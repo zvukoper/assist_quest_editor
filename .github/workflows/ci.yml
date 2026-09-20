@@ -43,6 +43,10 @@ jobs:
         shell: pwsh
         run: node ci/selection_context_smoke.mjs
 
+      - name: Quest Graph Playwright smoke
+        shell: pwsh
+        run: node ci/quest_graph_smoke.mjs
+
       - name: Проверить синтаксис web JavaScript
         shell: pwsh
         run: |
