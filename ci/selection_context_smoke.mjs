@@ -13,10 +13,9 @@ const editorForm = fs.readFileSync(
   path.join(root, "src", "AssistQuestEditor.App", "Host", "EditorForm.cs"),
   "utf8"
 );
-const contextMethod = editorForm.slice(editorForm.indexOf("private void PostSimulatorContext()"));
 check(
-  contextMethod.includes("PropertyNamingPolicy = JsonNamingPolicy.CamelCase"),
-  "EditorForm.PostSimulatorContext должен сериализовать simulator_context в camelCase."
+  editorForm.includes("PropertyNamingPolicy = JsonNamingPolicy.CamelCase"),
+  "EditorForm должен сериализовать simulator_context/coordinate в camelCase."
 );
 
 const simulatorJs = fs.readFileSync(
