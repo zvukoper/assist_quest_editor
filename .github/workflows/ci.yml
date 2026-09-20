@@ -39,6 +39,10 @@ jobs:
         shell: pwsh
         run: node ci/playwright_smoke.mjs
 
+      - name: Проверить контракт simulator ↔ editor
+        shell: pwsh
+        run: node ci/selection_context_smoke.mjs
+
       - name: Проверить синтаксис web JavaScript
         shell: pwsh
         run: |
