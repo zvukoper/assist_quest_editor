@@ -1,0 +1,86 @@
+name: Проверки
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  checks:
+    name: Полный набор проверок
+    runs-on: windows-latest
+
+    steps:
+      - name: Получить исходники
+        uses: actions/checkout@v5
+
+      - name: Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: 22
+
+      - name: Проверить память проекта
+        shell: pwsh
+        run: node ci/validate_memory.mjs
+
+      - name: Установить Playwright
+        shell: pwsh
+        run: npm install --no-save playwright@latest
+
+      - name: Установить Chromium для Playwright
+        shell: pwsh
+        run: npx playwright install chromium
+
+      - name: Playwright + Chromium smoke
+        shell: pwsh
+        run: node ci/playwright_smoke.mjs
+
+      - name: .NET SDK
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Собрать и протестировать .NET, если проект уже создан
+        shell: pwsh
+        run: |
+          $solutions = @(Get-ChildItem -Path . -Recurse -File -Include *.sln,*.slnx)
+          $projects = @(Get-ChildItem -Path . -Recurse -File -Filter *.csproj)
+
+          if ($solutions.Count -gt 0) {
+            foreach ($solution in $solutions) {
+              dotnet restore $solution.FullName
+              if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+              dotnet build $solution.FullName --configuration Release --no-restore
+              if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+              dotnet test $solution.FullName --configuration Release --no-build
+              if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+            }
+          }
+          elseif ($projects.Count -gt 0) {
+            foreach ($project in $projects) {
+              dotnet restore $project.FullName
+              if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+              dotnet build $project.FullName --configuration Release --no-restore
+              if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+            }
+          }
+          else {
+            Write-Host "C# проект пока не создан. Проверка .NET пропущена на архитектурном этапе."
+          }
+
+      - name: Проверить отсутствие логов в репозитории
+        shell: pwsh
+        run: |
+          $unexpected = @(Get-ChildItem -Path MemoryAI/LOGS -File | Where-Object { $_.Name -ne "README.md" })
+          if ($unexpected.Count -gt 0) {
+            Write-Error "MemoryAI/LOGS должен содержать только README.md."
+            $unexpected | ForEach-Object { Write-Host $_.FullName }
+            exit 1
+          }
