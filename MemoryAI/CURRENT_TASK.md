@@ -90,12 +90,13 @@ Web-ресурсы src/AssistQuestEditor.App/Web и data/world/sdo_points.json �
 
 Причина пустого Simulator найдена: C# snapshot сериализовался с PascalCase, тогда как Web UI ожидает camelCase.
 
-Текущая рабочая версия: 1.0.40.108-QUEST-EDITOR-QUEST-GRAPH-R1.
+Текущая рабочая версия: 1.0.40.109-QUEST-EDITOR-INTERACTION-R1.
 
 Последние рабочие вехи:
 - 1.0.40.106 — исправлена camelCase сериализация Simulator snapshot;
 - 1.0.40.107 — исправлен camelCase контракт simulator_context/coordinate между Simulator и Editor;
-- 1.0.40.108 — начат функциональный Quest Graph Editor через общий QuestGraphStore.
+- 1.0.40.108 — начат функциональный Quest Graph Editor через общий QuestGraphStore;
+- 1.0.40.109 — добавлены drag нод, wheel zoom и regression smoke для canvas interaction.
 
 Перед физическим тестированием пользователя версия обязательно увеличивается.
 
@@ -116,7 +117,7 @@ Web-ресурсы src/AssistQuestEditor.App/Web и data/world/sdo_points.json �
 
 Host передаёт Graph UI enum значения строками через `JsonStringEnumConverter`, поэтому SocketDirection, FlowKind и GraphDiagnosticSeverity имеют единый transport contract.
 
-Следующие незавершённые части Graph Editor: drag нод, pan/zoom canvas, dynamic sockets, comments, copy/paste, disk save/load, minimap. Перед полноценным drag/pan/zoom нужно сохранить принцип WolvenKit: editor layout/viewport state не смешивать с canonical graph resource.
+Следующие незавершённые части Graph Editor: pan canvas, dynamic sockets, comments, copy/paste, disk save/load, minimap. Drag нод и wheel zoom уже реализованы как presentation interaction с отправкой финальных X/Y через canonical Store. Viewport хранится отдельно в Web UI и не входит в canonical graph resource.
 
 Quest Graph smoke проверяет реальный `editor.js`: загрузку `quest_graph`, создание ноды через `graph_add_node`, изменение свойств через `graph_update_node`, запуск `graph_validate` и команды Undo/Redo.
 ## Проверки
@@ -131,4 +132,4 @@ Quest Graph smoke проверяет реальный `editor.js`: загруз�
 
 Quest Graph smoke проверяет реальный `editor.js`: загрузку `quest_graph`, создание ноды через `graph_add_node` и изменение свойств через `graph_update_node`.
 
-Последний физически тестируемый выпуск: `1.0.40.108-QUEST-EDITOR-QUEST-GRAPH-R1`. Перед следующим физическим тестом номер версии снова повышается.
+Последний физически тестируемый выпуск: `1.0.40.108-QUEST-EDITOR-QUEST-GRAPH-R1`. Следующий физический тест выполняется на `1.0.40.109-QUEST-EDITOR-INTERACTION-R1`.
