@@ -5,6 +5,7 @@
   const send = payload => window.chrome?.webview?.postMessage(payload);
 
   let snapshot = null;
+  let runtime = null;
   let draggingPlayer = false;
   let panning = false;
   let panStart = null;
@@ -471,8 +472,14 @@
 
     if (id === "system") {
       return [
-        "<div class='kv'><span>Runtime</span><span>" + (snapshot.system.runtimeRunning ? "работает" : "остановлен") + "</span></div>",
-        "<div class='kv'><span>Режим</span><span>" + escapeHtml(snapshot.system.runtimeMode) + "</span></div>",
+        "<div class='toolbar'>" +
+          "<button class='smallButton primary' id='runtimeStartSide'>Запустить квест</button>" +
+          "<button class='smallButton' id='runtimeStopSide'>Остановить</button>" +
+        "</div>",
+        "<div class='kv'><span>Runtime</span><span>" + (runtime?.status || (snapshot.system.runtimeRunning ? "Running" : "Stopped")) + "</span></div>",
+        "<div class='kv'><span>Текущая нода</span><span>" + escapeHtml(runtime?.currentNodeId || "—") + "</span></div>",
+        "<div class='kv'><span>Ожидание</span><span>" + escapeHtml(runtime?.waitingFor || "—") + "</span></div>",
+        "<div class='kv'><span>Режим</span><span>" + escapeHtml(snapshot.system.runtimeMode) + "</span></div>"
         "<div class='kv'><span>Последний переход</span><span>" + escapeHtml(snapshot.system.lastTransition) + "</span></div>",
         "<div class='kv'><span>Последнее событие</span><span>" + escapeHtml(snapshot.system.lastEvent || "—") + "</span></div>",
         "<div class='notice' style='margin-top:10px'>Системный канал диагностический и не является источником игровых данных.</div>"
@@ -571,6 +578,9 @@
       });
     });
 
+    side.querySelector("#runtimeStartSide")?.addEventListener("click", () => send({ action: "runtime_start" }));
+    side.querySelector("#runtimeStopSide")?.addEventListener("click", () => send({ action: "runtime_stop" }));
+
     side.querySelector("#emitEvent")?.addEventListener("click", () => {
       let payload = {};
       try {
@@ -603,6 +613,7 @@
     if (message.type === "snapshot") {
       const hadSnapshot = !!snapshot;
       snapshot = message.snapshot;
+      runtime = message.runtime || null;
       selectedPointId = snapshot.selection?.point?.id || null;
       window.assistWebLog?.("INFO", "Simulator получил snapshot.", {
         points: snapshot.world?.points?.length ?? 0,
@@ -612,6 +623,22 @@
       });
       if (!hadSnapshot) fitWorld();
       drawMap();
+      renderSide();
+      return;
+    }
+
+    if (message.type === "runtime_event") {
+      runtime = message.runtime || runtime;
+      if (message["@event"] || message.event) {
+        eventHistory.unshift({
+          eventType: (message["@event"] || message.event).eventType,
+          timestamp: (message["@event"] || message.event).timestamp,
+          source: (message["@event"] || message.event).source
+        });
+        eventHistory.splice(12);
+        const list = side.querySelector("#eventList");
+        if (list) list.innerHTML = eventHistory.map(renderEvent).join("");
+      }
       renderSide();
       return;
     }
@@ -753,6 +780,8 @@
     drawPlayer(ctx, temp);
   }
 
+  document.getElementById("runtimeStart").addEventListener("click", () => send({ action: "runtime_start" }));
+  document.getElementById("runtimeStop").addEventListener("click", () => send({ action: "runtime_stop" }));
   document.getElementById("reset").addEventListener("click", () => send({ action: "reset" }));
   window.addEventListener("resize", () => {
     drawMap();

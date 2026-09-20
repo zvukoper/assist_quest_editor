@@ -7,6 +7,7 @@ public sealed class MainForm : WebViewForm
 {
     private readonly IDataChannelHub _hub;
     private readonly QuestGraphStore _questGraph;
+    private readonly QuestRuntime _runtime;
     private readonly Dictionary<string, EditorForm> _editors = new(StringComparer.OrdinalIgnoreCase);
     private SimulatorForm? _simulator;
 
@@ -18,6 +19,7 @@ public sealed class MainForm : WebViewForm
     {
         _hub = hub;
         _questGraph = new QuestGraphStore(QuestGraphFactory.CreateStarter());
+        _runtime = new QuestRuntime(_questGraph, _hub);
         Shown += (_, _) => OpenSimulator();
         FormClosed += (_, _) =>
         {
@@ -107,7 +109,7 @@ public sealed class MainForm : WebViewForm
             return;
         }
 
-        _simulator = new SimulatorForm(_hub);
+        _simulator = new SimulatorForm(_hub, _runtime);
         _simulator.FormClosed += (_, _) => _simulator = null;
         PlaceOnSecondaryScreen(_simulator);
         _simulator.Show(this);

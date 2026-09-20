@@ -6,14 +6,22 @@ namespace AssistQuestEditor.App;
 public sealed class SimulatorForm : WebViewForm
 {
     private readonly IDataChannelHub _hub;
+    private readonly QuestRuntime _runtime;
+    private readonly Timer _runtimeTimer;
 
-    public SimulatorForm(IDataChannelHub hub)
+    public SimulatorForm(IDataChannelHub hub, QuestRuntime runtime)
         : base(
             "Assist Quest Editor — Симулятор",
             "simulator.html",
             new Size(1440, 900))
     {
         _hub = hub;
+        _runtime = runtime ?? throw new ArgumentNullException(nameof(runtime));
+        _runtime.Published += Runtime_Published;
+        _runtimeTimer = new Timer { Interval = 250 };
+        _runtimeTimer.Tick += (_, _) => _runtime.Tick();
+        _runtimeTimer.Start();
+
         if (_hub.Events is EventChannel<SimulatorEvent> events)
         {
             events.Published += Events_Published;
@@ -21,6 +29,9 @@ public sealed class SimulatorForm : WebViewForm
 
         FormClosed += (_, _) =>
         {
+            _runtimeTimer.Stop();
+            _runtimeTimer.Dispose();
+            _runtime.Published -= Runtime_Published;
             if (_hub.Events is EventChannel<SimulatorEvent> events)
             {
                 events.Published -= Events_Published;
@@ -50,7 +61,8 @@ public sealed class SimulatorForm : WebViewForm
         {
             type = "snapshot",
             version = VersionInfo.InformationalVersion,
-            snapshot
+            snapshot,
+            runtime = _runtime.State
         }, new JsonSerializerOptions
         {
             PropertyNamingPolicy = JsonNamingPolicy.CamelCase
@@ -121,7 +133,16 @@ public sealed class SimulatorForm : WebViewForm
                     EmitEvent(root);
                     break;
 
+                case "runtime_start":
+                    _runtime.Start();
+                    break;
+
+                case "runtime_stop":
+                    _runtime.Stop();
+                    break;
+
                 case "reset":
+                    _runtime.Stop("Сброс симулятора");
                     if (_hub is SimulatorDataChannelHub simulatorHub)
                     {
                         simulatorHub.Reset();
@@ -302,6 +323,34 @@ public sealed class SimulatorForm : WebViewForm
             DateTimeOffset.UtcNow,
             String(root, "source", "Simulator"),
             payload));
+    }
+
+    private void Runtime_Published(object? sender, QuestRuntimeEvent e)
+    {
+        if (IsDisposed || !IsHandleCreated)
+        {
+            return;
+        }
+
+        try
+        {
+            BeginInvoke((Action)(() =>
+            {
+                PostJson(JsonSerializer.Serialize(new
+                {
+                    type = "runtime_event",
+                    @event = e,
+                    runtime = _runtime.State
+                }, new JsonSerializerOptions
+                {
+                    PropertyNamingPolicy = JsonNamingPolicy.CamelCase
+                }));
+                PushSnapshot();
+            }));
+        }
+        catch (InvalidOperationException)
+        {
+        }
     }
 
     private void Events_Published(SimulatorEvent e)
