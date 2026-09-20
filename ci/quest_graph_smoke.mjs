@@ -92,6 +92,18 @@ try {
   await page.getByRole("button", { name: "Сохранить свойства" }).click();
 
   await page.waitForTimeout(20);
+  await page.getByRole("button", { name: "Проверить" }).click();
+
+  await page.waitForTimeout(20);
+
+  const validation = await page.evaluate(() =>
+    window.__messages.find(message => message.action === "graph_validate")
+  );
+
+  if (!validation) {
+    throw new Error("UI не отправил корректную команду graph_validate.");
+  }
+
 
   const update = await page.evaluate(() =>
     window.__messages.find(message => message.action === "graph_update_node")

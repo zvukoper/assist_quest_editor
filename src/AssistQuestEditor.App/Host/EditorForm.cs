@@ -204,6 +204,12 @@ public sealed class EditorForm : WebViewForm
                 PostQuestGraph();
                 break;
             }
+            case "graph_validate":
+            {
+                AppLogger.Info("Quest Graph: выполнена проверка графа.");
+                PostQuestGraph();
+                break;
+            }
 
             case "graph_undo":
             {
@@ -244,7 +250,8 @@ public sealed class EditorForm : WebViewForm
             graph = _questGraph.Value,
             selectedNodeId,
             canUndo = _questGraph.CanUndo,
-            canRedo = _questGraph.CanRedo
+            canRedo = _questGraph.CanRedo,
+            validation = QuestGraphValidator.Validate(_questGraph.Value)
         }, WebJsonOptions));
     }
 

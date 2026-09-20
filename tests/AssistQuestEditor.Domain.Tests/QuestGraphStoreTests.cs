@@ -141,4 +141,96 @@ public sealed class QuestGraphStoreTests
         Assert.False(store.CanRedo);
         Assert.True(store.CanUndo);
     }
+    [Fact]
+    public void StarterGraphPassesValidation()
+    {
+        var diagnostics = QuestGraphValidator.Validate(QuestGraphFactory.CreateStarter());
+
+        Assert.Empty(diagnostics);
+    }
+
+    [Fact]
+    public void ValidatorReportsStructuralAndConnectionProblems()
+    {
+        var start = new QuestNode(
+            "start",
+            "Start",
+            "Начало",
+            0,
+            0,
+            QuestNodeCatalog.CreateSockets("Start", "start"));
+
+        var end = new QuestNode(
+            "end",
+            "End",
+            "Конец",
+            240,
+            0,
+            QuestNodeCatalog.CreateSockets("End", "end"));
+
+        var graph = new QuestGraph(
+            "",
+            "",
+            new[] { start, end },
+            new[]
+            {
+                new QuestConnection("start", "missing", "end", "end.in"),
+                new QuestConnection("end", "end.in", "start", "start.out"),
+                new QuestConnection("start", "start.out", "end", "end.in"),
+                new QuestConnection("start", "start.out", "end", "end.in")
+            });
+
+        var diagnostics = QuestGraphValidator.Validate(graph);
+
+        Assert.Contains(diagnostics, diagnostic => diagnostic.Code == "GRAPH001");
+        Assert.Contains(diagnostics, diagnostic => diagnostic.Code == "GRAPH002");
+        Assert.Contains(diagnostics, diagnostic => diagnostic.Code == "CONNECTION003");
+        Assert.Contains(diagnostics, diagnostic => diagnostic.Code == "CONNECTION005");
+        Assert.Contains(diagnostics, diagnostic => diagnostic.Code == "CONNECTION006");
+    }
+
+    [Fact]
+    public void ValidatorReportsUnreachableNode()
+    {
+        var start = new QuestNode(
+            "start",
+            "Start",
+            "Начало",
+            0,
+            0,
+            QuestNodeCatalog.CreateSockets("Start", "start"));
+
+        var end = new QuestNode(
+            "end",
+            "End",
+            "Конец",
+            240,
+            0,
+            QuestNodeCatalog.CreateSockets("End", "end"));
+
+        var orphan = new QuestNode(
+            "orphan",
+            "Phase",
+            "Недостижимая фаза",
+            120,
+            180,
+            QuestNodeCatalog.CreateSockets("Phase", "orphan"));
+
+        var graph = new QuestGraph(
+            "test",
+            "Тест",
+            new[] { start, end, orphan },
+            new[]
+            {
+                new QuestConnection("start", "start.out", "end", "end.in")
+            });
+
+        var diagnostics = QuestGraphValidator.Validate(graph);
+
+        Assert.Contains(diagnostics, diagnostic =>
+            diagnostic.Code == "FLOW004" &&
+            diagnostic.NodeId == "orphan" &&
+            diagnostic.Severity == GraphDiagnosticSeverity.Warning);
+    }
+
 }

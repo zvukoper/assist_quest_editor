@@ -11,6 +11,7 @@
   let selectedGraphNodeId = null;
   let pendingOutput = null;
   let graphHistory = { canUndo: false, canRedo: false };
+  let graphValidation = [];
 
   const configs = {
     graph: { title: "Нодовый редактор квестов", draw: renderGraph },
@@ -91,6 +92,7 @@
         "<button class='toolButton' id='fitGraph'>По размеру</button>" +
         "<button class='toolButton' id='undoGraph' " + (graphHistory.canUndo ? "" : "disabled") + ">↶ Отменить</button>" +
         "<button class='toolButton' id='redoGraph' " + (graphHistory.canRedo ? "" : "disabled") + ">↷ Повторить</button>" +
+        "<button class='toolButton' id='validateGraph'>Проверить</button>" +
         "<span class='badge accent'>" + questGraph.nodes.length + " нод</span>" +
         "<span class='badge'>" + questGraph.connections.length + " связей</span>" +
         "<span class='badge red'>" + escapeHtml(questGraph.name) + "</span>" +
@@ -109,6 +111,7 @@
     ws.querySelector("#fitGraph").addEventListener("click", fitGraph);
     ws.querySelector("#undoGraph").addEventListener("click", () => send({ action: "graph_undo" }));
     ws.querySelector("#redoGraph").addEventListener("click", () => send({ action: "graph_redo" }));
+    ws.querySelector("#validateGraph").addEventListener("click", () => send({ action: "graph_validate" }));
     bindGraphInteractions(ws.querySelector("#questGraphSvg"));
     updateGraphInspector(ins);
   }
@@ -449,18 +452,32 @@
   }
 
   function renderValidation(ws, ins) {
+    const errors = graphValidation.filter(item => item.severity === "Error");
+    const warnings = graphValidation.filter(item => item.severity === "Warning");
+
     ws.innerHTML =
-      "<div class='notice good'>Проектная структура проходит базовую валидацию.</div>" +
-      "<div class='tableLike' style='margin-top:12px'>" +
-        validationRow("Quest Graph", "SocketId connections", "OK") +
-        validationRow("Scene Graph", "Scene references", "OK") +
-        validationRow("World", "WorldPoint references", "OK") +
-        validationRow("Data Channels", "Adapter contract", "OK") +
-        validationRow("Localization", "Keys", "OK") +
-      "</div>";
+      (errors.length === 0
+        ? "<div class='notice'>Граф не содержит блокирующих ошибок. Предупреждений: " + warnings.length + ".</div>"
+        : "<div class='notice'>Найдено ошибок: " + errors.length + ". Предупреждений: " + warnings.length + ".</div>") +
+      (graphValidation.length
+        ? "<div class='tableLike' style='margin-top:12px'>" +
+            graphValidation.map(item =>
+              "<div class='tableRow'><span><strong>" + escapeHtml(item.code) + "</strong><small>" +
+              escapeHtml(item.message) +
+              (item.nodeId ? " · node=" + escapeHtml(item.nodeId) : "") +
+              (item.socketId ? " · socket=" + escapeHtml(item.socketId) : "") +
+              "</small></span><span class='badge " +
+              (item.severity === "Error" ? "red" : item.severity === "Warning" ? "accent" : "blue") +
+              "'>" + escapeHtml(item.severity) + "</span></div>"
+            ).join("") +
+          "</div>"
+        : "<div class='notice' style='margin-top:12px'>Диагностика отсутствует: граф корректен.</div>");
+
     ins.innerHTML =
-      "<div class='badge'>Validation</div><h3 style='margin:10px 0 4px'>Проверка</h3>" +
-      "<div class='notice'>Позже здесь появятся реальные диагностические идентификаторы и severity.</div>";
+      "<div class='badge'>Validation</div><h3 style='margin:10px 0 4px'>Проверка Quest Graph</h3>" +
+      "<div class='kv'><span>Ошибки</span><span>" + errors.length + "</span></div>" +
+      "<div class='kv'><span>Предупреждения</span><span>" + warnings.length + "</span></div>" +
+      "<div class='notice' style='margin-top:10px'>Проверка выполняется на canonical QuestGraph в Host/Domain.</div>";
   }
 
   function validationRow(a, b, c) {
@@ -508,6 +525,7 @@
         canUndo: Boolean(data.canUndo),
         canRedo: Boolean(data.canRedo)
       };
+      graphValidation = Array.isArray(data.validation) ? data.validation : [];
       if (data.selectedNodeId) selectedGraphNodeId = data.selectedNodeId;
       if (selectedGraphNodeId && !questGraph.nodes.some(node => node.nodeId === selectedGraphNodeId)) {
         selectedGraphNodeId = questGraph.nodes[0]?.nodeId || null;
