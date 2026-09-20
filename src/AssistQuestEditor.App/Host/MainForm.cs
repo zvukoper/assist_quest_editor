@@ -76,6 +76,7 @@ public sealed class MainForm : WebViewForm
             "conditions" => ("Редактор условий и действий", "editor.html#conditions"),
             "localization" => ("Редактор локализации", "editor.html#localization"),
             "validation" => ("Проверка проекта", "editor.html#validation"),
+            "registry" => ("Реестр нод и схем", "editor.html#registry"),
             _ => ("Редактор", "editor.html#graph")
         };
 
