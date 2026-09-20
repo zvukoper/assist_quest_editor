@@ -19,7 +19,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="....srcAssistQuestEditor.DomainAssistQuestEditor.Domain.csproj" />
+    <ProjectReference Include="../../src/AssistQuestEditor.Domain/AssistQuestEditor.Domain.csproj" />
   </ItemGroup>
 
 </Project>
