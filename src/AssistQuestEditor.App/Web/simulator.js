@@ -14,7 +14,7 @@
 
   const escapeHtml = value => String(value ?? "").replace(/[&<>"']/g, char => ({
     "&": "&amp;", "<": "&lt;", ">": "&gt;", "\"": "&quot;", "'": "&#39;"
-  }[char]);
+  }[char]));
 
   const sections = [
     ["player", "Игрок и мир"],
