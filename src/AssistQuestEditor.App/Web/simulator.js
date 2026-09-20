@@ -377,7 +377,7 @@
       return [
         "<div class='field'><label>Тип события</label><input id='eventType' value='CustomEvent'></div>",
         "<div class='field' style='margin-top:6px'><label>Источник</label><input id='eventSource' value='Simulator'></div>",
-        "<div class='field' style='margin-top:6px'><label>Payload JSON</label><textarea id='eventPayload'>{"quest":"special_marinated_shashlik"}</textarea></div>",
+        "<div class='field' style='margin-top:6px'><label>Payload JSON</label><textarea id='eventPayload'>{\"quest\":\"special_marinated_shashlik\"}</textarea></div>",
         "<button class='smallButton primary' id='emitEvent'>Отправить событие</button>",
         "<div class='miniLabel' style='margin:12px 0 5px'>Последние события</div>",
         "<div class='eventList' id='eventList'></div>"
