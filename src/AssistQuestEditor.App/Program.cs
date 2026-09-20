@@ -9,7 +9,8 @@ internal static class Program
     {
         ApplicationConfiguration.Initialize();
 
-        var simulatorAdapter = new SimulatorDataSourceAdapter();
+        var worldPoints = SdoWorldDataLoader.Load();
+        var simulatorAdapter = new SimulatorDataSourceAdapter(worldPoints);
         using var mainForm = new MainForm(simulatorAdapter.Channels);
         Application.Run(mainForm);
     }

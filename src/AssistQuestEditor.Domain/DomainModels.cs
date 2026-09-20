@@ -29,7 +29,11 @@ public sealed record WorldPoint(
     string Name,
     string Category,
     WorldCoordinate Position,
-    double TriggerRadius = 35);
+    double TriggerRadius = 35)
+{
+    public bool Editable { get; init; } = true;
+    public string Color { get; init; } = "#78c8f0";
+}
 
 public sealed record PlayerState(
     WorldCoordinate Position,
@@ -42,6 +46,10 @@ public sealed record WorldState(
     string CoordinateSystem,
     IReadOnlyList<WorldPoint> Points,
     string ActiveLocation);
+
+public sealed record WorldSelectionState(
+    WorldPoint? Point,
+    string Source);
 
 public sealed record FactState(
     IReadOnlyDictionary<string, string> Values);
@@ -142,6 +150,7 @@ public sealed record DataChannelDescriptor(
 public sealed record SimulatorSnapshot(
     PlayerState Player,
     WorldState World,
+    WorldSelectionState Selection,
     FactState Facts,
     QuestStatusesState QuestStatuses,
     RuntimeStatesState States,

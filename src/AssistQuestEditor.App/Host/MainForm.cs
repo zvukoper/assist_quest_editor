@@ -88,7 +88,7 @@ public sealed class MainForm : WebViewForm
             return;
         }
 
-        var form = new EditorForm(page.Item1, page.Item2);
+        var form = new EditorForm(page.Item1, page.Item2, _hub);
         _editors[page.Item2] = form;
         form.FormClosed += (_, _) => _editors.Remove(page.Item2);
         PlaceAuxiliaryWindow(form, _editors.Count);

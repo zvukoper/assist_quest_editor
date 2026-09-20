@@ -32,7 +32,24 @@ public abstract class WebViewForm : Form
         {
             await Browser.EnsureCoreWebView2Async();
             Browser.WebMessageReceived += Browser_WebMessageReceived;
-            Browser.CoreWebView2.Navigate(new Uri(GetPagePath()).AbsoluteUri);
+
+            var hashIndex = _page.IndexOf('#');
+            var fileName = hashIndex >= 0 ? _page[..hashIndex] : _page;
+            var fragment = hashIndex >= 0 ? _page[(hashIndex + 1)..] : string.Empty;
+            var path = Path.Combine(AppContext.BaseDirectory, "Web", fileName);
+
+            if (!File.Exists(path))
+            {
+                throw new FileNotFoundException("Web-страница не найдена в опубликованном приложении.", path);
+            }
+
+            var uri = new Uri(path).AbsoluteUri;
+            if (!string.IsNullOrWhiteSpace(fragment))
+            {
+                uri += "#" + fragment;
+            }
+
+            Browser.CoreWebView2.Navigate(uri);
             OnBrowserReady();
         }
         catch (Exception ex)
@@ -53,9 +70,6 @@ public abstract class WebViewForm : Form
     {
         OnWebMessage(e.WebMessageAsJson);
     }
-
-    protected string GetPagePath() =>
-        Path.Combine(AppContext.BaseDirectory, "Web", _page);
 
     protected void PostJson(string json)
     {
@@ -84,9 +98,9 @@ public abstract class WebViewForm : Form
             TextAlign = ContentAlignment.MiddleCenter,
             ForeColor = Color.FromArgb(231, 237, 244),
             Font = new Font("Segoe UI", 12f),
-            Text = "Не удалось запустить WebView2.\r\n\r\n" +
+            Text = "Не удалось открыть Web-интерфейс.\r\n\r\n" +
                    ex.Message + "\r\n\r\n" +
-                   "Для работы редактора требуется установленный Microsoft Edge WebView2 Runtime."
+                   "Проверьте содержимое папки Web в опубликованном приложении."
         };
 
         panel.Controls.Add(label);

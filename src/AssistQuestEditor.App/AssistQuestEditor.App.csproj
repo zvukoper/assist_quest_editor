@@ -11,10 +11,10 @@
     <Prefer32Bit>false</Prefer32Bit>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
 
-    <Version>1.0.40.101</Version>
-    <AssemblyVersion>1.0.40.101</AssemblyVersion>
-    <FileVersion>1.0.40.101</FileVersion>
-    <AssemblyInformationalVersion>1.0.40.101-QUEST-EDITOR-DUAL-WINDOW-R1</AssemblyInformationalVersion>
+    <Version>1.0.40.102</Version>
+    <AssemblyVersion>1.0.40.102</AssemblyVersion>
+    <FileVersion>1.0.40.102</FileVersion>
+    <AssemblyInformationalVersion>1.0.40.102-QUEST-EDITOR-SDO-SIM-R1</AssemblyInformationalVersion>
     <PublishSingleFile>true</PublishSingleFile>
     <SelfContained>true</SelfContained>
     <RuntimeIdentifier>win-x64</RuntimeIdentifier>
@@ -30,6 +30,10 @@
     <ProjectReference Include="../AssistQuestEditor.Domain/AssistQuestEditor.Domain.csproj" />
     <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.4191.47" />
     <None Update="Web/**/*">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+    </None>
+    <None Include="../../data/world/sdo_points.json" Link="data/world/sdo_points.json">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
       <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
     </None>

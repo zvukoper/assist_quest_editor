@@ -64,8 +64,14 @@ public sealed class SimulatorForm : WebViewForm
                     SetPlayerPosition(root);
                     break;
 
-                case "move_player_to_point":
-                    MovePlayerToPoint(root);
+                case "select_point":
+                    SelectPoint(root);
+                    break;
+
+                case "clear_selection":
+                    _hub.Get<WorldSelectionState>("world-selection").Set(
+                        new WorldSelectionState(null, "Карта симулятора"),
+                        "Карта симулятора");
                     break;
 
                 case "set_fact":
@@ -140,17 +146,20 @@ public sealed class SimulatorForm : WebViewForm
             "Редактор игрока");
     }
 
-    private void MovePlayerToPoint(JsonElement root)
+    private void SelectPoint(JsonElement root)
     {
-        var id = String(root, "id");
-        var point = _hub.Get<WorldState>("world").Value.Points.FirstOrDefault(x => x.Id.Equals(id, StringComparison.OrdinalIgnoreCase));
+        var id = Required(root, "id");
+        var point = _hub.Get<WorldState>("world").Value.Points
+            .FirstOrDefault(x => x.Id.Equals(id, StringComparison.OrdinalIgnoreCase));
+
         if (point is null)
         {
-            throw new InvalidOperationException("Точка мира не найдена: " + id);
+            throw new InvalidOperationException("СДО-точка не найдена: " + id);
         }
 
-        var old = _hub.Get<PlayerState>("player").Value;
-        _hub.Get<PlayerState>("player").Set(old with { Position = point.Position }, "Карта симулятора");
+        _hub.Get<WorldSelectionState>("world-selection").Set(
+            new WorldSelectionState(point, "Карта симулятора"),
+            "Карта симулятора");
     }
 
     private void SetFact(JsonElement root)
@@ -286,16 +295,22 @@ public sealed class SimulatorForm : WebViewForm
 
     private void Events_Published(SimulatorEvent e)
     {
-        if (IsDisposed)
+        if (IsDisposed || !IsHandleCreated)
         {
             return;
         }
 
-        BeginInvoke((Action)(() =>
+        try
         {
-            PostJson(JsonSerializer.Serialize(new { type = "event", @event = e }));
-            PushSnapshot();
-        }));
+            BeginInvoke((Action)(() =>
+            {
+                PostJson(JsonSerializer.Serialize(new { type = "event", @event = e }));
+                PushSnapshot();
+            }));
+        }
+        catch (InvalidOperationException)
+        {
+        }
     }
 
     private static string Required(JsonElement root, string name)

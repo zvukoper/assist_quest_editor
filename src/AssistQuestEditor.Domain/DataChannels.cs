@@ -79,7 +79,12 @@ public interface IDataSourceAdapter
 public sealed class SimulatorDataSourceAdapter : IDataSourceAdapter
 {
     public string AdapterId => "simulator";
-    public IDataChannelHub Channels { get; } = new SimulatorDataChannelHub();
+    public IDataChannelHub Channels { get; }
+
+    public SimulatorDataSourceAdapter(IEnumerable<WorldPoint>? worldPoints = null)
+    {
+        Channels = new SimulatorDataChannelHub(worldPoints);
+    }
 }
 
 public interface IDataChannelHub
@@ -93,27 +98,38 @@ public interface IDataChannelHub
 public sealed class SimulatorDataChannelHub : IDataChannelHub
 {
     private readonly Dictionary<string, IDataChannel> _channels;
+    private readonly WorldState _initialWorld;
+    private readonly PlayerState _initialPlayer;
 
-    public SimulatorDataChannelHub()
+    public SimulatorDataChannelHub(IEnumerable<WorldPoint>? worldPoints = null)
     {
+        var points = (worldPoints ?? CreateFallbackWorld()).ToArray();
+        _initialWorld = new WorldState(
+            "ETS2 X/Y/Z • вид сверху использует X/Z",
+            points,
+            "СДО");
+
+        _initialPlayer = new PlayerState(
+            GetWorldCenter(points),
+            0,
+            0,
+            false,
+            true);
+
         Player = new DataChannel<PlayerState>(
             "player",
             "Игрок",
-            new PlayerState(new WorldCoordinate(120, 0, 80), 0, 0, false, true));
+            _initialPlayer);
 
         World = new DataChannel<WorldState>(
             "world",
             "Мир",
-            new WorldState(
-                "ETS2 X/Y/Z • вид сверху использует X/Z",
-                new[]
-                {
-                    new WorldPoint("ruslan", "Руслан", "Квестовый персонаж", new WorldCoordinate(180, 0, 80)),
-                    new WorldPoint("gosha", "Гоша", "Квестовый персонаж", new WorldCoordinate(430, 0, -120)),
-                    new WorldPoint("yard", "Испытательный двор", "Локация", new WorldCoordinate(-140, 0, -60)),
-                    new WorldPoint("village", "Деревня", "Локация", new WorldCoordinate(30, 0, 260))
-                },
-                "Испытательный двор"));
+            _initialWorld);
+
+        Selection = new DataChannel<WorldSelectionState>(
+            "world-selection",
+            "Выбранная точка",
+            new WorldSelectionState(null, "Нет выбора"));
 
         Facts = new DataChannel<FactState>(
             "facts",
@@ -189,6 +205,7 @@ public sealed class SimulatorDataChannelHub : IDataChannelHub
         {
             [Player.Key] = Player,
             [World.Key] = World,
+            [Selection.Key] = Selection,
             [Facts.Key] = Facts,
             [QuestStatuses.Key] = QuestStatuses,
             [States.Key] = States,
@@ -207,6 +224,7 @@ public sealed class SimulatorDataChannelHub : IDataChannelHub
 
     public DataChannel<PlayerState> Player { get; }
     public DataChannel<WorldState> World { get; }
+    public DataChannel<WorldSelectionState> Selection { get; }
     public DataChannel<FactState> Facts { get; }
     public DataChannel<QuestStatusesState> QuestStatuses { get; }
     public DataChannel<RuntimeStatesState> States { get; }
@@ -231,17 +249,9 @@ public sealed class SimulatorDataChannelHub : IDataChannelHub
 
     public void Reset()
     {
-        Player.Set(new PlayerState(new WorldCoordinate(120, 0, 80), 0, 0, false, true), "Сброс симулятора");
-        World.Set(new WorldState(
-            "ETS2 X/Y/Z • вид сверху использует X/Z",
-            new[]
-            {
-                new WorldPoint("ruslan", "Руслан", "Квестовый персонаж", new WorldCoordinate(180, 0, 80)),
-                new WorldPoint("gosha", "Гоша", "Квестовый персонаж", new WorldCoordinate(430, 0, -120)),
-                new WorldPoint("yard", "Испытательный двор", "Локация", new WorldCoordinate(-140, 0, -60)),
-                new WorldPoint("village", "Деревня", "Локация", new WorldCoordinate(30, 0, 260))
-            },
-            "Испытательный двор"), "Сброс симулятора");
+        Player.Set(_initialPlayer, "Сброс симулятора");
+        World.Set(_initialWorld, "Сброс симулятора");
+        Selection.Set(new WorldSelectionState(null, "Сброс симулятора"), "Сброс симулятора");
         Facts.Set(new FactState(new Dictionary<string, string>
         {
             ["quest.ruslan.introductionSeen"] = "false",
@@ -295,6 +305,7 @@ public sealed class SimulatorDataChannelHub : IDataChannelHub
         new(
             Player.Value,
             World.Value,
+            Selection.Value,
             Facts.Value,
             QuestStatuses.Value,
             States.Value,
@@ -342,6 +353,13 @@ public sealed class SimulatorDataChannelHub : IDataChannelHub
         {
             world.Changed += (_, args) => PublishTransition("world", args.Source, "Изменён мир");
         }
+        else if (channel is DataChannel<WorldSelectionState> selection)
+        {
+            selection.Changed += (_, args) =>
+                PublishTransition("world-selection", args.Source, args.CurrentValue.Point is null
+                    ? "Снято выделение точки"
+                    : $"Выбрана СДО-точка {args.CurrentValue.Point.Id}");
+        }
         else if (channel is DataChannel<SystemState> system)
         {
             system.Changed += (_, args) => PublishTransition("system", args.Source, "Изменено состояние системы");
@@ -350,7 +368,7 @@ public sealed class SimulatorDataChannelHub : IDataChannelHub
 
     private void PublishTransition(string channel, string source, string description)
     {
-        var evt = new SimulatorEvent(
+        Events.Publish(new SimulatorEvent(
             "ChannelChanged",
             DateTimeOffset.UtcNow,
             source,
@@ -358,8 +376,46 @@ public sealed class SimulatorDataChannelHub : IDataChannelHub
             {
                 ["channel"] = channel,
                 ["description"] = description
-            });
+            }));
+    }
 
-        Events.Publish(evt);
+    private static IReadOnlyList<WorldPoint> CreateFallbackWorld() =>
+    [
+        new WorldPoint("fallback-ruslan", "Руслан", "Квестовая точка", new WorldCoordinate(180, 0, 80))
+        {
+            Color = "#ff7a50"
+        },
+        new WorldPoint("fallback-gosha", "Гоша", "Квестовая точка", new WorldCoordinate(430, 0, -120))
+        {
+            Color = "#ff7a50"
+        },
+        new WorldPoint("fallback-yard", "Испытательный двор", "Локация", new WorldCoordinate(-140, 0, -60))
+        {
+            Color = "#12abe5"
+        },
+        new WorldPoint("fallback-village", "Деревня", "Локация", new WorldCoordinate(30, 0, 260))
+        {
+            Color = "#5fd08a"
+        }
+    ];
+
+    private static WorldCoordinate GetWorldCenter(IReadOnlyList<WorldPoint> points)
+    {
+        if (points.Count == 0)
+        {
+            return new WorldCoordinate(0, 0, 0);
+        }
+
+        var minX = points.Min(x => x.Position.X);
+        var maxX = points.Max(x => x.Position.X);
+        var minY = points.Min(x => x.Position.Y);
+        var maxY = points.Max(x => x.Position.Y);
+        var minZ = points.Min(x => x.Position.Z);
+        var maxZ = points.Max(x => x.Position.Z);
+
+        return new WorldCoordinate(
+            (minX + maxX) / 2,
+            (minY + maxY) / 2,
+            (minZ + maxZ) / 2);
     }
 }
