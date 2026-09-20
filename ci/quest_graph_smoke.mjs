@@ -144,7 +144,10 @@ try {
 
 
   const update = await page.evaluate(() =>
-    window.__messages.find(message => message.action === "graph_update_node")
+    window.__messages.find(message =>
+      message.action === "graph_update_node" &&
+      message.nodeId === "start"
+    )
   );
 
   if (!update || update.nodeId !== "start" || update.title !== "Старт обновлён") {
