@@ -11,10 +11,10 @@
     <Prefer32Bit>false</Prefer32Bit>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
 
-    <Version>1.0.40.106</Version>
-    <AssemblyVersion>1.0.40.104</AssemblyVersion>
-    <FileVersion>1.0.40.104</FileVersion>
-    <AssemblyInformationalVersion>1.0.40.104-QUEST-EDITOR-SDO-MAP-R3</AssemblyInformationalVersion>
+    <Version>1.0.40.107</Version>
+    <AssemblyVersion>1.0.40.107</AssemblyVersion>
+    <FileVersion>1.0.40.107</FileVersion>
+    <AssemblyInformationalVersion>1.0.40.107-QUEST-EDITOR-SDO-MAP-R6-SELECTION-CONTEXT-FIX</AssemblyInformationalVersion>
     <PublishSingleFile>true</PublishSingleFile>
     <SelfContained>true</SelfContained>
     <RuntimeIdentifier>win-x64</RuntimeIdentifier>

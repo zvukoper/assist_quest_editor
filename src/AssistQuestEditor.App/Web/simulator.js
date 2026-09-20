@@ -12,6 +12,11 @@
   let camera = { cx: 0, cz: 0, mpp: 50 };
   let eventHistory = [];
 
+  function formatPosition(position) {
+    if (!position) return "—";
+    return "X " + Math.round(position.x) + " · Y " + Math.round(position.y) + " · Z " + Math.round(position.z);
+  }
+
   const escapeHtml = value => String(value ?? "").replace(/[&<>"']/g, char => ({
     "&": "&amp;", "<": "&lt;", ">": "&gt;", "\"": "&quot;", "'": "&#39;"
   }[char]));

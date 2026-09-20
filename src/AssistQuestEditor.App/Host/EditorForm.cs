@@ -5,6 +5,11 @@ namespace AssistQuestEditor.App;
 
 public sealed class EditorForm : WebViewForm
 {
+    private static readonly JsonSerializerOptions WebJsonOptions = new()
+    {
+        PropertyNamingPolicy = JsonNamingPolicy.CamelCase
+    };
+
     private readonly IDataChannel<PlayerState> _player;
     private readonly IDataChannel<WorldSelectionState> _selection;
 
@@ -58,7 +63,7 @@ public sealed class EditorForm : WebViewForm
                         type = "coordinate_error",
                         source,
                         message = "В симуляторе не выбрана точка."
-                    }));
+                    }, WebJsonOptions));
                     return;
                 }
 
@@ -68,7 +73,7 @@ public sealed class EditorForm : WebViewForm
                     source,
                     point = point,
                     position = point.Position
-                }));
+                }, WebJsonOptions));
                 return;
             }
 
@@ -79,7 +84,7 @@ public sealed class EditorForm : WebViewForm
                     type = "coordinate",
                     source,
                     position = _player.Value.Position
-                }));
+                }, WebJsonOptions));
             }
         }
         catch (Exception ex)
@@ -88,7 +93,7 @@ public sealed class EditorForm : WebViewForm
             {
                 type = "coordinate_error",
                 message = ex.Message
-            }));
+            }, WebJsonOptions));
         }
     }
 
@@ -130,6 +135,6 @@ public sealed class EditorForm : WebViewForm
             type = "simulator_context",
             player = _player.Value,
             selection = _selection.Value
-        }));
+        }, WebJsonOptions));
     }
 }
