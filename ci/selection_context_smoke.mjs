@@ -53,7 +53,7 @@ try {
           };
         </script>
         <script>
-          ${simulatorJs.replace(/<\\/script/gi, "<\\\\/script")}
+          ${simulatorJs.replaceAll("</script", "<\\/script")}
         </script>
       </body>
     </html>
