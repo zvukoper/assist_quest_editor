@@ -40,7 +40,7 @@ for (const marker of requiredRules) {
 }
 
 const currentTask = fs.readFileSync(path.join(root, "MemoryAI/CURRENT_TASK.md"), "utf8");
-if (!currentTask.includes("1.0.40.100-QUEST-EDITOR-SANDBOX-R0")) {
+if (!currentTask.includes("1.0.40.101-QUEST-EDITOR-DUAL-WINDOW-R1")) {
   console.error("Базовая версия песочницы не зафиксирована.");
   process.exit(1);
 }
