@@ -113,6 +113,7 @@ try {
     throw new Error("UI не отправил корректную команду graph_update_node.");
   }
 
+  await page.getByRole("button", { name: "Отменить" }).click();
   await page.getByRole("button", { name: "Повторить" }).click();
 
   await page.waitForTimeout(20);
