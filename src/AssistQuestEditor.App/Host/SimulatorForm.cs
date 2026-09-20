@@ -291,11 +291,11 @@ public sealed class SimulatorForm : WebViewForm
             return;
         }
 
-        BeginInvoke(() =>
+        BeginInvoke((Action)(() =>
         {
             PostJson(JsonSerializer.Serialize(new { type = "event", @event = e }));
             PushSnapshot();
-        });
+        }));
     }
 
     private static string Required(JsonElement root, string name)
