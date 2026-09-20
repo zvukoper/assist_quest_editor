@@ -30,7 +30,6 @@ public sealed class QuestRuntime
 
     private readonly QuestGraphStore _graphStore;
     private readonly IDataChannelHub _hub;
-    private string? _waitingEventType;
     private DateTimeOffset? _waitUntil;
 
     public QuestRuntime(QuestGraphStore graphStore, IDataChannelHub hub)
@@ -123,6 +122,14 @@ public sealed class QuestRuntime
     {
         if (State.Status != QuestRuntimeStatus.Waiting)
         {
+            return;
+        }
+
+        if ((string.Equals(State.WaitingFor, "Condition", StringComparison.OrdinalIgnoreCase) ||
+             string.Equals(State.WaitingFor, "Interaction", StringComparison.OrdinalIgnoreCase)) &&
+            value.EventType.Equals("ChannelChanged", StringComparison.OrdinalIgnoreCase))
+        {
+            EvaluateWaitingCondition();
             return;
         }
 
