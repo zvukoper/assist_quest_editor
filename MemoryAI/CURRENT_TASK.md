@@ -119,5 +119,13 @@ Web-ресурсы src/AssistQuestEditor.App/Web и data/world/sdo_points.json �
 ## Проверки
 
 - Domain regression: `tests/AssistQuestEditor.Domain.Tests/QuestGraphStoreTests.cs`.
+- Web regression: `ci/selection_context_smoke.mjs` и `ci/quest_graph_smoke.mjs`.
 - CI: Node, Chromium/Playwright, web syntax, .NET build/test, single-file publish.
 
+
+
+## Последняя проверочная точка
+
+Quest Graph smoke проверяет реальный `editor.js`: загрузку `quest_graph`, создание ноды через `graph_add_node` и изменение свойств через `graph_update_node`.
+
+Последний физически тестируемый выпуск: `1.0.40.108-QUEST-EDITOR-QUEST-GRAPH-R1`. Перед следующим физическим тестом номер версии снова повышается.
