@@ -102,7 +102,7 @@
           escapeHtml(graphDocument.dirty ? "Не сохранено" : "Сохранено") +
         "</span>" +
         "<span class='badge'>" + escapeHtml(graphDocument.path ? graphDocument.path : "Новый документ") + "</span>" +
-        "<select id='graphNodeType' class='toolButton'> +
+        "<select id='graphNodeType' class='toolButton'>" +
           nodeTypes.map(([type, label]) => "<option value='" + escapeHtml(type) + "'>" + escapeHtml(label) + " (" + escapeHtml(type) + ")</option>").join("") +
         "</select>" +
         "<input id='graphNodeTitle' class='toolButton' style='width:190px' placeholder='Название новой ноды'>" +
