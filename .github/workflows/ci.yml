@@ -78,6 +78,20 @@ jobs:
             if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           }
 
+      - name: Проверить compile.ps1 как single-file публикацию
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          powershell -NoProfile -NonInteractive -ExecutionPolicy Bypass -File .\compile.ps1 -NoLaunch
+          $publish = Join-Path $env:GITHUB_WORKSPACE 'bin\Release\net10.0-windows\win-x64\publish'
+          $files = @(Get-ChildItem -LiteralPath $publish -File -Force)
+          if ($files.Count -ne 1 -or $files[0].Extension -ne '.exe') {
+            Write-Error "compile.ps1 не создал ровно один EXE."
+            $files | ForEach-Object { Write-Host $_.FullName }
+            exit 1
+          }
+          Write-Host "Single-file публикация CI: $($files[0].FullName)" -ForegroundColor Green
+
       - name: Проверить отсутствие логов в репозитории
         shell: pwsh
         run: |
