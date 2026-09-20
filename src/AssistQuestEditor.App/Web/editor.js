@@ -14,6 +14,8 @@
   let graphValidation = [];
   let graphPreviewPositions = new Map();
   let graphViewport = { x: 0, y: 0, width: 1200, height: 720 };
+  let graphDocument = { path: "", dirty: false };
+  let graphSpaceDown = false;
 
   const configs = {
     graph: { title: "Нодовый редактор квестов", draw: renderGraph },
@@ -86,7 +88,15 @@
 
     ws.innerHTML =
       "<div class='toolbar' style='margin-bottom:10px;flex-wrap:wrap'>" +
-        "<select id='graphNodeType' class='toolButton'>" +
+        "<button class='toolButton' id='newGraph'>Новый</button>" +
+        "<button class='toolButton' id='openGraph'>Открыть</button>" +
+        "<button class='toolButton primary' id='saveGraph'>Сохранить</button>" +
+        "<button class='toolButton' id='saveGraphAs'>Сохранить как…</button>" +
+        "<span class='badge " + (graphDocument.dirty ? "accent" : "blue") + "'>" +
+          escapeHtml(graphDocument.dirty ? "Не сохранено" : "Сохранено") +
+        "</span>" +
+        "<span class='badge'>" + escapeHtml(graphDocument.path ? graphDocument.path : "Новый документ") + "</span>" +
+        "<select id='graphNodeType' class='toolButton'> +
           nodeTypes.map(([type, label]) => "<option value='" + escapeHtml(type) + "'>" + escapeHtml(label) + " (" + escapeHtml(type) + ")</option>").join("") +
         "</select>" +
         "<input id='graphNodeTitle' class='toolButton' style='width:190px' placeholder='Название новой ноды'>" +
@@ -106,6 +116,11 @@
         "</svg>" +
       "</div>";
 
+    ws.querySelector("#newGraph").addEventListener("click", () => send({ action: "graph_new" }));
+    ws.querySelector("#openGraph").addEventListener("click", () => send({ action: "graph_open" }));
+    ws.querySelector("#saveGraph").addEventListener("click", () => send({ action: "graph_save" }));
+    ws.querySelector("#saveGraphAs").addEventListener("click", () => send({ action: "graph_save_as" }));
+
     ws.querySelector("#addGraphNode").addEventListener("click", () => {
       const type = ws.querySelector("#graphNodeType").value;
       const nodeTitle = ws.querySelector("#graphNodeTitle").value.trim() || type;
@@ -117,6 +132,14 @@
     ws.querySelector("#validateGraph").addEventListener("click", () => send({ action: "graph_validate" }));
     bindGraphInteractions(ws.querySelector("#questGraphSvg"));
     updateGraphInspector(ins);
+  }
+
+  const GRAPH_NODE_WIDTH = 210;
+
+  function graphNodeHeight(node) {
+    const inputs = node.sockets.filter(socket => socket.direction === "Input").length;
+    const outputs = node.sockets.filter(socket => socket.direction === "Output").length;
+    return Math.max(110, 72 + Math.max(inputs, outputs) * 22);
   }
 
   function graphEdges() {
@@ -135,7 +158,7 @@
       const toIndex = inputs.findIndex(socket => socket.socketId === toSocket.socketId);
       const fromPosition = getGraphNodePosition(from);
       const toPosition = getGraphNodePosition(to);
-      const startX = fromPosition.x + 180;
+      const startX = fromPosition.x + GRAPH_NODE_WIDTH;
       const startY = fromPosition.y + 22 + Math.max(0, fromIndex) * 22;
       const endX = toPosition.x;
       const endY = toPosition.y + 22 + Math.max(0, toIndex) * 22;
@@ -155,8 +178,9 @@
     const outputs = node.sockets.filter(socket => socket.direction === "Output");
 
     const position = getGraphNodePosition(node);
+    const nodeHeight = graphNodeHeight(node);
     return "<g class='node" + selected + "' data-node-id='" + escapeHtml(node.nodeId) + "' transform='translate(" + position.x + " " + position.y + ")'>" +
-      "<rect class='nodeRect' rx='8' width='180' height='110'></rect>" +
+      "<rect class='nodeRect' rx='8' width='" + GRAPH_NODE_WIDTH + "' height='" + nodeHeight + "'></rect>" +
       "<text class='nodeTitle' x='14' y='26'>" + escapeHtml(node.nodeType) + "</text>" +
       "<text x='14' y='49' fill='#a6a6a6' font-size='11'>" + escapeHtml(node.title) + "</text>" +
       "<text x='14' y='91' fill='#737f8b' font-size='9'>" + escapeHtml(node.nodeId) + "</text>" +
@@ -168,8 +192,8 @@
       ).join("") +
       outputs.map((socket, index) =>
         "<g class='socketGroup' data-socket-direction='Output' data-socket-id='" + escapeHtml(socket.socketId) + "'>" +
-          "<circle class='socket output' cx='180' cy='" + (22 + index * 22) + "' r='6'></circle>" +
-          "<text x='170' y='" + (26 + index * 22) + "' text-anchor='end' fill='#8f9baa' font-size='9'>" + escapeHtml(socket.name) + "</text>" +
+          "<circle class='socket output' cx='" + GRAPH_NODE_WIDTH + "'" cy='" + (22 + index * 22) + "' r='6'></circle>" +
+          "<text x='" + (GRAPH_NODE_WIDTH - 10) + "' y='" + (26 + index * 22) + "' text-anchor='end' fill='#8f9baa' font-size='9'>" + escapeHtml(socket.name) + "</text>" +
         "</g>"
       ).join("") +
     "</g>";
@@ -179,8 +203,22 @@
     if (!svg) return;
 
     let dragState = null;
+    let panState = null;
+
+    const setViewBox = () => {
+      svg.setAttribute("viewBox", graphViewport.x + " " + graphViewport.y + " " + graphViewport.width + " " + graphViewport.height);
+    };
 
     svg.addEventListener("pointerdown", event => {
+      const wantsPan = event.button === 1 || (event.button === 0 && graphSpaceDown);
+      if (wantsPan) {
+        panState = { pointerId: event.pointerId, lastX: event.clientX, lastY: event.clientY };
+        svg.classList.add("panActive");
+        svg.setPointerCapture?.(event.pointerId);
+        event.preventDefault();
+        return;
+      }
+
       if (event.button !== 0) return;
 
       const socket = event.target.closest(".socketGroup");
@@ -217,6 +255,22 @@
     });
 
     svg.addEventListener("pointermove", event => {
+      if (panState && event.pointerId === panState.pointerId) {
+        const rect = svg.getBoundingClientRect();
+        if (rect.width > 0 && rect.height > 0) {
+          const scaleX = svg.viewBox.baseVal.width / rect.width;
+          const scaleY = svg.viewBox.baseVal.height / rect.height;
+          graphViewport.x -= (event.clientX - panState.lastX) * scaleX;
+          graphViewport.y -= (event.clientY - panState.lastY) * scaleY;
+          panState.lastX = event.clientX;
+          panState.lastY = event.clientY;
+          setViewBox();
+          refreshGraphEdges(svg);
+        }
+        event.preventDefault();
+        return;
+      }
+
       if (!dragState || event.pointerId !== dragState.pointerId) return;
 
       const movedDistance = Math.hypot(
@@ -249,6 +303,13 @@
     });
 
     const finishDrag = event => {
+      if (panState && event.pointerId === panState.pointerId) {
+        panState = null;
+        svg.classList.remove("panActive");
+        try { svg.releasePointerCapture?.(event.pointerId); } catch {}
+        return;
+      }
+
       if (!dragState || event.pointerId !== dragState.pointerId) return;
 
       const finished = dragState;
@@ -311,13 +372,7 @@
         height: nextHeight
       };
 
-      svg.setAttribute(
-        "viewBox",
-        graphViewport.x + " " +
-        graphViewport.y + " " +
-        graphViewport.width + " " + graphViewport.height
-      );
-
+      setViewBox();
       refreshGraphEdges(svg);
       event.preventDefault();
     }, { passive: false });
@@ -369,6 +424,57 @@
       node.classList.toggle("selected", node.dataset.nodeId === selectedGraphNodeId));
   }
 
+  const PARAMETER_LABELS = {
+    worldPointId: "WorldPoint Id", triggerRadius: "Радиус триггера",
+    operator: "Оператор", left: "Левый операнд", comparison: "Сравнение", right: "Правый операнд",
+    seconds: "Секунды", conditionId: "Condition Id", eventType: "Тип события",
+    status: "Статус", step: "Этап", key: "Ключ", value: "Значение", sceneId: "Scene Id",
+    rewardId: "Reward Id", itemId: "Предмет Id", count: "Количество",
+    faction: "Фракция", amount: "Количество", outputCount: "Количество выходов"
+  };
+
+  function parameterLabel(key) {
+    return PARAMETER_LABELS[key] || key;
+  }
+
+  function parameterEditorHtml(node) {
+    const parameters = node.parameters || {};
+    const entries = Object.entries(parameters);
+    if (!entries.length) {
+      return "<div class='notice'>У этой ноды пока нет параметров.</div>";
+    }
+
+    return "<div class='tableLike'>" + entries.map(([key, value]) =>
+      "<div class='tableRow' data-param-row>" +
+        "<input class='toolButton' data-param-key value='" + escapeHtml(key) + "' title='" + escapeHtml(parameterLabel(key)) + "'>" +
+        "<input class='toolButton' data-param-value value='" + escapeHtml(value) + "'>" +
+        "<button class='toolButton' data-param-remove title='Удалить параметр'>×</button>" +
+      "</div>"
+    ).join("") + "</div>";
+  }
+
+  function addParameterRow(container) {
+    const row = document.createElement("div");
+    row.className = "tableRow";
+    row.dataset.paramRow = "";
+    row.innerHTML =
+      "<input class='toolButton' data-param-key placeholder='Ключ'>" +
+      "<input class='toolButton' data-param-value placeholder='Значение'>" +
+      "<button class='toolButton' data-param-remove title='Удалить параметр'>×</button>";
+    container.appendChild(row);
+    row.querySelector("[data-param-remove]")?.addEventListener("click", () => row.remove());
+  }
+
+  function collectParameters(ins) {
+    const parameters = {};
+    ins.querySelectorAll("[data-param-row]").forEach(row => {
+      const key = row.querySelector("[data-param-key]")?.value.trim();
+      if (!key) return;
+      parameters[key] = row.querySelector("[data-param-value]")?.value ?? "";
+    });
+    return parameters;
+  }
+
   function updateGraphInspector(ins) {
     if (!ins) return;
 
@@ -394,6 +500,9 @@
         "<div class='field'><label>Y</label><input id='graphEditY' type='number' value='" + node.y + "'></div>" +
       "</div>" +
       "<div class='field' style='margin-top:8px'><label>NodeType</label><input value='" + escapeHtml(node.nodeType) + "' disabled></div>" +
+      "<div class='miniLabel' style='margin-top:14px'>Параметры</div>" +
+      "<div id='graphParameterEditor' style='margin-top:6px'>" + parameterEditorHtml(node) + "</div>" +
+      "<button class='toolButton' id='addGraphParameter' style='margin-top:6px'>Добавить параметр</button>" +
       "<button class='toolButton primary' id='saveGraphNode' style='margin-top:10px'>Сохранить свойства</button>" +
       "<button class='toolButton' id='deleteGraphNode' style='margin-top:6px'>Удалить ноду</button>" +
       "<div class='miniLabel' style='margin-top:14px'>Sockets</div>" +
@@ -421,13 +530,22 @@
           : "Связь создаётся кликом Output → Input.") +
       "</div>";
 
+    ins.querySelectorAll("[data-param-remove]").forEach(button => {
+      button.addEventListener("click", () => button.closest("[data-param-row]")?.remove());
+    });
+
+    ins.querySelector("#addGraphParameter").addEventListener("click", () => {
+      addParameterRow(ins.querySelector("#graphParameterEditor"));
+    });
+
     ins.querySelector("#saveGraphNode").addEventListener("click", () => {
       send({
         action: "graph_update_node",
         nodeId: node.nodeId,
         title: ins.querySelector("#graphEditTitle").value,
         x: Number(ins.querySelector("#graphEditX").value),
-        y: Number(ins.querySelector("#graphEditY").value)
+        y: Number(ins.querySelector("#graphEditY").value),
+        parameters: collectParameters(ins)
       });
     });
 
@@ -454,9 +572,9 @@
   function fitGraph() {
     if (!questGraph?.nodes?.length) return;
     const minX = Math.min(...questGraph.nodes.map(node => getGraphNodePosition(node).x));
-    const maxX = Math.max(...questGraph.nodes.map(node => getGraphNodePosition(node).x + 180));
+    const maxX = Math.max(...questGraph.nodes.map(node => getGraphNodePosition(node).x + GRAPH_NODE_WIDTH));
     const minY = Math.min(...questGraph.nodes.map(node => getGraphNodePosition(node).y));
-    const maxY = Math.max(...questGraph.nodes.map(node => getGraphNodePosition(node).y + 110));
+    const maxY = Math.max(...questGraph.nodes.map(node => getGraphNodePosition(node).y + graphNodeHeight(node)));
     const svg = document.getElementById("questGraphSvg");
     if (!svg) return;
     graphViewport = {
@@ -704,6 +822,10 @@
 
     if (data?.type === "quest_graph") {
       questGraph = data.graph;
+      graphDocument = {
+        path: data.documentPath || "",
+        dirty: Boolean(data.documentDirty)
+      };
       graphPreviewPositions.clear();
       graphHistory = {
         canUndo: Boolean(data.canUndo),
@@ -754,6 +876,10 @@
   });
 
   document.addEventListener("keydown", event => {
+    if (event.code === "Space") {
+      graphSpaceDown = true;
+      if (currentId() === "graph") event.preventDefault();
+    }
     if (currentId() !== "graph" || !(event.ctrlKey || event.metaKey)) return;
     const key = event.key.toLowerCase();
     if (key === "z" && !event.shiftKey) {
@@ -766,6 +892,14 @@
       event.preventDefault();
       if (graphHistory.canRedo) send({ action: "graph_redo" });
     }
+  });
+
+  document.addEventListener("keyup", event => {
+    if (event.code === "Space") graphSpaceDown = false;
+  });
+
+  window.addEventListener("blur", () => {
+    graphSpaceDown = false;
   });
 
   window.addEventListener("hashchange", render);

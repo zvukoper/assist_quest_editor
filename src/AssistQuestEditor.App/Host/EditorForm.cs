@@ -15,8 +15,12 @@ public sealed class EditorForm : WebViewForm
 
     private readonly IDataChannel<PlayerState> _player;
     private readonly IDataChannel<WorldSelectionState> _selection;
+    private const int DefinitionSchemaVersion = 1;
+
     private readonly QuestGraphStore _questGraph;
     private readonly bool _isGraphEditor;
+    private string? _currentDefinitionPath;
+    private bool _documentDirty;
 
     public EditorForm(string title, string page, IDataChannelHub hub, QuestGraphStore questGraph)
         : base($"Assist Quest Editor — {title}", page, new Size(1380, 900))
@@ -29,6 +33,7 @@ public sealed class EditorForm : WebViewForm
         _player.Changed += Player_Changed;
         _selection.Changed += Selection_Changed;
         _questGraph.Changed += QuestGraph_Changed;
+        UpdateWindowTitle();
 
         FormClosed += (_, _) =>
         {
@@ -141,7 +146,8 @@ public sealed class EditorForm : WebViewForm
                     nodeId,
                     String(root, "title", null),
                     NumberOrNull(root, "x"),
-                    NumberOrNull(root, "y"));
+                    NumberOrNull(root, "y"),
+                    Parameters(root, "parameters"));
 
                 if (updated is null)
                 {
@@ -206,6 +212,29 @@ public sealed class EditorForm : WebViewForm
                 PostQuestGraph();
                 break;
             }
+            case "graph_new":
+            {
+                _questGraph.Replace(QuestGraphFactory.CreateStarter());
+                _currentDefinitionPath = null;
+                _documentDirty = false;
+                UpdateWindowTitle();
+                AppLogger.Info("Quest Graph: создан новый документ.");
+                PostQuestGraph();
+                break;
+            }
+
+            case "graph_open":
+                OpenGraph();
+                break;
+
+            case "graph_save":
+                SaveGraph(saveAs: false);
+                break;
+
+            case "graph_save_as":
+                SaveGraph(saveAs: true);
+                break;
+
             case "graph_validate":
             {
                 AppLogger.Info("Quest Graph: выполнена проверка графа.");
@@ -239,6 +268,93 @@ public sealed class EditorForm : WebViewForm
         }
     }
 
+    private void OpenGraph()
+    {
+        using var dialog = new OpenFileDialog
+        {
+            Title = "Открыть Quest Definition",
+            Filter = "Quest Definition (*.json)|*.json|JSON (*.json)|*.json|Все файлы (*.*)|*.*",
+            Multiselect = false
+        };
+
+        if (dialog.ShowDialog(this) != DialogResult.OK) return;
+
+        var json = File.ReadAllText(dialog.FileName);
+        var document = JsonSerializer.Deserialize<QuestDefinitionDocument>(json, WebJsonOptions)
+            ?? throw new InvalidOperationException("Файл Quest Definition пуст или повреждён.");
+
+        if (document.SchemaVersion != DefinitionSchemaVersion)
+            throw new InvalidOperationException($"Неподдерживаемая версия схемы Quest Definition: {document.SchemaVersion}. Поддерживается {DefinitionSchemaVersion}.");
+
+        if (document.Definition?.Graph is null)
+            throw new InvalidOperationException("В документе отсутствует Quest Graph.");
+
+        _questGraph.Replace(document.Definition.Graph);
+        _currentDefinitionPath = dialog.FileName;
+        _documentDirty = false;
+        UpdateWindowTitle();
+        PostQuestGraph();
+
+        AppLogger.Info("Quest Graph: документ открыт.", $"path={dialog.FileName}; schema={document.SchemaVersion}");
+    }
+
+    private void SaveGraph(bool saveAs)
+    {
+        var path = _currentDefinitionPath;
+
+        if (saveAs || string.IsNullOrWhiteSpace(path))
+        {
+            using var dialog = new SaveFileDialog
+            {
+                Title = "Сохранить Quest Definition",
+                Filter = "Quest Definition (*.json)|*.json|JSON (*.json)|*.json",
+                DefaultExt = "json",
+                AddExtension = true,
+                FileName = string.IsNullOrWhiteSpace(path)
+                    ? $"{SanitizeFileName(_questGraph.Value.Name)}.json"
+                    : Path.GetFileName(path)
+            };
+
+            if (dialog.ShowDialog(this) != DialogResult.OK) return;
+            path = dialog.FileName;
+        }
+
+        var definition = new QuestDefinition(
+            _questGraph.Value.Id,
+            _questGraph.Value.Name,
+            string.Empty,
+            _questGraph.Value,
+            Array.Empty<string>());
+
+        var document = new QuestDefinitionDocument(DefinitionSchemaVersion, definition);
+        var output = JsonSerializer.Serialize(document, WebJsonOptions);
+        File.WriteAllText(path!, output);
+
+        _currentDefinitionPath = path;
+        _documentDirty = false;
+        UpdateWindowTitle();
+        PostQuestGraph();
+
+        AppLogger.Info("Quest Graph: документ сохранён.",
+            $"path={_currentDefinitionPath}; schema={DefinitionSchemaVersion}; bytes={output.Length}");
+    }
+
+    private void UpdateWindowTitle()
+    {
+        if (!_isGraphEditor) return;
+        var fileName = string.IsNullOrWhiteSpace(_currentDefinitionPath)
+            ? "Новый документ"
+            : Path.GetFileName(_currentDefinitionPath);
+        Text = $"Assist Quest Editor — Нодовый редактор — {fileName}" + (_documentDirty ? " *" : string.Empty);
+    }
+
+    private static string SanitizeFileName(string value)
+    {
+        var invalid = Path.GetInvalidFileNameChars();
+        var clean = new string(value.Select(character => invalid.Contains(character) ? '_' : character).ToArray());
+        return string.IsNullOrWhiteSpace(clean) ? "quest" : clean;
+    }
+
     private void PostQuestGraph(string? selectedNodeId = null)
     {
         if (!_isGraphEditor || Browser.CoreWebView2 is null)
@@ -253,7 +369,9 @@ public sealed class EditorForm : WebViewForm
             selectedNodeId,
             canUndo = _questGraph.CanUndo,
             canRedo = _questGraph.CanRedo,
-            validation = QuestGraphValidator.Validate(_questGraph.Value)
+            validation = QuestGraphValidator.Validate(_questGraph.Value),
+            documentPath = _currentDefinitionPath ?? string.Empty,
+            documentDirty = _documentDirty
         }, WebJsonOptions));
     }
 
@@ -261,6 +379,8 @@ public sealed class EditorForm : WebViewForm
     {
         if (_isGraphEditor)
         {
+            _documentDirty = true;
+            UpdateWindowTitle();
             PushGraphOnUiThread();
         }
     }
@@ -330,6 +450,20 @@ public sealed class EditorForm : WebViewForm
                element.ValueKind != JsonValueKind.Undefined
             ? element.ToString()
             : fallback ?? string.Empty;
+    }
+
+    private static IReadOnlyDictionary<string, string>? Parameters(JsonElement root, string name)
+    {
+        if (!root.TryGetProperty(name, out var element) || element.ValueKind != JsonValueKind.Object)
+            return null;
+
+        var result = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var property in element.EnumerateObject())
+        {
+            result[property.Name] = property.Value.ToString();
+        }
+
+        return result;
     }
 
     private static double Number(JsonElement root, string name, double fallback) =>
