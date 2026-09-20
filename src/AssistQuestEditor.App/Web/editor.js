@@ -1,7 +1,7 @@
 (() => {
   const root = document.getElementById("root");
   const title = document.getElementById("editorTitle");
-  const send = payload => window.chrome?.webview?.postMessage(JSON.stringify(payload));
+  const send = payload => window.chrome?.webview?.postMessage(payload);
 
   let simulatorContext = {
     player: null,

@@ -2,7 +2,7 @@
   const map = document.getElementById("mapCanvas");
   const side = document.getElementById("side");
   const hud = document.getElementById("hud");
-  const send = payload => window.chrome?.webview?.postMessage(JSON.stringify(payload));
+  const send = payload => window.chrome?.webview?.postMessage(payload);
 
   let snapshot = null;
   let draggingPlayer = false;
