@@ -62,12 +62,24 @@ public interface IEventChannel<TEvent>
 
 public sealed class EventChannel<TEvent> : IEventChannel<TEvent>
 {
-    public event EventHandler<TEvent>? Published;
+    public event Action<TEvent>? Published;
 
     public void Publish(TEvent value)
     {
         Published?.Invoke(value);
     }
+}
+
+public interface IDataSourceAdapter
+{
+    string AdapterId { get; }
+    IDataChannelHub Channels { get; }
+}
+
+public sealed class SimulatorDataSourceAdapter : IDataSourceAdapter
+{
+    public string AdapterId => "simulator";
+    public IDataChannelHub Channels { get; } = new SimulatorDataChannelHub();
 }
 
 public interface IDataChannelHub
