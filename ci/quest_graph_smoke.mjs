@@ -81,7 +81,10 @@ try {
 
 
   await page.evaluate(graphValue => {
-    window.__messageHandler({
+    if (typeof window.__assistHandleWebviewMessage !== "function") {
+      throw new Error("Quest Graph WebView message handler не зарегистрирован.");
+    }
+    window.__assistHandleWebviewMessage({
       data: JSON.stringify({ type: "quest_graph", graph: graphValue, canUndo: true, canRedo: true })
     });
   }, graph);

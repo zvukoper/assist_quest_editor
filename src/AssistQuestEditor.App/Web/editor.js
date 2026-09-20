@@ -817,7 +817,7 @@
   }
 
   const webview = window.__assistWebview || window.chrome?.webview;
-  webview?.addEventListener("message", event => {
+  const handleWebviewMessage = event => {
     const data = typeof event.data === "string" ? JSON.parse(event.data) : event.data;
 
     if (data?.type === "quest_graph") {
@@ -873,7 +873,15 @@
     if (data?.type === "coordinate_error") {
       window.alert(data.message || "Координаты не получены.");
     }
-  });
+  };
+
+  if (window.__assistWebview) {
+    window.__assistHandleWebviewMessage = handleWebviewMessage;
+  }
+
+  if (typeof webview?.addEventListener === "function") {
+    webview.addEventListener("message", handleWebviewMessage);
+  }
 
   document.addEventListener("keydown", event => {
     if (event.code === "Space") {
