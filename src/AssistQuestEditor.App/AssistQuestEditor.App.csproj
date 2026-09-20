@@ -11,7 +11,7 @@
     <Prefer32Bit>false</Prefer32Bit>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
 
-    <Version>1.0.40.104</Version>
+    <Version>1.0.40.105</Version>
     <AssemblyVersion>1.0.40.104</AssemblyVersion>
     <FileVersion>1.0.40.104</FileVersion>
     <AssemblyInformationalVersion>1.0.40.104-QUEST-EDITOR-SDO-MAP-R3</AssemblyInformationalVersion>

@@ -30,6 +30,7 @@ public sealed class SimulatorForm : WebViewForm
 
     protected override void OnBrowserReady()
     {
+        AppLogger.Info("SimulatorForm: browser ready, отправляю snapshot.");
         PushSnapshot();
     }
 
@@ -40,18 +41,25 @@ public sealed class SimulatorForm : WebViewForm
             return;
         }
 
+        var snapshot = _hub.GetSnapshot();
+        var pointCount = snapshot.World.Points.Count;
+        AppLogger.Info("SimulatorForm: формирование snapshot.",
+            $"points={pointCount}; selected={snapshot.Selection.Point?.Id ?? "<none>"}; player={snapshot.Player.Position}");
+
         var payload = JsonSerializer.Serialize(new
         {
             type = "snapshot",
             version = VersionInfo.InformationalVersion,
-            snapshot = _hub.GetSnapshot()
+            snapshot
         });
 
+        AppLogger.Info("SimulatorForm: отправляю snapshot в WebView2.", $"jsonChars={payload.Length}; points={pointCount}");
         PostJson(payload);
     }
 
     protected override void OnWebMessage(string json)
     {
+        AppLogger.Info("SimulatorForm: обработка web action.", $"json={json}");
         try
         {
             using var document = JsonDocument.Parse(json);

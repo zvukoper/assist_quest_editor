@@ -118,12 +118,18 @@ Write-Host "Проверка: опубликован ровно один фай�
 # После успешной публикации временные диагностические логи можно удалить.
 $logsDir = Join-Path $PSScriptRoot 'MemoryAI\LOGS'
 if (Test-Path -LiteralPath $logsDir) {
-    Get-ChildItem -LiteralPath $logsDir -File -ErrorAction SilentlyContinue |
+    Get-ChildItem -LiteralPath $logsDir -File -Force -ErrorAction SilentlyContinue |
         Where-Object { $_.Name -ne 'README.md' } |
-        Remove-Item -Force -ErrorAction SilentlyContinue
+        Remove-Item -Force -ErrorAction Stop
 
-    Get-ChildItem -LiteralPath $logsDir -Directory -ErrorAction SilentlyContinue |
-        Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
+    Get-ChildItem -LiteralPath $logsDir -Directory -Force -ErrorAction SilentlyContinue |
+        Remove-Item -Recurse -Force -ErrorAction Stop
+}
+
+$remainingLogs = @(Get-ChildItem -LiteralPath $logsDir -Force -ErrorAction SilentlyContinue |
+    Where-Object { $_.Name -ne 'README.md' })
+if ($remainingLogs.Count -ne 0) {
+    throw "Не удалось очистить MemoryAI/LOGS после успешной публикации."
 }
 
 if (-not $NoLaunch) {

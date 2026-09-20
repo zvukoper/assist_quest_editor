@@ -590,12 +590,21 @@
   }
 
   function receive(message) {
-    if (!message) return;
+    if (!message) {
+      window.assistWebLog?.("WARN", "Simulator получил пустое сообщение.");
+      return;
+    }
 
     if (message.type === "snapshot") {
       const hadSnapshot = !!snapshot;
       snapshot = message.snapshot;
       selectedPointId = snapshot.selection?.point?.id || null;
+      window.assistWebLog?.("INFO", "Simulator получил snapshot.", {
+        points: snapshot.world?.points?.length ?? 0,
+        selectedPointId,
+        player: snapshot.player?.position,
+        version: message.version
+      });
       if (!hadSnapshot) fitWorld();
       drawMap();
       renderSide();
@@ -617,8 +626,17 @@
 
   const webview = window.chrome?.webview;
   webview?.addEventListener("message", event => {
-    const data = typeof event.data === "string" ? JSON.parse(event.data) : event.data;
-    receive(data);
+    try {
+      const data = typeof event.data === "string" ? JSON.parse(event.data) : event.data;
+      receive(data);
+    } catch (error) {
+      window.assistWebLog?.("ERROR", "Ошибка обработки сообщения от host.", { error: String(error) });
+    }
+  });
+  window.assistWebLog?.("INFO", "Simulator Web UI готов.", {
+    canvas: !!map,
+    side: !!side,
+    url: location.href
   });
 
   map.addEventListener("pointerdown", event => {

@@ -1,5 +1,14 @@
 # Журнал изменений памяти и архитектуры
 
+## 2026-09-20 — 1.0.40.105-QUEST-EDITOR-SDO-MAP-R4-DIAGNOSTICS
+
+- добавлен постоянный диагностический лог `MemoryAI/LOGS/assist_quest_editor.log`;
+- логируется путь и размер SDO-файла, результат JSON-десериализации, число входных/валидных точек и диапазоны координат;
+- логируется жизненный цикл WebView2, NavigationCompleted, URL страницы, версия браузера и отправка/получение snapshot;
+- добавлен сбор `console.error`, `console.warn`, `window.error` и `unhandledrejection` из Web UI;
+- добавлен version cache-busting для HTML/JS/CSS WebView;
+- после успешной публикации compile.ps1 очищает старые логи, при ошибке публикации логи не удаляются.
+
 ## 2026-09-20 — Инициализация
 
 - создан отдельный репозиторий-песочница assist_quest_editor;

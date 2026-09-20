@@ -77,8 +77,12 @@ compile.ps1 создаёт self-contained single-file EXE: bin/Release/net10.0-w
 
 Web-ресурсы src/AssistQuestEditor.App/Web и data/world/sdo_points.json объявлены как publish content и включаются в single-file через IncludeAllContentForSelfExtract.
 
+После успешной публикации compile.ps1 очищает MemoryAI/LOGS и только затем запускает EXE, поэтому логи физического теста начинаются с чистого запуска.
+
 ## Версия
 
-Текущая рабочая версия: 1.0.40.104-QUEST-EDITOR-SDO-MAP-R3.
+Базовая версия каркаса: 1.0.40.101-QUEST-EDITOR-DUAL-WINDOW-R1.
+
+Текущая рабочая версия: 1.0.40.105-QUEST-EDITOR-SDO-MAP-R4-DIAGNOSTICS.
 
 Перед физическим тестированием пользователя версия обязательно увеличивается.

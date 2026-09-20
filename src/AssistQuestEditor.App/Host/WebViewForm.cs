@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Microsoft.Web.WebView2.Core;
 using Microsoft.Web.WebView2.WinForms;
 
@@ -37,8 +38,10 @@ public abstract class WebViewForm : Form
     {
         try
         {
+            AppLogger.Info("WebView2: начало инициализации.", $"form={Text}; page={_page}");
             _browserReadyRaised = false;
             await Browser.EnsureCoreWebView2Async();
+            AppLogger.Info("WebView2: CoreWebView2 создан.", $"browser={Browser.CoreWebView2.Environment.BrowserVersionString}");
             Browser.WebMessageReceived += Browser_WebMessageReceived;
 
             var hashIndex = _page.IndexOf("#");
@@ -52,11 +55,13 @@ public abstract class WebViewForm : Form
             }
 
             var uri = new Uri(path).AbsoluteUri;
+            uri += "?v=" + Uri.EscapeDataString(VersionInfo.NumericVersion);
             if (!string.IsNullOrWhiteSpace(fragment))
             {
                 uri += "#" + fragment;
             }
 
+            AppLogger.Info("WebView2: Navigate.", $"form={Text}; uri={uri}; sourceExists={File.Exists(path)}; sourceBytes={new FileInfo(path).Length}");
             Browser.CoreWebView2.Navigate(uri);
         }
         catch (Exception ex)
@@ -67,6 +72,7 @@ public abstract class WebViewForm : Form
 
     private void Browser_NavigationCompleted(object? sender, CoreWebView2NavigationCompletedEventArgs e)
     {
+        AppLogger.Info("WebView2: NavigationCompleted.", $"form={Text}; success={e.IsSuccess}; error={e.WebErrorStatus}");
         if (IsDisposed || _browserReadyRaised)
         {
             return;
@@ -80,6 +86,7 @@ public abstract class WebViewForm : Form
         }
 
         _browserReadyRaised = true;
+        AppLogger.Info("WebView2: browser ready.", $"form={Text}; page={_page}");
         OnBrowserReady();
     }
 
@@ -93,6 +100,32 @@ public abstract class WebViewForm : Form
 
     private void Browser_WebMessageReceived(object? sender, CoreWebView2WebMessageReceivedEventArgs e)
     {
+        try
+        {
+            using var document = JsonDocument.Parse(e.WebMessageAsJson);
+            var root = document.RootElement;
+            var action = root.TryGetProperty("action", out var actionNode) ? actionNode.GetString() : null;
+            if (string.Equals(action, "web_log", StringComparison.OrdinalIgnoreCase))
+            {
+                var level = root.TryGetProperty("level", out var levelNode) ? levelNode.GetString() : "INFO";
+                var message = root.TryGetProperty("message", out var messageNode) ? messageNode.GetString() : "Web log";
+                var details = root.TryGetProperty("details", out var detailsNode) ? detailsNode.ToString() : null;
+                if (string.Equals(level, "ERROR", StringComparison.OrdinalIgnoreCase))
+                    AppLogger.Error("WEB: " + (message ?? "Web error"), details: details);
+                else if (string.Equals(level, "WARN", StringComparison.OrdinalIgnoreCase))
+                    AppLogger.Warn("WEB: " + (message ?? "Web warning"), details);
+                else
+                    AppLogger.Info("WEB: " + (message ?? "Web info"), details);
+                return;
+            }
+
+            AppLogger.Info("WebView2: получено действие.", "form=" + Text + "; action=" + (action ?? "<none>"));
+        }
+        catch (Exception ex)
+        {
+            AppLogger.Error("WebView2: ошибка разбора web message.", ex);
+        }
+
         OnWebMessage(e.WebMessageAsJson);
     }
 
