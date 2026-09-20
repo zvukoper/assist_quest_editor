@@ -6,7 +6,11 @@
 
 Репозиторий: assist_quest_editor
 
-Ветка разработки: только main.
+Ветка разработки: только main
+
+### Фактический текущий результат
+
+Quest Graph больше не является статической SVG-заготовкой: канонический граф хранится в `QuestGraphStore` Domain и редактируется через Host/WebView2..
 
 ## Уже сделано
 
@@ -27,9 +31,10 @@
 
 Следующий функциональный слой:
 
-1. canonical Quest Runtime и registry handlers;
-2. интеграция Simulator → Runtime;
-3. автоматические переходы эталонного квеста Руслана;
+1. довести Quest Graph Editor до следующего цикла: перетаскивание нод, pan/zoom, validation, undo/redo и сохранение definition;
+2. затем canonical Quest Runtime и registry handlers;
+3. интеграция Simulator → Runtime;
+4. автоматические переходы эталонного квеста Руслана;
 4. runtime UI: маркеры, уведомления, диалоги, выборы и награды;
 5. сохранение и восстановление состояния;
 6. сохранение графа, undo/redo и миграции схем;
@@ -85,6 +90,34 @@ Web-ресурсы src/AssistQuestEditor.App/Web и data/world/sdo_points.json �
 
 Причина пустого Simulator найдена: C# snapshot сериализовался с PascalCase, тогда как Web UI ожидает camelCase.
 
-Текущая рабочая версия: 1.0.40.106-QUEST-EDITOR-SDO-MAP-R5-SNAPSHOT-FIX.
+Текущая рабочая версия: 1.0.40.108-QUEST-EDITOR-QUEST-GRAPH-R1.
+
+Последние рабочие вехи:
+- 1.0.40.106 — исправлена camelCase сериализация Simulator snapshot;
+- 1.0.40.107 — исправлен camelCase контракт simulator_context/coordinate между Simulator и Editor;
+- 1.0.40.108 — начат функциональный Quest Graph Editor через общий QuestGraphStore.
 
 Перед физическим тестированием пользователя версия обязательно увеличивается.
+
+## Quest Graph — текущий рабочий контракт
+
+- `QuestGraphStore` находится в `src/AssistQuestEditor.Domain/QuestGraphStore.cs`.
+- `QuestGraphFactory.CreateStarter()` создаёт эталонный граф «Спецмаринад для Руслана».
+- `QuestNodeCatalog.CreateSockets()` выдаёт sockets по типу ноды.
+- Изменения графа выполняются через AddNode / UpdateNode / RemoveNode / Connect / Disconnect.
+- NodeId сохраняется при редактировании.
+- Удаление ноды автоматически удаляет все связанные connections.
+- Связь разрешена только Output → Input, дубликаты запрещены.
+- `MainForm` создаёт один QuestGraphStore на всё приложение; все EditorForm получают тот же экземпляр.
+- Graph Web UI работает через действия graph_add_node, graph_update_node, graph_remove_node, graph_connect, graph_disconnect.
+- Состояние выбора ноды в браузере является только presentation state.
+
+Текущий Graph Editor поддерживает: выбор ноды, добавление нод из списка типов, редактирование Title/X/Y, удаление нод, создание/удаление связей Output → Input.
+
+Следующие незавершённые части Graph Editor: drag нод, pan/zoom canvas, dynamic sockets, comments, copy/paste, undo/redo, disk save/load, validation, minimap.
+
+## Проверки
+
+- Domain regression: `tests/AssistQuestEditor.Domain.Tests/QuestGraphStoreTests.cs`.
+- CI: Node, Chromium/Playwright, web syntax, .NET build/test, single-file publish.
+
