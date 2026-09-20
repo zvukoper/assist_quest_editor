@@ -57,11 +57,16 @@ public sealed class QuestGraphStoreTests
     {
         var store = new QuestGraphStore(QuestGraphFactory.CreateStarter());
 
-        Assert.Equal(3, store.Value.Connections.Count);
+        Assert.Collection(
+            store.Value.Connections,
+            _ => { },
+            _ => { },
+            _ => { });
+
         Assert.True(store.RemoveNode("condition"));
 
         Assert.Null(store.FindNode("condition"));
-        Assert.Equal(1, store.Value.Connections.Count);
+        Assert.Single(store.Value.Connections);
         Assert.All(store.Value.Connections, connection =>
         {
             Assert.NotEqual("condition", connection.FromNodeId);
