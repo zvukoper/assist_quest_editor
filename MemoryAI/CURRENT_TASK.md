@@ -112,10 +112,13 @@ Web-ресурсы src/AssistQuestEditor.App/Web и data/world/sdo_points.json �
 - Graph Web UI работает через действия graph_add_node, graph_update_node, graph_remove_node, graph_connect, graph_disconnect.
 - Состояние выбора ноды в браузере является только presentation state.
 
-Текущий Graph Editor поддерживает: выбор ноды, добавление нод из списка типов, редактирование Title/X/Y, удаление нод, создание/удаление связей Output → Input.
+Текущий Graph Editor поддерживает: выбор ноды, добавление нод из списка типов, редактирование Title/X/Y, удаление нод, создание/удаление связей Output → Input, Undo/Redo через QuestGraphStore и canonical validation.
 
-Следующие незавершённые части Graph Editor: drag нод, pan/zoom canvas, dynamic sockets, comments, copy/paste, undo/redo, disk save/load, validation, minimap.
+Host передаёт Graph UI enum значения строками через `JsonStringEnumConverter`, поэтому SocketDirection, FlowKind и GraphDiagnosticSeverity имеют единый transport contract.
 
+Следующие незавершённые части Graph Editor: drag нод, pan/zoom canvas, dynamic sockets, comments, copy/paste, disk save/load, minimap. Перед полноценным drag/pan/zoom нужно сохранить принцип WolvenKit: editor layout/viewport state не смешивать с canonical graph resource.
+
+Quest Graph smoke проверяет реальный `editor.js`: загрузку `quest_graph`, создание ноды через `graph_add_node`, изменение свойств через `graph_update_node`, запуск `graph_validate` и команды Undo/Redo.
 ## Проверки
 
 - Domain regression: `tests/AssistQuestEditor.Domain.Tests/QuestGraphStoreTests.cs`.

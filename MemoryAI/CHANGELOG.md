@@ -1,5 +1,14 @@
 # Журнал изменений памяти и архитектуры
 
+## 2026-09-20 — Quest Graph: Undo/Redo, Validation и transport contract
+
+- `QuestGraphStore` хранит snapshot history для Undo/Redo; новая правка очищает Redo history.
+- Добавлен `QuestGraphValidator` со стабильными diagnostic codes для структуры графа, sockets, connections и достижимости нод.
+- Host поддерживает `graph_undo`, `graph_redo`, `graph_validate`; `quest_graph` передаёт состояние history и validation diagnostics.
+- Web Graph Editor получил Undo/Redo/Проверить и горячие клавиши Ctrl+Z, Ctrl+Y, Ctrl+Shift+Z.
+- `JsonStringEnumConverter` синхронизировал enum transport с Web UI.
+- Domain tests и Playwright smoke расширены новыми контрактами.
+
 ## 2026-09-20 — Архитектурный reference WolvenKit
 
 - добавлен обязательный внешний архитектурный reference: upstream `WolvenKit/WolvenKit`;
