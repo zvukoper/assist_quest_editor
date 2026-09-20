@@ -284,14 +284,18 @@ public sealed class SimulatorForm : WebViewForm
             payload));
     }
 
-    private void Events_Published(object? sender, SimulatorEvent e)
+    private void Events_Published(SimulatorEvent e)
     {
         if (IsDisposed)
         {
             return;
         }
 
-        BeginInvoke(PushSnapshot);
+        BeginInvoke(() =>
+        {
+            PostJson(JsonSerializer.Serialize(new { type = "event", @event = e }));
+            PushSnapshot();
+        });
     }
 
     private static string Required(JsonElement root, string name)
