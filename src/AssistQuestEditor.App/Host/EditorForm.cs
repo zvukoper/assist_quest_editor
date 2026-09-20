@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using AssistQuestEditor.Domain;
 
 namespace AssistQuestEditor.App;
@@ -8,7 +9,8 @@ public sealed class EditorForm : WebViewForm
 {
     private static readonly JsonSerializerOptions WebJsonOptions = new()
     {
-        PropertyNamingPolicy = JsonNamingPolicy.CamelCase
+        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+        Converters = { new JsonStringEnumConverter() }
     };
 
     private readonly IDataChannel<PlayerState> _player;
