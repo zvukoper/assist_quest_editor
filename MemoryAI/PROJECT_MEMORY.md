@@ -196,9 +196,92 @@ Playwright + Chromium являются обязательным тестовым
 
 ## 12. Текущий этап
 
-Репозиторий новый и пустой на момент создания этой памяти.
+Каркас приложения уже создан и прошёл физическую проверку. Simulator реально загружает 5115 точек СДО из `data/world/sdo_points.json`, показывает их на карте по координатам ETS2 X/Z, использует цвет категорий, выделяет выбранную точку толстой оранжевой обводкой и показывает красный треугольник игрока.
 
-Первый этап — зафиксировать архитектуру, правила разработки, CI и тестовый контур. После этого строится минимальное приложение и модель данных. Нельзя преждевременно подключать ETS2 Assist или телеметрию.
+Между Simulator и Editor стабилизирован контракт WebView2: сообщения сериализуются в camelCase. Выбранная СДО и координаты игрока успешно передаются в редактор мира/локаций.
+
+Текущая версия проекта: `1.0.40.108-QUEST-EDITOR-QUEST-GRAPH-R1`.
+
+Текущий функциональный фокус — Quest Graph Editor. После его стабилизации следующим крупным слоем будет Quest Runtime. Реальная интеграция с ETS2 Assist, телеметрией и игровыми событиями пока запрещена.
+
+## 14. Фактическое состояние на 2026-09-20
+
+### Рабочая инфраструктура
+
+- WinForms Host + WebView2;
+- отдельное окно Simulator с автоматическим размещением на втором мониторе;
+- загрузка СДО ETS2 Assist: 71 категория / 5115 точек;
+- выбор СДО на карте и red player marker;
+- передача выбранной СДО и координат игрока в World Editor;
+- диагностический лог `MemoryAI/LOGS/assist_quest_editor.log`;
+- version cache-busting WebView2;
+- CI с Node/Chromium/Playwright/.NET/single-file publish.
+
+### Quest Graph
+
+Canonical model:
+- `QuestGraph`;
+- `QuestNode`;
+- `SocketDefinition`;
+- `QuestConnection`;
+- `QuestGraphStore`;
+- `QuestGraphFactory`;
+- `QuestNodeCatalog`.
+
+Starter graph:
+`Start → Condition → DialogueScene → End`, 4 ноды и 3 connections.
+
+Graph Store:
+- AddNode;
+- UpdateNode;
+- RemoveNode;
+- Connect;
+- Disconnect;
+- NodeId сохраняется при редактировании;
+- удаление ноды очищает связанные connections;
+- connections разрешены только Output → Input;
+- duplicate connection запрещена.
+
+Host:
+- один `QuestGraphStore` создаётся в `MainForm`;
+- тот же store передаётся всем `EditorForm`;
+- Graph editor получает изменения через WebView2 actions;
+- Web JSON сериализуется camelCase.
+
+Graph Web UI:
+- выбор ноды;
+- добавление ноды из списка зарегистрированных типов;
+- редактирование Title/X/Y;
+- удаление ноды;
+- создание связи кликом Output → Input;
+- удаление связи;
+- отображение sockets и connections в inspector.
+
+Пока не реализованы:
+- drag нод;
+- полноценный pan/zoom canvas;
+- dynamic sockets beyond catalog defaults;
+- comments;
+- copy/paste;
+- undo/redo;
+- disk save/load;
+- validation;
+- minimap.
+
+### Регрессии, которые уже исправлены
+
+- ранняя отправка snapshot до NavigationCompleted;
+- PascalCase snapshot → camelCase contract;
+- PascalCase simulator_context / coordinate → camelCase;
+- отсутствие `formatPosition()` в Simulator Web UI.
+
+### Контроль продолжения для другого агента
+
+Начинать с ветки `main`. Сначала проверить HEAD, CI и версии файлов. Затем прочитать `MemoryAI/INSTRUCTIONS.md`, `MemoryAI/ARCHITECTURE.md`, `MemoryAI/CURRENT_TASK.md` и этот файл.
+
+Не переносить canonical graph state в JavaScript. Не подключать ETS2 Assist/telemetry/runtime integration, пока не выполнен следующий утверждённый этап sandbox.
+
+Следующий логичный шаг после текущего R1 — сделать перемещение нод мышью и pan/zoom, затем validation и undo/redo, после чего подключать Graph persistence.
 
 ## 13. Что нельзя потерять при смене агента
 
