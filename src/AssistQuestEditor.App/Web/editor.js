@@ -1,7 +1,13 @@
 (() => {
   const root = document.getElementById("root");
   const title = document.getElementById("editorTitle");
-  const send = payload => window.chrome?.webview?.postMessage(payload);
+  const send = payload => {
+    if (typeof window.__assistSend === "function") {
+      window.__assistSend(payload);
+      return;
+    }
+    window.chrome?.webview?.postMessage(payload);
+  };
 
   let simulatorContext = {
     player: null,
@@ -816,7 +822,7 @@
     }[char]));
   }
 
-  const webview = window.__assistWebview || window.chrome?.webview;
+  const webview = window.chrome?.webview;
   const handleWebviewMessage = event => {
     const data = typeof event.data === "string" ? JSON.parse(event.data) : event.data;
 
@@ -875,9 +881,7 @@
     }
   };
 
-  if (window.__assistWebview) {
-    window.__assistHandleWebviewMessage = handleWebviewMessage;
-  }
+  window.addEventListener("message", handleWebviewMessage);
 
   if (typeof webview?.addEventListener === "function") {
     webview.addEventListener("message", handleWebviewMessage);

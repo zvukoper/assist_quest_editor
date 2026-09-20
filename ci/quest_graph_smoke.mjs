@@ -24,13 +24,7 @@ try {
         <main id="root"></main>
         <script>
           window.__messages = [];
-          window.__messageHandler = null;
-          window.__assistWebview = {
-            addEventListener(type, handler) {
-              if (type === "message") window.__messageHandler = handler;
-            },
-            postMessage(payload) { window.__messages.push(payload); }
-          };
+          window.__assistSend = payload => window.__messages.push(payload);
         </script>
         <script>
           ${source.replaceAll("</script", "<\\/script")}
@@ -81,12 +75,9 @@ try {
 
 
   await page.evaluate(graphValue => {
-    if (typeof window.__assistHandleWebviewMessage !== "function") {
-      throw new Error("Quest Graph WebView message handler не зарегистрирован.");
-    }
-    window.__assistHandleWebviewMessage({
+    window.dispatchEvent(new MessageEvent("message", {
       data: JSON.stringify({ type: "quest_graph", graph: graphValue, canUndo: true, canRedo: true })
-    });
+    }));
   }, graph);
 
   await page.locator("#questGraphSvg .nodeTitle", { hasText: "Start" }).waitFor();
