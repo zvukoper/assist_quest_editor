@@ -30,6 +30,7 @@ public sealed class DataChannelTests
 
         Assert.Contains("player", keys);
         Assert.Contains("world", keys);
+        Assert.Contains("world-selection", keys);
         Assert.Contains("facts", keys);
         Assert.Contains("quest-statuses", keys);
         Assert.Contains("states", keys);
@@ -41,14 +42,41 @@ public sealed class DataChannelTests
     }
 
     [Fact]
-    public void SnapshotContainsDemoWorldAndPlayer()
+    public void SnapshotUsesConfiguredWorldAndPlayerCenter()
     {
-        var hub = new SimulatorDataChannelHub();
+        var points = new[]
+        {
+            new WorldPoint("a", "Точка A", "test", new WorldCoordinate(-100, 10, -50)),
+            new WorldPoint("b", "Точка B", "test", new WorldCoordinate(300, 30, 150))
+        };
+
+        var hub = new SimulatorDataChannelHub(points);
         var snapshot = hub.GetSnapshot();
 
         Assert.Equal("ETS2 X/Y/Z • вид сверху использует X/Z", snapshot.World.CoordinateSystem);
-        Assert.Equal(4, snapshot.World.Points.Count);
-        Assert.Equal("ruslan", snapshot.World.Points[0].Id);
+        Assert.Equal(2, snapshot.World.Points.Count);
+        Assert.Equal("a", snapshot.World.Points[0].Id);
+        Assert.Equal(100, snapshot.Player.Position.X);
+        Assert.Equal(20, snapshot.Player.Position.Y);
+        Assert.Equal(50, snapshot.Player.Position.Z);
         Assert.True(snapshot.Player.InCab);
+    }
+
+    [Fact]
+    public void WorldSelectionStoresSelectedPoint()
+    {
+        var point = new WorldPoint(
+            "sdo:test:1",
+            "Категория",
+            "test",
+            new WorldCoordinate(1, 2, 3),
+            Editable: false);
+
+        var hub = new SimulatorDataChannelHub(new[] { point });
+        hub.Get<WorldSelectionState>("world-selection").Set(
+            new WorldSelectionState(point, "Тест"),
+            "Тест");
+
+        Assert.Equal(point, hub.Get<WorldSelectionState>("world-selection").Value.Point);
     }
 }
