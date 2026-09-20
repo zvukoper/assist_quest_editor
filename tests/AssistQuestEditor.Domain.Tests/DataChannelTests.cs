@@ -1,3 +1,5 @@
+using Xunit;
+
 using AssistQuestEditor.Domain;
 
 namespace AssistQuestEditor.Domain.Tests;
