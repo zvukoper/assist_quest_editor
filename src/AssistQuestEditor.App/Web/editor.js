@@ -12,6 +12,7 @@
   let pendingOutput = null;
   let graphHistory = { canUndo: false, canRedo: false };
   let graphValidation = [];
+  let graphPreviewPositions = new Map();
 
   const configs = {
     graph: { title: "Нодовый редактор квестов", draw: renderGraph },
@@ -99,7 +100,8 @@
       "</div>" +
       "<div style='height:calc(100% - 46px);min-height:560px;border:1px solid var(--border);border-radius:8px;overflow:hidden;background:#111419'>" +
         "<svg id='questGraphSvg' viewBox='0 0 1200 720' xmlns='http://www.w3.org/2000/svg' style='width:100%;height:100%'>" +
-          graphEdges() + questGraph.nodes.map(graphNodeMarkup).join("") +
+          "<g id='questGraphEdges'>" + graphEdges() + "</g>" +
+          "<g id='questGraphNodes'>" + questGraph.nodes.map(graphNodeMarkup).join("") + "</g>" +
         "</svg>" +
       "</div>";
 
@@ -130,10 +132,12 @@
       const inputs = to.sockets.filter(socket => socket.direction === "Input");
       const fromIndex = outputs.findIndex(socket => socket.socketId === fromSocket.socketId);
       const toIndex = inputs.findIndex(socket => socket.socketId === toSocket.socketId);
-      const startX = from.x + 180;
-      const startY = from.y + 22 + Math.max(0, fromIndex) * 22;
-      const endX = to.x;
-      const endY = to.y + 22 + Math.max(0, toIndex) * 22;
+      const fromPosition = getGraphNodePosition(from);
+      const toPosition = getGraphNodePosition(to);
+      const startX = fromPosition.x + 180;
+      const startY = fromPosition.y + 22 + Math.max(0, fromIndex) * 22;
+      const endX = toPosition.x;
+      const endY = toPosition.y + 22 + Math.max(0, toIndex) * 22;
       const bend = Math.max(70, Math.abs(endX - startX) * 0.45);
 
       return "<path class='edge " +
@@ -149,7 +153,8 @@
     const inputs = node.sockets.filter(socket => socket.direction === "Input");
     const outputs = node.sockets.filter(socket => socket.direction === "Output");
 
-    return "<g class='node" + selected + "' data-node-id='" + escapeHtml(node.nodeId) + "' transform='translate(" + node.x + " " + node.y + ")'>" +
+    const position = getGraphNodePosition(node);
+    return "<g class='node" + selected + "' data-node-id='" + escapeHtml(node.nodeId) + "' transform='translate(" + position.x + " " + position.y + ")'>" +
       "<rect class='nodeRect' rx='8' width='180' height='110'></rect>" +
       "<text class='nodeTitle' x='14' y='26'>" + escapeHtml(node.nodeType) + "</text>" +
       "<text x='14' y='49' fill='#a6a6a6' font-size='11'>" + escapeHtml(node.title) + "</text>" +
@@ -171,6 +176,143 @@
 
   function bindGraphInteractions(svg) {
     if (!svg) return;
+
+    let dragState = null;
+
+    svg.addEventListener("pointerdown", event => {
+      if (event.button !== 0) return;
+
+      const socket = event.target.closest(".socketGroup");
+      if (socket) return;
+
+      const node = event.target.closest(".node");
+      if (!node) return;
+
+      const nodeId = node.dataset.nodeId;
+      const sourceNode = questGraph?.nodes?.find(item => item.nodeId === nodeId);
+      if (!sourceNode) return;
+
+      const position = getGraphNodePosition(sourceNode);
+      const graphPoint = clientToGraph(svg, event.clientX, event.clientY);
+
+      selectedGraphNodeId = nodeId;
+      updateGraphVisuals();
+      updateGraphInspector(document.getElementById("inspector"));
+
+      dragState = {
+        nodeId,
+        startPointerX: event.clientX,
+        startPointerY: event.clientY,
+        pointerOffsetX: graphPoint.x - position.x,
+        pointerOffsetY: graphPoint.y - position.y,
+        positionX: position.x,
+        positionY: position.y,
+        moved: false,
+        pointerId: event.pointerId
+      };
+
+      svg.setPointerCapture?.(event.pointerId);
+      event.preventDefault();
+    });
+
+    svg.addEventListener("pointermove", event => {
+      if (!dragState || event.pointerId !== dragState.pointerId) return;
+
+      const movedDistance = Math.hypot(
+        event.clientX - dragState.startPointerX,
+        event.clientY - dragState.startPointerY
+      );
+
+      const graphPoint = clientToGraph(svg, event.clientX, event.clientY);
+      const x = Math.round(graphPoint.x - dragState.pointerOffsetX);
+      const y = Math.round(graphPoint.y - dragState.pointerOffsetY);
+
+      if (movedDistance >= 2) {
+        dragState.moved = true;
+      }
+
+      if (!dragState.moved) return;
+
+      graphPreviewPositions.set(dragState.nodeId, { x, y });
+
+      const nodeElement = svg.querySelector(
+        ".node[data-node-id='" + escapeCssAttribute(dragState.nodeId) + "']"
+      );
+      if (nodeElement) {
+        nodeElement.setAttribute("transform", "translate(" + x + " " + y + ")");
+      }
+
+      refreshGraphEdges(svg);
+      updateGraphInspector(document.getElementById("inspector"));
+      event.preventDefault();
+    });
+
+    const finishDrag = event => {
+      if (!dragState || event.pointerId !== dragState.pointerId) return;
+
+      const finished = dragState;
+      dragState = null;
+
+      try {
+        svg.releasePointerCapture?.(event.pointerId);
+      } catch {
+        // Pointer capture may already be released by the browser.
+      }
+
+      const preview = graphPreviewPositions.get(finished.nodeId);
+      graphPreviewPositions.delete(finished.nodeId);
+
+      if (finished.moved && preview) {
+        const node = questGraph?.nodes?.find(item => item.nodeId === finished.nodeId);
+        if (node && (preview.x !== node.x || preview.y !== node.y)) {
+          send({
+            action: "graph_update_node",
+            nodeId: node.nodeId,
+            title: node.title,
+            x: preview.x,
+            y: preview.y
+          });
+        } else {
+          refreshGraphEdges(svg);
+        }
+      }
+    };
+
+    svg.addEventListener("pointerup", finishDrag);
+    svg.addEventListener("pointercancel", finishDrag);
+
+    svg.addEventListener("wheel", event => {
+      if (!questGraph?.nodes?.length) return;
+
+      const rect = svg.getBoundingClientRect();
+      if (rect.width <= 0 || rect.height <= 0) return;
+
+      const viewBox = svg.viewBox.baseVal;
+      const focus = clientToGraph(svg, event.clientX, event.clientY);
+      const zoomFactor = event.deltaY > 0 ? 1.12 : 1 / 1.12;
+      const minSize = 180;
+      const maxSize = 6000;
+      const nextWidth = clamp(viewBox.width * zoomFactor, minSize, maxSize);
+      const nextHeight = clamp(viewBox.height * zoomFactor, minSize, maxSize);
+
+      if (nextWidth === viewBox.width && nextHeight === viewBox.height) {
+        event.preventDefault();
+        return;
+      }
+
+      const ratioX = (focus.x - viewBox.x) / viewBox.width;
+      const ratioY = (focus.y - viewBox.y) / viewBox.height;
+
+      svg.setAttribute(
+        "viewBox",
+        (focus.x - ratioX * nextWidth) + " " +
+        (focus.y - ratioY * nextHeight) + " " +
+        nextWidth + " " + nextHeight
+      );
+
+      refreshGraphEdges(svg);
+      event.preventDefault();
+    }, { passive: false });
 
     svg.querySelectorAll(".node").forEach(node => {
       node.addEventListener("click", event => {
@@ -303,10 +445,10 @@
 
   function fitGraph() {
     if (!questGraph?.nodes?.length) return;
-    const minX = Math.min(...questGraph.nodes.map(node => node.x));
-    const maxX = Math.max(...questGraph.nodes.map(node => node.x + 180));
-    const minY = Math.min(...questGraph.nodes.map(node => node.y));
-    const maxY = Math.max(...questGraph.nodes.map(node => node.y + 110));
+    const minX = Math.min(...questGraph.nodes.map(node => getGraphNodePosition(node).x));
+    const maxX = Math.max(...questGraph.nodes.map(node => getGraphNodePosition(node).x + 180));
+    const minY = Math.min(...questGraph.nodes.map(node => getGraphNodePosition(node).y));
+    const maxY = Math.max(...questGraph.nodes.map(node => getGraphNodePosition(node).y + 110));
     const svg = document.getElementById("questGraphSvg");
     if (!svg) return;
     svg.setAttribute(
@@ -501,6 +643,46 @@
       "<div class='notice'>Расширение не требует изменения канонической модели существующих нод.</div>";
   }
 
+  function getGraphNodePosition(node) {
+    return graphPreviewPositions.get(node.nodeId) || { x: node.x, y: node.y };
+  }
+
+  function clientToGraph(svg, clientX, clientY) {
+    const rect = svg.getBoundingClientRect();
+    const viewBox = svg.viewBox.baseVal;
+    return {
+      x: viewBox.x + ((clientX - rect.left) / rect.width) * viewBox.width,
+      y: viewBox.y + ((clientY - rect.top) / rect.height) * viewBox.height
+    };
+  }
+
+  function refreshGraphEdges(svg) {
+    const edgeElements = svg.querySelectorAll(".edge");
+    const generated = graphEdges();
+    if (edgeElements.length !== questGraph.connections.length) {
+      const edgeGroup = svg.querySelector("#questGraphEdges");
+      if (edgeGroup) edgeGroup.innerHTML = generated;
+      return;
+    }
+
+    const template = document.createElementNS("http://www.w3.org/2000/svg", "g");
+    template.innerHTML = generated;
+    edgeElements.forEach((edge, index) => {
+      const next = template.children[index];
+      if (next) {
+        edge.replaceWith(next.cloneNode(true));
+      }
+    });
+  }
+
+  function escapeCssAttribute(value) {
+    return String(value ?? "").replace(/\\/g, "\\\\").replace(/'/g, "\\'");
+  }
+
+  function clamp(value, min, max) {
+    return Math.min(max, Math.max(min, value));
+  }
+
   function formatPosition(position) {
     return "X " + Math.round(position.x) + " · Y " + Math.round(position.y) + " · Z " + Math.round(position.z);
   }
@@ -521,6 +703,7 @@
 
     if (data?.type === "quest_graph") {
       questGraph = data.graph;
+      graphPreviewPositions.clear();
       graphHistory = {
         canUndo: Boolean(data.canUndo),
         canRedo: Boolean(data.canRedo)
