@@ -5,6 +5,7 @@ namespace AssistQuestEditor.App;
 public abstract class WebViewForm : Form
 {
     private readonly string _page;
+    private bool _browserReadyRaised;
     protected readonly WebView2 Browser;
 
     protected WebViewForm(string title, string page, Size initialSize)
@@ -23,6 +24,7 @@ public abstract class WebViewForm : Form
         };
 
         Controls.Add(Browser);
+        Browser.NavigationCompleted += Browser_NavigationCompleted;
         Load += HandleLoad;
     }
 
@@ -30,6 +32,7 @@ public abstract class WebViewForm : Form
     {
         try
         {
+            _browserReadyRaised = false;
             await Browser.EnsureCoreWebView2Async();
             Browser.WebMessageReceived += Browser_WebMessageReceived;
 
@@ -50,12 +53,32 @@ public abstract class WebViewForm : Form
             }
 
             Browser.CoreWebView2.Navigate(uri);
-            OnBrowserReady();
         }
         catch (Exception ex)
         {
             ShowWebViewError(ex);
         }
+    }
+
+    private void Browser_NavigationCompleted(object? sender, Microsoft.Web.WebView2.Core.CoreWebView2NavigationCompletedEventArgs e)
+    {
+        if (IsDisposed || _browserReadyRaised)
+        {
+            return;
+        }
+
+        if (!e.IsSuccess)
+        {
+            ShowWebViewError(new InvalidOperationException(
+                "Web-страница не загрузилась. Код навигации: " + e.WebErrorStatus));
+            return;
+        }
+
+        // ВАЖНО: WebView2 теряет сообщения, отправленные до завершения Navigate().
+        // Все наследники получают snapshot/context только после фактической загрузки
+        // документа и его JavaScript.
+        _browserReadyRaised = true;
+        OnBrowserReady();
     }
 
     protected virtual void OnBrowserReady()
