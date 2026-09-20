@@ -44,35 +44,38 @@ jobs:
         with:
           dotnet-version: 10.0.x
 
-      - name: Собрать и протестировать .NET, если проект уже создан
+      - name: Собрать исходные проекты .NET
         shell: pwsh
         run: |
-          $solutions = @(Get-ChildItem -Path . -Recurse -File -Include *.sln,*.slnx)
-          $projects = @(Get-ChildItem -Path . -Recurse -File -Filter *.csproj)
-
-          if ($solutions.Count -gt 0) {
-            foreach ($solution in $solutions) {
-              dotnet restore $solution.FullName
-              if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-
-              dotnet build $solution.FullName --configuration Release --no-restore
-              if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-
-              dotnet test $solution.FullName --configuration Release --no-build
-              if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-            }
+          $projects = @(Get-ChildItem -Path src -Recurse -File -Filter *.csproj)
+          if ($projects.Count -eq 0) {
+            Write-Error "В src нет C# проектов."
+            exit 1
           }
-          elseif ($projects.Count -gt 0) {
-            foreach ($project in $projects) {
-              dotnet restore $project.FullName
-              if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
-              dotnet build $project.FullName --configuration Release --no-restore
-              if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-            }
+          foreach ($project in $projects) {
+            dotnet restore $project.FullName
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+            dotnet build $project.FullName --configuration Release --no-restore
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           }
-          else {
-            Write-Host "C# проект пока не создан. Проверка .NET пропущена на архитектурном этапе."
+
+      - name: Выполнить тесты домена
+        shell: pwsh
+        run: |
+          $tests = @(Get-ChildItem -Path tests -Recurse -File -Filter *.csproj)
+          if ($tests.Count -eq 0) {
+            Write-Error "В tests нет C# тестовых проектов."
+            exit 1
+          }
+
+          foreach ($test in $tests) {
+            dotnet restore $test.FullName
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+            dotnet test $test.FullName --configuration Release --no-restore
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           }
 
       - name: Проверить отсутствие логов в репозитории
