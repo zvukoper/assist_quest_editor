@@ -56,7 +56,7 @@ public sealed class DataChannel<T>(
 
 public interface IEventChannel<TEvent>
 {
-    event EventHandler<TEvent>? Published;
+    event Action<TEvent>? Published;
     void Publish(TEvent value);
 }
 
@@ -66,7 +66,7 @@ public sealed class EventChannel<TEvent> : IEventChannel<TEvent>
 
     public void Publish(TEvent value)
     {
-        Published?.Invoke(this, value);
+        Published?.Invoke(value);
     }
 }
 
@@ -214,6 +214,58 @@ public sealed class SimulatorDataChannelHub : IDataChannelHub
         }
 
         return typed;
+    }
+
+    public void Reset()
+    {
+        Player.Set(new PlayerState(new WorldCoordinate(120, 0, 80), 0, 0, false, true), "Сброс симулятора");
+        World.Set(new WorldState(
+            "ETS2 X/Y/Z • вид сверху использует X/Z",
+            new[]
+            {
+                new WorldPoint("ruslan", "Руслан", "Квестовый персонаж", new WorldCoordinate(180, 0, 80)),
+                new WorldPoint("gosha", "Гоша", "Квестовый персонаж", new WorldCoordinate(430, 0, -120)),
+                new WorldPoint("yard", "Испытательный двор", "Локация", new WorldCoordinate(-140, 0, -60)),
+                new WorldPoint("village", "Деревня", "Локация", new WorldCoordinate(30, 0, 260))
+            },
+            "Испытательный двор"), "Сброс симулятора");
+        Facts.Set(new FactState(new Dictionary<string, string>
+        {
+            ["quest.ruslan.introductionSeen"] = "false",
+            ["world.marketOpen"] = "true",
+            ["player.hasLicense"] = "A"
+        }), "Сброс симулятора");
+        QuestStatuses.Set(new QuestStatusesState(new[]
+        {
+            new QuestStatusEntry("special_marinated_shashlik", QuestStatus.Available, "available")
+        }), "Сброс симулятора");
+        States.Set(new RuntimeStatesState(
+            new Dictionary<string, bool>
+            {
+                ["ruslan.offerPending"] = false,
+                ["quest.demoMode"] = true
+            },
+            new Dictionary<string, string>
+            {
+                ["test.number"] = "0",
+                ["quest.lastChoice"] = ""
+            },
+            null,
+            null), "Сброс симулятора");
+        Inventory.Set(new InventoryState(new Dictionary<string, int>
+        {
+            ["money"] = 1500,
+            ["special_marinade_meat"] = 0,
+            ["legendary_shashlik"] = 0
+        }), "Сброс симулятора");
+        Reputation.Set(new ReputationState(new Dictionary<string, int>
+        {
+            ["ruslan"] = 0,
+            ["gosha"] = 0
+        }), "Сброс симулятора");
+        Telemetry.Set(new TelemetryState(0, 800, 0, 0, 0, 78, 82, 34, 0, 0, 0, 0, false), "Сброс симулятора");
+        Environment.Set(new EnvironmentState("Ясно", 0, "12:30", 5000), "Сброс симулятора");
+        System.Set(new SystemState(true, "Симулятор", "", "Симуляция сброшена"), "Сброс симулятора");
     }
 
     public IReadOnlyCollection<DataChannelDescriptor> Describe() =>
