@@ -99,8 +99,8 @@
     drawGrid(ctx, width, height);
 
     const points = snapshot.world?.points || [];
-    const showAllLabels = camera.mpp < 35;
-    const labelLimit = camera.mpp < 120 ? 250 : 70;
+    const showAllLabels = camera.mpp < 24;
+    const labelLimit = camera.mpp < 70 ? 140 : (camera.mpp < 180 ? 55 : 24);
     const occupied = new Set();
 
     for (const point of points) {
@@ -108,16 +108,23 @@
       if (q.x < -18 || q.y < -18 || q.x > width + 18 || q.y > height + 18) continue;
 
       const selected = point.id === selectedPointId;
-      const radius = selected ? 6.5 : 4.5;
+      const radius = selected ? 5.5 : (camera.mpp > 250 ? 2.8 : 3.6);
 
       ctx.save();
       ctx.beginPath();
       ctx.arc(q.x, q.y, radius, 0, Math.PI * 2);
       ctx.fillStyle = point.color || "#78c8f0";
+      ctx.shadowColor = selected ? "rgba(250,176,3,.95)" : "rgba(0,0,0,.55)";
+      ctx.shadowBlur = selected ? 14 : 2;
       ctx.fill();
+
       if (selected) {
-        ctx.lineWidth = 4;
+        ctx.beginPath();
+        ctx.arc(q.x, q.y, radius + 5, 0, Math.PI * 2);
+        ctx.lineWidth = 4.5;
         ctx.strokeStyle = "#fab003";
+        ctx.shadowColor = "rgba(250,176,3,.9)";
+        ctx.shadowBlur = 16;
         ctx.stroke();
       }
       ctx.restore();
@@ -128,6 +135,7 @@
     }
 
     drawPlayer(ctx, snapshot.player);
+    drawCategoryLegend(ctx, width, height, points);
     drawHud();
   }
 
@@ -202,7 +210,8 @@
     const shape = [[0, -18], [-10, 14], [0, 9], [10, 14]];
     ctx.save();
     ctx.translate(q.x, q.y);
-    ctx.rotate(-Number(player.heading || 0) * 360 * Math.PI / 180);
+    const headingDeg = Number(player.heading || 0);
+    ctx.rotate(-headingDeg * Math.PI / 180);
     ctx.shadowColor = "rgba(0,0,0,.92)";
     ctx.shadowBlur = 9;
     ctx.shadowOffsetX = 0;
@@ -216,9 +225,14 @@
     ctx.shadowColor = "rgba(0,0,0,0)";
     ctx.shadowBlur = 0;
     ctx.shadowOffsetY = 0;
-    ctx.lineWidth = 3;
-    ctx.strokeStyle = "#fff";
+    ctx.lineWidth = 3.5;
+    ctx.strokeStyle = "#ffffff";
     ctx.stroke();
+
+    ctx.beginPath();
+    ctx.arc(0, 1, 2.5, 0, Math.PI * 2);
+    ctx.fillStyle = "#ff4d4d";
+    ctx.fill();
     ctx.restore();
   }
 
@@ -243,6 +257,72 @@
       }
     }
     return best;
+  }
+
+
+  function drawCategoryLegend(ctx, width, height, points) {
+    const counts = new Map();
+    for (const point of points) {
+      const q = worldToScreen(point.position.x, point.position.z);
+      if (q.x < 0 || q.y < 0 || q.x > width || q.y > height) continue;
+      const key = point.category || point.name || "СДО";
+      const existing = counts.get(key);
+      if (existing) {
+        existing.count += 1;
+      } else {
+        counts.set(key, {
+          count: 1,
+          color: point.color || "#78c8f0",
+          name: key
+        });
+      }
+    }
+
+    const categories = [...counts.values()]
+      .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name, "ru"))
+      .slice(0, 10);
+
+    if (!categories.length) return;
+
+    const lineH = 18;
+    const pad = 9;
+    const boxW = 230;
+    const boxH = pad * 2 + lineH * (categories.length + 1);
+
+    ctx.save();
+    ctx.fillStyle = "rgba(10,12,16,.88)";
+    ctx.strokeStyle = "rgba(255,255,255,.12)";
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.roundRect(width - boxW - 12, 12, boxW, boxH, 8);
+    ctx.fill();
+    ctx.stroke();
+
+    ctx.font = "600 11px Open Sans, Arial, sans-serif";
+    ctx.textAlign = "left";
+    ctx.textBaseline = "middle";
+    ctx.fillStyle = "#e7edf4";
+    ctx.fillText("Категории СДО", width - boxW + 1, 12 + pad + lineH / 2);
+
+    categories.forEach((entry, index) => {
+      const y = 12 + pad + lineH * (index + 1) + lineH / 2;
+
+      ctx.beginPath();
+      ctx.arc(width - boxW + 7, y, 4, 0, Math.PI * 2);
+      ctx.fillStyle = entry.color;
+      ctx.fill();
+
+      ctx.textAlign = "left";
+      ctx.fillStyle = "#d9e2ec";
+      const label = entry.name.length > 25 ? entry.name.slice(0, 24) + "…" : entry.name;
+      ctx.fillText(label, width - boxW + 18, y);
+
+      ctx.textAlign = "right";
+      ctx.fillStyle = "#8f9baa";
+      ctx.fillText(String(entry.count), width - 20, y);
+    });
+
+    ctx.restore();
   }
 
   function drawHud() {
@@ -507,23 +587,6 @@
     if (!event) return "";
     return "<div class='eventRow'><strong>" + escapeHtml(event.eventType) + "</strong>" +
       new Date(event.timestamp).toLocaleTimeString("ru-RU") + " · " + escapeHtml(event.source) + "</div>";
-  }
-
-  function receive(message) {
-    if (!message) return;
-    if (message.type === "snapshot") {
-      snapshot = message.snapshot;
-      draw();
-    }
-    if (message.type === "event") {
-      eventHistory.unshift(message["@event"] || message.event);
-      eventHistory.splice(12);
-      const list = side.querySelector("#eventList");
-      if (list) list.innerHTML = eventHistory.map(renderEvent).join("");
-    }
-    if (message.type === "error") {
-      window.alert(message.message || "Ошибка симулятора");
-    }
   }
 
   function receive(message) {
