@@ -27,33 +27,66 @@ public sealed class QuestGraphStore
     {
         var type = string.IsNullOrWhiteSpace(nodeType) ? "Phase" : nodeType.Trim();
         var nodeId = "node-" + Guid.NewGuid().ToString("N")[..8];
+        var parameters = QuestNodeCatalog.CreateDefaultParameters(type);
         var node = new QuestNode(
             nodeId,
             type,
             string.IsNullOrWhiteSpace(title) ? type : title.Trim(),
             x,
             y,
-            QuestNodeCatalog.CreateSockets(type, nodeId));
+            QuestNodeCatalog.CreateSockets(type, nodeId, parameters))
+        {
+            Parameters = parameters
+        };
 
         Apply(_value with { Nodes = _value.Nodes.Append(node).ToArray() });
         return node;
     }
 
-    public QuestNode? UpdateNode(string nodeId, string? title = null, double? x = null, double? y = null)
+    public QuestNode? UpdateNode(
+        string nodeId,
+        string? title = null,
+        double? x = null,
+        double? y = null,
+        IReadOnlyDictionary<string, string>? parameters = null)
     {
         var nodes = _value.Nodes.ToArray();
         var index = Array.FindIndex(nodes, node => node.NodeId.Equals(nodeId, StringComparison.OrdinalIgnoreCase));
         if (index < 0) return null;
 
         var current = nodes[index];
+        var nextParameters = parameters is null
+            ? current.Parameters
+            : NormalizeParameters(parameters);
+
+        var nextSockets = parameters is null
+            ? current.Sockets
+            : QuestNodeCatalog.CreateSockets(current.NodeType, current.NodeId, nextParameters);
+
         nodes[index] = current with
         {
             Title = string.IsNullOrWhiteSpace(title) ? current.Title : title.Trim(),
             X = x ?? current.X,
-            Y = y ?? current.Y
+            Y = y ?? current.Y,
+            Parameters = nextParameters,
+            Sockets = nextSockets
         };
 
-        Apply(_value with { Nodes = nodes });
+        var socketIdsByNode = nodes.ToDictionary(
+            node => node.NodeId,
+            node => node.Sockets.Select(socket => socket.SocketId)
+                .ToHashSet(StringComparer.OrdinalIgnoreCase),
+            StringComparer.OrdinalIgnoreCase);
+
+        var connections = _value.Connections
+            .Where(connection =>
+                socketIdsByNode.TryGetValue(connection.FromNodeId, out var fromSockets) &&
+                fromSockets.Contains(connection.FromSocketId) &&
+                socketIdsByNode.TryGetValue(connection.ToNodeId, out var toSockets) &&
+                toSockets.Contains(connection.ToSocketId))
+            .ToArray();
+
+        Apply(_value with { Nodes = nodes, Connections = connections });
         return nodes[index];
     }
 
@@ -119,6 +152,15 @@ public sealed class QuestGraphStore
         return true;
     }
 
+    public void Replace(QuestGraph graph)
+    {
+        ArgumentNullException.ThrowIfNull(graph);
+        _value = graph;
+        _undo.Clear();
+        _redo.Clear();
+        Changed?.Invoke(this, EventArgs.Empty);
+    }
+
     public bool Undo()
     {
         if (_undo.Count == 0) return false;
@@ -139,6 +181,16 @@ public sealed class QuestGraphStore
         return true;
     }
 
+    private static IReadOnlyDictionary<string, string> NormalizeParameters(
+        IReadOnlyDictionary<string, string> parameters) =>
+        new Dictionary<string, string>(
+            parameters.Where(pair => !string.IsNullOrWhiteSpace(pair.Key))
+                .ToDictionary(
+                    pair => pair.Key.Trim(),
+                    pair => pair.Value ?? string.Empty,
+                    StringComparer.OrdinalIgnoreCase),
+            StringComparer.OrdinalIgnoreCase);
+
     private void Apply(QuestGraph next)
     {
         _undo.Push(_value);
@@ -156,10 +208,31 @@ public static class QuestGraphFactory
             "Спецмаринад для Руслана",
             new[]
             {
-                new QuestNode("start", "Start", "Начало квеста", 80, 250, QuestNodeCatalog.CreateSockets("Start", "start")),
-                new QuestNode("condition", "Condition", "Проверить этап", 360, 250, QuestNodeCatalog.CreateSockets("Condition", "condition")),
-                new QuestNode("dialogue", "DialogueScene", "Разговор с Русланом", 680, 180, QuestNodeCatalog.CreateSockets("DialogueScene", "dialogue")),
-                new QuestNode("end", "End", "Завершение", 1000, 180, QuestNodeCatalog.CreateSockets("End", "end"))
+                CreateNode("start", "Start", "Начало квеста", 80, 250),
+                CreateNode(
+                    "condition",
+                    "Condition",
+                    "Проверить этап",
+                    360,
+                    250,
+                    new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+                    {
+                        ["operator"] = "QuestStepIs",
+                        ["left"] = "step",
+                        ["comparison"] = "==",
+                        ["right"] = "return_to_ruslan"
+                    }),
+                CreateNode(
+                    "dialogue",
+                    "DialogueScene",
+                    "Разговор с Русланом",
+                    680,
+                    180,
+                    new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+                    {
+                        ["sceneId"] = "ruslan_start"
+                    }),
+                CreateNode("end", "End", "Завершение", 1000, 180)
             },
             new[]
             {
@@ -167,13 +240,68 @@ public static class QuestGraphFactory
                 new QuestConnection("condition", "condition.true", "dialogue", "dialogue.in"),
                 new QuestConnection("dialogue", "dialogue.out", "end", "end.in")
             });
+
+    private static QuestNode CreateNode(
+        string nodeId,
+        string nodeType,
+        string title,
+        double x,
+        double y,
+        IReadOnlyDictionary<string, string>? parameters = null)
+    {
+        var actualParameters = parameters ?? QuestNodeCatalog.CreateDefaultParameters(nodeType);
+        return new QuestNode(
+            nodeId,
+            nodeType,
+            title,
+            x,
+            y,
+            QuestNodeCatalog.CreateSockets(nodeType, nodeId, actualParameters))
+        {
+            Parameters = actualParameters
+        };
+    }
 }
 
 public static class QuestNodeCatalog
 {
-    private static readonly string[] Branching = ["Condition", "And", "Or", "Not", "Switch", "Random", "Choice"];
+    private static readonly string[] FixedBranching = ["Condition", "And", "Or", "Not"];
+    private static readonly string[] DynamicBranching = ["Switch", "Random", "Choice"];
 
-    public static IReadOnlyList<SocketDefinition> CreateSockets(string nodeType, string nodeId)
+    public static IReadOnlyDictionary<string, string> CreateDefaultParameters(string nodeType)
+    {
+        return nodeType.ToLowerInvariant() switch
+        {
+            "interaction" => Parameters(
+                ("worldPointId", ""),
+                ("triggerRadius", "35")),
+            "condition" => Parameters(
+                ("operator", "QuestStepIs"),
+                ("left", "step"),
+                ("comparison", "=="),
+                ("right", "return_to_ruslan")),
+            "wait" => Parameters(("seconds", "1")),
+            "waitforcondition" => Parameters(("conditionId", "")),
+            "waitforevent" => Parameters(("eventType", "")),
+            "setstatus" => Parameters(("status", "Active")),
+            "setstep" => Parameters(("step", "")),
+            "setflag" => Parameters(("key", ""), ("value", "true")),
+            "setvariable" => Parameters(("key", ""), ("value", "")),
+            "dialoguescene" => Parameters(("sceneId", "")),
+            "reward" => Parameters(("rewardId", "")),
+            "giveitem" => Parameters(("itemId", ""), ("count", "1")),
+            "removeitem" => Parameters(("itemId", ""), ("count", "1")),
+            "addreputation" => Parameters(("faction", ""), ("amount", "1")),
+            "removereputation" => Parameters(("faction", ""), ("amount", "1")),
+            "switch" or "random" or "choice" => Parameters(("outputCount", "2")),
+            _ => new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        };
+    }
+
+    public static IReadOnlyList<SocketDefinition> CreateSockets(
+        string nodeType,
+        string nodeId,
+        IReadOnlyDictionary<string, string>? parameters = null)
     {
         if (nodeType.Equals("Start", StringComparison.OrdinalIgnoreCase))
             return [new SocketDefinition($"{nodeId}.out", "Далее", SocketDirection.Output)];
@@ -181,7 +309,7 @@ public static class QuestNodeCatalog
         if (nodeType.Equals("End", StringComparison.OrdinalIgnoreCase))
             return [new SocketDefinition($"{nodeId}.in", "Вход", SocketDirection.Input)];
 
-        if (Branching.Contains(nodeType, StringComparer.OrdinalIgnoreCase))
+        if (FixedBranching.Contains(nodeType, StringComparer.OrdinalIgnoreCase))
             return
             [
                 new SocketDefinition($"{nodeId}.in", "Вход", SocketDirection.Input),
@@ -189,10 +317,53 @@ public static class QuestNodeCatalog
                 new SocketDefinition($"{nodeId}.false", "Нет", SocketDirection.Output, FlowKind.Cut)
             ];
 
+        if (DynamicBranching.Contains(nodeType, StringComparer.OrdinalIgnoreCase))
+        {
+            var count = GetOutputCount(parameters);
+            var suffix = nodeType.ToLowerInvariant() switch
+            {
+                "switch" => "case",
+                "random" => "branch",
+                _ => "choice"
+            };
+            var label = nodeType.Equals("Switch", StringComparison.OrdinalIgnoreCase)
+                ? "Вариант"
+                : nodeType.Equals("Random", StringComparison.OrdinalIgnoreCase)
+                    ? "Ветка"
+                    : "Выбор";
+
+            var outputs = Enumerable.Range(1, count)
+                .Select(index => new SocketDefinition(
+                    $"{nodeId}.{suffix}{index}",
+                    $"{label} {index}",
+                    SocketDirection.Output))
+                .ToArray();
+
+            return [new SocketDefinition($"{nodeId}.in", "Вход", SocketDirection.Input), .. outputs];
+        }
+
         return
         [
             new SocketDefinition($"{nodeId}.in", "Вход", SocketDirection.Input),
             new SocketDefinition($"{nodeId}.out", "Далее", SocketDirection.Output)
         ];
     }
+
+    private static int GetOutputCount(IReadOnlyDictionary<string, string>? parameters)
+    {
+        if (parameters is not null &&
+            parameters.TryGetValue("outputCount", out var value) &&
+            int.TryParse(value, out var parsed))
+        {
+            return Math.Clamp(parsed, 2, 16);
+        }
+
+        return 2;
+    }
+
+    private static Dictionary<string, string> Parameters(params (string Key, string Value)[] values) =>
+        values.ToDictionary(
+            pair => pair.Key,
+            pair => pair.Value,
+            StringComparer.OrdinalIgnoreCase);
 }

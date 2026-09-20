@@ -102,6 +102,46 @@ public sealed class QuestGraphStoreTests
         Assert.Equal(720, updated.X);
         Assert.Equal(420, updated.Y);
         Assert.Equal(original.Sockets, updated.Sockets);
+        Assert.Equal(original.Parameters, updated.Parameters);
+    }
+
+    [Fact]
+    public void UpdatesDynamicSocketsFromNodeParameters()
+    {
+        var store = new QuestGraphStore(QuestGraphFactory.CreateStarter());
+
+        var node = store.AddNode("Choice", "Выбор", 420, 120);
+        Assert.Equal(2, node.Sockets.Count(socket => socket.Direction == SocketDirection.Output));
+
+        var parameters = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["outputCount"] = "4"
+        };
+
+        var updated = store.UpdateNode(node.NodeId, parameters: parameters);
+
+        Assert.NotNull(updated);
+        Assert.Equal(4, updated!.Sockets.Count(socket => socket.Direction == SocketDirection.Output));
+        Assert.Contains(updated.Sockets, socket => socket.SocketId == $"{node.NodeId}.choice4");
+    }
+
+    [Fact]
+    public void ReplaceLoadsNewGraphAndClearsHistory()
+    {
+        var store = new QuestGraphStore(QuestGraphFactory.CreateStarter());
+        store.AddNode("Phase", "Изменение", 420, 120);
+
+        var replacement = new QuestGraph(
+            "loaded",
+            "Загруженный квест",
+            Array.Empty<QuestNode>(),
+            Array.Empty<QuestConnection>());
+
+        store.Replace(replacement);
+
+        Assert.Equal(replacement, store.Value);
+        Assert.False(store.CanUndo);
+        Assert.False(store.CanRedo);
     }
 
     [Fact]

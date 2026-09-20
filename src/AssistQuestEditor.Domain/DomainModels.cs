@@ -119,7 +119,11 @@ public sealed record QuestNode(
     string Title,
     double X,
     double Y,
-    IReadOnlyList<SocketDefinition> Sockets);
+    IReadOnlyList<SocketDefinition> Sockets)
+{
+    public IReadOnlyDictionary<string, string> Parameters { get; init; } =
+        new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+}
 
 public sealed record QuestConnection(
     string FromNodeId,
@@ -139,6 +143,10 @@ public sealed record QuestDefinition(
     string Description,
     QuestGraph Graph,
     IReadOnlyList<string> SceneIds);
+
+public sealed record QuestDefinitionDocument(
+    int SchemaVersion,
+    QuestDefinition Definition);
 
 public sealed record DataChannelDescriptor(
     string Key,
