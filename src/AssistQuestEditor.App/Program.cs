@@ -9,8 +9,8 @@ internal static class Program
     {
         ApplicationConfiguration.Initialize();
 
-        var hub = new SimulatorDataChannelHub();
-        using var mainForm = new MainForm(hub);
+        var simulatorAdapter = new SimulatorDataSourceAdapter();
+        using var mainForm = new MainForm(simulatorAdapter.Channels);
         Application.Run(mainForm);
     }
 }
