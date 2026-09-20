@@ -6,6 +6,7 @@ namespace AssistQuestEditor.App;
 public sealed class MainForm : WebViewForm
 {
     private readonly IDataChannelHub _hub;
+    private readonly QuestGraphStore _questGraph;
     private readonly Dictionary<string, EditorForm> _editors = new(StringComparer.OrdinalIgnoreCase);
     private SimulatorForm? _simulator;
 
@@ -16,6 +17,7 @@ public sealed class MainForm : WebViewForm
             new Size(1280, 820))
     {
         _hub = hub;
+        _questGraph = new QuestGraphStore(QuestGraphFactory.CreateStarter());
         Shown += (_, _) => OpenSimulator();
         FormClosed += (_, _) =>
         {
@@ -88,7 +90,7 @@ public sealed class MainForm : WebViewForm
             return;
         }
 
-        var form = new EditorForm(page.Item1, page.Item2, _hub);
+        var form = new EditorForm(page.Item1, page.Item2, _hub, _questGraph);
         _editors[page.Item2] = form;
         form.FormClosed += (_, _) => _editors.Remove(page.Item2);
         PlaceAuxiliaryWindow(form, _editors.Count);
