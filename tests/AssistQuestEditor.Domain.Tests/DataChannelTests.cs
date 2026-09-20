@@ -69,8 +69,10 @@ public sealed class DataChannelTests
             "sdo:test:1",
             "Категория",
             "test",
-            new WorldCoordinate(1, 2, 3),
-            Editable: false);
+            new WorldCoordinate(1, 2, 3))
+        {
+            Editable = false
+        };
 
         var hub = new SimulatorDataChannelHub(new[] { point });
         hub.Get<WorldSelectionState>("world-selection").Set(
