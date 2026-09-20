@@ -192,7 +192,7 @@
       ).join("") +
       outputs.map((socket, index) =>
         "<g class='socketGroup' data-socket-direction='Output' data-socket-id='" + escapeHtml(socket.socketId) + "'>" +
-          "<circle class='socket output' cx='" + GRAPH_NODE_WIDTH + "'" cy='" + (22 + index * 22) + "' r='6'></circle>" +
+          "<circle class='socket output' cx='" + GRAPH_NODE_WIDTH + "' cy='" + (22 + index * 22) + "' r='6'></circle>" +
           "<text x='" + (GRAPH_NODE_WIDTH - 10) + "' y='" + (26 + index * 22) + "' text-anchor='end' fill='#8f9baa' font-size='9'>" + escapeHtml(socket.name) + "</text>" +
         "</g>"
       ).join("") +
