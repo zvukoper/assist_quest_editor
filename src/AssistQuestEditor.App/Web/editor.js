@@ -816,7 +816,7 @@
     }[char]));
   }
 
-  const webview = window.chrome?.webview;
+  const webview = window.__assistWebview || window.chrome?.webview;
   webview?.addEventListener("message", event => {
     const data = typeof event.data === "string" ? JSON.parse(event.data) : event.data;
 

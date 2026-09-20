@@ -23,19 +23,14 @@ try {
         <header><strong id="editorTitle"></strong></header>
         <main id="root"></main>
         <script>
-          Object.defineProperty(window, "chrome", {
-            configurable: true,
-            value: {
-              webview: {
-                addEventListener(type, handler) {
-                  if (type === "message") window.__messageHandler = handler;
-                },
-                postMessage(payload) { window.__messages.push(payload); }
-              }
-            }
-          });
           window.__messages = [];
           window.__messageHandler = null;
+          window.__assistWebview = {
+            addEventListener(type, handler) {
+              if (type === "message") window.__messageHandler = handler;
+            },
+            postMessage(payload) { window.__messages.push(payload); }
+          };
         </script>
         <script>
           ${source.replaceAll("</script", "<\\/script")}
