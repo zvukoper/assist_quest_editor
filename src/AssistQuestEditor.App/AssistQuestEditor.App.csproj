@@ -14,7 +14,7 @@
     <Version>1.0.40.108</Version>
     <AssemblyVersion>1.0.40.108</AssemblyVersion>
     <FileVersion>1.0.40.108</FileVersion>
-    <AssemblyInformationalVersion>1.0.40.108-QUEST-EDITOR-SDO-MAP-R6-SELECTION-CONTEXT-FIX</AssemblyInformationalVersion>
+    <AssemblyInformationalVersion>1.0.40.108-QUEST-EDITOR-QUEST-GRAPH-R1</AssemblyInformationalVersion>
     <PublishSingleFile>true</PublishSingleFile>
     <SelfContained>true</SelfContained>
     <RuntimeIdentifier>win-x64</RuntimeIdentifier>
