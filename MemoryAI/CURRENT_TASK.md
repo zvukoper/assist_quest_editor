@@ -67,6 +67,14 @@
 
 Любое изменение Simulator должно проходить через Data Channel contract.
 
+## Инструменты сборки
+
+В корне проекта находятся compile.ps1 и pull.ps1.
+
+compile.ps1 создаёт self-contained single-file EXE: bin\\Release\\net10.0-windows\\win-x64\\publish\\AssistQuestEditor.exe.
+
+pull.ps1 обновляет main и запускает compile.ps1.
+
 ## Версия
 
 Текущая рабочая версия: 1.0.40.101-QUEST-EDITOR-DUAL-WINDOW-R1.
