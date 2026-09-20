@@ -63,9 +63,10 @@ try {
     ]
   };
 
+
   await page.evaluate(graphValue => {
     window.chrome.webview.listeners.get("message")({
-      data: JSON.stringify({ type: "quest_graph", graph: graphValue })
+      data: JSON.stringify({ type: "quest_graph", graph: graphValue, canUndo: true, canRedo: true })
     });
   }, graph);
 
@@ -98,6 +99,21 @@ try {
 
   if (!update || update.nodeId !== "start" || update.title !== "Старт обновлён") {
     throw new Error("UI не отправил корректную команду graph_update_node.");
+  }
+
+  await page.getByRole("button", { name: "Повторить" }).click();
+
+  await page.waitForTimeout(20);
+
+  const undo = await page.evaluate(() =>
+    window.__messages.find(message => message.action === "graph_undo")
+  );
+  const redo = await page.evaluate(() =>
+    window.__messages.find(message => message.action === "graph_redo")
+  );
+
+  if (!undo || !redo) {
+    throw new Error("UI не отправил корректные команды graph_undo/graph_redo.");
   }
 
   if (errors.length) {

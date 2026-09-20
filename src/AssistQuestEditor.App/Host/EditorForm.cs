@@ -204,6 +204,30 @@ public sealed class EditorForm : WebViewForm
                 PostQuestGraph();
                 break;
             }
+
+            case "graph_undo":
+            {
+                if (!_questGraph.Undo())
+                {
+                    throw new InvalidOperationException("Нет изменений для отмены.");
+                }
+
+                AppLogger.Info("Quest Graph: выполнена отмена изменения.");
+                PostQuestGraph();
+                break;
+            }
+
+            case "graph_redo":
+            {
+                if (!_questGraph.Redo())
+                {
+                    throw new InvalidOperationException("Нет изменений для повтора.");
+                }
+
+                AppLogger.Info("Quest Graph: выполнен повтор изменения.");
+                PostQuestGraph();
+                break;
+            }
         }
     }
 
@@ -218,7 +242,9 @@ public sealed class EditorForm : WebViewForm
         {
             type = "quest_graph",
             graph = _questGraph.Value,
-            selectedNodeId
+            selectedNodeId,
+            canUndo = _questGraph.CanUndo,
+            canRedo = _questGraph.CanRedo
         }, WebJsonOptions));
     }
 

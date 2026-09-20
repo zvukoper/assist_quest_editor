@@ -10,6 +10,7 @@
   let questGraph = null;
   let selectedGraphNodeId = null;
   let pendingOutput = null;
+  let graphHistory = { canUndo: false, canRedo: false };
 
   const configs = {
     graph: { title: "Нодовый редактор квестов", draw: renderGraph },
@@ -88,6 +89,8 @@
         "<input id='graphNodeTitle' class='toolButton' style='width:190px' placeholder='Название новой ноды'>" +
         "<button class='toolButton primary' id='addGraphNode'>Добавить ноду</button>" +
         "<button class='toolButton' id='fitGraph'>По размеру</button>" +
+        "<button class='toolButton' id='undoGraph' " + (graphHistory.canUndo ? "" : "disabled") + ">↶ Отменить</button>" +
+        "<button class='toolButton' id='redoGraph' " + (graphHistory.canRedo ? "" : "disabled") + ">↷ Повторить</button>" +
         "<span class='badge accent'>" + questGraph.nodes.length + " нод</span>" +
         "<span class='badge'>" + questGraph.connections.length + " связей</span>" +
         "<span class='badge red'>" + escapeHtml(questGraph.name) + "</span>" +
@@ -104,6 +107,8 @@
       send({ action: "graph_add_node", nodeType: type, title: nodeTitle, x: 420, y: 120 });
     });
     ws.querySelector("#fitGraph").addEventListener("click", fitGraph);
+    ws.querySelector("#undoGraph").addEventListener("click", () => send({ action: "graph_undo" }));
+    ws.querySelector("#redoGraph").addEventListener("click", () => send({ action: "graph_redo" }));
     bindGraphInteractions(ws.querySelector("#questGraphSvg"));
     updateGraphInspector(ins);
   }
@@ -499,6 +504,10 @@
 
     if (data?.type === "quest_graph") {
       questGraph = data.graph;
+      graphHistory = {
+        canUndo: Boolean(data.canUndo),
+        canRedo: Boolean(data.canRedo)
+      };
       if (data.selectedNodeId) selectedGraphNodeId = data.selectedNodeId;
       if (selectedGraphNodeId && !questGraph.nodes.some(node => node.nodeId === selectedGraphNodeId)) {
         selectedGraphNodeId = questGraph.nodes[0]?.nodeId || null;
@@ -539,6 +548,21 @@
 
     if (data?.type === "coordinate_error") {
       window.alert(data.message || "Координаты не получены.");
+    }
+  });
+
+  document.addEventListener("keydown", event => {
+    if (currentId() !== "graph" || !(event.ctrlKey || event.metaKey)) return;
+    const key = event.key.toLowerCase();
+    if (key === "z" && !event.shiftKey) {
+      event.preventDefault();
+      if (graphHistory.canUndo) send({ action: "graph_undo" });
+    } else if (key === "z" && event.shiftKey) {
+      event.preventDefault();
+      if (graphHistory.canRedo) send({ action: "graph_redo" });
+    } else if (key === "y") {
+      event.preventDefault();
+      if (graphHistory.canRedo) send({ action: "graph_redo" });
     }
   });
 
