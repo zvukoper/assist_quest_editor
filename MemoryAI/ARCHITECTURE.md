@@ -421,3 +421,27 @@ Simulator предоставляет отдельные accordion-панели:
 - плавные fade/slide/zoom-анимации без резких cut-переходов.
 
 Единая тема хранится в src/AssistQuestEditor.App/Web/theme.css.
+
+
+## 19. Внешний архитектурный reference: WolvenKit
+
+Наш заявленный «прародительский» reference — upstream **WolvenKit**: https://github.com/WolvenKit/WolvenKit
+
+Обязательные для нас заимствуемые принципы:
+
+- resource/document-centric IDE-like workflow;
+- platform-independent application/domain logic отдельно от UI;
+- DI, factories, services и registries для расширения;
+- canonical graph как Node/Socket/Connection model;
+- стабильные идентификаторы;
+- dynamic sockets как часть модели, а не UI hack;
+- editor layout/viewport state отдельно от canonical graph content;
+- contextual validation;
+- function over form;
+- специализированные редакторы поверх общей инфраструктуры.
+
+Важно: WolvenKit решает задачу authoring файлов REDengine, а Assist Quest Editor — задачу универсального quest authoring/runtime. Поэтому мы **сверяем принципы, а не копируем типы и форматы**.
+
+Подробный конспект, список проверенных исходников и обязательная процедура сверки находятся в `MemoryAI/WOLVENKIT_REFERENCE.md`.
+
+Перед архитектурными изменениями агент обязан проверить актуальный upstream `main` WolvenKit и зафиксировать существенные расхождения.

@@ -1,5 +1,13 @@
 # Журнал изменений памяти и архитектуры
 
+## 2026-09-20 — Архитектурный reference WolvenKit
+
+- добавлен обязательный внешний архитектурный reference: upstream `WolvenKit/WolvenKit`;
+- добавлен `MemoryAI/WOLVENKIT_REFERENCE.md` с кратким конспектом философии, graph/document architecture, DI/factories, stable IDs, editor metadata и contextual validation;
+- в `INSTRUCTIONS.md` зафиксирована обязательная сверка актуального WolvenKit `main` перед архитектурными и логическими изменениями;
+- в `ARCHITECTURE.md` и `PROJECT_MEMORY.md` добавлена явная связь с reference;
+- отдельно зафиксировано, что заимствуются принципы, а не REDengine-specific типы и форматы.
+
 ## 2026-09-20 — 1.0.40.108-QUEST-EDITOR-QUEST-GRAPH-R1
 
 - Quest Graph переведён из статического demo SVG в рабочий редактор.

@@ -200,3 +200,21 @@ JSON — переносимый формат хранения/тестирова
 Для интеграции Simulator → Runtime — integration tests.
 
 Физическое тестирование пользователем проводится только после зелёного CI и bump версии.
+
+## 19. Обязательная сверка с WolvenKit
+
+Для архитектурных и логических решений Assist Quest Editor обязательным внешним reference является upstream-репозиторий WolvenKit:
+
+https://github.com/WolvenKit/WolvenKit
+
+Перед изменением canonical model, Quest/Scene Graph, Node/Socket/Connection, Runtime, Persistence, Editor infrastructure, adapters/exporters или крупного editor workflow агент обязан:
+
+1. прочитать `MemoryAI/WOLVENKIT_REFERENCE.md`;
+2. проверить актуальный `main` WolvenKit;
+3. изучить относящиеся к решению source/docs;
+4. сравнить предлагаемое решение с их архитектурными принципами;
+5. зафиксировать в MemoryAI причину, если наше решение сознательно отличается.
+
+WolvenKit не является абсолютной спецификацией нашего проекта. Мы заимствуем его философию и полезные архитектурные паттерны, но не переносим REDengine/Cyberpunk-specific model один-в-один.
+
+Игнорировать эту сверку при архитектурном изменении запрещено: цель правила — не допускать решений, которые сейчас удобны, но позже ограничат функциональность и потребуют перелома canonical model.
