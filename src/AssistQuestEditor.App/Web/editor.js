@@ -13,6 +13,7 @@
   let graphHistory = { canUndo: false, canRedo: false };
   let graphValidation = [];
   let graphPreviewPositions = new Map();
+  let graphViewport = { x: 0, y: 0, width: 1200, height: 720 };
 
   const configs = {
     graph: { title: "Нодовый редактор квестов", draw: renderGraph },
@@ -99,7 +100,7 @@
         "<span class='badge red'>" + escapeHtml(questGraph.name) + "</span>" +
       "</div>" +
       "<div style='height:calc(100% - 46px);min-height:560px;border:1px solid var(--border);border-radius:8px;overflow:hidden;background:#111419'>" +
-        "<svg id='questGraphSvg' viewBox='0 0 1200 720' xmlns='http://www.w3.org/2000/svg' style='width:100%;height:100%'>" +
+        "<svg id='questGraphSvg' viewBox='" + graphViewport.x + " " + graphViewport.y + " " + graphViewport.width + " " + graphViewport.height + "' xmlns='http://www.w3.org/2000/svg' style='width:100%;height:100%'>" +
           "<g id='questGraphEdges'>" + graphEdges() + "</g>" +
           "<g id='questGraphNodes'>" + questGraph.nodes.map(graphNodeMarkup).join("") + "</g>" +
         "</svg>" +
@@ -303,11 +304,18 @@
       const ratioX = (focus.x - viewBox.x) / viewBox.width;
       const ratioY = (focus.y - viewBox.y) / viewBox.height;
 
+      graphViewport = {
+        x: focus.x - ratioX * nextWidth,
+        y: focus.y - ratioY * nextHeight,
+        width: nextWidth,
+        height: nextHeight
+      };
+
       svg.setAttribute(
         "viewBox",
-        (focus.x - ratioX * nextWidth) + " " +
-        (focus.y - ratioY * nextHeight) + " " +
-        nextWidth + " " + nextHeight
+        graphViewport.x + " " +
+        graphViewport.y + " " +
+        graphViewport.width + " " + graphViewport.height
       );
 
       refreshGraphEdges(svg);
@@ -451,11 +459,16 @@
     const maxY = Math.max(...questGraph.nodes.map(node => getGraphNodePosition(node).y + 110));
     const svg = document.getElementById("questGraphSvg");
     if (!svg) return;
+    graphViewport = {
+      x: minX - 60,
+      y: minY - 60,
+      width: Math.max(220, maxX - minX + 120),
+      height: Math.max(180, maxY - minY + 120)
+    };
     svg.setAttribute(
       "viewBox",
-      (minX - 60) + " " + (minY - 60) + " " +
-      Math.max(220, maxX - minX + 120) + " " +
-      Math.max(180, maxY - minY + 120)
+      graphViewport.x + " " + graphViewport.y + " " +
+      graphViewport.width + " " + graphViewport.height
     );
   }
 
@@ -657,22 +670,10 @@
   }
 
   function refreshGraphEdges(svg) {
-    const edgeElements = svg.querySelectorAll(".edge");
-    const generated = graphEdges();
-    if (edgeElements.length !== questGraph.connections.length) {
-      const edgeGroup = svg.querySelector("#questGraphEdges");
-      if (edgeGroup) edgeGroup.innerHTML = generated;
-      return;
+    const edgeGroup = svg.querySelector("#questGraphEdges");
+    if (edgeGroup) {
+      edgeGroup.innerHTML = graphEdges();
     }
-
-    const template = document.createElementNS("http://www.w3.org/2000/svg", "g");
-    template.innerHTML = generated;
-    edgeElements.forEach((edge, index) => {
-      const next = template.children[index];
-      if (next) {
-        edge.replaceWith(next.cloneNode(true));
-      }
-    });
   }
 
   function escapeCssAttribute(value) {
