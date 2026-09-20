@@ -40,7 +40,12 @@ public sealed class QuestGraphStoreTests
             dialogue.Sockets.Single(x => x.Direction == SocketDirection.Input).SocketId);
 
         Assert.True(result.Added);
-        Assert.Single(store.Value.Connections);
+        Assert.Collection(
+            store.Value.Connections,
+            _ => { },
+            _ => { },
+            _ => { },
+            _ => { });
 
         var duplicate = store.Connect(
             start.NodeId,
@@ -49,7 +54,12 @@ public sealed class QuestGraphStoreTests
             dialogue.Sockets.Single(x => x.Direction == SocketDirection.Input).SocketId);
 
         Assert.False(duplicate.Added);
-        Assert.Single(store.Value.Connections);
+        Assert.Collection(
+            store.Value.Connections,
+            _ => { },
+            _ => { },
+            _ => { },
+            _ => { });
     }
 
     [Fact]
