@@ -17,9 +17,9 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..AssistQuestEditor.DomainAssistQuestEditor.Domain.csproj" />
+    <ProjectReference Include="../AssistQuestEditor.Domain/AssistQuestEditor.Domain.csproj" />
     <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.4191.47" />
-    <None Update="Web***">
+    <None Update="Web/**/*">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
       <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
     </None>
