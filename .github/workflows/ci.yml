@@ -100,12 +100,12 @@ jobs:
           }
           Write-Host "Single-file публикация CI: $($files[0].FullName)" -ForegroundColor Green
 
-      - name: Проверить отсутствие логов в репозитории
+      - name: Проверить структуру диагностических логов
         shell: pwsh
         run: |
-          $unexpected = @(Get-ChildItem -Path MemoryAI/LOGS -File | Where-Object { $_.Name -ne "README.md" })
+          $unexpected = @(Get-ChildItem -Path MemoryAI/LOGS -File | Where-Object { $_.Name -ne "README.md" -and $_.Name -ne "assist_quest_editor.log" })
           if ($unexpected.Count -gt 0) {
-            Write-Error "MemoryAI/LOGS должен содержать только README.md."
+            Write-Error "MemoryAI/LOGS должен содержать README.md и, при наличии физического теста, assist_quest_editor.log."
             $unexpected | ForEach-Object { Write-Host $_.FullName }
             exit 1
           }

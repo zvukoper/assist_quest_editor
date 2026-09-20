@@ -1,5 +1,12 @@
 # Журнал изменений памяти и архитектуры
 
+## 2026-09-20 — 1.0.40.106-QUEST-EDITOR-SDO-MAP-R5-SNAPSHOT-FIX
+
+- исправлена сериализация Simulator snapshot: для Web UI принудительно используется camelCase;
+- устранена причина ошибки `Cannot read properties of undefined (reading 'position')`;
+- версия поднята перед повторным физическим тестом;
+- CI разрешает диагностический `MemoryAI/LOGS/assist_quest_editor.log` для анализа.
+
 ## 2026-09-20 — 1.0.40.105-QUEST-EDITOR-SDO-MAP-R4-DIAGNOSTICS
 
 - добавлен постоянный диагностический лог `MemoryAI/LOGS/assist_quest_editor.log`;

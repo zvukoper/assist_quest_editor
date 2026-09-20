@@ -83,6 +83,8 @@ Web-ресурсы src/AssistQuestEditor.App/Web и data/world/sdo_points.json �
 
 Базовая версия каркаса: 1.0.40.101-QUEST-EDITOR-DUAL-WINDOW-R1.
 
-Текущая рабочая версия: 1.0.40.105-QUEST-EDITOR-SDO-MAP-R4-DIAGNOSTICS.
+Причина пустого Simulator найдена: C# snapshot сериализовался с PascalCase, тогда как Web UI ожидает camelCase.
+
+Текущая рабочая версия: 1.0.40.106-QUEST-EDITOR-SDO-MAP-R5-SNAPSHOT-FIX.
 
 Перед физическим тестированием пользователя версия обязательно увеличивается.

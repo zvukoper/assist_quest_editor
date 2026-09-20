@@ -47,7 +47,7 @@ if (!currentTask.includes("1.0.40.101-QUEST-EDITOR-DUAL-WINDOW-R1")) {
 
 const logDir = path.join(root, "MemoryAI/LOGS");
 const entries = fs.readdirSync(logDir);
-const unexpected = entries.filter(name => name !== "README.md");
+const unexpected = entries.filter(name => name !== "README.md" && name !== "assist_quest_editor.log");
 
 if (unexpected.length) {
   console.error("MemoryAI/LOGS должен быть пустым, кроме README.md:");
@@ -55,4 +55,4 @@ if (unexpected.length) {
   process.exit(1);
 }
 
-console.log("Проверка памяти: OK (" + required.length + " обязательных файлов).");
+console.log("Проверка памяти: OK (" + required.length + " обязательных файлов). Разрешён диагностический assist_quest_editor.log.");

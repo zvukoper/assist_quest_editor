@@ -51,6 +51,9 @@ public sealed class SimulatorForm : WebViewForm
             type = "snapshot",
             version = VersionInfo.InformationalVersion,
             snapshot
+        }, new JsonSerializerOptions
+        {
+            PropertyNamingPolicy = JsonNamingPolicy.CamelCase
         });
 
         AppLogger.Info("SimulatorForm: отправляю snapshot в WebView2.", $"jsonChars={payload.Length}; points={pointCount}");
