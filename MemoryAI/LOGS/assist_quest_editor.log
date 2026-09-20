@@ -1,261 +1,129 @@
-2026-09-20 20:33:32.362 [INFO] [PID 21048] [TID 2] === Assist Quest Editor START === | Version=1.0.40.104-QUEST-EDITOR-SDO-MAP-R3; BaseDirectory=C:\Users\Admin\AppData\Local\Temp\.net\AssistQuestEditor\8LSoBG8DCwvr\; CurrentDirectory=F:\repo\assist_quest_editor; LogPath=F:\repo\assist_quest_editor\MemoryAI\LOGS\assist_quest_editor.log
-2026-09-20 20:33:32.372 [INFO] [PID 21048] [TID 2] Загрузка СДО world data.
-2026-09-20 20:33:32.389 [INFO] [PID 21048] [TID 2] SdoWorldDataLoader.Load() | path=C:\Users\Admin\AppData\Local\Temp\.net\AssistQuestEditor\8LSoBG8DCwvr\data/world/sdo_points.json; exists=True
-2026-09-20 20:33:32.392 [INFO] [PID 21048] [TID 2] Файл СДО прочитан. | bytes=756275; chars=708222
-2026-09-20 20:33:32.443 [INFO] [PID 21048] [TID 2] Метаданные СДО разобраны. | schema=1; source=zvukoper/ets2_assist:data/editor_static_data; categoryCount=71; pointCount=5115; parsedPoints=5115
-2026-09-20 20:33:32.444 [INFO] [PID 21048] [TID 2] СДО-точки отфильтрованы. | input=5115; valid=5115; invalid=0
-2026-09-20 20:33:32.450 [INFO] [PID 21048] [TID 2] СДО world points готовы. | count=5115; X=[118733,199063]; Y=[-41,7734,220,812]; Z=[-110503,-43350,1]
-2026-09-20 20:33:32.450 [INFO] [PID 21048] [TID 2] СДО world data загружены. | points=5115
-2026-09-20 20:33:32.455 [INFO] [PID 21048] [TID 2] Создан SimulatorDataSourceAdapter. | channels=11; points=5115
-2026-09-20 20:33:32.515 [INFO] [PID 21048] [TID 2] MainForm создан. Запуск Application.Run().
-2026-09-20 20:33:32.531 [INFO] [PID 21048] [TID 2] WebView2: начало инициализации. | form=Assist Quest Editor — Редактор; page=main.html
-2026-09-20 20:33:32.599 [INFO] [PID 21048] [TID 2] WebView2: начало инициализации. | form=Assist Quest Editor — Симулятор; page=simulator.html
-2026-09-20 20:33:32.833 [INFO] [PID 21048] [TID 2] WebView2: CoreWebView2 создан. | browser=153.0.4234.48
-2026-09-20 20:33:32.846 [INFO] [PID 21048] [TID 2] WebView2: Navigate. | form=Assist Quest Editor — Редактор; uri=file:///C:/Users/Admin/AppData/Local/Temp/.net/AssistQuestEditor/8LSoBG8DCwvr/Web/main.html?v=1.0.40.104; sourceExists=True; sourceBytes=5762
-2026-09-20 20:33:32.857 [INFO] [PID 21048] [TID 2] WebView2: CoreWebView2 создан. | browser=153.0.4234.48
-2026-09-20 20:33:32.860 [INFO] [PID 21048] [TID 2] WebView2: Navigate. | form=Assist Quest Editor — Симулятор; uri=file:///C:/Users/Admin/AppData/Local/Temp/.net/AssistQuestEditor/8LSoBG8DCwvr/Web/simulator.html?v=1.0.40.104; sourceExists=True; sourceBytes=1523
-2026-09-20 20:33:32.898 [INFO] [PID 21048] [TID 2] WEB: Simulator Web UI готов. | {"canvas":true,"side":true,"url":"file:///C:/Users/Admin/AppData/Local/Temp/.net/AssistQuestEditor/8LSoBG8DCwvr/Web/simulator.html?v=1.0.40.104"}
-2026-09-20 20:33:32.900 [INFO] [PID 21048] [TID 2] WEB: Web document load завершён. | {"title":"Симулятор","url":"file:///C:/Users/Admin/AppData/Local/Temp/.net/AssistQuestEditor/8LSoBG8DCwvr/Web/simulator.html?v=1.0.40.104"}
-2026-09-20 20:33:32.903 [INFO] [PID 21048] [TID 2] WebView2: NavigationCompleted. | form=Assist Quest Editor — Симулятор; success=True; error=Unknown
-2026-09-20 20:33:32.903 [INFO] [PID 21048] [TID 2] WebView2: browser ready. | form=Assist Quest Editor — Симулятор; page=simulator.html
-2026-09-20 20:33:32.904 [INFO] [PID 21048] [TID 2] SimulatorForm: browser ready, отправляю snapshot.
-2026-09-20 20:33:32.905 [INFO] [PID 21048] [TID 2] SimulatorForm: формирование snapshot. | points=5115; selected=<none>; player=WorldCoordinate { X = 158898, Y = 89,5193, Z = -76926,55 }
-2026-09-20 20:33:32.946 [INFO] [PID 21048] [TID 2] SimulatorForm: отправляю snapshot в WebView2. | jsonChars=1193206; points=5115
-2026-09-20 20:33:32.970 [INFO] [PID 21048] [TID 2] WEB: Web document load завершён. | {"title":"Assist Quest Editor","url":"file:///C:/Users/Admin/AppData/Local/Temp/.net/AssistQuestEditor/8LSoBG8DCwvr/Web/main.html?v=1.0.40.104"}
-2026-09-20 20:33:32.976 [INFO] [PID 21048] [TID 2] WEB: Simulator получил snapshot. | {"points":0,"selectedPointId":null,"version":"1.0.40.104-QUEST-EDITOR-SDO-MAP-R3"}
-2026-09-20 20:33:32.982 [INFO] [PID 21048] [TID 2] WebView2: NavigationCompleted. | form=Assist Quest Editor — Редактор; success=True; error=Unknown
-2026-09-20 20:33:32.982 [INFO] [PID 21048] [TID 2] WebView2: browser ready. | form=Assist Quest Editor — Редактор; page=main.html
-2026-09-20 20:33:32.986 [ERROR] [PID 21048] [TID 2] WEB: Ошибка обработки сообщения от host. | {"error":"TypeError: Cannot read properties of undefined (reading 'position')"}
-2026-09-20 20:33:35.023 [ERROR] [PID 21048] [TID 2] WEB: window.error | {"message":"Script error.","filename":"","line":0,"column":0}
-2026-09-20 20:33:35.096 [ERROR] [PID 21048] [TID 2] WEB: window.error | {"message":"Script error.","filename":"","line":0,"column":0}
-2026-09-20 20:33:35.100 [ERROR] [PID 21048] [TID 2] WEB: window.error | {"message":"Script error.","filename":"","line":0,"column":0}
-2026-09-20 20:33:35.106 [ERROR] [PID 21048] [TID 2] WEB: window.error | {"message":"Script error.","filename":"","line":0,"column":0}
-2026-09-20 20:33:35.112 [ERROR] [PID 21048] [TID 2] WEB: window.error | {"message":"Script error.","filename":"","line":0,"column":0}
-2026-09-20 20:33:35.117 [ERROR] [PID 21048] [TID 2] WEB: window.error | {"message":"Script error.","filename":"","line":0,"column":0}
-2026-09-20 20:33:35.123 [ERROR] [PID 21048] [TID 2] WEB: window.error | {"message":"Script error.","filename":"","line":0,"column":0}
-2026-09-20 20:33:35.128 [ERROR] [PID 21048] [TID 2] WEB: window.error | {"message":"Script error.","filename":"","line":0,"column":0}
-2026-09-20 20:33:35.134 [ERROR] [PID 21048] [TID 2] WEB: window.error | {"message":"Script error.","filename":"","line":0,"column":0}
-2026-09-20 20:33:35.139 [ERROR] [PID 21048] [TID 2] WEB: window.error | {"message":"Script error.","filename":"","line":0,"column":0}
-2026-09-20 20:33:35.145 [ERROR] [PID 21048] [TID 2] WEB: window.error | {"message":"Script error.","filename":"","line":0,"column":0}
-2026-09-20 20:33:35.150 [ERROR] [PID 21048] [TID 2] WEB: window.error | {"message":"Script error.","filename":"","line":0,"column":0}
-2026-09-20 20:33:35.156 [ERROR] [PID 21048] [TID 2] WEB: window.error | {"message":"Script error.","filename":"","line":0,"column":0}
-2026-09-20 20:33:35.161 [ERROR] [PID 21048] [TID 2] WEB: window.error | {"message":"Script error.","filename":"","line":0,"column":0}
-2026-09-20 20:33:35.167 [ERROR] [PID 21048] [TID 2] WEB: window.error | {"message":"Script error.","filename":"","line":0,"column":0}
-2026-09-20 20:33:35.173 [ERROR] [PID 21048] [TID 2] WEB: window.error | {"message":"Script error.","filename":"","line":0,"column":0}
-2026-09-20 20:33:35.178 [ERROR] [PID 21048] [TID 2] WEB: window.error | {"message":"Script error.","filename":"","line":0,"column":0}
-2026-09-20 20:33:35.184 [ERROR] [PID 21048] [TID 2] WEB: window.error | {"message":"Script error.","filename":"","line":0,"column":0}
-2026-09-20 20:33:35.189 [ERROR] [PID 21048] [TID 2] WEB: window.error | {"message":"Script error.","filename":"","line":0,"column":0}
-2026-09-20 20:33:35.195 [ERROR] [PID 21048] [TID 2] WEB: window.error | {"message":"Script error.","filename":"","line":0,"column":0}
-2026-09-20 20:33:35.200 [ERROR] [PID 21048] [TID 2] WEB: window.error | {"message":"Script error.","filename":"","line":0,"column":0}
-2026-09-20 20:33:35.206 [ERROR] [PID 21048] [TID 2] WEB: window.error | {"message":"Script error.","filename":"","line":0,"column":0}
-2026-09-20 20:33:35.211 [ERROR] [PID 21048] [TID 2] WEB: window.error | {"message":"Script error.","filename":"","line":0,"column":0}
-2026-09-20 20:33:35.217 [ERROR] [PID 21048] [TID 2] WEB: window.error | {"message":"Script error.","filename":"","line":0,"column":0}
-2026-09-20 20:33:35.223 [ERROR] [PID 21048] [TID 2] WEB: window.error | {"message":"Script error.","filename":"","line":0,"column":0}
-2026-09-20 20:33:35.228 [ERROR] [PID 21048] [TID 2] WEB: window.error | {"message":"Script error.","filename":"","line":0,"column":0}
-2026-09-20 20:33:35.234 [ERROR] [PID 21048] [TID 2] WEB: window.error | {"message":"Script error.","filename":"","line":0,"column":0}
-2026-09-20 20:33:35.239 [ERROR] [PID 21048] [TID 2] WEB: window.error | {"message":"Script error.","filename":"","line":0,"column":0}
-2026-09-20 20:33:35.245 [ERROR] [PID 21048] [TID 2] WEB: window.error | {"message":"Script error.","filename":"","line":0,"column":0}
-2026-09-20 20:33:35.250 [ERROR] [PID 21048] [TID 2] WEB: window.error | {"message":"Script error.","filename":"","line":0,"column":0}
-2026-09-20 20:33:35.256 [ERROR] [PID 21048] [TID 2] WEB: window.error | {"message":"Script error.","filename":"","line":0,"column":0}
-2026-09-20 20:33:35.261 [ERROR] [PID 21048] [TID 2] WEB: window.error | {"message":"Script error.","filename":"","line":0,"column":0}
-2026-09-20 20:33:35.267 [ERROR] [PID 21048] [TID 2] WEB: window.error | {"message":"Script error.","filename":"","line":0,"column":0}
-2026-09-20 20:33:35.273 [ERROR] [PID 21048] [TID 2] WEB: window.error | {"message":"Script error.","filename":"","line":0,"column":0}
-2026-09-20 20:33:35.278 [ERROR] [PID 21048] [TID 2] WEB: window.error | {"message":"Script error.","filename":"","line":0,"column":0}
-2026-09-20 20:33:35.284 [ERROR] [PID 21048] [TID 2] WEB: window.error | {"message":"Script error.","filename":"","line":0,"column":0}
-2026-09-20 20:33:35.289 [ERROR] [PID 21048] [TID 2] WEB: window.error | {"message":"Script error.","filename":"","line":0,"column":0}
-2026-09-20 20:33:35.295 [ERROR] [PID 21048] [TID 2] WEB: window.error | {"message":"Script error.","filename":"","line":0,"column":0}
-2026-09-20 20:33:35.300 [ERROR] [PID 21048] [TID 2] WEB: window.error | {"message":"Script error.","filename":"","line":0,"column":0}
-2026-09-20 20:33:35.306 [ERROR] [PID 21048] [TID 2] WEB: window.error | {"message":"Script error.","filename":"","line":0,"column":0}
-2026-09-20 20:33:35.311 [ERROR] [PID 21048] [TID 2] WEB: window.error | {"message":"Script error.","filename":"","line":0,"column":0}
-2026-09-20 20:33:35.317 [ERROR] [PID 21048] [TID 2] WEB: window.error | {"message":"Script error.","filename":"","line":0,"column":0}
-2026-09-20 20:33:35.322 [ERROR] [PID 21048] [TID 2] WEB: window.error | {"message":"Script error.","filename":"","line":0,"column":0}
-2026-09-20 20:33:35.328 [ERROR] [PID 21048] [TID 2] WEB: window.error | {"message":"Script error.","filename":"","line":0,"column":0}
-2026-09-20 20:33:35.334 [ERROR] [PID 21048] [TID 2] WEB: window.error | {"message":"Script error.","filename":"","line":0,"column":0}
-2026-09-20 20:33:35.339 [ERROR] [PID 21048] [TID 2] WEB: window.error | {"message":"Script error.","filename":"","line":0,"column":0}
-2026-09-20 20:33:35.345 [ERROR] [PID 21048] [TID 2] WEB: window.error | {"message":"Script error.","filename":"","line":0,"column":0}
-2026-09-20 20:33:35.350 [ERROR] [PID 21048] [TID 2] WEB: window.error | {"message":"Script error.","filename":"","line":0,"column":0}
-2026-09-20 20:33:35.356 [ERROR] [PID 21048] [TID 2] WEB: window.error | {"message":"Script error.","filename":"","line":0,"column":0}
-2026-09-20 20:33:35.361 [ERROR] [PID 21048] [TID 2] WEB: window.error | {"message":"Script error.","filename":"","line":0,"column":0}
-2026-09-20 20:33:35.367 [ERROR] [PID 21048] [TID 2] WEB: window.error | {"message":"Script error.","filename":"","line":0,"column":0}
-2026-09-20 20:33:35.373 [ERROR] [PID 21048] [TID 2] WEB: window.error | {"message":"Script error.","filename":"","line":0,"column":0}
-2026-09-20 20:33:35.378 [ERROR] [PID 21048] [TID 2] WEB: window.error | {"message":"Script error.","filename":"","line":0,"column":0}
-2026-09-20 20:33:35.384 [ERROR] [PID 21048] [TID 2] WEB: window.error | {"message":"Script error.","filename":"","line":0,"column":0}
-2026-09-20 20:33:35.389 [ERROR] [PID 21048] [TID 2] WEB: window.error | {"message":"Script error.","filename":"","line":0,"column":0}
-2026-09-20 20:33:35.395 [ERROR] [PID 21048] [TID 2] WEB: window.error | {"message":"Script error.","filename":"","line":0,"column":0}
-2026-09-20 20:33:35.400 [ERROR] [PID 21048] [TID 2] WEB: window.error | {"message":"Script error.","filename":"","line":0,"column":0}
-2026-09-20 20:33:35.406 [ERROR] [PID 21048] [TID 2] WEB: window.error | {"message":"Script error.","filename":"","line":0,"column":0}
-2026-09-20 20:33:35.411 [ERROR] [PID 21048] [TID 2] WEB: window.error | {"message":"Script error.","filename":"","line":0,"column":0}
-2026-09-20 20:33:35.417 [ERROR] [PID 21048] [TID 2] WEB: window.error | {"message":"Script error.","filename":"","line":0,"column":0}
-2026-09-20 20:33:35.423 [ERROR] [PID 21048] [TID 2] WEB: window.error | {"message":"Script error.","filename":"","line":0,"column":0}
-2026-09-20 20:33:35.428 [ERROR] [PID 21048] [TID 2] WEB: window.error | {"message":"Script error.","filename":"","line":0,"column":0}
-2026-09-20 20:33:35.434 [ERROR] [PID 21048] [TID 2] WEB: window.error | {"message":"Script error.","filename":"","line":0,"column":0}
-2026-09-20 20:33:35.439 [ERROR] [PID 21048] [TID 2] WEB: window.error | {"message":"Script error.","filename":"","line":0,"column":0}
-2026-09-20 20:33:35.445 [ERROR] [PID 21048] [TID 2] WEB: window.error | {"message":"Script error.","filename":"","line":0,"column":0}
-2026-09-20 20:33:35.450 [ERROR] [PID 21048] [TID 2] WEB: window.error | {"message":"Script error.","filename":"","line":0,"column":0}
-2026-09-20 20:33:35.456 [ERROR] [PID 21048] [TID 2] WEB: window.error | {"message":"Script error.","filename":"","line":0,"column":0}
-2026-09-20 20:33:35.461 [ERROR] [PID 21048] [TID 2] WEB: window.error | {"message":"Script error.","filename":"","line":0,"column":0}
-2026-09-20 20:33:35.467 [ERROR] [PID 21048] [TID 2] WEB: window.error | {"message":"Script error.","filename":"","line":0,"column":0}
-2026-09-20 20:33:35.473 [ERROR] [PID 21048] [TID 2] WEB: window.error | {"message":"Script error.","filename":"","line":0,"column":0}
-2026-09-20 20:33:35.478 [ERROR] [PID 21048] [TID 2] WEB: window.error | {"message":"Script error.","filename":"","line":0,"column":0}
-2026-09-20 20:33:35.484 [ERROR] [PID 21048] [TID 2] WEB: window.error | {"message":"Script error.","filename":"","line":0,"column":0}
-2026-09-20 20:33:35.489 [ERROR] [PID 21048] [TID 2] WEB: window.error | {"message":"Script error.","filename":"","line":0,"column":0}
-2026-09-20 20:33:35.495 [ERROR] [PID 21048] [TID 2] WEB: window.error | {"message":"Script error.","filename":"","line":0,"column":0}
-2026-09-20 20:33:35.500 [ERROR] [PID 21048] [TID 2] WEB: window.error | {"message":"Script error.","filename":"","line":0,"column":0}
-2026-09-20 20:33:35.506 [ERROR] [PID 21048] [TID 2] WEB: window.error | {"message":"Script error.","filename":"","line":0,"column":0}
-2026-09-20 20:33:35.511 [ERROR] [PID 21048] [TID 2] WEB: window.error | {"message":"Script error.","filename":"","line":0,"column":0}
-2026-09-20 20:33:35.517 [ERROR] [PID 21048] [TID 2] WEB: window.error | {"message":"Script error.","filename":"","line":0,"column":0}
-2026-09-20 20:33:35.522 [ERROR] [PID 21048] [TID 2] WEB: window.error | {"message":"Script error.","filename":"","line":0,"column":0}
-2026-09-20 20:33:35.528 [ERROR] [PID 21048] [TID 2] WEB: window.error | {"message":"Script error.","filename":"","line":0,"column":0}
-2026-09-20 20:33:35.534 [ERROR] [PID 21048] [TID 2] WEB: window.error | {"message":"Script error.","filename":"","line":0,"column":0}
-2026-09-20 20:33:35.539 [ERROR] [PID 21048] [TID 2] WEB: window.error | {"message":"Script error.","filename":"","line":0,"column":0}
-2026-09-20 20:33:35.545 [ERROR] [PID 21048] [TID 2] WEB: window.error | {"message":"Script error.","filename":"","line":0,"column":0}
-2026-09-20 20:33:35.550 [ERROR] [PID 21048] [TID 2] WEB: window.error | {"message":"Script error.","filename":"","line":0,"column":0}
-2026-09-20 20:33:35.556 [ERROR] [PID 21048] [TID 2] WEB: window.error | {"message":"Script error.","filename":"","line":0,"column":0}
-2026-09-20 20:33:35.561 [ERROR] [PID 21048] [TID 2] WEB: window.error | {"message":"Script error.","filename":"","line":0,"column":0}
-2026-09-20 20:33:35.567 [ERROR] [PID 21048] [TID 2] WEB: window.error | {"message":"Script error.","filename":"","line":0,"column":0}
-2026-09-20 20:33:35.573 [ERROR] [PID 21048] [TID 2] WEB: window.error | {"message":"Script error.","filename":"","line":0,"column":0}
-2026-09-20 20:33:35.578 [ERROR] [PID 21048] [TID 2] WEB: window.error | {"message":"Script error.","filename":"","line":0,"column":0}
-2026-09-20 20:33:35.584 [ERROR] [PID 21048] [TID 2] WEB: window.error | {"message":"Script error.","filename":"","line":0,"column":0}
-2026-09-20 20:33:35.586 [ERROR] [PID 21048] [TID 2] WEB: window.error | {"message":"Script error.","filename":"","line":0,"column":0}
-2026-09-20 20:33:35.739 [ERROR] [PID 21048] [TID 2] WEB: window.error | {"message":"Script error.","filename":"","line":0,"column":0}
-2026-09-20 20:33:35.762 [ERROR] [PID 21048] [TID 2] WEB: window.error | {"message":"Script error.","filename":"","line":0,"column":0}
-2026-09-20 20:33:35.778 [ERROR] [PID 21048] [TID 2] WEB: window.error | {"message":"Script error.","filename":"","line":0,"column":0}
-2026-09-20 20:33:35.795 [ERROR] [PID 21048] [TID 2] WEB: window.error | {"message":"Script error.","filename":"","line":0,"column":0}
-2026-09-20 20:33:35.812 [ERROR] [PID 21048] [TID 2] WEB: window.error | {"message":"Script error.","filename":"","line":0,"column":0}
-2026-09-20 20:33:36.067 [ERROR] [PID 21048] [TID 2] WEB: window.error | {"message":"Script error.","filename":"","line":0,"column":0}
-2026-09-20 20:33:36.089 [ERROR] [PID 21048] [TID 2] WEB: window.error | {"message":"Script error.","filename":"","line":0,"column":0}
-2026-09-20 20:33:36.100 [ERROR] [PID 21048] [TID 2] WEB: window.error | {"message":"Script error.","filename":"","line":0,"column":0}
-2026-09-20 20:33:36.112 [ERROR] [PID 21048] [TID 2] WEB: window.error | {"message":"Script error.","filename":"","line":0,"column":0}
-2026-09-20 20:33:36.117 [ERROR] [PID 21048] [TID 2] WEB: window.error | {"message":"Script error.","filename":"","line":0,"column":0}
-2026-09-20 20:33:36.128 [ERROR] [PID 21048] [TID 2] WEB: window.error | {"message":"Script error.","filename":"","line":0,"column":0}
-2026-09-20 20:33:36.146 [ERROR] [PID 21048] [TID 2] WEB: window.error | {"message":"Script error.","filename":"","line":0,"column":0}
-2026-09-20 20:33:36.506 [ERROR] [PID 21048] [TID 2] WEB: window.error | {"message":"Script error.","filename":"","line":0,"column":0}
-2026-09-20 20:33:36.528 [ERROR] [PID 21048] [TID 2] WEB: window.error | {"message":"Script error.","filename":"","line":0,"column":0}
-2026-09-20 20:33:36.539 [ERROR] [PID 21048] [TID 2] WEB: window.error | {"message":"Script error.","filename":"","line":0,"column":0}
-2026-09-20 20:33:36.550 [ERROR] [PID 21048] [TID 2] WEB: window.error | {"message":"Script error.","filename":"","line":0,"column":0}
-2026-09-20 20:33:36.561 [ERROR] [PID 21048] [TID 2] WEB: window.error | {"message":"Script error.","filename":"","line":0,"column":0}
-2026-09-20 20:33:36.594 [ERROR] [PID 21048] [TID 2] WEB: window.error | {"message":"Script error.","filename":"","line":0,"column":0}
-2026-09-20 20:33:36.763 [ERROR] [PID 21048] [TID 2] WEB: window.error | {"message":"Script error.","filename":"","line":0,"column":0}
-2026-09-20 20:33:36.790 [ERROR] [PID 21048] [TID 2] WEB: window.error | {"message":"Script error.","filename":"","line":0,"column":0}
-2026-09-20 20:33:36.800 [ERROR] [PID 21048] [TID 2] WEB: window.error | {"message":"Script error.","filename":"","line":0,"column":0}
-2026-09-20 20:33:36.811 [ERROR] [PID 21048] [TID 2] WEB: window.error | {"message":"Script error.","filename":"","line":0,"column":0}
-2026-09-20 20:33:36.823 [ERROR] [PID 21048] [TID 2] WEB: window.error | {"message":"Script error.","filename":"","line":0,"column":0}
-2026-09-20 20:33:36.839 [ERROR] [PID 21048] [TID 2] WEB: window.error | {"message":"Script error.","filename":"","line":0,"column":0}
-2026-09-20 20:33:37.029 [ERROR] [PID 21048] [TID 2] WEB: window.error | {"message":"Script error.","filename":"","line":0,"column":0}
-2026-09-20 20:33:37.051 [ERROR] [PID 21048] [TID 2] WEB: window.error | {"message":"Script error.","filename":"","line":0,"column":0}
-2026-09-20 20:33:37.056 [ERROR] [PID 21048] [TID 2] WEB: window.error | {"message":"Script error.","filename":"","line":0,"column":0}
-2026-09-20 20:33:37.073 [ERROR] [PID 21048] [TID 2] WEB: window.error | {"message":"Script error.","filename":"","line":0,"column":0}
-2026-09-20 20:33:37.091 [ERROR] [PID 21048] [TID 2] WEB: window.error | {"message":"Script error.","filename":"","line":0,"column":0}
-2026-09-20 20:33:38.572 [INFO] [PID 21048] [TID 2] WebView2: получено действие. | form=Assist Quest Editor — Симулятор; action=reset
-2026-09-20 20:33:38.573 [INFO] [PID 21048] [TID 2] SimulatorForm: обработка web action. | json={"action":"reset"}
-2026-09-20 20:33:38.575 [INFO] [PID 21048] [TID 2] SimulatorForm: формирование snapshot. | points=5115; selected=<none>; player=WorldCoordinate { X = 158898, Y = 89,5193, Z = -76926,55 }
-2026-09-20 20:33:38.587 [INFO] [PID 21048] [TID 2] SimulatorForm: отправляю snapshot в WebView2. | jsonChars=1193236; points=5115
-2026-09-20 20:33:38.612 [INFO] [PID 21048] [TID 2] SimulatorForm: формирование snapshot. | points=5115; selected=<none>; player=WorldCoordinate { X = 158898, Y = 89,5193, Z = -76926,55 }
-2026-09-20 20:33:38.623 [INFO] [PID 21048] [TID 2] SimulatorForm: отправляю snapshot в WebView2. | jsonChars=1193236; points=5115
-2026-09-20 20:33:38.644 [INFO] [PID 21048] [TID 2] SimulatorForm: формирование snapshot. | points=5115; selected=<none>; player=WorldCoordinate { X = 158898, Y = 89,5193, Z = -76926,55 }
-2026-09-20 20:33:38.659 [INFO] [PID 21048] [TID 2] SimulatorForm: отправляю snapshot в WebView2. | jsonChars=1193236; points=5115
-2026-09-20 20:33:38.680 [INFO] [PID 21048] [TID 2] SimulatorForm: формирование snapshot. | points=5115; selected=<none>; player=WorldCoordinate { X = 158898, Y = 89,5193, Z = -76926,55 }
-2026-09-20 20:33:38.690 [INFO] [PID 21048] [TID 2] SimulatorForm: отправляю snapshot в WebView2. | jsonChars=1193236; points=5115
-2026-09-20 20:33:38.711 [INFO] [PID 21048] [TID 2] SimulatorForm: формирование snapshot. | points=5115; selected=<none>; player=WorldCoordinate { X = 158898, Y = 89,5193, Z = -76926,55 }
-2026-09-20 20:33:38.722 [INFO] [PID 21048] [TID 2] SimulatorForm: отправляю snapshot в WebView2. | jsonChars=1193236; points=5115
-2026-09-20 20:33:38.742 [INFO] [PID 21048] [TID 2] SimulatorForm: формирование snapshot. | points=5115; selected=<none>; player=WorldCoordinate { X = 158898, Y = 89,5193, Z = -76926,55 }
-2026-09-20 20:33:38.754 [INFO] [PID 21048] [TID 2] SimulatorForm: отправляю snapshot в WebView2. | jsonChars=1193236; points=5115
-2026-09-20 20:33:38.776 [INFO] [PID 21048] [TID 2] SimulatorForm: формирование snapshot. | points=5115; selected=<none>; player=WorldCoordinate { X = 158898, Y = 89,5193, Z = -76926,55 }
-2026-09-20 20:33:38.787 [INFO] [PID 21048] [TID 2] SimulatorForm: отправляю snapshot в WebView2. | jsonChars=1193236; points=5115
-2026-09-20 20:33:38.808 [INFO] [PID 21048] [TID 2] SimulatorForm: формирование snapshot. | points=5115; selected=<none>; player=WorldCoordinate { X = 158898, Y = 89,5193, Z = -76926,55 }
-2026-09-20 20:33:38.817 [INFO] [PID 21048] [TID 2] SimulatorForm: отправляю snapshot в WebView2. | jsonChars=1193236; points=5115
-2026-09-20 20:33:38.837 [INFO] [PID 21048] [TID 2] SimulatorForm: формирование snapshot. | points=5115; selected=<none>; player=WorldCoordinate { X = 158898, Y = 89,5193, Z = -76926,55 }
-2026-09-20 20:33:38.846 [INFO] [PID 21048] [TID 2] SimulatorForm: отправляю snapshot в WebView2. | jsonChars=1193236; points=5115
-2026-09-20 20:33:38.866 [INFO] [PID 21048] [TID 2] SimulatorForm: формирование snapshot. | points=5115; selected=<none>; player=WorldCoordinate { X = 158898, Y = 89,5193, Z = -76926,55 }
-2026-09-20 20:33:38.875 [INFO] [PID 21048] [TID 2] SimulatorForm: отправляю snapshot в WebView2. | jsonChars=1193236; points=5115
-2026-09-20 20:33:38.895 [INFO] [PID 21048] [TID 2] SimulatorForm: формирование snapshot. | points=5115; selected=<none>; player=WorldCoordinate { X = 158898, Y = 89,5193, Z = -76926,55 }
-2026-09-20 20:33:38.905 [INFO] [PID 21048] [TID 2] SimulatorForm: отправляю snapshot в WebView2. | jsonChars=1193236; points=5115
-2026-09-20 20:33:38.927 [INFO] [PID 21048] [TID 2] SimulatorForm: формирование snapshot. | points=5115; selected=<none>; player=WorldCoordinate { X = 158898, Y = 89,5193, Z = -76926,55 }
-2026-09-20 20:33:38.936 [INFO] [PID 21048] [TID 2] SimulatorForm: отправляю snapshot в WebView2. | jsonChars=1193236; points=5115
-2026-09-20 20:33:38.984 [INFO] [PID 21048] [TID 2] WEB: Simulator получил snapshot. | {"points":0,"selectedPointId":null,"version":"1.0.40.104-QUEST-EDITOR-SDO-MAP-R3"}
-2026-09-20 20:33:38.985 [ERROR] [PID 21048] [TID 2] WEB: Ошибка обработки сообщения от host. | {"error":"TypeError: Cannot read properties of undefined (reading 'position')"}
-2026-09-20 20:33:38.985 [INFO] [PID 21048] [TID 2] WEB: Simulator получил snapshot. | {"points":0,"selectedPointId":null,"version":"1.0.40.104-QUEST-EDITOR-SDO-MAP-R3"}
-2026-09-20 20:33:38.985 [ERROR] [PID 21048] [TID 2] WEB: Ошибка обработки сообщения от host. | {"error":"TypeError: Cannot read properties of undefined (reading 'position')"}
-2026-09-20 20:33:38.985 [INFO] [PID 21048] [TID 2] WEB: Simulator получил snapshot. | {"points":0,"selectedPointId":null,"version":"1.0.40.104-QUEST-EDITOR-SDO-MAP-R3"}
-2026-09-20 20:33:38.986 [ERROR] [PID 21048] [TID 2] WEB: Ошибка обработки сообщения от host. | {"error":"TypeError: Cannot read properties of undefined (reading 'position')"}
-2026-09-20 20:33:38.986 [INFO] [PID 21048] [TID 2] WEB: Simulator получил snapshot. | {"points":0,"selectedPointId":null,"version":"1.0.40.104-QUEST-EDITOR-SDO-MAP-R3"}
-2026-09-20 20:33:38.986 [ERROR] [PID 21048] [TID 2] WEB: Ошибка обработки сообщения от host. | {"error":"TypeError: Cannot read properties of undefined (reading 'position')"}
-2026-09-20 20:33:38.986 [INFO] [PID 21048] [TID 2] WEB: Simulator получил snapshot. | {"points":0,"selectedPointId":null,"version":"1.0.40.104-QUEST-EDITOR-SDO-MAP-R3"}
-2026-09-20 20:33:38.987 [ERROR] [PID 21048] [TID 2] WEB: Ошибка обработки сообщения от host. | {"error":"TypeError: Cannot read properties of undefined (reading 'position')"}
-2026-09-20 20:33:38.987 [INFO] [PID 21048] [TID 2] WEB: Simulator получил snapshot. | {"points":0,"selectedPointId":null,"version":"1.0.40.104-QUEST-EDITOR-SDO-MAP-R3"}
-2026-09-20 20:33:38.987 [ERROR] [PID 21048] [TID 2] WEB: Ошибка обработки сообщения от host. | {"error":"TypeError: Cannot read properties of undefined (reading 'position')"}
-2026-09-20 20:33:38.987 [INFO] [PID 21048] [TID 2] WEB: Simulator получил snapshot. | {"points":0,"selectedPointId":null,"version":"1.0.40.104-QUEST-EDITOR-SDO-MAP-R3"}
-2026-09-20 20:33:38.988 [ERROR] [PID 21048] [TID 2] WEB: Ошибка обработки сообщения от host. | {"error":"TypeError: Cannot read properties of undefined (reading 'position')"}
-2026-09-20 20:33:38.988 [INFO] [PID 21048] [TID 2] WEB: Simulator получил snapshot. | {"points":0,"selectedPointId":null,"version":"1.0.40.104-QUEST-EDITOR-SDO-MAP-R3"}
-2026-09-20 20:33:38.988 [ERROR] [PID 21048] [TID 2] WEB: Ошибка обработки сообщения от host. | {"error":"TypeError: Cannot read properties of undefined (reading 'position')"}
-2026-09-20 20:33:38.988 [INFO] [PID 21048] [TID 2] WEB: Simulator получил snapshot. | {"points":0,"selectedPointId":null,"version":"1.0.40.104-QUEST-EDITOR-SDO-MAP-R3"}
-2026-09-20 20:33:38.989 [ERROR] [PID 21048] [TID 2] WEB: Ошибка обработки сообщения от host. | {"error":"TypeError: Cannot read properties of undefined (reading 'position')"}
-2026-09-20 20:33:38.989 [INFO] [PID 21048] [TID 2] WEB: Simulator получил snapshot. | {"points":0,"selectedPointId":null,"version":"1.0.40.104-QUEST-EDITOR-SDO-MAP-R3"}
-2026-09-20 20:33:38.989 [ERROR] [PID 21048] [TID 2] WEB: Ошибка обработки сообщения от host. | {"error":"TypeError: Cannot read properties of undefined (reading 'position')"}
-2026-09-20 20:33:38.989 [INFO] [PID 21048] [TID 2] WEB: Simulator получил snapshot. | {"points":0,"selectedPointId":null,"version":"1.0.40.104-QUEST-EDITOR-SDO-MAP-R3"}
-2026-09-20 20:33:38.990 [ERROR] [PID 21048] [TID 2] WEB: Ошибка обработки сообщения от host. | {"error":"TypeError: Cannot read properties of undefined (reading 'position')"}
-2026-09-20 20:33:38.990 [INFO] [PID 21048] [TID 2] WEB: Simulator получил snapshot. | {"points":0,"selectedPointId":null,"version":"1.0.40.104-QUEST-EDITOR-SDO-MAP-R3"}
-2026-09-20 20:33:38.990 [ERROR] [PID 21048] [TID 2] WEB: Ошибка обработки сообщения от host. | {"error":"TypeError: Cannot read properties of undefined (reading 'position')"}
-2026-09-20 20:33:39.151 [ERROR] [PID 21048] [TID 2] WEB: window.error | {"message":"Script error.","filename":"","line":0,"column":0}
-2026-09-20 20:33:39.167 [ERROR] [PID 21048] [TID 2] WEB: window.error | {"message":"Script error.","filename":"","line":0,"column":0}
-2026-09-20 20:33:39.184 [ERROR] [PID 21048] [TID 2] WEB: window.error | {"message":"Script error.","filename":"","line":0,"column":0}
-2026-09-20 20:33:39.195 [ERROR] [PID 21048] [TID 2] WEB: window.error | {"message":"Script error.","filename":"","line":0,"column":0}
-2026-09-20 20:33:39.212 [ERROR] [PID 21048] [TID 2] WEB: window.error | {"message":"Script error.","filename":"","line":0,"column":0}
-2026-09-20 20:33:39.423 [ERROR] [PID 21048] [TID 2] WEB: window.error | {"message":"Script error.","filename":"","line":0,"column":0}
-2026-09-20 20:33:39.445 [ERROR] [PID 21048] [TID 2] WEB: window.error | {"message":"Script error.","filename":"","line":0,"column":0}
-2026-09-20 20:33:39.461 [ERROR] [PID 21048] [TID 2] WEB: window.error | {"message":"Script error.","filename":"","line":0,"column":0}
-2026-09-20 20:33:39.473 [ERROR] [PID 21048] [TID 2] WEB: window.error | {"message":"Script error.","filename":"","line":0,"column":0}
-2026-09-20 20:33:39.489 [ERROR] [PID 21048] [TID 2] WEB: window.error | {"message":"Script error.","filename":"","line":0,"column":0}
-2026-09-20 20:33:39.544 [ERROR] [PID 21048] [TID 2] WEB: window.error | {"message":"Script error.","filename":"","line":0,"column":0}
-2026-09-20 20:33:40.498 [INFO] [PID 21048] [TID 2] WebView2: получено действие. | form=Assist Quest Editor — Симулятор; action=reset
-2026-09-20 20:33:40.498 [INFO] [PID 21048] [TID 2] SimulatorForm: обработка web action. | json={"action":"reset"}
-2026-09-20 20:33:40.499 [INFO] [PID 21048] [TID 2] SimulatorForm: формирование snapshot. | points=5115; selected=<none>; player=WorldCoordinate { X = 158898, Y = 89,5193, Z = -76926,55 }
-2026-09-20 20:33:40.512 [INFO] [PID 21048] [TID 2] SimulatorForm: отправляю snapshot в WebView2. | jsonChars=1193236; points=5115
-2026-09-20 20:33:40.532 [INFO] [PID 21048] [TID 2] SimulatorForm: формирование snapshot. | points=5115; selected=<none>; player=WorldCoordinate { X = 158898, Y = 89,5193, Z = -76926,55 }
-2026-09-20 20:33:40.547 [INFO] [PID 21048] [TID 2] SimulatorForm: отправляю snapshot в WebView2. | jsonChars=1193236; points=5115
-2026-09-20 20:33:40.567 [INFO] [PID 21048] [TID 2] SimulatorForm: формирование snapshot. | points=5115; selected=<none>; player=WorldCoordinate { X = 158898, Y = 89,5193, Z = -76926,55 }
-2026-09-20 20:33:40.581 [INFO] [PID 21048] [TID 2] SimulatorForm: отправляю snapshot в WebView2. | jsonChars=1193236; points=5115
-2026-09-20 20:33:40.602 [INFO] [PID 21048] [TID 2] SimulatorForm: формирование snapshot. | points=5115; selected=<none>; player=WorldCoordinate { X = 158898, Y = 89,5193, Z = -76926,55 }
-2026-09-20 20:33:40.614 [INFO] [PID 21048] [TID 2] SimulatorForm: отправляю snapshot в WebView2. | jsonChars=1193236; points=5115
-2026-09-20 20:33:40.633 [INFO] [PID 21048] [TID 2] SimulatorForm: формирование snapshot. | points=5115; selected=<none>; player=WorldCoordinate { X = 158898, Y = 89,5193, Z = -76926,55 }
-2026-09-20 20:33:40.645 [INFO] [PID 21048] [TID 2] SimulatorForm: отправляю snapshot в WebView2. | jsonChars=1193236; points=5115
-2026-09-20 20:33:40.665 [INFO] [PID 21048] [TID 2] SimulatorForm: формирование snapshot. | points=5115; selected=<none>; player=WorldCoordinate { X = 158898, Y = 89,5193, Z = -76926,55 }
-2026-09-20 20:33:40.677 [INFO] [PID 21048] [TID 2] SimulatorForm: отправляю snapshot в WebView2. | jsonChars=1193236; points=5115
-2026-09-20 20:33:40.697 [INFO] [PID 21048] [TID 2] SimulatorForm: формирование snapshot. | points=5115; selected=<none>; player=WorldCoordinate { X = 158898, Y = 89,5193, Z = -76926,55 }
-2026-09-20 20:33:40.708 [INFO] [PID 21048] [TID 2] SimulatorForm: отправляю snapshot в WebView2. | jsonChars=1193236; points=5115
-2026-09-20 20:33:40.728 [INFO] [PID 21048] [TID 2] SimulatorForm: формирование snapshot. | points=5115; selected=<none>; player=WorldCoordinate { X = 158898, Y = 89,5193, Z = -76926,55 }
-2026-09-20 20:33:40.735 [INFO] [PID 21048] [TID 2] SimulatorForm: отправляю snapshot в WebView2. | jsonChars=1193236; points=5115
-2026-09-20 20:33:40.756 [INFO] [PID 21048] [TID 2] SimulatorForm: формирование snapshot. | points=5115; selected=<none>; player=WorldCoordinate { X = 158898, Y = 89,5193, Z = -76926,55 }
-2026-09-20 20:33:40.760 [INFO] [PID 21048] [TID 2] SimulatorForm: отправляю snapshot в WebView2. | jsonChars=1193236; points=5115
-2026-09-20 20:33:40.780 [INFO] [PID 21048] [TID 2] SimulatorForm: формирование snapshot. | points=5115; selected=<none>; player=WorldCoordinate { X = 158898, Y = 89,5193, Z = -76926,55 }
-2026-09-20 20:33:40.784 [INFO] [PID 21048] [TID 2] SimulatorForm: отправляю snapshot в WebView2. | jsonChars=1193236; points=5115
-2026-09-20 20:33:40.804 [INFO] [PID 21048] [TID 2] SimulatorForm: формирование snapshot. | points=5115; selected=<none>; player=WorldCoordinate { X = 158898, Y = 89,5193, Z = -76926,55 }
-2026-09-20 20:33:40.808 [INFO] [PID 21048] [TID 2] SimulatorForm: отправляю snapshot в WebView2. | jsonChars=1193236; points=5115
-2026-09-20 20:33:40.828 [INFO] [PID 21048] [TID 2] SimulatorForm: формирование snapshot. | points=5115; selected=<none>; player=WorldCoordinate { X = 158898, Y = 89,5193, Z = -76926,55 }
-2026-09-20 20:33:40.833 [INFO] [PID 21048] [TID 2] SimulatorForm: отправляю snapshot в WebView2. | jsonChars=1193236; points=5115
-2026-09-20 20:33:40.868 [INFO] [PID 21048] [TID 2] WEB: Simulator получил snapshot. | {"points":0,"selectedPointId":null,"version":"1.0.40.104-QUEST-EDITOR-SDO-MAP-R3"}
-2026-09-20 20:33:40.868 [ERROR] [PID 21048] [TID 2] WEB: Ошибка обработки сообщения от host. | {"error":"TypeError: Cannot read properties of undefined (reading 'position')"}
-2026-09-20 20:33:40.869 [INFO] [PID 21048] [TID 2] WEB: Simulator получил snapshot. | {"points":0,"selectedPointId":null,"version":"1.0.40.104-QUEST-EDITOR-SDO-MAP-R3"}
-2026-09-20 20:33:40.869 [ERROR] [PID 21048] [TID 2] WEB: Ошибка обработки сообщения от host. | {"error":"TypeError: Cannot read properties of undefined (reading 'position')"}
-2026-09-20 20:33:40.869 [INFO] [PID 21048] [TID 2] WEB: Simulator получил snapshot. | {"points":0,"selectedPointId":null,"version":"1.0.40.104-QUEST-EDITOR-SDO-MAP-R3"}
-2026-09-20 20:33:40.869 [ERROR] [PID 21048] [TID 2] WEB: Ошибка обработки сообщения от host. | {"error":"TypeError: Cannot read properties of undefined (reading 'position')"}
-2026-09-20 20:33:40.870 [INFO] [PID 21048] [TID 2] WEB: Simulator получил snapshot. | {"points":0,"selectedPointId":null,"version":"1.0.40.104-QUEST-EDITOR-SDO-MAP-R3"}
-2026-09-20 20:33:40.870 [ERROR] [PID 21048] [TID 2] WEB: Ошибка обработки сообщения от host. | {"error":"TypeError: Cannot read properties of undefined (reading 'position')"}
-2026-09-20 20:33:40.870 [INFO] [PID 21048] [TID 2] WEB: Simulator получил snapshot. | {"points":0,"selectedPointId":null,"version":"1.0.40.104-QUEST-EDITOR-SDO-MAP-R3"}
-2026-09-20 20:33:40.870 [ERROR] [PID 21048] [TID 2] WEB: Ошибка обработки сообщения от host. | {"error":"TypeError: Cannot read properties of undefined (reading 'position')"}
-2026-09-20 20:33:40.871 [INFO] [PID 21048] [TID 2] WEB: Simulator получил snapshot. | {"points":0,"selectedPointId":null,"version":"1.0.40.104-QUEST-EDITOR-SDO-MAP-R3"}
-2026-09-20 20:33:40.871 [ERROR] [PID 21048] [TID 2] WEB: Ошибка обработки сообщения от host. | {"error":"TypeError: Cannot read properties of undefined (reading 'position')"}
-2026-09-20 20:33:40.871 [INFO] [PID 21048] [TID 2] WEB: Simulator получил snapshot. | {"points":0,"selectedPointId":null,"version":"1.0.40.104-QUEST-EDITOR-SDO-MAP-R3"}
-2026-09-20 20:33:40.871 [ERROR] [PID 21048] [TID 2] WEB: Ошибка обработки сообщения от host. | {"error":"TypeError: Cannot read properties of undefined (reading 'position')"}
-2026-09-20 20:33:40.872 [INFO] [PID 21048] [TID 2] WEB: Simulator получил snapshot. | {"points":0,"selectedPointId":null,"version":"1.0.40.104-QUEST-EDITOR-SDO-MAP-R3"}
-2026-09-20 20:33:40.872 [ERROR] [PID 21048] [TID 2] WEB: Ошибка обработки сообщения от host. | {"error":"TypeError: Cannot read properties of undefined (reading 'position')"}
-2026-09-20 20:33:40.872 [INFO] [PID 21048] [TID 2] WEB: Simulator получил snapshot. | {"points":0,"selectedPointId":null,"version":"1.0.40.104-QUEST-EDITOR-SDO-MAP-R3"}
-2026-09-20 20:33:40.872 [ERROR] [PID 21048] [TID 2] WEB: Ошибка обработки сообщения от host. | {"error":"TypeError: Cannot read properties of undefined (reading 'position')"}
-2026-09-20 20:33:40.872 [INFO] [PID 21048] [TID 2] WEB: Simulator получил snapshot. | {"points":0,"selectedPointId":null,"version":"1.0.40.104-QUEST-EDITOR-SDO-MAP-R3"}
-2026-09-20 20:33:40.873 [ERROR] [PID 21048] [TID 2] WEB: Ошибка обработки сообщения от host. | {"error":"TypeError: Cannot read properties of undefined (reading 'position')"}
-2026-09-20 20:33:40.873 [INFO] [PID 21048] [TID 2] WEB: Simulator получил snapshot. | {"points":0,"selectedPointId":null,"version":"1.0.40.104-QUEST-EDITOR-SDO-MAP-R3"}
-2026-09-20 20:33:40.873 [ERROR] [PID 21048] [TID 2] WEB: Ошибка обработки сообщения от host. | {"error":"TypeError: Cannot read properties of undefined (reading 'position')"}
-2026-09-20 20:33:40.873 [INFO] [PID 21048] [TID 2] WEB: Simulator получил snapshot. | {"points":0,"selectedPointId":null,"version":"1.0.40.104-QUEST-EDITOR-SDO-MAP-R3"}
-2026-09-20 20:33:40.874 [ERROR] [PID 21048] [TID 2] WEB: Ошибка обработки сообщения от host. | {"error":"TypeError: Cannot read properties of undefined (reading 'position')"}
-2026-09-20 20:33:42.831 [INFO] [PID 21048] [TID 2] Application.Run завершён.
-2026-09-20 20:33:42.831 [INFO] [PID 21048] [TID 2] === Assist Quest Editor END ===
+2026-09-20 20:42:13.146 [INFO] [PID 27420] [TID 2] === Assist Quest Editor START === | Version=1.0.40.106-QUEST-EDITOR-SDO-MAP-R5-SNAPSHOT-FIX; BaseDirectory=C:\Users\Admin\AppData\Local\Temp\.net\AssistQuestEditor\vjYFqajbbR5b\; CurrentDirectory=F:\repo\assist_quest_editor; LogPath=F:\repo\assist_quest_editor\MemoryAI\LOGS\assist_quest_editor.log
+2026-09-20 20:42:13.160 [INFO] [PID 27420] [TID 2] Загрузка СДО world data.
+2026-09-20 20:42:13.177 [INFO] [PID 27420] [TID 2] SdoWorldDataLoader.Load() | path=C:\Users\Admin\AppData\Local\Temp\.net\AssistQuestEditor\vjYFqajbbR5b\data/world/sdo_points.json; exists=True
+2026-09-20 20:42:13.180 [INFO] [PID 27420] [TID 2] Файл СДО прочитан. | bytes=756275; chars=708222
+2026-09-20 20:42:13.231 [INFO] [PID 27420] [TID 2] Метаданные СДО разобраны. | schema=1; source=zvukoper/ets2_assist:data/editor_static_data; categoryCount=71; pointCount=5115; parsedPoints=5115
+2026-09-20 20:42:13.232 [INFO] [PID 27420] [TID 2] СДО-точки отфильтрованы. | input=5115; valid=5115; invalid=0
+2026-09-20 20:42:13.237 [INFO] [PID 27420] [TID 2] СДО world points готовы. | count=5115; X=[118733,199063]; Y=[-41,7734,220,812]; Z=[-110503,-43350,1]
+2026-09-20 20:42:13.238 [INFO] [PID 27420] [TID 2] СДО world data загружены. | points=5115
+2026-09-20 20:42:13.242 [INFO] [PID 27420] [TID 2] Создан SimulatorDataSourceAdapter. | channels=11; points=5115
+2026-09-20 20:42:13.302 [INFO] [PID 27420] [TID 2] MainForm создан. Запуск Application.Run().
+2026-09-20 20:42:13.315 [INFO] [PID 27420] [TID 2] WebView2: начало инициализации. | form=Assist Quest Editor — Редактор; page=main.html
+2026-09-20 20:42:13.371 [INFO] [PID 27420] [TID 2] WebView2: начало инициализации. | form=Assist Quest Editor — Симулятор; page=simulator.html
+2026-09-20 20:42:13.613 [INFO] [PID 27420] [TID 2] WebView2: CoreWebView2 создан. | browser=153.0.4234.48
+2026-09-20 20:42:13.631 [INFO] [PID 27420] [TID 2] WebView2: Navigate. | form=Assist Quest Editor — Редактор; uri=file:///C:/Users/Admin/AppData/Local/Temp/.net/AssistQuestEditor/vjYFqajbbR5b/Web/main.html?v=1.0.40.106; sourceExists=True; sourceBytes=5762
+2026-09-20 20:42:13.643 [INFO] [PID 27420] [TID 2] WebView2: CoreWebView2 создан. | browser=153.0.4234.48
+2026-09-20 20:42:13.644 [INFO] [PID 27420] [TID 2] WebView2: Navigate. | form=Assist Quest Editor — Симулятор; uri=file:///C:/Users/Admin/AppData/Local/Temp/.net/AssistQuestEditor/vjYFqajbbR5b/Web/simulator.html?v=1.0.40.106; sourceExists=True; sourceBytes=1523
+2026-09-20 20:42:13.676 [INFO] [PID 27420] [TID 2] WEB: Simulator Web UI готов. | {"canvas":true,"side":true,"url":"file:///C:/Users/Admin/AppData/Local/Temp/.net/AssistQuestEditor/vjYFqajbbR5b/Web/simulator.html?v=1.0.40.106"}
+2026-09-20 20:42:13.679 [INFO] [PID 27420] [TID 2] WEB: Web document load завершён. | {"title":"Симулятор","url":"file:///C:/Users/Admin/AppData/Local/Temp/.net/AssistQuestEditor/vjYFqajbbR5b/Web/simulator.html?v=1.0.40.106"}
+2026-09-20 20:42:13.680 [INFO] [PID 27420] [TID 2] WEB: Web document load завершён. | {"title":"Assist Quest Editor","url":"file:///C:/Users/Admin/AppData/Local/Temp/.net/AssistQuestEditor/vjYFqajbbR5b/Web/main.html?v=1.0.40.106"}
+2026-09-20 20:42:13.686 [INFO] [PID 27420] [TID 2] WebView2: NavigationCompleted. | form=Assist Quest Editor — Симулятор; success=True; error=Unknown
+2026-09-20 20:42:13.686 [INFO] [PID 27420] [TID 2] WebView2: browser ready. | form=Assist Quest Editor — Симулятор; page=simulator.html
+2026-09-20 20:42:13.687 [INFO] [PID 27420] [TID 2] SimulatorForm: browser ready, отправляю snapshot.
+2026-09-20 20:42:13.688 [INFO] [PID 27420] [TID 2] SimulatorForm: формирование snapshot. | points=5115; selected=<none>; player=WorldCoordinate { X = 158898, Y = 89,5193, Z = -76926,55 }
+2026-09-20 20:42:13.724 [INFO] [PID 27420] [TID 2] SimulatorForm: отправляю snapshot в WebView2. | jsonChars=1193219; points=5115
+2026-09-20 20:42:13.749 [INFO] [PID 27420] [TID 2] WebView2: NavigationCompleted. | form=Assist Quest Editor — Редактор; success=True; error=Unknown
+2026-09-20 20:42:13.750 [INFO] [PID 27420] [TID 2] WebView2: browser ready. | form=Assist Quest Editor — Редактор; page=main.html
+2026-09-20 20:42:13.755 [INFO] [PID 27420] [TID 2] WEB: Simulator получил snapshot. | {"points":5115,"selectedPointId":null,"player":{"x":158898,"y":89.5193,"z":-76926.55},"version":"1.0.40.106-QUEST-EDITOR-SDO-MAP-R5-SNAPSHOT-FIX"}
+2026-09-20 20:42:20.061 [INFO] [PID 27420] [TID 2] WebView2: получено действие. | form=Assist Quest Editor — Симулятор; action=set_player_position
+2026-09-20 20:42:20.062 [INFO] [PID 27420] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_player_position","x":158278.41453616557,"y":89.5193,"z":-79687.60704936278}
+2026-09-20 20:42:20.064 [INFO] [PID 27420] [TID 2] SimulatorForm: формирование snapshot. | points=5115; selected=<none>; player=WorldCoordinate { X = 158278,41453616557, Y = 89,5193, Z = -79687,60704936278 }
+2026-09-20 20:42:20.076 [INFO] [PID 27420] [TID 2] SimulatorForm: отправляю snapshot в WebView2. | jsonChars=1193240; points=5115
+2026-09-20 20:42:20.101 [INFO] [PID 27420] [TID 2] SimulatorForm: формирование snapshot. | points=5115; selected=<none>; player=WorldCoordinate { X = 158278,41453616557, Y = 89,5193, Z = -79687,60704936278 }
+2026-09-20 20:42:20.114 [INFO] [PID 27420] [TID 2] SimulatorForm: отправляю snapshot в WebView2. | jsonChars=1193240; points=5115
+2026-09-20 20:42:20.137 [INFO] [PID 27420] [TID 2] WEB: Simulator получил snapshot. | {"points":5115,"selectedPointId":null,"player":{"x":158278.41453616557,"y":89.5193,"z":-79687.60704936278},"version":"1.0.40.106-QUEST-EDITOR-SDO-MAP-R5-SNAPSHOT-FIX"}
+2026-09-20 20:42:20.141 [INFO] [PID 27420] [TID 2] WEB: Simulator получил snapshot. | {"points":5115,"selectedPointId":null,"player":{"x":158278.41453616557,"y":89.5193,"z":-79687.60704936278},"version":"1.0.40.106-QUEST-EDITOR-SDO-MAP-R5-SNAPSHOT-FIX"}
+2026-09-20 20:42:27.827 [INFO] [PID 27420] [TID 2] WebView2: получено действие. | form=Assist Quest Editor — Симулятор; action=set_player_position
+2026-09-20 20:42:27.828 [INFO] [PID 27420] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_player_position","x":155696.20648600443,"y":89.5193,"z":-83156.081421825}
+2026-09-20 20:42:27.828 [INFO] [PID 27420] [TID 2] SimulatorForm: формирование snapshot. | points=5115; selected=<none>; player=WorldCoordinate { X = 155696,20648600443, Y = 89,5193, Z = -83156,081421825 }
+2026-09-20 20:42:27.849 [INFO] [PID 27420] [TID 2] SimulatorForm: отправляю snapshot в WebView2. | jsonChars=1193238; points=5115
+2026-09-20 20:42:27.876 [INFO] [PID 27420] [TID 2] SimulatorForm: формирование snapshot. | points=5115; selected=<none>; player=WorldCoordinate { X = 155696,20648600443, Y = 89,5193, Z = -83156,081421825 }
+2026-09-20 20:42:27.893 [INFO] [PID 27420] [TID 2] SimulatorForm: отправляю snapshot в WebView2. | jsonChars=1193238; points=5115
+2026-09-20 20:42:27.919 [INFO] [PID 27420] [TID 2] WEB: Simulator получил snapshot. | {"points":5115,"selectedPointId":null,"player":{"x":155696.20648600443,"y":89.5193,"z":-83156.081421825},"version":"1.0.40.106-QUEST-EDITOR-SDO-MAP-R5-SNAPSHOT-FIX"}
+2026-09-20 20:42:27.924 [INFO] [PID 27420] [TID 2] WEB: Simulator получил snapshot. | {"points":5115,"selectedPointId":null,"player":{"x":155696.20648600443,"y":89.5193,"z":-83156.081421825},"version":"1.0.40.106-QUEST-EDITOR-SDO-MAP-R5-SNAPSHOT-FIX"}
+2026-09-20 20:42:33.429 [INFO] [PID 27420] [TID 2] WebView2: получено действие. | form=Assist Quest Editor — Симулятор; action=set_player_position
+2026-09-20 20:42:33.429 [INFO] [PID 27420] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_player_position","x":156000.6678831931,"y":89.5193,"z":-83079.61333065366}
+2026-09-20 20:42:33.430 [INFO] [PID 27420] [TID 2] SimulatorForm: формирование snapshot. | points=5115; selected=<none>; player=WorldCoordinate { X = 156000,6678831931, Y = 89,5193, Z = -83079,61333065366 }
+2026-09-20 20:42:33.434 [INFO] [PID 27420] [TID 2] SimulatorForm: отправляю snapshot в WebView2. | jsonChars=1193239; points=5115
+2026-09-20 20:42:33.454 [INFO] [PID 27420] [TID 2] SimulatorForm: формирование snapshot. | points=5115; selected=<none>; player=WorldCoordinate { X = 156000,6678831931, Y = 89,5193, Z = -83079,61333065366 }
+2026-09-20 20:42:33.460 [INFO] [PID 27420] [TID 2] SimulatorForm: отправляю snapshot в WebView2. | jsonChars=1193239; points=5115
+2026-09-20 20:42:33.481 [INFO] [PID 27420] [TID 2] WEB: Simulator получил snapshot. | {"points":5115,"selectedPointId":null,"player":{"x":156000.6678831931,"y":89.5193,"z":-83079.61333065366},"version":"1.0.40.106-QUEST-EDITOR-SDO-MAP-R5-SNAPSHOT-FIX"}
+2026-09-20 20:42:33.485 [INFO] [PID 27420] [TID 2] WEB: Simulator получил snapshot. | {"points":5115,"selectedPointId":null,"player":{"x":156000.6678831931,"y":89.5193,"z":-83079.61333065366},"version":"1.0.40.106-QUEST-EDITOR-SDO-MAP-R5-SNAPSHOT-FIX"}
+2026-09-20 20:42:40.467 [INFO] [PID 27420] [TID 2] WebView2: получено действие. | form=Assist Quest Editor — Симулятор; action=set_player_position
+2026-09-20 20:42:40.467 [INFO] [PID 27420] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_player_position","x":154785.05318020674,"y":89.5193,"z":-82875.69262669368}
+2026-09-20 20:42:40.468 [INFO] [PID 27420] [TID 2] SimulatorForm: формирование snapshot. | points=5115; selected=<none>; player=WorldCoordinate { X = 154785,05318020674, Y = 89,5193, Z = -82875,69262669368 }
+2026-09-20 20:42:40.472 [INFO] [PID 27420] [TID 2] SimulatorForm: отправляю snapshot в WebView2. | jsonChars=1193240; points=5115
+2026-09-20 20:42:40.492 [INFO] [PID 27420] [TID 2] SimulatorForm: формирование snapshot. | points=5115; selected=<none>; player=WorldCoordinate { X = 154785,05318020674, Y = 89,5193, Z = -82875,69262669368 }
+2026-09-20 20:42:40.496 [INFO] [PID 27420] [TID 2] SimulatorForm: отправляю snapshot в WebView2. | jsonChars=1193240; points=5115
+2026-09-20 20:42:40.516 [INFO] [PID 27420] [TID 2] WEB: Simulator получил snapshot. | {"points":5115,"selectedPointId":null,"player":{"x":154785.05318020674,"y":89.5193,"z":-82875.69262669368},"version":"1.0.40.106-QUEST-EDITOR-SDO-MAP-R5-SNAPSHOT-FIX"}
+2026-09-20 20:42:40.522 [INFO] [PID 27420] [TID 2] WEB: Simulator получил snapshot. | {"points":5115,"selectedPointId":null,"player":{"x":154785.05318020674,"y":89.5193,"z":-82875.69262669368},"version":"1.0.40.106-QUEST-EDITOR-SDO-MAP-R5-SNAPSHOT-FIX"}
+2026-09-20 20:42:46.557 [INFO] [PID 27420] [TID 2] WebView2: получено действие. | form=Assist Quest Editor — Симулятор; action=select_point
+2026-09-20 20:42:46.558 [INFO] [PID 27420] [TID 2] SimulatorForm: обработка web action. | json={"action":"select_point","id":"sdo:village_house_5:0x4e0d56d835c00001"}
+2026-09-20 20:42:46.559 [INFO] [PID 27420] [TID 2] SimulatorForm: формирование snapshot. | points=5115; selected=sdo:village_house_5:0x4e0d56d835c00001; player=WorldCoordinate { X = 154785,05318020674, Y = 89,5193, Z = -82875,69262669368 }
+2026-09-20 20:42:46.563 [INFO] [PID 27420] [TID 2] SimulatorForm: отправляю snapshot в WebView2. | jsonChars=1193548; points=5115
+2026-09-20 20:42:46.583 [INFO] [PID 27420] [TID 2] SimulatorForm: формирование snapshot. | points=5115; selected=sdo:village_house_5:0x4e0d56d835c00001; player=WorldCoordinate { X = 154785,05318020674, Y = 89,5193, Z = -82875,69262669368 }
+2026-09-20 20:42:46.587 [INFO] [PID 27420] [TID 2] SimulatorForm: отправляю snapshot в WebView2. | jsonChars=1193548; points=5115
+2026-09-20 20:42:46.607 [INFO] [PID 27420] [TID 2] WEB: Simulator получил snapshot. | {"points":5115,"selectedPointId":"sdo:village_house_5:0x4e0d56d835c00001","player":{"x":154785.05318020674,"y":89.5193,"z":-82875.69262669368},"version":"1.0.40.106-QUEST-EDITOR-SDO-MAP-R5-SNAPSHOT-FIX"}
+2026-09-20 20:42:46.608 [ERROR] [PID 27420] [TID 2] WEB: Ошибка обработки сообщения от host. | {"error":"ReferenceError: formatPosition is not defined"}
+2026-09-20 20:42:46.612 [INFO] [PID 27420] [TID 2] WEB: Simulator получил snapshot. | {"points":5115,"selectedPointId":"sdo:village_house_5:0x4e0d56d835c00001","player":{"x":154785.05318020674,"y":89.5193,"z":-82875.69262669368},"version":"1.0.40.106-QUEST-EDITOR-SDO-MAP-R5-SNAPSHOT-FIX"}
+2026-09-20 20:42:46.617 [ERROR] [PID 27420] [TID 2] WEB: Ошибка обработки сообщения от host. | {"error":"ReferenceError: formatPosition is not defined"}
+2026-09-20 20:43:01.001 [INFO] [PID 27420] [TID 2] WebView2: получено действие. | form=Assist Quest Editor — Симулятор; action=clear_selection
+2026-09-20 20:43:01.002 [INFO] [PID 27420] [TID 2] SimulatorForm: обработка web action. | json={"action":"clear_selection"}
+2026-09-20 20:43:01.002 [INFO] [PID 27420] [TID 2] SimulatorForm: формирование snapshot. | points=5115; selected=<none>; player=WorldCoordinate { X = 154785,05318020674, Y = 89,5193, Z = -82875,69262669368 }
+2026-09-20 20:43:01.006 [INFO] [PID 27420] [TID 2] SimulatorForm: отправляю snapshot в WebView2. | jsonChars=1193276; points=5115
+2026-09-20 20:43:01.027 [INFO] [PID 27420] [TID 2] SimulatorForm: формирование snapshot. | points=5115; selected=<none>; player=WorldCoordinate { X = 154785,05318020674, Y = 89,5193, Z = -82875,69262669368 }
+2026-09-20 20:43:01.031 [INFO] [PID 27420] [TID 2] SimulatorForm: отправляю snapshot в WebView2. | jsonChars=1193276; points=5115
+2026-09-20 20:43:01.053 [INFO] [PID 27420] [TID 2] WEB: Simulator получил snapshot. | {"points":5115,"selectedPointId":null,"player":{"x":154785.05318020674,"y":89.5193,"z":-82875.69262669368},"version":"1.0.40.106-QUEST-EDITOR-SDO-MAP-R5-SNAPSHOT-FIX"}
+2026-09-20 20:43:01.058 [INFO] [PID 27420] [TID 2] WEB: Simulator получил snapshot. | {"points":5115,"selectedPointId":null,"player":{"x":154785.05318020674,"y":89.5193,"z":-82875.69262669368},"version":"1.0.40.106-QUEST-EDITOR-SDO-MAP-R5-SNAPSHOT-FIX"}
+2026-09-20 20:44:09.546 [INFO] [PID 27420] [TID 2] WebView2: получено действие. | form=Assist Quest Editor — Симулятор; action=select_point
+2026-09-20 20:44:09.547 [INFO] [PID 27420] [TID 2] SimulatorForm: обработка web action. | json={"action":"select_point","id":"sdo:shashlik:0x5352b4939e000001"}
+2026-09-20 20:44:09.547 [INFO] [PID 27420] [TID 2] SimulatorForm: формирование snapshot. | points=5115; selected=sdo:shashlik:0x5352b4939e000001; player=WorldCoordinate { X = 154785,05318020674, Y = 89,5193, Z = -82875,69262669368 }
+2026-09-20 20:44:09.552 [INFO] [PID 27420] [TID 2] SimulatorForm: отправляю snapshot в WebView2. | jsonChars=1193483; points=5115
+2026-09-20 20:44:09.572 [INFO] [PID 27420] [TID 2] SimulatorForm: формирование snapshot. | points=5115; selected=sdo:shashlik:0x5352b4939e000001; player=WorldCoordinate { X = 154785,05318020674, Y = 89,5193, Z = -82875,69262669368 }
+2026-09-20 20:44:09.576 [INFO] [PID 27420] [TID 2] SimulatorForm: отправляю snapshot в WebView2. | jsonChars=1193483; points=5115
+2026-09-20 20:44:09.596 [INFO] [PID 27420] [TID 2] WEB: Simulator получил snapshot. | {"points":5115,"selectedPointId":"sdo:shashlik:0x5352b4939e000001","player":{"x":154785.05318020674,"y":89.5193,"z":-82875.69262669368},"version":"1.0.40.106-QUEST-EDITOR-SDO-MAP-R5-SNAPSHOT-FIX"}
+2026-09-20 20:44:09.596 [ERROR] [PID 27420] [TID 2] WEB: Ошибка обработки сообщения от host. | {"error":"ReferenceError: formatPosition is not defined"}
+2026-09-20 20:44:09.601 [INFO] [PID 27420] [TID 2] WEB: Simulator получил snapshot. | {"points":5115,"selectedPointId":"sdo:shashlik:0x5352b4939e000001","player":{"x":154785.05318020674,"y":89.5193,"z":-82875.69262669368},"version":"1.0.40.106-QUEST-EDITOR-SDO-MAP-R5-SNAPSHOT-FIX"}
+2026-09-20 20:44:09.606 [ERROR] [PID 27420] [TID 2] WEB: Ошибка обработки сообщения от host. | {"error":"ReferenceError: formatPosition is not defined"}
+2026-09-20 20:44:12.447 [INFO] [PID 27420] [TID 2] WebView2: получено действие. | form=Assist Quest Editor — Редактор; action=open_editor
+2026-09-20 20:44:12.453 [INFO] [PID 27420] [TID 2] WebView2: начало инициализации. | form=Assist Quest Editor — Редактор мира; page=editor.html#world
+2026-09-20 20:44:12.506 [INFO] [PID 27420] [TID 2] WebView2: CoreWebView2 создан. | browser=153.0.4234.48
+2026-09-20 20:44:12.507 [INFO] [PID 27420] [TID 2] WebView2: Navigate. | form=Assist Quest Editor — Редактор мира; uri=file:///C:/Users/Admin/AppData/Local/Temp/.net/AssistQuestEditor/vjYFqajbbR5b/Web/editor.html?v=1.0.40.106#world; sourceExists=True; sourceBytes=880
+2026-09-20 20:44:12.543 [INFO] [PID 27420] [TID 2] WEB: Web document load завершён. | {"title":"Редактор","url":"file:///C:/Users/Admin/AppData/Local/Temp/.net/AssistQuestEditor/vjYFqajbbR5b/Web/editor.html?v=1.0.40.106#world"}
+2026-09-20 20:44:12.543 [INFO] [PID 27420] [TID 2] WebView2: NavigationCompleted. | form=Assist Quest Editor — Редактор мира; success=True; error=Unknown
+2026-09-20 20:44:12.543 [INFO] [PID 27420] [TID 2] WebView2: browser ready. | form=Assist Quest Editor — Редактор мира; page=editor.html#world
+2026-09-20 20:44:17.645 [INFO] [PID 27420] [TID 2] WebView2: получено действие. | form=Assist Quest Editor — Редактор мира; action=coordinate_request
+2026-09-20 20:44:22.545 [INFO] [PID 27420] [TID 2] WebView2: получено действие. | form=Assist Quest Editor — Редактор мира; action=coordinate_request
+2026-09-20 20:44:23.269 [INFO] [PID 27420] [TID 2] WebView2: получено действие. | form=Assist Quest Editor — Редактор мира; action=coordinate_request
+2026-09-20 20:44:42.672 [INFO] [PID 27420] [TID 2] WebView2: получено действие. | form=Assist Quest Editor — Симулятор; action=select_point
+2026-09-20 20:44:42.673 [INFO] [PID 27420] [TID 2] SimulatorForm: обработка web action. | json={"action":"select_point","id":"sdo:cat:0x56f0ac94d9800000"}
+2026-09-20 20:44:42.673 [INFO] [PID 27420] [TID 2] SimulatorForm: формирование snapshot. | points=5115; selected=sdo:cat:0x56f0ac94d9800000; player=WorldCoordinate { X = 154785,05318020674, Y = 89,5193, Z = -82875,69262669368 }
+2026-09-20 20:44:42.677 [INFO] [PID 27420] [TID 2] SimulatorForm: отправляю snapshot в WebView2. | jsonChars=1193455; points=5115
+2026-09-20 20:44:42.697 [INFO] [PID 27420] [TID 2] SimulatorForm: формирование snapshot. | points=5115; selected=sdo:cat:0x56f0ac94d9800000; player=WorldCoordinate { X = 154785,05318020674, Y = 89,5193, Z = -82875,69262669368 }
+2026-09-20 20:44:42.701 [INFO] [PID 27420] [TID 2] SimulatorForm: отправляю snapshot в WebView2. | jsonChars=1193455; points=5115
+2026-09-20 20:44:42.721 [INFO] [PID 27420] [TID 2] WEB: Simulator получил snapshot. | {"points":5115,"selectedPointId":"sdo:cat:0x56f0ac94d9800000","player":{"x":154785.05318020674,"y":89.5193,"z":-82875.69262669368},"version":"1.0.40.106-QUEST-EDITOR-SDO-MAP-R5-SNAPSHOT-FIX"}
+2026-09-20 20:44:42.721 [ERROR] [PID 27420] [TID 2] WEB: Ошибка обработки сообщения от host. | {"error":"ReferenceError: formatPosition is not defined"}
+2026-09-20 20:44:42.726 [INFO] [PID 27420] [TID 2] WEB: Simulator получил snapshot. | {"points":5115,"selectedPointId":"sdo:cat:0x56f0ac94d9800000","player":{"x":154785.05318020674,"y":89.5193,"z":-82875.69262669368},"version":"1.0.40.106-QUEST-EDITOR-SDO-MAP-R5-SNAPSHOT-FIX"}
+2026-09-20 20:44:42.733 [ERROR] [PID 27420] [TID 2] WEB: Ошибка обработки сообщения от host. | {"error":"ReferenceError: formatPosition is not defined"}
+2026-09-20 20:44:43.598 [INFO] [PID 27420] [TID 2] WebView2: получено действие. | form=Assist Quest Editor — Симулятор; action=clear_selection
+2026-09-20 20:44:43.598 [INFO] [PID 27420] [TID 2] SimulatorForm: обработка web action. | json={"action":"clear_selection"}
+2026-09-20 20:44:43.599 [INFO] [PID 27420] [TID 2] SimulatorForm: формирование snapshot. | points=5115; selected=<none>; player=WorldCoordinate { X = 154785,05318020674, Y = 89,5193, Z = -82875,69262669368 }
+2026-09-20 20:44:43.603 [INFO] [PID 27420] [TID 2] SimulatorForm: отправляю snapshot в WebView2. | jsonChars=1193276; points=5115
+2026-09-20 20:44:43.623 [INFO] [PID 27420] [TID 2] SimulatorForm: формирование snapshot. | points=5115; selected=<none>; player=WorldCoordinate { X = 154785,05318020674, Y = 89,5193, Z = -82875,69262669368 }
+2026-09-20 20:44:43.627 [INFO] [PID 27420] [TID 2] SimulatorForm: отправляю snapshot в WebView2. | jsonChars=1193276; points=5115
+2026-09-20 20:44:43.662 [INFO] [PID 27420] [TID 2] WEB: Simulator получил snapshot. | {"points":5115,"selectedPointId":null,"player":{"x":154785.05318020674,"y":89.5193,"z":-82875.69262669368},"version":"1.0.40.106-QUEST-EDITOR-SDO-MAP-R5-SNAPSHOT-FIX"}
+2026-09-20 20:44:43.662 [INFO] [PID 27420] [TID 2] WEB: Simulator получил snapshot. | {"points":5115,"selectedPointId":null,"player":{"x":154785.05318020674,"y":89.5193,"z":-82875.69262669368},"version":"1.0.40.106-QUEST-EDITOR-SDO-MAP-R5-SNAPSHOT-FIX"}
+2026-09-20 20:44:45.400 [INFO] [PID 27420] [TID 2] WebView2: получено действие. | form=Assist Quest Editor — Симулятор; action=select_point
+2026-09-20 20:44:45.400 [INFO] [PID 27420] [TID 2] SimulatorForm: обработка web action. | json={"action":"select_point","id":"sdo:shashlik:0x5352b4939e000001"}
+2026-09-20 20:44:45.401 [INFO] [PID 27420] [TID 2] SimulatorForm: формирование snapshot. | points=5115; selected=sdo:shashlik:0x5352b4939e000001; player=WorldCoordinate { X = 154785,05318020674, Y = 89,5193, Z = -82875,69262669368 }
+2026-09-20 20:44:45.405 [INFO] [PID 27420] [TID 2] SimulatorForm: отправляю snapshot в WebView2. | jsonChars=1193483; points=5115
+2026-09-20 20:44:45.425 [INFO] [PID 27420] [TID 2] SimulatorForm: формирование snapshot. | points=5115; selected=sdo:shashlik:0x5352b4939e000001; player=WorldCoordinate { X = 154785,05318020674, Y = 89,5193, Z = -82875,69262669368 }
+2026-09-20 20:44:45.429 [INFO] [PID 27420] [TID 2] SimulatorForm: отправляю snapshot в WebView2. | jsonChars=1193483; points=5115
+2026-09-20 20:44:45.450 [INFO] [PID 27420] [TID 2] WEB: Simulator получил snapshot. | {"points":5115,"selectedPointId":"sdo:shashlik:0x5352b4939e000001","player":{"x":154785.05318020674,"y":89.5193,"z":-82875.69262669368},"version":"1.0.40.106-QUEST-EDITOR-SDO-MAP-R5-SNAPSHOT-FIX"}
+2026-09-20 20:44:45.450 [ERROR] [PID 27420] [TID 2] WEB: Ошибка обработки сообщения от host. | {"error":"ReferenceError: formatPosition is not defined"}
+2026-09-20 20:44:45.453 [INFO] [PID 27420] [TID 2] WEB: Simulator получил snapshot. | {"points":5115,"selectedPointId":"sdo:shashlik:0x5352b4939e000001","player":{"x":154785.05318020674,"y":89.5193,"z":-82875.69262669368},"version":"1.0.40.106-QUEST-EDITOR-SDO-MAP-R5-SNAPSHOT-FIX"}
+2026-09-20 20:44:45.459 [ERROR] [PID 27420] [TID 2] WEB: Ошибка обработки сообщения от host. | {"error":"ReferenceError: formatPosition is not defined"}
+2026-09-20 20:47:12.504 [INFO] [PID 27420] [TID 2] WebView2: получено действие. | form=Assist Quest Editor — Редактор мира; action=coordinate_request
+2026-09-20 20:47:14.244 [INFO] [PID 27420] [TID 2] WebView2: получено действие. | form=Assist Quest Editor — Редактор мира; action=coordinate_request
+2026-09-20 20:47:58.864 [INFO] [PID 27420] [TID 2] Application.Run завершён.
+2026-09-20 20:47:58.864 [INFO] [PID 27420] [TID 2] === Assist Quest Editor END ===
