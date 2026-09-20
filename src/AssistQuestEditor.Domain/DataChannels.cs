@@ -217,6 +217,7 @@ public sealed class SimulatorDataChannelHub : IDataChannelHub
     public DataChannel<SystemState> System { get; }
 
     public EventChannel<SimulatorEvent> Events { get; } = new();
+    IEventChannel<SimulatorEvent> IDataChannelHub.Events => Events;
 
     IDataChannel<T> IDataChannelHub.Get<T>(string key)
     {
