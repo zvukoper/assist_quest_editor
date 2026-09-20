@@ -239,7 +239,7 @@ public sealed class EditorForm : WebViewForm
 
         try
         {
-            BeginInvoke((Action)PostQuestGraph);
+            BeginInvoke((Action)(() => PostQuestGraph()));
         }
         catch (InvalidOperationException)
         {
