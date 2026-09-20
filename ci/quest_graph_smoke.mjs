@@ -22,16 +22,16 @@ try {
       <body>
         <header><strong id="editorTitle"></strong></header>
         <main id="root"></main>
-        <script>
-          window.__messages = [];
-          window.__assistSend = payload => window.__messages.push(payload);
-        </script>
-        <script>
-          ${source.replaceAll("</script", "<\\/script")}
-        </script>
       </body>
     </html>
   `);
+
+  await page.evaluate(() => {
+    window.__messages = [];
+    window.__assistSend = payload => window.__messages.push(payload);
+  });
+
+  await page.addScriptTag({ content: source });
 
   const graph = {
     id: "special_marinated_shashlik",
