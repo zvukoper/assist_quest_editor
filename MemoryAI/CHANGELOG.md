@@ -1,5 +1,17 @@
 # Журнал изменений памяти и архитектуры
 
+## 2026-09-20 — 1.0.40.110 Quest Graph authoring
+
+- добавлен pan canvas через среднюю кнопку мыши и Space + ЛКМ;
+- параметры нод стали частью canonical QuestNode;
+- Switch, Random и Choice получили динамические Output sockets через outputCount;
+- Inspector умеет редактировать и добавлять параметры;
+- добавлено versioned QuestDefinitionDocument schema=1;
+- Graph Editor получил Новый, Открыть, Сохранить и Сохранить как…;
+- добавлены smoke-проверки параметров и pan;
+- версия поднята до 1.0.40.110 перед физическим тестированием.
+
+
 ## 2026-09-20 — Quest Graph: drag и wheel zoom
 
 - Graph nodes теперь перетаскиваются ЛКМ непосредственно по canvas.

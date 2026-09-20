@@ -23,14 +23,19 @@ try {
         <header><strong id="editorTitle"></strong></header>
         <main id="root"></main>
         <script>
-          window.chrome = {
-            webview: {
-              listeners: new Map(),
-              addEventListener(type, handler) { this.listeners.set(type, handler); },
-              postMessage(payload) { window.__messages.push(payload); }
+          Object.defineProperty(window, "chrome", {
+            configurable: true,
+            value: {
+              webview: {
+                addEventListener(type, handler) {
+                  if (type === "message") window.__messageHandler = handler;
+                },
+                postMessage(payload) { window.__messages.push(payload); }
+              }
             }
-          };
+          });
           window.__messages = [];
+          window.__messageHandler = null;
         </script>
         <script>
           ${source.replaceAll("</script", "<\\/script")}
@@ -81,7 +86,7 @@ try {
 
 
   await page.evaluate(graphValue => {
-    window.chrome.webview.listeners.get("message")({
+    window.__messageHandler({
       data: JSON.stringify({ type: "quest_graph", graph: graphValue, canUndo: true, canRedo: true })
     });
   }, graph);
