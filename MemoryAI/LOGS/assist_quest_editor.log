@@ -1,0 +1,261 @@
+2026-09-20 20:33:32.362 [INFO] [PID 21048] [TID 2] === Assist Quest Editor START === | Version=1.0.40.104-QUEST-EDITOR-SDO-MAP-R3; BaseDirectory=C:\Users\Admin\AppData\Local\Temp\.net\AssistQuestEditor\8LSoBG8DCwvr\; CurrentDirectory=F:\repo\assist_quest_editor; LogPath=F:\repo\assist_quest_editor\MemoryAI\LOGS\assist_quest_editor.log
+2026-09-20 20:33:32.372 [INFO] [PID 21048] [TID 2] Загрузка СДО world data.
+2026-09-20 20:33:32.389 [INFO] [PID 21048] [TID 2] SdoWorldDataLoader.Load() | path=C:\Users\Admin\AppData\Local\Temp\.net\AssistQuestEditor\8LSoBG8DCwvr\data/world/sdo_points.json; exists=True
+2026-09-20 20:33:32.392 [INFO] [PID 21048] [TID 2] Файл СДО прочитан. | bytes=756275; chars=708222
+2026-09-20 20:33:32.443 [INFO] [PID 21048] [TID 2] Метаданные СДО разобраны. | schema=1; source=zvukoper/ets2_assist:data/editor_static_data; categoryCount=71; pointCount=5115; parsedPoints=5115
+2026-09-20 20:33:32.444 [INFO] [PID 21048] [TID 2] СДО-точки отфильтрованы. | input=5115; valid=5115; invalid=0
+2026-09-20 20:33:32.450 [INFO] [PID 21048] [TID 2] СДО world points готовы. | count=5115; X=[118733,199063]; Y=[-41,7734,220,812]; Z=[-110503,-43350,1]
+2026-09-20 20:33:32.450 [INFO] [PID 21048] [TID 2] СДО world data загружены. | points=5115
+2026-09-20 20:33:32.455 [INFO] [PID 21048] [TID 2] Создан SimulatorDataSourceAdapter. | channels=11; points=5115
+2026-09-20 20:33:32.515 [INFO] [PID 21048] [TID 2] MainForm создан. Запуск Application.Run().
+2026-09-20 20:33:32.531 [INFO] [PID 21048] [TID 2] WebView2: начало инициализации. | form=Assist Quest Editor — Редактор; page=main.html
+2026-09-20 20:33:32.599 [INFO] [PID 21048] [TID 2] WebView2: начало инициализации. | form=Assist Quest Editor — Симулятор; page=simulator.html
+2026-09-20 20:33:32.833 [INFO] [PID 21048] [TID 2] WebView2: CoreWebView2 создан. | browser=153.0.4234.48
+2026-09-20 20:33:32.846 [INFO] [PID 21048] [TID 2] WebView2: Navigate. | form=Assist Quest Editor — Редактор; uri=file:///C:/Users/Admin/AppData/Local/Temp/.net/AssistQuestEditor/8LSoBG8DCwvr/Web/main.html?v=1.0.40.104; sourceExists=True; sourceBytes=5762
+2026-09-20 20:33:32.857 [INFO] [PID 21048] [TID 2] WebView2: CoreWebView2 создан. | browser=153.0.4234.48
+2026-09-20 20:33:32.860 [INFO] [PID 21048] [TID 2] WebView2: Navigate. | form=Assist Quest Editor — Симулятор; uri=file:///C:/Users/Admin/AppData/Local/Temp/.net/AssistQuestEditor/8LSoBG8DCwvr/Web/simulator.html?v=1.0.40.104; sourceExists=True; sourceBytes=1523
+2026-09-20 20:33:32.898 [INFO] [PID 21048] [TID 2] WEB: Simulator Web UI готов. | {"canvas":true,"side":true,"url":"file:///C:/Users/Admin/AppData/Local/Temp/.net/AssistQuestEditor/8LSoBG8DCwvr/Web/simulator.html?v=1.0.40.104"}
+2026-09-20 20:33:32.900 [INFO] [PID 21048] [TID 2] WEB: Web document load завершён. | {"title":"Симулятор","url":"file:///C:/Users/Admin/AppData/Local/Temp/.net/AssistQuestEditor/8LSoBG8DCwvr/Web/simulator.html?v=1.0.40.104"}
+2026-09-20 20:33:32.903 [INFO] [PID 21048] [TID 2] WebView2: NavigationCompleted. | form=Assist Quest Editor — Симулятор; success=True; error=Unknown
+2026-09-20 20:33:32.903 [INFO] [PID 21048] [TID 2] WebView2: browser ready. | form=Assist Quest Editor — Симулятор; page=simulator.html
+2026-09-20 20:33:32.904 [INFO] [PID 21048] [TID 2] SimulatorForm: browser ready, отправляю snapshot.
+2026-09-20 20:33:32.905 [INFO] [PID 21048] [TID 2] SimulatorForm: формирование snapshot. | points=5115; selected=<none>; player=WorldCoordinate { X = 158898, Y = 89,5193, Z = -76926,55 }
+2026-09-20 20:33:32.946 [INFO] [PID 21048] [TID 2] SimulatorForm: отправляю snapshot в WebView2. | jsonChars=1193206; points=5115
+2026-09-20 20:33:32.970 [INFO] [PID 21048] [TID 2] WEB: Web document load завершён. | {"title":"Assist Quest Editor","url":"file:///C:/Users/Admin/AppData/Local/Temp/.net/AssistQuestEditor/8LSoBG8DCwvr/Web/main.html?v=1.0.40.104"}
+2026-09-20 20:33:32.976 [INFO] [PID 21048] [TID 2] WEB: Simulator получил snapshot. | {"points":0,"selectedPointId":null,"version":"1.0.40.104-QUEST-EDITOR-SDO-MAP-R3"}
+2026-09-20 20:33:32.982 [INFO] [PID 21048] [TID 2] WebView2: NavigationCompleted. | form=Assist Quest Editor — Редактор; success=True; error=Unknown
+2026-09-20 20:33:32.982 [INFO] [PID 21048] [TID 2] WebView2: browser ready. | form=Assist Quest Editor — Редактор; page=main.html
+2026-09-20 20:33:32.986 [ERROR] [PID 21048] [TID 2] WEB: Ошибка обработки сообщения от host. | {"error":"TypeError: Cannot read properties of undefined (reading 'position')"}
+2026-09-20 20:33:35.023 [ERROR] [PID 21048] [TID 2] WEB: window.error | {"message":"Script error.","filename":"","line":0,"column":0}
+2026-09-20 20:33:35.096 [ERROR] [PID 21048] [TID 2] WEB: window.error | {"message":"Script error.","filename":"","line":0,"column":0}
+2026-09-20 20:33:35.100 [ERROR] [PID 21048] [TID 2] WEB: window.error | {"message":"Script error.","filename":"","line":0,"column":0}
+2026-09-20 20:33:35.106 [ERROR] [PID 21048] [TID 2] WEB: window.error | {"message":"Script error.","filename":"","line":0,"column":0}
+2026-09-20 20:33:35.112 [ERROR] [PID 21048] [TID 2] WEB: window.error | {"message":"Script error.","filename":"","line":0,"column":0}
+2026-09-20 20:33:35.117 [ERROR] [PID 21048] [TID 2] WEB: window.error | {"message":"Script error.","filename":"","line":0,"column":0}
+2026-09-20 20:33:35.123 [ERROR] [PID 21048] [TID 2] WEB: window.error | {"message":"Script error.","filename":"","line":0,"column":0}
+2026-09-20 20:33:35.128 [ERROR] [PID 21048] [TID 2] WEB: window.error | {"message":"Script error.","filename":"","line":0,"column":0}
+2026-09-20 20:33:35.134 [ERROR] [PID 21048] [TID 2] WEB: window.error | {"message":"Script error.","filename":"","line":0,"column":0}
+2026-09-20 20:33:35.139 [ERROR] [PID 21048] [TID 2] WEB: window.error | {"message":"Script error.","filename":"","line":0,"column":0}
+2026-09-20 20:33:35.145 [ERROR] [PID 21048] [TID 2] WEB: window.error | {"message":"Script error.","filename":"","line":0,"column":0}
+2026-09-20 20:33:35.150 [ERROR] [PID 21048] [TID 2] WEB: window.error | {"message":"Script error.","filename":"","line":0,"column":0}
+2026-09-20 20:33:35.156 [ERROR] [PID 21048] [TID 2] WEB: window.error | {"message":"Script error.","filename":"","line":0,"column":0}
+2026-09-20 20:33:35.161 [ERROR] [PID 21048] [TID 2] WEB: window.error | {"message":"Script error.","filename":"","line":0,"column":0}
+2026-09-20 20:33:35.167 [ERROR] [PID 21048] [TID 2] WEB: window.error | {"message":"Script error.","filename":"","line":0,"column":0}
+2026-09-20 20:33:35.173 [ERROR] [PID 21048] [TID 2] WEB: window.error | {"message":"Script error.","filename":"","line":0,"column":0}
+2026-09-20 20:33:35.178 [ERROR] [PID 21048] [TID 2] WEB: window.error | {"message":"Script error.","filename":"","line":0,"column":0}
+2026-09-20 20:33:35.184 [ERROR] [PID 21048] [TID 2] WEB: window.error | {"message":"Script error.","filename":"","line":0,"column":0}
+2026-09-20 20:33:35.189 [ERROR] [PID 21048] [TID 2] WEB: window.error | {"message":"Script error.","filename":"","line":0,"column":0}
+2026-09-20 20:33:35.195 [ERROR] [PID 21048] [TID 2] WEB: window.error | {"message":"Script error.","filename":"","line":0,"column":0}
+2026-09-20 20:33:35.200 [ERROR] [PID 21048] [TID 2] WEB: window.error | {"message":"Script error.","filename":"","line":0,"column":0}
+2026-09-20 20:33:35.206 [ERROR] [PID 21048] [TID 2] WEB: window.error | {"message":"Script error.","filename":"","line":0,"column":0}
+2026-09-20 20:33:35.211 [ERROR] [PID 21048] [TID 2] WEB: window.error | {"message":"Script error.","filename":"","line":0,"column":0}
+2026-09-20 20:33:35.217 [ERROR] [PID 21048] [TID 2] WEB: window.error | {"message":"Script error.","filename":"","line":0,"column":0}
+2026-09-20 20:33:35.223 [ERROR] [PID 21048] [TID 2] WEB: window.error | {"message":"Script error.","filename":"","line":0,"column":0}
+2026-09-20 20:33:35.228 [ERROR] [PID 21048] [TID 2] WEB: window.error | {"message":"Script error.","filename":"","line":0,"column":0}
+2026-09-20 20:33:35.234 [ERROR] [PID 21048] [TID 2] WEB: window.error | {"message":"Script error.","filename":"","line":0,"column":0}
+2026-09-20 20:33:35.239 [ERROR] [PID 21048] [TID 2] WEB: window.error | {"message":"Script error.","filename":"","line":0,"column":0}
+2026-09-20 20:33:35.245 [ERROR] [PID 21048] [TID 2] WEB: window.error | {"message":"Script error.","filename":"","line":0,"column":0}
+2026-09-20 20:33:35.250 [ERROR] [PID 21048] [TID 2] WEB: window.error | {"message":"Script error.","filename":"","line":0,"column":0}
+2026-09-20 20:33:35.256 [ERROR] [PID 21048] [TID 2] WEB: window.error | {"message":"Script error.","filename":"","line":0,"column":0}
+2026-09-20 20:33:35.261 [ERROR] [PID 21048] [TID 2] WEB: window.error | {"message":"Script error.","filename":"","line":0,"column":0}
+2026-09-20 20:33:35.267 [ERROR] [PID 21048] [TID 2] WEB: window.error | {"message":"Script error.","filename":"","line":0,"column":0}
+2026-09-20 20:33:35.273 [ERROR] [PID 21048] [TID 2] WEB: window.error | {"message":"Script error.","filename":"","line":0,"column":0}
+2026-09-20 20:33:35.278 [ERROR] [PID 21048] [TID 2] WEB: window.error | {"message":"Script error.","filename":"","line":0,"column":0}
+2026-09-20 20:33:35.284 [ERROR] [PID 21048] [TID 2] WEB: window.error | {"message":"Script error.","filename":"","line":0,"column":0}
+2026-09-20 20:33:35.289 [ERROR] [PID 21048] [TID 2] WEB: window.error | {"message":"Script error.","filename":"","line":0,"column":0}
+2026-09-20 20:33:35.295 [ERROR] [PID 21048] [TID 2] WEB: window.error | {"message":"Script error.","filename":"","line":0,"column":0}
+2026-09-20 20:33:35.300 [ERROR] [PID 21048] [TID 2] WEB: window.error | {"message":"Script error.","filename":"","line":0,"column":0}
+2026-09-20 20:33:35.306 [ERROR] [PID 21048] [TID 2] WEB: window.error | {"message":"Script error.","filename":"","line":0,"column":0}
+2026-09-20 20:33:35.311 [ERROR] [PID 21048] [TID 2] WEB: window.error | {"message":"Script error.","filename":"","line":0,"column":0}
+2026-09-20 20:33:35.317 [ERROR] [PID 21048] [TID 2] WEB: window.error | {"message":"Script error.","filename":"","line":0,"column":0}
+2026-09-20 20:33:35.322 [ERROR] [PID 21048] [TID 2] WEB: window.error | {"message":"Script error.","filename":"","line":0,"column":0}
+2026-09-20 20:33:35.328 [ERROR] [PID 21048] [TID 2] WEB: window.error | {"message":"Script error.","filename":"","line":0,"column":0}
+2026-09-20 20:33:35.334 [ERROR] [PID 21048] [TID 2] WEB: window.error | {"message":"Script error.","filename":"","line":0,"column":0}
+2026-09-20 20:33:35.339 [ERROR] [PID 21048] [TID 2] WEB: window.error | {"message":"Script error.","filename":"","line":0,"column":0}
+2026-09-20 20:33:35.345 [ERROR] [PID 21048] [TID 2] WEB: window.error | {"message":"Script error.","filename":"","line":0,"column":0}
+2026-09-20 20:33:35.350 [ERROR] [PID 21048] [TID 2] WEB: window.error | {"message":"Script error.","filename":"","line":0,"column":0}
+2026-09-20 20:33:35.356 [ERROR] [PID 21048] [TID 2] WEB: window.error | {"message":"Script error.","filename":"","line":0,"column":0}
+2026-09-20 20:33:35.361 [ERROR] [PID 21048] [TID 2] WEB: window.error | {"message":"Script error.","filename":"","line":0,"column":0}
+2026-09-20 20:33:35.367 [ERROR] [PID 21048] [TID 2] WEB: window.error | {"message":"Script error.","filename":"","line":0,"column":0}
+2026-09-20 20:33:35.373 [ERROR] [PID 21048] [TID 2] WEB: window.error | {"message":"Script error.","filename":"","line":0,"column":0}
+2026-09-20 20:33:35.378 [ERROR] [PID 21048] [TID 2] WEB: window.error | {"message":"Script error.","filename":"","line":0,"column":0}
+2026-09-20 20:33:35.384 [ERROR] [PID 21048] [TID 2] WEB: window.error | {"message":"Script error.","filename":"","line":0,"column":0}
+2026-09-20 20:33:35.389 [ERROR] [PID 21048] [TID 2] WEB: window.error | {"message":"Script error.","filename":"","line":0,"column":0}
+2026-09-20 20:33:35.395 [ERROR] [PID 21048] [TID 2] WEB: window.error | {"message":"Script error.","filename":"","line":0,"column":0}
+2026-09-20 20:33:35.400 [ERROR] [PID 21048] [TID 2] WEB: window.error | {"message":"Script error.","filename":"","line":0,"column":0}
+2026-09-20 20:33:35.406 [ERROR] [PID 21048] [TID 2] WEB: window.error | {"message":"Script error.","filename":"","line":0,"column":0}
+2026-09-20 20:33:35.411 [ERROR] [PID 21048] [TID 2] WEB: window.error | {"message":"Script error.","filename":"","line":0,"column":0}
+2026-09-20 20:33:35.417 [ERROR] [PID 21048] [TID 2] WEB: window.error | {"message":"Script error.","filename":"","line":0,"column":0}
+2026-09-20 20:33:35.423 [ERROR] [PID 21048] [TID 2] WEB: window.error | {"message":"Script error.","filename":"","line":0,"column":0}
+2026-09-20 20:33:35.428 [ERROR] [PID 21048] [TID 2] WEB: window.error | {"message":"Script error.","filename":"","line":0,"column":0}
+2026-09-20 20:33:35.434 [ERROR] [PID 21048] [TID 2] WEB: window.error | {"message":"Script error.","filename":"","line":0,"column":0}
+2026-09-20 20:33:35.439 [ERROR] [PID 21048] [TID 2] WEB: window.error | {"message":"Script error.","filename":"","line":0,"column":0}
+2026-09-20 20:33:35.445 [ERROR] [PID 21048] [TID 2] WEB: window.error | {"message":"Script error.","filename":"","line":0,"column":0}
+2026-09-20 20:33:35.450 [ERROR] [PID 21048] [TID 2] WEB: window.error | {"message":"Script error.","filename":"","line":0,"column":0}
+2026-09-20 20:33:35.456 [ERROR] [PID 21048] [TID 2] WEB: window.error | {"message":"Script error.","filename":"","line":0,"column":0}
+2026-09-20 20:33:35.461 [ERROR] [PID 21048] [TID 2] WEB: window.error | {"message":"Script error.","filename":"","line":0,"column":0}
+2026-09-20 20:33:35.467 [ERROR] [PID 21048] [TID 2] WEB: window.error | {"message":"Script error.","filename":"","line":0,"column":0}
+2026-09-20 20:33:35.473 [ERROR] [PID 21048] [TID 2] WEB: window.error | {"message":"Script error.","filename":"","line":0,"column":0}
+2026-09-20 20:33:35.478 [ERROR] [PID 21048] [TID 2] WEB: window.error | {"message":"Script error.","filename":"","line":0,"column":0}
+2026-09-20 20:33:35.484 [ERROR] [PID 21048] [TID 2] WEB: window.error | {"message":"Script error.","filename":"","line":0,"column":0}
+2026-09-20 20:33:35.489 [ERROR] [PID 21048] [TID 2] WEB: window.error | {"message":"Script error.","filename":"","line":0,"column":0}
+2026-09-20 20:33:35.495 [ERROR] [PID 21048] [TID 2] WEB: window.error | {"message":"Script error.","filename":"","line":0,"column":0}
+2026-09-20 20:33:35.500 [ERROR] [PID 21048] [TID 2] WEB: window.error | {"message":"Script error.","filename":"","line":0,"column":0}
+2026-09-20 20:33:35.506 [ERROR] [PID 21048] [TID 2] WEB: window.error | {"message":"Script error.","filename":"","line":0,"column":0}
+2026-09-20 20:33:35.511 [ERROR] [PID 21048] [TID 2] WEB: window.error | {"message":"Script error.","filename":"","line":0,"column":0}
+2026-09-20 20:33:35.517 [ERROR] [PID 21048] [TID 2] WEB: window.error | {"message":"Script error.","filename":"","line":0,"column":0}
+2026-09-20 20:33:35.522 [ERROR] [PID 21048] [TID 2] WEB: window.error | {"message":"Script error.","filename":"","line":0,"column":0}
+2026-09-20 20:33:35.528 [ERROR] [PID 21048] [TID 2] WEB: window.error | {"message":"Script error.","filename":"","line":0,"column":0}
+2026-09-20 20:33:35.534 [ERROR] [PID 21048] [TID 2] WEB: window.error | {"message":"Script error.","filename":"","line":0,"column":0}
+2026-09-20 20:33:35.539 [ERROR] [PID 21048] [TID 2] WEB: window.error | {"message":"Script error.","filename":"","line":0,"column":0}
+2026-09-20 20:33:35.545 [ERROR] [PID 21048] [TID 2] WEB: window.error | {"message":"Script error.","filename":"","line":0,"column":0}
+2026-09-20 20:33:35.550 [ERROR] [PID 21048] [TID 2] WEB: window.error | {"message":"Script error.","filename":"","line":0,"column":0}
+2026-09-20 20:33:35.556 [ERROR] [PID 21048] [TID 2] WEB: window.error | {"message":"Script error.","filename":"","line":0,"column":0}
+2026-09-20 20:33:35.561 [ERROR] [PID 21048] [TID 2] WEB: window.error | {"message":"Script error.","filename":"","line":0,"column":0}
+2026-09-20 20:33:35.567 [ERROR] [PID 21048] [TID 2] WEB: window.error | {"message":"Script error.","filename":"","line":0,"column":0}
+2026-09-20 20:33:35.573 [ERROR] [PID 21048] [TID 2] WEB: window.error | {"message":"Script error.","filename":"","line":0,"column":0}
+2026-09-20 20:33:35.578 [ERROR] [PID 21048] [TID 2] WEB: window.error | {"message":"Script error.","filename":"","line":0,"column":0}
+2026-09-20 20:33:35.584 [ERROR] [PID 21048] [TID 2] WEB: window.error | {"message":"Script error.","filename":"","line":0,"column":0}
+2026-09-20 20:33:35.586 [ERROR] [PID 21048] [TID 2] WEB: window.error | {"message":"Script error.","filename":"","line":0,"column":0}
+2026-09-20 20:33:35.739 [ERROR] [PID 21048] [TID 2] WEB: window.error | {"message":"Script error.","filename":"","line":0,"column":0}
+2026-09-20 20:33:35.762 [ERROR] [PID 21048] [TID 2] WEB: window.error | {"message":"Script error.","filename":"","line":0,"column":0}
+2026-09-20 20:33:35.778 [ERROR] [PID 21048] [TID 2] WEB: window.error | {"message":"Script error.","filename":"","line":0,"column":0}
+2026-09-20 20:33:35.795 [ERROR] [PID 21048] [TID 2] WEB: window.error | {"message":"Script error.","filename":"","line":0,"column":0}
+2026-09-20 20:33:35.812 [ERROR] [PID 21048] [TID 2] WEB: window.error | {"message":"Script error.","filename":"","line":0,"column":0}
+2026-09-20 20:33:36.067 [ERROR] [PID 21048] [TID 2] WEB: window.error | {"message":"Script error.","filename":"","line":0,"column":0}
+2026-09-20 20:33:36.089 [ERROR] [PID 21048] [TID 2] WEB: window.error | {"message":"Script error.","filename":"","line":0,"column":0}
+2026-09-20 20:33:36.100 [ERROR] [PID 21048] [TID 2] WEB: window.error | {"message":"Script error.","filename":"","line":0,"column":0}
+2026-09-20 20:33:36.112 [ERROR] [PID 21048] [TID 2] WEB: window.error | {"message":"Script error.","filename":"","line":0,"column":0}
+2026-09-20 20:33:36.117 [ERROR] [PID 21048] [TID 2] WEB: window.error | {"message":"Script error.","filename":"","line":0,"column":0}
+2026-09-20 20:33:36.128 [ERROR] [PID 21048] [TID 2] WEB: window.error | {"message":"Script error.","filename":"","line":0,"column":0}
+2026-09-20 20:33:36.146 [ERROR] [PID 21048] [TID 2] WEB: window.error | {"message":"Script error.","filename":"","line":0,"column":0}
+2026-09-20 20:33:36.506 [ERROR] [PID 21048] [TID 2] WEB: window.error | {"message":"Script error.","filename":"","line":0,"column":0}
+2026-09-20 20:33:36.528 [ERROR] [PID 21048] [TID 2] WEB: window.error | {"message":"Script error.","filename":"","line":0,"column":0}
+2026-09-20 20:33:36.539 [ERROR] [PID 21048] [TID 2] WEB: window.error | {"message":"Script error.","filename":"","line":0,"column":0}
+2026-09-20 20:33:36.550 [ERROR] [PID 21048] [TID 2] WEB: window.error | {"message":"Script error.","filename":"","line":0,"column":0}
+2026-09-20 20:33:36.561 [ERROR] [PID 21048] [TID 2] WEB: window.error | {"message":"Script error.","filename":"","line":0,"column":0}
+2026-09-20 20:33:36.594 [ERROR] [PID 21048] [TID 2] WEB: window.error | {"message":"Script error.","filename":"","line":0,"column":0}
+2026-09-20 20:33:36.763 [ERROR] [PID 21048] [TID 2] WEB: window.error | {"message":"Script error.","filename":"","line":0,"column":0}
+2026-09-20 20:33:36.790 [ERROR] [PID 21048] [TID 2] WEB: window.error | {"message":"Script error.","filename":"","line":0,"column":0}
+2026-09-20 20:33:36.800 [ERROR] [PID 21048] [TID 2] WEB: window.error | {"message":"Script error.","filename":"","line":0,"column":0}
+2026-09-20 20:33:36.811 [ERROR] [PID 21048] [TID 2] WEB: window.error | {"message":"Script error.","filename":"","line":0,"column":0}
+2026-09-20 20:33:36.823 [ERROR] [PID 21048] [TID 2] WEB: window.error | {"message":"Script error.","filename":"","line":0,"column":0}
+2026-09-20 20:33:36.839 [ERROR] [PID 21048] [TID 2] WEB: window.error | {"message":"Script error.","filename":"","line":0,"column":0}
+2026-09-20 20:33:37.029 [ERROR] [PID 21048] [TID 2] WEB: window.error | {"message":"Script error.","filename":"","line":0,"column":0}
+2026-09-20 20:33:37.051 [ERROR] [PID 21048] [TID 2] WEB: window.error | {"message":"Script error.","filename":"","line":0,"column":0}
+2026-09-20 20:33:37.056 [ERROR] [PID 21048] [TID 2] WEB: window.error | {"message":"Script error.","filename":"","line":0,"column":0}
+2026-09-20 20:33:37.073 [ERROR] [PID 21048] [TID 2] WEB: window.error | {"message":"Script error.","filename":"","line":0,"column":0}
+2026-09-20 20:33:37.091 [ERROR] [PID 21048] [TID 2] WEB: window.error | {"message":"Script error.","filename":"","line":0,"column":0}
+2026-09-20 20:33:38.572 [INFO] [PID 21048] [TID 2] WebView2: получено действие. | form=Assist Quest Editor — Симулятор; action=reset
+2026-09-20 20:33:38.573 [INFO] [PID 21048] [TID 2] SimulatorForm: обработка web action. | json={"action":"reset"}
+2026-09-20 20:33:38.575 [INFO] [PID 21048] [TID 2] SimulatorForm: формирование snapshot. | points=5115; selected=<none>; player=WorldCoordinate { X = 158898, Y = 89,5193, Z = -76926,55 }
+2026-09-20 20:33:38.587 [INFO] [PID 21048] [TID 2] SimulatorForm: отправляю snapshot в WebView2. | jsonChars=1193236; points=5115
+2026-09-20 20:33:38.612 [INFO] [PID 21048] [TID 2] SimulatorForm: формирование snapshot. | points=5115; selected=<none>; player=WorldCoordinate { X = 158898, Y = 89,5193, Z = -76926,55 }
+2026-09-20 20:33:38.623 [INFO] [PID 21048] [TID 2] SimulatorForm: отправляю snapshot в WebView2. | jsonChars=1193236; points=5115
+2026-09-20 20:33:38.644 [INFO] [PID 21048] [TID 2] SimulatorForm: формирование snapshot. | points=5115; selected=<none>; player=WorldCoordinate { X = 158898, Y = 89,5193, Z = -76926,55 }
+2026-09-20 20:33:38.659 [INFO] [PID 21048] [TID 2] SimulatorForm: отправляю snapshot в WebView2. | jsonChars=1193236; points=5115
+2026-09-20 20:33:38.680 [INFO] [PID 21048] [TID 2] SimulatorForm: формирование snapshot. | points=5115; selected=<none>; player=WorldCoordinate { X = 158898, Y = 89,5193, Z = -76926,55 }
+2026-09-20 20:33:38.690 [INFO] [PID 21048] [TID 2] SimulatorForm: отправляю snapshot в WebView2. | jsonChars=1193236; points=5115
+2026-09-20 20:33:38.711 [INFO] [PID 21048] [TID 2] SimulatorForm: формирование snapshot. | points=5115; selected=<none>; player=WorldCoordinate { X = 158898, Y = 89,5193, Z = -76926,55 }
+2026-09-20 20:33:38.722 [INFO] [PID 21048] [TID 2] SimulatorForm: отправляю snapshot в WebView2. | jsonChars=1193236; points=5115
+2026-09-20 20:33:38.742 [INFO] [PID 21048] [TID 2] SimulatorForm: формирование snapshot. | points=5115; selected=<none>; player=WorldCoordinate { X = 158898, Y = 89,5193, Z = -76926,55 }
+2026-09-20 20:33:38.754 [INFO] [PID 21048] [TID 2] SimulatorForm: отправляю snapshot в WebView2. | jsonChars=1193236; points=5115
+2026-09-20 20:33:38.776 [INFO] [PID 21048] [TID 2] SimulatorForm: формирование snapshot. | points=5115; selected=<none>; player=WorldCoordinate { X = 158898, Y = 89,5193, Z = -76926,55 }
+2026-09-20 20:33:38.787 [INFO] [PID 21048] [TID 2] SimulatorForm: отправляю snapshot в WebView2. | jsonChars=1193236; points=5115
+2026-09-20 20:33:38.808 [INFO] [PID 21048] [TID 2] SimulatorForm: формирование snapshot. | points=5115; selected=<none>; player=WorldCoordinate { X = 158898, Y = 89,5193, Z = -76926,55 }
+2026-09-20 20:33:38.817 [INFO] [PID 21048] [TID 2] SimulatorForm: отправляю snapshot в WebView2. | jsonChars=1193236; points=5115
+2026-09-20 20:33:38.837 [INFO] [PID 21048] [TID 2] SimulatorForm: формирование snapshot. | points=5115; selected=<none>; player=WorldCoordinate { X = 158898, Y = 89,5193, Z = -76926,55 }
+2026-09-20 20:33:38.846 [INFO] [PID 21048] [TID 2] SimulatorForm: отправляю snapshot в WebView2. | jsonChars=1193236; points=5115
+2026-09-20 20:33:38.866 [INFO] [PID 21048] [TID 2] SimulatorForm: формирование snapshot. | points=5115; selected=<none>; player=WorldCoordinate { X = 158898, Y = 89,5193, Z = -76926,55 }
+2026-09-20 20:33:38.875 [INFO] [PID 21048] [TID 2] SimulatorForm: отправляю snapshot в WebView2. | jsonChars=1193236; points=5115
+2026-09-20 20:33:38.895 [INFO] [PID 21048] [TID 2] SimulatorForm: формирование snapshot. | points=5115; selected=<none>; player=WorldCoordinate { X = 158898, Y = 89,5193, Z = -76926,55 }
+2026-09-20 20:33:38.905 [INFO] [PID 21048] [TID 2] SimulatorForm: отправляю snapshot в WebView2. | jsonChars=1193236; points=5115
+2026-09-20 20:33:38.927 [INFO] [PID 21048] [TID 2] SimulatorForm: формирование snapshot. | points=5115; selected=<none>; player=WorldCoordinate { X = 158898, Y = 89,5193, Z = -76926,55 }
+2026-09-20 20:33:38.936 [INFO] [PID 21048] [TID 2] SimulatorForm: отправляю snapshot в WebView2. | jsonChars=1193236; points=5115
+2026-09-20 20:33:38.984 [INFO] [PID 21048] [TID 2] WEB: Simulator получил snapshot. | {"points":0,"selectedPointId":null,"version":"1.0.40.104-QUEST-EDITOR-SDO-MAP-R3"}
+2026-09-20 20:33:38.985 [ERROR] [PID 21048] [TID 2] WEB: Ошибка обработки сообщения от host. | {"error":"TypeError: Cannot read properties of undefined (reading 'position')"}
+2026-09-20 20:33:38.985 [INFO] [PID 21048] [TID 2] WEB: Simulator получил snapshot. | {"points":0,"selectedPointId":null,"version":"1.0.40.104-QUEST-EDITOR-SDO-MAP-R3"}
+2026-09-20 20:33:38.985 [ERROR] [PID 21048] [TID 2] WEB: Ошибка обработки сообщения от host. | {"error":"TypeError: Cannot read properties of undefined (reading 'position')"}
+2026-09-20 20:33:38.985 [INFO] [PID 21048] [TID 2] WEB: Simulator получил snapshot. | {"points":0,"selectedPointId":null,"version":"1.0.40.104-QUEST-EDITOR-SDO-MAP-R3"}
+2026-09-20 20:33:38.986 [ERROR] [PID 21048] [TID 2] WEB: Ошибка обработки сообщения от host. | {"error":"TypeError: Cannot read properties of undefined (reading 'position')"}
+2026-09-20 20:33:38.986 [INFO] [PID 21048] [TID 2] WEB: Simulator получил snapshot. | {"points":0,"selectedPointId":null,"version":"1.0.40.104-QUEST-EDITOR-SDO-MAP-R3"}
+2026-09-20 20:33:38.986 [ERROR] [PID 21048] [TID 2] WEB: Ошибка обработки сообщения от host. | {"error":"TypeError: Cannot read properties of undefined (reading 'position')"}
+2026-09-20 20:33:38.986 [INFO] [PID 21048] [TID 2] WEB: Simulator получил snapshot. | {"points":0,"selectedPointId":null,"version":"1.0.40.104-QUEST-EDITOR-SDO-MAP-R3"}
+2026-09-20 20:33:38.987 [ERROR] [PID 21048] [TID 2] WEB: Ошибка обработки сообщения от host. | {"error":"TypeError: Cannot read properties of undefined (reading 'position')"}
+2026-09-20 20:33:38.987 [INFO] [PID 21048] [TID 2] WEB: Simulator получил snapshot. | {"points":0,"selectedPointId":null,"version":"1.0.40.104-QUEST-EDITOR-SDO-MAP-R3"}
+2026-09-20 20:33:38.987 [ERROR] [PID 21048] [TID 2] WEB: Ошибка обработки сообщения от host. | {"error":"TypeError: Cannot read properties of undefined (reading 'position')"}
+2026-09-20 20:33:38.987 [INFO] [PID 21048] [TID 2] WEB: Simulator получил snapshot. | {"points":0,"selectedPointId":null,"version":"1.0.40.104-QUEST-EDITOR-SDO-MAP-R3"}
+2026-09-20 20:33:38.988 [ERROR] [PID 21048] [TID 2] WEB: Ошибка обработки сообщения от host. | {"error":"TypeError: Cannot read properties of undefined (reading 'position')"}
+2026-09-20 20:33:38.988 [INFO] [PID 21048] [TID 2] WEB: Simulator получил snapshot. | {"points":0,"selectedPointId":null,"version":"1.0.40.104-QUEST-EDITOR-SDO-MAP-R3"}
+2026-09-20 20:33:38.988 [ERROR] [PID 21048] [TID 2] WEB: Ошибка обработки сообщения от host. | {"error":"TypeError: Cannot read properties of undefined (reading 'position')"}
+2026-09-20 20:33:38.988 [INFO] [PID 21048] [TID 2] WEB: Simulator получил snapshot. | {"points":0,"selectedPointId":null,"version":"1.0.40.104-QUEST-EDITOR-SDO-MAP-R3"}
+2026-09-20 20:33:38.989 [ERROR] [PID 21048] [TID 2] WEB: Ошибка обработки сообщения от host. | {"error":"TypeError: Cannot read properties of undefined (reading 'position')"}
+2026-09-20 20:33:38.989 [INFO] [PID 21048] [TID 2] WEB: Simulator получил snapshot. | {"points":0,"selectedPointId":null,"version":"1.0.40.104-QUEST-EDITOR-SDO-MAP-R3"}
+2026-09-20 20:33:38.989 [ERROR] [PID 21048] [TID 2] WEB: Ошибка обработки сообщения от host. | {"error":"TypeError: Cannot read properties of undefined (reading 'position')"}
+2026-09-20 20:33:38.989 [INFO] [PID 21048] [TID 2] WEB: Simulator получил snapshot. | {"points":0,"selectedPointId":null,"version":"1.0.40.104-QUEST-EDITOR-SDO-MAP-R3"}
+2026-09-20 20:33:38.990 [ERROR] [PID 21048] [TID 2] WEB: Ошибка обработки сообщения от host. | {"error":"TypeError: Cannot read properties of undefined (reading 'position')"}
+2026-09-20 20:33:38.990 [INFO] [PID 21048] [TID 2] WEB: Simulator получил snapshot. | {"points":0,"selectedPointId":null,"version":"1.0.40.104-QUEST-EDITOR-SDO-MAP-R3"}
+2026-09-20 20:33:38.990 [ERROR] [PID 21048] [TID 2] WEB: Ошибка обработки сообщения от host. | {"error":"TypeError: Cannot read properties of undefined (reading 'position')"}
+2026-09-20 20:33:39.151 [ERROR] [PID 21048] [TID 2] WEB: window.error | {"message":"Script error.","filename":"","line":0,"column":0}
+2026-09-20 20:33:39.167 [ERROR] [PID 21048] [TID 2] WEB: window.error | {"message":"Script error.","filename":"","line":0,"column":0}
+2026-09-20 20:33:39.184 [ERROR] [PID 21048] [TID 2] WEB: window.error | {"message":"Script error.","filename":"","line":0,"column":0}
+2026-09-20 20:33:39.195 [ERROR] [PID 21048] [TID 2] WEB: window.error | {"message":"Script error.","filename":"","line":0,"column":0}
+2026-09-20 20:33:39.212 [ERROR] [PID 21048] [TID 2] WEB: window.error | {"message":"Script error.","filename":"","line":0,"column":0}
+2026-09-20 20:33:39.423 [ERROR] [PID 21048] [TID 2] WEB: window.error | {"message":"Script error.","filename":"","line":0,"column":0}
+2026-09-20 20:33:39.445 [ERROR] [PID 21048] [TID 2] WEB: window.error | {"message":"Script error.","filename":"","line":0,"column":0}
+2026-09-20 20:33:39.461 [ERROR] [PID 21048] [TID 2] WEB: window.error | {"message":"Script error.","filename":"","line":0,"column":0}
+2026-09-20 20:33:39.473 [ERROR] [PID 21048] [TID 2] WEB: window.error | {"message":"Script error.","filename":"","line":0,"column":0}
+2026-09-20 20:33:39.489 [ERROR] [PID 21048] [TID 2] WEB: window.error | {"message":"Script error.","filename":"","line":0,"column":0}
+2026-09-20 20:33:39.544 [ERROR] [PID 21048] [TID 2] WEB: window.error | {"message":"Script error.","filename":"","line":0,"column":0}
+2026-09-20 20:33:40.498 [INFO] [PID 21048] [TID 2] WebView2: получено действие. | form=Assist Quest Editor — Симулятор; action=reset
+2026-09-20 20:33:40.498 [INFO] [PID 21048] [TID 2] SimulatorForm: обработка web action. | json={"action":"reset"}
+2026-09-20 20:33:40.499 [INFO] [PID 21048] [TID 2] SimulatorForm: формирование snapshot. | points=5115; selected=<none>; player=WorldCoordinate { X = 158898, Y = 89,5193, Z = -76926,55 }
+2026-09-20 20:33:40.512 [INFO] [PID 21048] [TID 2] SimulatorForm: отправляю snapshot в WebView2. | jsonChars=1193236; points=5115
+2026-09-20 20:33:40.532 [INFO] [PID 21048] [TID 2] SimulatorForm: формирование snapshot. | points=5115; selected=<none>; player=WorldCoordinate { X = 158898, Y = 89,5193, Z = -76926,55 }
+2026-09-20 20:33:40.547 [INFO] [PID 21048] [TID 2] SimulatorForm: отправляю snapshot в WebView2. | jsonChars=1193236; points=5115
+2026-09-20 20:33:40.567 [INFO] [PID 21048] [TID 2] SimulatorForm: формирование snapshot. | points=5115; selected=<none>; player=WorldCoordinate { X = 158898, Y = 89,5193, Z = -76926,55 }
+2026-09-20 20:33:40.581 [INFO] [PID 21048] [TID 2] SimulatorForm: отправляю snapshot в WebView2. | jsonChars=1193236; points=5115
+2026-09-20 20:33:40.602 [INFO] [PID 21048] [TID 2] SimulatorForm: формирование snapshot. | points=5115; selected=<none>; player=WorldCoordinate { X = 158898, Y = 89,5193, Z = -76926,55 }
+2026-09-20 20:33:40.614 [INFO] [PID 21048] [TID 2] SimulatorForm: отправляю snapshot в WebView2. | jsonChars=1193236; points=5115
+2026-09-20 20:33:40.633 [INFO] [PID 21048] [TID 2] SimulatorForm: формирование snapshot. | points=5115; selected=<none>; player=WorldCoordinate { X = 158898, Y = 89,5193, Z = -76926,55 }
+2026-09-20 20:33:40.645 [INFO] [PID 21048] [TID 2] SimulatorForm: отправляю snapshot в WebView2. | jsonChars=1193236; points=5115
+2026-09-20 20:33:40.665 [INFO] [PID 21048] [TID 2] SimulatorForm: формирование snapshot. | points=5115; selected=<none>; player=WorldCoordinate { X = 158898, Y = 89,5193, Z = -76926,55 }
+2026-09-20 20:33:40.677 [INFO] [PID 21048] [TID 2] SimulatorForm: отправляю snapshot в WebView2. | jsonChars=1193236; points=5115
+2026-09-20 20:33:40.697 [INFO] [PID 21048] [TID 2] SimulatorForm: формирование snapshot. | points=5115; selected=<none>; player=WorldCoordinate { X = 158898, Y = 89,5193, Z = -76926,55 }
+2026-09-20 20:33:40.708 [INFO] [PID 21048] [TID 2] SimulatorForm: отправляю snapshot в WebView2. | jsonChars=1193236; points=5115
+2026-09-20 20:33:40.728 [INFO] [PID 21048] [TID 2] SimulatorForm: формирование snapshot. | points=5115; selected=<none>; player=WorldCoordinate { X = 158898, Y = 89,5193, Z = -76926,55 }
+2026-09-20 20:33:40.735 [INFO] [PID 21048] [TID 2] SimulatorForm: отправляю snapshot в WebView2. | jsonChars=1193236; points=5115
+2026-09-20 20:33:40.756 [INFO] [PID 21048] [TID 2] SimulatorForm: формирование snapshot. | points=5115; selected=<none>; player=WorldCoordinate { X = 158898, Y = 89,5193, Z = -76926,55 }
+2026-09-20 20:33:40.760 [INFO] [PID 21048] [TID 2] SimulatorForm: отправляю snapshot в WebView2. | jsonChars=1193236; points=5115
+2026-09-20 20:33:40.780 [INFO] [PID 21048] [TID 2] SimulatorForm: формирование snapshot. | points=5115; selected=<none>; player=WorldCoordinate { X = 158898, Y = 89,5193, Z = -76926,55 }
+2026-09-20 20:33:40.784 [INFO] [PID 21048] [TID 2] SimulatorForm: отправляю snapshot в WebView2. | jsonChars=1193236; points=5115
+2026-09-20 20:33:40.804 [INFO] [PID 21048] [TID 2] SimulatorForm: формирование snapshot. | points=5115; selected=<none>; player=WorldCoordinate { X = 158898, Y = 89,5193, Z = -76926,55 }
+2026-09-20 20:33:40.808 [INFO] [PID 21048] [TID 2] SimulatorForm: отправляю snapshot в WebView2. | jsonChars=1193236; points=5115
+2026-09-20 20:33:40.828 [INFO] [PID 21048] [TID 2] SimulatorForm: формирование snapshot. | points=5115; selected=<none>; player=WorldCoordinate { X = 158898, Y = 89,5193, Z = -76926,55 }
+2026-09-20 20:33:40.833 [INFO] [PID 21048] [TID 2] SimulatorForm: отправляю snapshot в WebView2. | jsonChars=1193236; points=5115
+2026-09-20 20:33:40.868 [INFO] [PID 21048] [TID 2] WEB: Simulator получил snapshot. | {"points":0,"selectedPointId":null,"version":"1.0.40.104-QUEST-EDITOR-SDO-MAP-R3"}
+2026-09-20 20:33:40.868 [ERROR] [PID 21048] [TID 2] WEB: Ошибка обработки сообщения от host. | {"error":"TypeError: Cannot read properties of undefined (reading 'position')"}
+2026-09-20 20:33:40.869 [INFO] [PID 21048] [TID 2] WEB: Simulator получил snapshot. | {"points":0,"selectedPointId":null,"version":"1.0.40.104-QUEST-EDITOR-SDO-MAP-R3"}
+2026-09-20 20:33:40.869 [ERROR] [PID 21048] [TID 2] WEB: Ошибка обработки сообщения от host. | {"error":"TypeError: Cannot read properties of undefined (reading 'position')"}
+2026-09-20 20:33:40.869 [INFO] [PID 21048] [TID 2] WEB: Simulator получил snapshot. | {"points":0,"selectedPointId":null,"version":"1.0.40.104-QUEST-EDITOR-SDO-MAP-R3"}
+2026-09-20 20:33:40.869 [ERROR] [PID 21048] [TID 2] WEB: Ошибка обработки сообщения от host. | {"error":"TypeError: Cannot read properties of undefined (reading 'position')"}
+2026-09-20 20:33:40.870 [INFO] [PID 21048] [TID 2] WEB: Simulator получил snapshot. | {"points":0,"selectedPointId":null,"version":"1.0.40.104-QUEST-EDITOR-SDO-MAP-R3"}
+2026-09-20 20:33:40.870 [ERROR] [PID 21048] [TID 2] WEB: Ошибка обработки сообщения от host. | {"error":"TypeError: Cannot read properties of undefined (reading 'position')"}
+2026-09-20 20:33:40.870 [INFO] [PID 21048] [TID 2] WEB: Simulator получил snapshot. | {"points":0,"selectedPointId":null,"version":"1.0.40.104-QUEST-EDITOR-SDO-MAP-R3"}
+2026-09-20 20:33:40.870 [ERROR] [PID 21048] [TID 2] WEB: Ошибка обработки сообщения от host. | {"error":"TypeError: Cannot read properties of undefined (reading 'position')"}
+2026-09-20 20:33:40.871 [INFO] [PID 21048] [TID 2] WEB: Simulator получил snapshot. | {"points":0,"selectedPointId":null,"version":"1.0.40.104-QUEST-EDITOR-SDO-MAP-R3"}
+2026-09-20 20:33:40.871 [ERROR] [PID 21048] [TID 2] WEB: Ошибка обработки сообщения от host. | {"error":"TypeError: Cannot read properties of undefined (reading 'position')"}
+2026-09-20 20:33:40.871 [INFO] [PID 21048] [TID 2] WEB: Simulator получил snapshot. | {"points":0,"selectedPointId":null,"version":"1.0.40.104-QUEST-EDITOR-SDO-MAP-R3"}
+2026-09-20 20:33:40.871 [ERROR] [PID 21048] [TID 2] WEB: Ошибка обработки сообщения от host. | {"error":"TypeError: Cannot read properties of undefined (reading 'position')"}
+2026-09-20 20:33:40.872 [INFO] [PID 21048] [TID 2] WEB: Simulator получил snapshot. | {"points":0,"selectedPointId":null,"version":"1.0.40.104-QUEST-EDITOR-SDO-MAP-R3"}
+2026-09-20 20:33:40.872 [ERROR] [PID 21048] [TID 2] WEB: Ошибка обработки сообщения от host. | {"error":"TypeError: Cannot read properties of undefined (reading 'position')"}
+2026-09-20 20:33:40.872 [INFO] [PID 21048] [TID 2] WEB: Simulator получил snapshot. | {"points":0,"selectedPointId":null,"version":"1.0.40.104-QUEST-EDITOR-SDO-MAP-R3"}
+2026-09-20 20:33:40.872 [ERROR] [PID 21048] [TID 2] WEB: Ошибка обработки сообщения от host. | {"error":"TypeError: Cannot read properties of undefined (reading 'position')"}
+2026-09-20 20:33:40.872 [INFO] [PID 21048] [TID 2] WEB: Simulator получил snapshot. | {"points":0,"selectedPointId":null,"version":"1.0.40.104-QUEST-EDITOR-SDO-MAP-R3"}
+2026-09-20 20:33:40.873 [ERROR] [PID 21048] [TID 2] WEB: Ошибка обработки сообщения от host. | {"error":"TypeError: Cannot read properties of undefined (reading 'position')"}
+2026-09-20 20:33:40.873 [INFO] [PID 21048] [TID 2] WEB: Simulator получил snapshot. | {"points":0,"selectedPointId":null,"version":"1.0.40.104-QUEST-EDITOR-SDO-MAP-R3"}
+2026-09-20 20:33:40.873 [ERROR] [PID 21048] [TID 2] WEB: Ошибка обработки сообщения от host. | {"error":"TypeError: Cannot read properties of undefined (reading 'position')"}
+2026-09-20 20:33:40.873 [INFO] [PID 21048] [TID 2] WEB: Simulator получил snapshot. | {"points":0,"selectedPointId":null,"version":"1.0.40.104-QUEST-EDITOR-SDO-MAP-R3"}
+2026-09-20 20:33:40.874 [ERROR] [PID 21048] [TID 2] WEB: Ошибка обработки сообщения от host. | {"error":"TypeError: Cannot read properties of undefined (reading 'position')"}
+2026-09-20 20:33:42.831 [INFO] [PID 21048] [TID 2] Application.Run завершён.
+2026-09-20 20:33:42.831 [INFO] [PID 21048] [TID 2] === Assist Quest Editor END ===
