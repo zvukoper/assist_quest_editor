@@ -69,7 +69,7 @@ try {
     });
   }, graph);
 
-  await page.getByText("Start", { exact: true }).waitFor();
+  await page.locator("#questGraphSvg .nodeTitle", { hasText: "Start" }).waitFor();
   await page.locator("#inspector input#graphEditTitle").waitFor();
 
   await page.locator("#graphNodeType").selectOption("Phase");
