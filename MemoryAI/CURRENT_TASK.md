@@ -71,12 +71,14 @@
 
 В корне проекта находятся compile.ps1 и pull.ps1.
 
-compile.ps1 создаёт self-contained single-file EXE: bin\\Release\\net10.0-windows\\win-x64\\publish\\AssistQuestEditor.exe.
+compile.ps1 создаёт self-contained single-file EXE: bin/Release/net10.0-windows/win-x64/publish/AssistQuestEditor.exe.
 
-pull.ps1 обновляет main и запускает compile.ps1.
+Перед каждой публикацией compile.ps1 останавливает запущенный AssistQuestEditor, удаляет целиком bin, obj, publish и управляемый профиль WebView2 в %LOCALAPPDATA%/AssistQuestEditor/WebView2, затем выполняет новый dotnet publish.
+
+Web-ресурсы src/AssistQuestEditor.App/Web и data/world/sdo_points.json объявлены как publish content и включаются в single-file через IncludeAllContentForSelfExtract.
 
 ## Версия
 
-Текущая рабочая версия: 1.0.40.103-QUEST-EDITOR-SDO-MAP-R2.
+Текущая рабочая версия: 1.0.40.104-QUEST-EDITOR-SDO-MAP-R3.
 
-Перед первым физическим тестированием пользователя версия обязательно увеличивается.
+Перед физическим тестированием пользователя версия обязательно увеличивается.

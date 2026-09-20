@@ -1,3 +1,4 @@
+using Microsoft.Web.WebView2.Core;
 using Microsoft.Web.WebView2.WinForms;
 
 namespace AssistQuestEditor.App;
@@ -20,7 +21,11 @@ public abstract class WebViewForm : Form
         Browser = new WebView2
         {
             Dock = DockStyle.Fill,
-            DefaultBackgroundColor = Color.FromArgb(10, 12, 16)
+            DefaultBackgroundColor = Color.FromArgb(10, 12, 16),
+            CreationProperties = new CoreWebView2CreationProperties
+            {
+                UserDataFolder = GetWebViewUserDataFolder()
+            }
         };
 
         Controls.Add(Browser);
@@ -36,7 +41,7 @@ public abstract class WebViewForm : Form
             await Browser.EnsureCoreWebView2Async();
             Browser.WebMessageReceived += Browser_WebMessageReceived;
 
-            var hashIndex = _page.IndexOf('#');
+            var hashIndex = _page.IndexOf("#");
             var fileName = hashIndex >= 0 ? _page[..hashIndex] : _page;
             var fragment = hashIndex >= 0 ? _page[(hashIndex + 1)..] : string.Empty;
             var path = Path.Combine(AppContext.BaseDirectory, "Web", fileName);
@@ -60,7 +65,7 @@ public abstract class WebViewForm : Form
         }
     }
 
-    private void Browser_NavigationCompleted(object? sender, Microsoft.Web.WebView2.Core.CoreWebView2NavigationCompletedEventArgs e)
+    private void Browser_NavigationCompleted(object? sender, CoreWebView2NavigationCompletedEventArgs e)
     {
         if (IsDisposed || _browserReadyRaised)
         {
@@ -74,9 +79,6 @@ public abstract class WebViewForm : Form
             return;
         }
 
-        // ВАЖНО: WebView2 теряет сообщения, отправленные до завершения Navigate().
-        // Все наследники получают snapshot/context только после фактической загрузки
-        // документа и его JavaScript.
         _browserReadyRaised = true;
         OnBrowserReady();
     }
@@ -89,7 +91,7 @@ public abstract class WebViewForm : Form
     {
     }
 
-    private void Browser_WebMessageReceived(object? sender, Microsoft.Web.WebView2.Core.CoreWebView2WebMessageReceivedEventArgs e)
+    private void Browser_WebMessageReceived(object? sender, CoreWebView2WebMessageReceivedEventArgs e)
     {
         OnWebMessage(e.WebMessageAsJson);
     }
@@ -102,6 +104,17 @@ public abstract class WebViewForm : Form
         }
 
         Browser.CoreWebView2.PostWebMessageAsJson(json);
+    }
+
+    private static string GetWebViewUserDataFolder()
+    {
+        var localAppData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+        if (string.IsNullOrWhiteSpace(localAppData))
+        {
+            localAppData = AppContext.BaseDirectory;
+        }
+
+        return Path.Combine(localAppData, "AssistQuestEditor", "WebView2");
     }
 
     private void ShowWebViewError(Exception ex)

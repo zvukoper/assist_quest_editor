@@ -5,8 +5,15 @@
 $ErrorActionPreference = 'Stop'
 
 $project = Join-Path $PSScriptRoot 'src\AssistQuestEditor.App\AssistQuestEditor.App.csproj'
+$binDir = Join-Path $PSScriptRoot 'bin'
+$objDir = Join-Path $PSScriptRoot 'obj'
 $publishDir = Join-Path $PSScriptRoot 'bin\Release\net10.0-windows\win-x64\publish'
 $exePath = Join-Path $publishDir 'AssistQuestEditor.exe'
+$webViewUserDataDir = if ($env:LOCALAPPDATA) {
+    Join-Path $env:LOCALAPPDATA 'AssistQuestEditor\WebView2'
+} else {
+    Join-Path $PSScriptRoot 'WebView2'
+}
 
 Write-Host "=== Assist Quest Editor: подготовка публикации ===" -ForegroundColor Cyan
 
@@ -22,20 +29,24 @@ if ($running.Count -gt 0) {
     foreach ($process in $running) {
         Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue
     }
-    Start-Sleep -Milliseconds 500
+    Start-Sleep -Milliseconds 700
 }
 
-# Полностью удаляем старую публикацию, чтобы не осталось файлов от предыдущей сборки.
+# Полностью удаляем старые build/output данные и профиль WebView2.
+# Это исключает старый publish, старые Web-ресурсы и браузерный cache из повторного запуска.
+foreach ($directory in @($publishDir, $binDir, $objDir, $webViewUserDataDir)) {
+    if (Test-Path -LiteralPath $directory) {
+        Write-Host "Удаляю старые данные: $directory" -ForegroundColor Yellow
+        Remove-Item -LiteralPath $directory -Recurse -Force
+    }
+}
+
 if (Test-Path -LiteralPath $publishDir) {
-    Write-Host "Удаляю предыдущую публикацию: $publishDir"
-    Remove-Item -LiteralPath $publishDir -Recurse -Force
+    throw "Не удалось удалить старую папку publish: $publishDir"
 }
 
-Write-Host "=== Очистка ===" -ForegroundColor Cyan
-& dotnet clean $project -c Release
-if ($LASTEXITCODE -ne 0) {
-    Write-Host "dotnet clean завершился с кодом $LASTEXITCODE." -ForegroundColor Red
-    exit $LASTEXITCODE
+if (Test-Path -LiteralPath $webViewUserDataDir) {
+    throw "Не удалось удалить кэш WebView2: $webViewUserDataDir"
 }
 
 Write-Host "=== Восстановление пакетов ===" -ForegroundColor Cyan
@@ -69,6 +80,16 @@ if (-not (Test-Path -LiteralPath $exePath)) {
     exit 1
 }
 
+# Проверяем, что исходные Web-ресурсы существуют перед формированием single-file.
+$webSourceDir = Join-Path $PSScriptRoot 'src\AssistQuestEditor.App\Web'
+$requiredWebFiles = @('main.html', 'main.js', 'simulator.html', 'simulator.js', 'theme.css')
+foreach ($file in $requiredWebFiles) {
+    $sourceFile = Join-Path $webSourceDir $file
+    if (-not (Test-Path -LiteralPath $sourceFile)) {
+        throw "Отсутствует исходный Web-ресурс: $sourceFile"
+    }
+}
+
 # Проверяем требование: каталог публикации должен содержать только один EXE.
 $publishedFiles = @(Get-ChildItem -LiteralPath $publishDir -File -Force)
 if ($publishedFiles.Count -ne 1 -or $publishedFiles[0].FullName -ne $exePath) {
@@ -90,6 +111,8 @@ Write-Host "=== Публикация завершена ===" -ForegroundColor Gr
 Write-Host "EXE: $exePath"
 Write-Host "Версия: $version"
 Write-Host "Размер: $sizeMb MB"
+Write-Host "WebView2 cache очищен: $webViewUserDataDir"
+Write-Host "Web-ресурсы включены в single-file через IncludeAllContentForSelfExtract." -ForegroundColor Green
 Write-Host "Проверка: опубликован ровно один файл." -ForegroundColor Green
 
 # После успешной публикации временные диагностические логи можно удалить.
