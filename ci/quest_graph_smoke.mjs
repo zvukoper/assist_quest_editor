@@ -48,18 +48,34 @@ try {
         nodeType: "Start",
         title: "Начало квеста",
         x: 80, y: 250,
+        parameters: {},
         sockets: [{ socketId: "start.out", name: "Далее", direction: "Output", flowKind: "Normal" }]
+      },
+      {
+        nodeId: "choice",
+        nodeType: "Choice",
+        title: "Выбор",
+        x: 300, y: 220,
+        parameters: { outputCount: "3" },
+        sockets: [
+          { socketId: "choice.in", name: "Вход", direction: "Input", flowKind: "Normal" },
+          { socketId: "choice.choice1", name: "Выбор 1", direction: "Output", flowKind: "Normal" },
+          { socketId: "choice.choice2", name: "Выбор 2", direction: "Output", flowKind: "Normal" },
+          { socketId: "choice.choice3", name: "Выбор 3", direction: "Output", flowKind: "Normal" }
+        ]
       },
       {
         nodeId: "end",
         nodeType: "End",
         title: "Завершение",
-        x: 500, y: 250,
+        x: 600, y: 220,
+        parameters: {},
         sockets: [{ socketId: "end.in", name: "Вход", direction: "Input", flowKind: "Normal" }]
       }
     ],
     connections: [
-      { fromNodeId: "start", fromSocketId: "start.out", toNodeId: "end", toSocketId: "end.in" }
+      { fromNodeId: "start", fromSocketId: "start.out", toNodeId: "choice", toSocketId: "choice.in" },
+      { fromNodeId: "choice", fromSocketId: "choice.choice1", toNodeId: "end", toSocketId: "end.in" }
     ]
   };
 
@@ -72,6 +88,30 @@ try {
 
   await page.locator("#questGraphSvg .nodeTitle", { hasText: "Start" }).waitFor();
   await page.locator("#inspector input#graphEditTitle").waitFor();
+
+  await page.locator("[data-node-id='choice']").click();
+  const parameterKeys = page.locator("[data-param-key]");
+  await parameterKeys.first().waitFor();
+  const outputCountKey = await parameterKeys.evaluateAll(nodes =>
+    nodes.map(node => node.value).find(value => value === "outputCount")
+  );
+  if (outputCountKey !== "outputCount") {
+    throw new Error("Параметр outputCount не отображается в инспекторе.");
+  }
+  const parameterValues = page.locator("[data-param-value]");
+  await parameterValues.first().fill("4");
+  await page.getByRole("button", { name: "Сохранить свойства" }).click();
+  await page.waitForTimeout(20);
+
+  const parameterUpdate = await page.evaluate(() =>
+    window.__messages.slice().reverse().find(message =>
+      message.action === "graph_update_node" &&
+      message.nodeId === "choice"
+    )
+  );
+  if (!parameterUpdate || parameterUpdate.parameters?.outputCount !== "4") {
+    throw new Error("Редактор ноды не отправил параметры outputCount.");
+  }
 
   await page.locator("#graphNodeType").selectOption("Phase");
   await page.locator("#graphNodeTitle").fill("Новая фаза");
@@ -143,6 +183,25 @@ try {
   const svgBox = await page.locator("#questGraphSvg").boundingBox();
   if (!svgBox) {
     throw new Error("Не удалось получить границы Quest Graph canvas.");
+  }
+
+  const viewBoxBeforePan = await page.locator("#questGraphSvg").getAttribute("viewBox");
+  await page.mouse.move(svgBox.x + svgBox.width / 2, svgBox.y + svgBox.height / 2);
+  await page.mouse.down({ button: "middle" });
+  await page.mouse.move(svgBox.x + svgBox.width / 2 + 120, svgBox.y + svgBox.height / 2 + 80);
+  await page.mouse.up({ button: "middle" });
+  await page.waitForTimeout(20);
+  const viewBoxAfterPan = await page.locator("#questGraphSvg").getAttribute("viewBox");
+  const panBefore = viewBoxBeforePan.split(/\s+/).map(Number);
+  const panAfter = viewBoxAfterPan.split(/\s+/).map(Number);
+  if (panBefore.length !== 4 || panAfter.length !== 4 ||
+      (panAfter[0] === panBefore[0] && panAfter[1] === panBefore[1])) {
+    throw new Error("Pan средней кнопкой не изменил viewport.");
+  }
+
+  await page.getByRole("button", { name: "Новый" }).click();
+  if (!await page.evaluate(() => window.__messages.some(message => message.action === "graph_new"))) {
+    throw new Error("UI не отправил graph_new.");
   }
 
   await page.mouse.move(svgBox.x + svgBox.width / 2, svgBox.y + svgBox.height / 2);
