@@ -80,6 +80,10 @@ try {
     }));
   }, graph);
 
+  if (errors.length) {
+    throw new Error("Ошибка выполнения editor.js до инициализации graph: " + errors.join(" | "));
+  }
+
   await page.locator("#questGraphSvg .nodeTitle", { hasText: "Start" }).waitFor();
   await page.locator("#inspector input#graphEditTitle").waitFor();
 
