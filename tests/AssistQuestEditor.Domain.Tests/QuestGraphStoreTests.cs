@@ -110,7 +110,8 @@ public sealed class QuestGraphStoreTests
         var store = new QuestGraphStore(QuestGraphFactory.CreateStarter());
         var original = store.Value;
 
-        var added = store.AddNode("Phase", "Новая фаза", 420, 120);
+        store.AddNode("Phase", "Новая фаза", 420, 120);
+        var afterAdd = store.Value;
 
         Assert.True(store.CanUndo);
         Assert.False(store.CanRedo);
@@ -121,7 +122,7 @@ public sealed class QuestGraphStoreTests
         Assert.True(store.CanRedo);
 
         Assert.True(store.Redo());
-        Assert.Equal(added, store.Value);
+        Assert.Equal(afterAdd, store.Value);
         Assert.True(store.CanUndo);
         Assert.False(store.CanRedo);
     }
