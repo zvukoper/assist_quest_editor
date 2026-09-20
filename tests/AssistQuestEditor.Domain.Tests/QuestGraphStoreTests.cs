@@ -93,4 +93,42 @@ public sealed class QuestGraphStoreTests
         Assert.Equal(420, updated.Y);
         Assert.Equal(original.Sockets, updated.Sockets);
     }
+
+    [Fact]
+    public void UndoAndRedoRestoreGraphSnapshots()
+    {
+        var store = new QuestGraphStore(QuestGraphFactory.CreateStarter());
+        var original = store.Value;
+
+        var added = store.AddNode("Phase", "Новая фаза", 420, 120);
+
+        Assert.True(store.CanUndo);
+        Assert.False(store.CanRedo);
+
+        Assert.True(store.Undo());
+        Assert.Equal(original, store.Value);
+        Assert.False(store.CanUndo);
+        Assert.True(store.CanRedo);
+
+        Assert.True(store.Redo());
+        Assert.Equal(added, store.Value);
+        Assert.True(store.CanUndo);
+        Assert.False(store.CanRedo);
+    }
+
+    [Fact]
+    public void NewChangeAfterUndoClearsRedoHistory()
+    {
+        var store = new QuestGraphStore(QuestGraphFactory.CreateStarter());
+
+        store.AddNode("Phase", "Первая фаза", 420, 120);
+        Assert.True(store.Undo());
+        Assert.True(store.CanRedo);
+
+        var updated = store.UpdateNode("dialogue", title: "Изменённый диалог");
+
+        Assert.NotNull(updated);
+        Assert.False(store.CanRedo);
+        Assert.True(store.CanUndo);
+    }
 }
