@@ -74,7 +74,7 @@ public sealed class DataChannelTests
             Editable = false
         };
 
-        var hub = new SimulatorDataChannelHub(new[] { point });
+        IDataChannelHub hub = new SimulatorDataChannelHub(new[] { point });
         hub.Get<WorldSelectionState>("world-selection").Set(
             new WorldSelectionState(point, "Тест"),
             "Тест");
