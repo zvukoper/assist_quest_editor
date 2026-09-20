@@ -9,8 +9,15 @@ public sealed record GraphConnectionResult(bool Added, QuestConnection? Connecti
 public sealed class QuestGraphStore
 {
     private QuestGraph _value;
-    public QuestGraphStore(QuestGraph initial) => _value = initial ?? throw new ArgumentNullException(nameof(initial));
+    private readonly Stack<QuestGraph> _undo = new();
+    private readonly Stack<QuestGraph> _redo = new();
+
+    public QuestGraphStore(QuestGraph initial) =>
+        _value = initial ?? throw new ArgumentNullException(nameof(initial));
+
     public QuestGraph Value => _value;
+    public bool CanUndo => _undo.Count > 0;
+    public bool CanRedo => _redo.Count > 0;
     public event EventHandler? Changed;
 
     public QuestNode? FindNode(string nodeId) =>
@@ -28,8 +35,7 @@ public sealed class QuestGraphStore
             y,
             QuestNodeCatalog.CreateSockets(type, nodeId));
 
-        _value = _value with { Nodes = _value.Nodes.Append(node).ToArray() };
-        Changed?.Invoke(this, EventArgs.Empty);
+        Apply(_value with { Nodes = _value.Nodes.Append(node).ToArray() });
         return node;
     }
 
@@ -47,22 +53,25 @@ public sealed class QuestGraphStore
             Y = y ?? current.Y
         };
 
-        _value = _value with { Nodes = nodes };
-        Changed?.Invoke(this, EventArgs.Empty);
+        Apply(_value with { Nodes = nodes });
         return nodes[index];
     }
 
     public bool RemoveNode(string nodeId)
     {
-        var nodes = _value.Nodes.Where(node => !node.NodeId.Equals(nodeId, StringComparison.OrdinalIgnoreCase)).ToArray();
+        var nodes = _value.Nodes
+            .Where(node => !node.NodeId.Equals(nodeId, StringComparison.OrdinalIgnoreCase))
+            .ToArray();
+
         if (nodes.Length == _value.Nodes.Count) return false;
 
-        var connections = _value.Connections.Where(connection =>
-            !connection.FromNodeId.Equals(nodeId, StringComparison.OrdinalIgnoreCase) &&
-            !connection.ToNodeId.Equals(nodeId, StringComparison.OrdinalIgnoreCase)).ToArray();
+        var connections = _value.Connections
+            .Where(connection =>
+                !connection.FromNodeId.Equals(nodeId, StringComparison.OrdinalIgnoreCase) &&
+                !connection.ToNodeId.Equals(nodeId, StringComparison.OrdinalIgnoreCase))
+            .ToArray();
 
-        _value = _value with { Nodes = nodes, Connections = connections };
-        Changed?.Invoke(this, EventArgs.Empty);
+        Apply(_value with { Nodes = nodes, Connections = connections });
         return true;
     }
 
@@ -73,8 +82,11 @@ public sealed class QuestGraphStore
         if (fromNode is null || toNode is null)
             return GraphConnectionResult.Failure("Для связи нужны две существующие ноды.");
 
-        var fromSocket = fromNode.Sockets.FirstOrDefault(x => x.SocketId.Equals(fromSocketId, StringComparison.OrdinalIgnoreCase));
-        var toSocket = toNode.Sockets.FirstOrDefault(x => x.SocketId.Equals(toSocketId, StringComparison.OrdinalIgnoreCase));
+        var fromSocket = fromNode.Sockets.FirstOrDefault(x =>
+            x.SocketId.Equals(fromSocketId, StringComparison.OrdinalIgnoreCase));
+        var toSocket = toNode.Sockets.FirstOrDefault(x =>
+            x.SocketId.Equals(toSocketId, StringComparison.OrdinalIgnoreCase));
+
         if (fromSocket is null || toSocket is null)
             return GraphConnectionResult.Failure("Указанный socket не найден.");
 
@@ -88,9 +100,13 @@ public sealed class QuestGraphStore
             x.ToSocketId.Equals(toSocketId, StringComparison.OrdinalIgnoreCase)))
             return GraphConnectionResult.Failure("Такая связь уже существует.");
 
-        var connection = new QuestConnection(fromNode.NodeId, fromSocket.SocketId, toNode.NodeId, toSocket.SocketId);
-        _value = _value with { Connections = _value.Connections.Append(connection).ToArray() };
-        Changed?.Invoke(this, EventArgs.Empty);
+        var connection = new QuestConnection(
+            fromNode.NodeId,
+            fromSocket.SocketId,
+            toNode.NodeId,
+            toSocket.SocketId);
+
+        Apply(_value with { Connections = _value.Connections.Append(connection).ToArray() });
         return GraphConnectionResult.Success(connection);
     }
 
@@ -98,9 +114,37 @@ public sealed class QuestGraphStore
     {
         var connections = _value.Connections.Where(x => x != connection).ToArray();
         if (connections.Length == _value.Connections.Count) return false;
-        _value = _value with { Connections = connections };
+
+        Apply(_value with { Connections = connections });
+        return true;
+    }
+
+    public bool Undo()
+    {
+        if (_undo.Count == 0) return false;
+
+        _redo.Push(_value);
+        _value = _undo.Pop();
         Changed?.Invoke(this, EventArgs.Empty);
         return true;
+    }
+
+    public bool Redo()
+    {
+        if (_redo.Count == 0) return false;
+
+        _undo.Push(_value);
+        _value = _redo.Pop();
+        Changed?.Invoke(this, EventArgs.Empty);
+        return true;
+    }
+
+    private void Apply(QuestGraph next)
+    {
+        _undo.Push(_value);
+        _value = next;
+        _redo.Clear();
+        Changed?.Invoke(this, EventArgs.Empty);
     }
 }
 
