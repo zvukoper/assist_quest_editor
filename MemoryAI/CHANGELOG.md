@@ -1,5 +1,14 @@
 # Журнал изменений памяти и архитектуры
 
+## 2026-09-20 — Quest Graph: drag и wheel zoom
+
+- Graph nodes теперь перетаскиваются ЛКМ непосредственно по canvas.
+- Финальные координаты drag отправляются через `graph_update_node`, поэтому canonical `QuestGraphStore` остаётся источником данных.
+- Колесо мыши масштабирует Quest Graph вокруг позиции курсора.
+- Viewport (`x/y/width/height`) хранится отдельно от `QuestGraph` и переживает rerender после изменения ноды.
+- Playwright smoke проверяет drag с изменением X/Y и реальный wheel zoom.
+- Версия поднята до `1.0.40.109-QUEST-EDITOR-INTERACTION-R1` перед физическим тестом.
+
 ## 2026-09-20 — Quest Graph: Undo/Redo, Validation и transport contract
 
 - `QuestGraphStore` хранит snapshot history для Undo/Redo; новая правка очищает Redo history.
