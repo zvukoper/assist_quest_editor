@@ -388,3 +388,10 @@ Canonical Scene authoring следует тому же правилу, что и
 - sceneEditor.js — presentation: drag/pan/zoom, sockets, context menu, inspector и toolbar.
 
 Обязательная кнопка «Перестроить» должна сохраняться во всех последующих версиях, пока Scene Editor содержит ноды.
+
+
+## 2026-09-21 — Scene Editor interaction parity checkpoint
+
+Scene Editor canvas должен оставаться производной от отработанного Quest Graph canvas. При последующих изменениях сначала проверяется решение Quest Graph и только затем оно переносится в Scene Editor с заменой canonical actions/model.
+
+Не создавать отдельную механику drag/pan/zoom/socket hover/context menu без необходимости. sceneEditor.js и editor.js должны сохранять functional parity по базовым canvas interactions.
