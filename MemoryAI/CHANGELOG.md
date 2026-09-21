@@ -1,3 +1,14 @@
+## 2026-09-21 — 1.0.40.129 Simulator Inventory / Player HUD
+
+- added stable ItemId + quantity inventory state and a tiny starter item catalog;
+- quest GiveItem/RemoveItem now mark acquired items as new and emit dedicated `InventoryChanged` events;
+- added backpack/grid inventory UI, new-item beacon, quest inventory notifications and tooltips;
+- added player vitals, money/XP/reserve, SPECIAL-like character stats and skills;
+- added quest nodes for changing health, energy, hydration, fatigue, money, experience and character stats;
+- reserved buff/debuff semantics in `MemoryAI/CHARACTER_EFFECTS.md` without displaying/applying them;
+- coalesced Simulator snapshots, Journal refresh and Choice rendering to reduce visible flicker;
+- synced Simulator resource cache-busting/version to `1.0.40.129`.
+
 # Журнал изменений памяти и архитектуры
 
 ## 2026-09-21 — 1.0.40.128 Готовый учебный квест
