@@ -100,6 +100,13 @@ public sealed class QuestRuntime
 
         if (string.Equals(State.WaitingFor, "Time", StringComparison.OrdinalIgnoreCase))
         {
+            var node = FindCurrentNode();
+            if (node is null)
+            {
+                Fail("Ожидающая нода не найдена.");
+                return;
+            }
+
             ResetWaiting();
             State = State with
             {
@@ -107,6 +114,8 @@ public sealed class QuestRuntime
                 WaitingFor = null,
                 LastEvent = "WaitCompleted"
             };
+
+            MoveToFirstOutput(node);
             Advance();
             return;
         }

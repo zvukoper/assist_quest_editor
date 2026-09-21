@@ -88,7 +88,7 @@ Web-ресурсы src/AssistQuestEditor.App/Web и data/world/sdo_points.json �
 
 Причина пустого Simulator найдена: C# snapshot сериализовался с PascalCase, тогда как Web UI ожидает camelCase.
 
-Текущая рабочая версия: 1.0.40.124-QUEST-MAP-CITIES-HOVER-R1.
+Текущая рабочая версия: 1.0.40.125-QUEST-RUNTIME-WAIT-FIX-R1.
 
 Последние рабочие вехи:
 - 1.0.40.106 — исправлена camelCase сериализация Simulator snapshot;
@@ -99,6 +99,7 @@ Web-ресурсы src/AssistQuestEditor.App/Web и data/world/sdo_points.json �
 - 1.0.40.111 — добавлен Quest Runtime, интеграция Simulator → Runtime, пробуждение Runtime по ChannelChanged, корректное продолжение после Choice и матрица из семи автоматических сценариев.
 - 1.0.40.122 — найдена причина серии красных CI: smoke-тест не загружал `theme.css`, поэтому проверки геометрии контекстного меню были бессмысленны. Harness приведён к production-условиям, исправлен устаревший `svgBox` после смены viewport, сброс dirty-меток нод после сохранения, version drift и читаемость `final_gate` в CI. Добавлен локальный прогон `ci/run_local.ps1`, `pull.ps1` собирает только при успешных проверках, ошибки пишутся в `MemoryAI/LOGS/CI_errors.md`.
 - 1.0.40.124 — Simulator получил города, усиленную тень точек, hover-подсветку и оранжевый/красный маркер игрока; добавлен демонстрационный Quest Definition со всеми типами нод. Следующий фокус — настоящая runtime-семантика нод, которые пока являются pass-through.
+- 1.0.40.125 — исправлен переход после Wait: по истечении таймера Runtime идёт по `wait.out`, не переисполняет Wait; добавлен отдельный regression test на `Wait → SetStep → End`.
 
 Перед физическим тестированием пользователя версия обязательно увеличивается.
 

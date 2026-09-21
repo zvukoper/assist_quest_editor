@@ -1,6 +1,6 @@
 # Матрица Quest Node Runtime
 
-Статус на 1.0.40.124. Разделяет наличие типа в canonical catalog/authoring и наличие реальной семантики в `QuestRuntime`.
+Статус на 1.0.40.125. Разделяет наличие типа в canonical catalog/authoring и наличие реальной семантики в `QuestRuntime`.
 
 | NodeType | Авторинг / sockets | Runtime | Текущая проверка |
 |---|---|---|---|
@@ -15,7 +15,7 @@
 | Switch | ✅ dynamic | ⚠️ pass-through первого output | demo_all_node_types |
 | Random | ✅ dynamic | ⚠️ pass-through первого output | demo_all_node_types |
 | Choice | ✅ dynamic | ✅ ожидание ChoiceSelected + branch | runtime tests + demo |
-| Wait | ✅ | ✅ таймер | demo |
+| Wait | ✅ | ✅ таймер с переходом по Output | runtime regression test + demo |
 | WaitForCondition | ✅ | ⚠️ условие вычисляется, но `conditionId` не разрешается | demo |
 | WaitForEvent | ✅ | ✅ ожидание события по eventType | demo + event test |
 | SetStatus | ✅ | ✅ | demo |

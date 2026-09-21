@@ -77,6 +77,44 @@ public sealed class QuestRuntimeTests
     }
 
     [Fact]
+    public void WaitTimerResumesThroughOutputAndDoesNotReenterWait()
+    {
+        var hub = new SimulatorDataSourceAdapter(Array.Empty<WorldPoint>()).Channels;
+        var start = Node("start", "Start");
+        var wait = Node("wait", "Wait", ("seconds", "0.1"));
+        var setStep = Node("step", "SetStep", ("step", "after_wait"));
+        var end = Node("end", "End");
+
+        var graph = Graph(
+            new[] { start, wait, setStep, end },
+            new[]
+            {
+                C("start", start, "out", wait, "in"),
+                C("wait", wait, "out", setStep, "in"),
+                C("step", setStep, "out", end, "in")
+            });
+
+        var runtime = new QuestRuntime(new QuestGraphStore(graph), hub);
+
+        runtime.Start();
+
+        Assert.Equal(QuestRuntimeStatus.Waiting, runtime.State.Status);
+        Assert.Equal("Time", runtime.State.WaitingFor);
+        Assert.Equal("wait", runtime.State.CurrentNodeId);
+
+        Thread.Sleep(250);
+        runtime.Tick();
+
+        Assert.Equal(QuestRuntimeStatus.Completed, runtime.State.Status);
+        Assert.Equal("end", runtime.State.CurrentNodeId);
+        Assert.Null(runtime.State.WaitingFor);
+
+        var questStatus = hub.Get<QuestStatusesState>("quest-statuses").Value.Quests
+            .Single(x => x.QuestId == graph.Id);
+        Assert.Equal("after_wait", questStatus.Step);
+    }
+
+    [Fact]
     public void WaitForEventResumesOnMatchingSimulatorEvent()
     {
         var hub = new SimulatorDataSourceAdapter(Array.Empty<WorldPoint>()).Channels;
