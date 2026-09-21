@@ -2,11 +2,7 @@
   const map = document.getElementById("mapCanvas");
   const side = document.getElementById("side");
   const hud = document.getElementById("hud");
-  const runtimeMonitor = document.getElementById("runtimeMonitor");
-  const runtimeState = document.getElementById("runtimeState");
-  const runtimeNode = document.getElementById("runtimeNode");
-  const runtimeWait = document.getElementById("runtimeWait");
-  const runtimeEvent = document.getElementById("runtimeEvent");
+  const runtimeSide = document.getElementById("runtimeSide");
   const send = payload => window.chrome?.webview?.postMessage(payload);
 
   let snapshot = null;
@@ -15,6 +11,7 @@
   let panning = false;
   let panStart = null;
   let selectedPointId = null;
+  let questGraph = null;
   let camera = { cx: 0, cz: 0, mpp: 50 };
   let eventHistory = [];
   const DISTANCE_RINGS = [25, 50, 100, 250, 500, 1000, 1500, 2000];
@@ -110,6 +107,7 @@
     ctx.fillRect(0, 0, width, height);
     drawGrid(ctx, width, height);
     drawDistanceRings(ctx, width, height);
+    drawRuntimeTarget(ctx);
 
     const points = snapshot.world?.points || [];
     const showAllLabels = camera.mpp < 24;
@@ -438,15 +436,255 @@
     })[status] || status || "Остановлен";
   }
 
-  function renderRuntimeMonitor() {
-    if (!runtimeMonitor) return;
+  function getRuntimeNode() {
+    const nodeId = runtime?.currentNodeId;
+    return nodeId && questGraph?.nodes
+      ? questGraph.nodes.find(node => node.nodeId === nodeId) || null
+      : null;
+  }
+
+  function nodeParameter(node, key, fallback = "") {
+    if (!node?.parameters) return fallback;
+    const entry = Object.entries(node.parameters)
+      .find(([name]) => name.toLowerCase() === key.toLowerCase());
+    return entry ? entry[1] : fallback;
+  }
+
+  function findPoint(pointId) {
+    if (!pointId || !snapshot?.world?.points) return null;
+    return snapshot.world.points.find(point =>
+      point.id?.toLowerCase() === String(pointId).toLowerCase());
+  }
+
+  function distanceMeters(a, b) {
+    if (!a || !b) return null;
+    const dx = Number(a.x) - Number(b.x);
+    const dy = Number(a.y) - Number(b.y);
+    const dz = Number(a.z) - Number(b.z);
+    return Math.sqrt(dx * dx + dy * dy + dz * dz);
+  }
+
+  function formatMeters(value) {
+    if (!Number.isFinite(value)) return "—";
+    if (value >= 1000) return (value / 1000).toLocaleString("ru-RU", { maximumFractionDigits: 2 }) + " км";
+    return Math.round(value).toLocaleString("ru-RU") + " м";
+  }
+
+  function runtimeTargetInfo() {
+    const node = getRuntimeNode();
+    if (!node) return { kind: "none", html: "<div class='notice'>Текущая нода ещё не определена.</div>", point: null, radius: null };
+
+    const type = String(node.nodeType || "").toLowerCase();
+    let pointId = "";
+    let radius = null;
+
+    if (type === "interaction") {
+      pointId = nodeParameter(node, "worldPointId");
+      radius = Number(nodeParameter(node, "triggerRadius", "35"));
+    } else if (type === "waitforcondition" || type === "condition") {
+      const operator = nodeParameter(node, "operator", "");
+      if (operator.toLowerCase() === "distancecompare") {
+        pointId = nodeParameter(node, "worldPointId", nodeParameter(node, "right"));
+        radius = Number(nodeParameter(node, "triggerRadius", "35"));
+      }
+    }
+
+    if (pointId) {
+      const point = findPoint(pointId);
+      if (!point) {
+        return {
+          kind: "missing",
+          point: null,
+          radius,
+          html:
+            "<div class='targetMissing'><strong>Целевая СДО не найдена</strong>" +
+            "<div>WorldPoint Id: <code>" + escapeHtml(pointId) + "</code></div></div>"
+        };
+      }
+
+      const player = snapshot?.player?.position;
+      const distance = distanceMeters(player, point.position);
+      const radiusText = Number.isFinite(radius) ? formatMeters(radius) : "—";
+      const stateText = Number.isFinite(distance) && Number.isFinite(radius)
+        ? (distance <= radius ? "Игрок уже в радиусе" : "Нужно приблизиться ещё на " + formatMeters(Math.max(0, distance - radius)))
+        : "Расстояние не определено";
+
+      return {
+        kind: "point",
+        point,
+        radius,
+        html:
+          "<div class='targetTitle'>Приблизить игрока к:</div>" +
+          "<strong class='targetName'>" + escapeHtml(point.name || point.category || point.id) + "</strong>" +
+          "<div class='targetCategory'>" + escapeHtml(point.category || "СДО") + "</div>" +
+          "<div class='kv'><span>Координаты</span><span>" + formatPosition(point.position) + "</span></div>" +
+          "<div class='kv'><span>Радиус</span><span>" + radiusText + "</span></div>" +
+          "<div class='kv'><span>Сейчас до точки</span><span>" + formatMeters(distance) + "</span></div>" +
+          "<div class='targetStatus'>" + escapeHtml(stateText) + "</div>",
+        point
+      };
+    }
+
+    if (type === "waitforevent") {
+      const eventType = nodeParameter(node, "eventType", "—");
+      return {
+        kind: "event",
+        point: null,
+        radius: null,
+        html:
+          "<div class='targetTitle'>Ожидается событие:</div>" +
+          "<strong class='eventTarget'>" + escapeHtml(eventType) + "</strong>" +
+          "<div class='notice' style='margin-top:8px'>Для теста можно отправить это событие через раздел «События» справа.</div>"
+      };
+    }
+
+    if (type === "choice") {
+      const outputs = (node.sockets || []).filter(socket => socket.direction === "Output").length;
+      return {
+        kind: "choice",
+        point: null,
+        radius: null,
+        html:
+          "<div class='targetTitle'>Ожидается выбор игрока</div>" +
+          "<div class='kv'><span>Вариантов</span><span>" + outputs + "</span></div>" +
+          "<div class='notice' style='margin-top:8px'>Событие ChoiceSelected приходит из тестового интерфейса.</div>"
+      };
+    }
+
+    if (type === "wait") {
+      const seconds = Number(nodeParameter(node, "seconds", "1"));
+      return {
+        kind: "wait",
+        point: null,
+        radius: null,
+        html:
+          "<div class='targetTitle'>Квест стоит на паузе</div>" +
+          "<div class='kv'><span>Длительность</span><span>" + (Number.isFinite(seconds) ? seconds.toLocaleString("ru-RU") + " с" : "—") + "</span></div>"
+      };
+    }
+
+    const operator = nodeParameter(node, "operator", "");
+    if (type === "waitforcondition" || type === "condition") {
+      return {
+        kind: "condition",
+        point: null,
+        radius: null,
+        html:
+          "<div class='targetTitle'>Ожидается условие</div>" +
+          (operator ? "<div class='kv'><span>Оператор</span><span>" + escapeHtml(operator) + "</span></div>" : "") +
+          "<div class='notice' style='margin-top:8px'>Проверь параметры текущей ноды в Нодовом редакторе.</div>"
+      };
+    }
+
+    return { kind: "none", point: null, radius: null, html: "<div class='notice'>Для этой ноды специальная цель ожидания не требуется.</div>" };
+  }
+
+  function drawRuntimeTarget(ctx) {
+    if (!snapshot || runtime?.status !== "Waiting" || !questGraph) return;
+    const info = runtimeTargetInfo();
+    if (!info.point) return;
+
+    const player = snapshot.player?.position;
+    const target = worldToScreen(info.point.position.x, info.point.position.z);
+    const playerScreen = player ? worldToScreen(player.x, player.z) : null;
+
+    if (Number.isFinite(info.radius)) {
+      const radiusPx = info.radius / camera.mpp;
+      if (radiusPx >= 2) {
+        ctx.save();
+        ctx.beginPath();
+        ctx.arc(target.x, target.y, radiusPx, 0, Math.PI * 2);
+        ctx.setLineDash([8, 5]);
+        ctx.lineWidth = 2;
+        ctx.strokeStyle = "rgba(250,176,3,.78)";
+        ctx.stroke();
+        ctx.restore();
+      }
+    }
+
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(target.x, target.y, 10, 0, Math.PI * 2);
+    ctx.lineWidth = 3;
+    ctx.strokeStyle = "#ffffff";
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.arc(target.x, target.y, 5, 0, Math.PI * 2);
+    ctx.fillStyle = "#fab003";
+    ctx.fill();
+    ctx.font = "800 11px Open Sans, Arial, sans-serif";
+    ctx.textBaseline = "bottom";
+    ctx.fillStyle = "#fab003";
+    ctx.strokeStyle = "rgba(0,0,0,.95)";
+    ctx.lineWidth = 4;
+    ctx.strokeText("ЦЕЛЬ", target.x + 12, target.y - 12);
+    ctx.fillText("ЦЕЛЬ", target.x + 12, target.y - 12);
+    if (playerScreen) {
+      ctx.beginPath();
+      ctx.moveTo(playerScreen.x, playerScreen.y);
+      ctx.lineTo(target.x, target.y);
+      ctx.setLineDash([6, 5]);
+      ctx.lineWidth = 1.5;
+      ctx.strokeStyle = "rgba(250,176,3,.55)";
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+
+  function renderRuntimeSidebar() {
+    if (!runtimeSide || !snapshot) return;
 
     const status = runtime?.status || (snapshot?.system?.runtimeRunning ? "Running" : "Stopped");
-    runtimeState.dataset.status = String(status).toLowerCase();
-    runtimeState.innerHTML = "<span class='statusDot'></span>" + escapeHtml(runtimeStatusLabel(status));
-    runtimeNode.textContent = "Нода: " + (runtime?.currentNodeId || "—");
-    runtimeWait.textContent = "Ожидание: " + (runtime?.waitingFor || "—");
-    runtimeEvent.textContent = "Событие: " + (runtime?.lastEvent || snapshot?.system?.lastEvent || "—");
+    const node = getRuntimeNode();
+    const info = runtimeTargetInfo();
+
+    runtimeSide.innerHTML =
+      "<div class='runtimeSideHeader'>" +
+        "<div>" +
+          "<div class='panelTitle'>Quest Runtime</div>" +
+          "<div class='runtimeQuestName'>" + escapeHtml(questGraph?.name || runtime?.questId || "Квест") + "</div>" +
+        "</div>" +
+      "</div>" +
+      "<div class='runtimeControls'>" +
+        "<button class='smallButton primary' id='runtimeStartSide'>Запустить квест</button>" +
+        "<button class='smallButton' id='runtimeStopSide'>Остановить</button>" +
+      "</div>" +
+      "<div class='runtimeStatusCard' data-status='" + escapeHtml(String(status).toLowerCase()) + "'>" +
+        "<span class='statusDot'></span><strong>" + escapeHtml(runtimeStatusLabel(status)) + "</strong>" +
+      "</div>" +
+      "<section class='runtimeBlock'>" +
+        "<div class='miniLabel'>Текущая нода</div>" +
+        (node
+          ? "<div class='runtimeNodeName'>" + escapeHtml(node.title || node.nodeType) + "</div>" +
+            "<div class='runtimeNodeType'>" + escapeHtml(node.nodeType) + " · " + escapeHtml(node.nodeId) + "</div>"
+          : "<div class='notice' style='margin-top:6px'>Запусти квест, чтобы Runtime выбрал Start.</div>") +
+      "</section>" +
+      "<section class='runtimeBlock'>" +
+        "<div class='miniLabel'>Что сейчас происходит</div>" +
+        "<div class='runtimeTransition'>" + escapeHtml(runtime?.lastTransition || snapshot?.system?.lastTransition || "—") + "</div>" +
+      "</section>" +
+      "<section class='runtimeBlock runtimeTargetBlock'>" +
+        "<div class='miniLabel'>Цель ожидания</div>" +
+        info.html +
+      "</section>" +
+      "<section class='runtimeBlock'>" +
+        "<div class='miniLabel'>Последнее событие</div>" +
+        "<div class='kv'><span>Runtime</span><span>" + escapeHtml(runtime?.lastEvent || snapshot?.system?.lastEvent || "—") + "</span></div>" +
+        "<div class='kv'><span>Ожидание</span><span>" + escapeHtml(runtime?.waitingFor || "—") + "</span></div>" +
+      "</section>" +
+      "<section class='runtimeBlock'>" +
+        "<div class='miniLabel'>События теста</div>" +
+        "<button class='smallButton eventTool' id='hornEventSide'>HornPressed</button>" +
+        "<div class='eventList runtimeEventList'>" +
+          eventHistory.map(renderEvent).join("") +
+        "</div>" +
+      "</section>";
+
+    runtimeSide.querySelector("#runtimeStartSide")?.addEventListener("click", () => send({ action: "runtime_start" }));
+    runtimeSide.querySelector("#runtimeStopSide")?.addEventListener("click", () => send({ action: "runtime_stop" }));
+    runtimeSide.querySelector("#hornEventSide")?.addEventListener("click", () => {
+      send({ action: "emit_event", eventType: "HornPressed", source: "Simulator", payload: {} });
+    });
   }
 
   function drawHud() {
@@ -733,6 +971,7 @@
       const hadSnapshot = !!snapshot;
       snapshot = message.snapshot;
       runtime = message.runtime || null;
+      questGraph = message.questGraph || questGraph;
       selectedPointId = snapshot.selection?.point?.id || null;
       window.assistWebLog?.("INFO", "Simulator получил snapshot.", {
         points: snapshot.world?.points?.length ?? 0,
@@ -742,6 +981,7 @@
       });
       if (!hadSnapshot) fitWorld();
       drawMap();
+      renderRuntimeSidebar();
       renderSide();
       return;
     }
@@ -758,6 +998,7 @@
         const list = side.querySelector("#eventList");
         if (list) list.innerHTML = eventHistory.map(renderEvent).join("");
       }
+      renderRuntimeSidebar();
       renderSide();
       return;
     }
@@ -767,6 +1008,7 @@
       eventHistory.splice(12);
       const list = side.querySelector("#eventList");
       if (list) list.innerHTML = eventHistory.map(renderEvent).join("");
+      renderRuntimeSidebar();
       return;
     }
 
@@ -899,11 +1141,6 @@
     drawPlayer(ctx, temp);
   }
 
-  document.getElementById("runtimeStart")?.addEventListener("click", () => send({ action: "runtime_start" }));
-  document.getElementById("runtimeStop")?.addEventListener("click", () => send({ action: "runtime_stop" }));
-  document.getElementById("hornEventTop")?.addEventListener("click", () => {
-    send({ action: "emit_event", eventType: "HornPressed", source: "Simulator", payload: {} });
-  });
   document.getElementById("reset")?.addEventListener("click", () => send({ action: "reset" }));
   window.addEventListener("resize", () => {
     drawMap();

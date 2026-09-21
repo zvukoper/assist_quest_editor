@@ -7,9 +7,10 @@ public sealed class SimulatorForm : WebViewForm
 {
     private readonly IDataChannelHub _hub;
     private readonly QuestRuntime _runtime;
+    private readonly QuestGraphStore _questGraph;
     private readonly System.Windows.Forms.Timer _runtimeTimer;
 
-    public SimulatorForm(IDataChannelHub hub, QuestRuntime runtime)
+    public SimulatorForm(IDataChannelHub hub, QuestRuntime runtime, QuestGraphStore questGraph)
         : base(
             "Assist Quest Editor — Симулятор",
             "simulator.html",
@@ -17,6 +18,8 @@ public sealed class SimulatorForm : WebViewForm
     {
         _hub = hub;
         _runtime = runtime ?? throw new ArgumentNullException(nameof(runtime));
+        _questGraph = questGraph ?? throw new ArgumentNullException(nameof(questGraph));
+        _questGraph.Changed += QuestGraph_Changed;
         _runtime.Published += Runtime_Published;
         _runtimeTimer = new System.Windows.Forms.Timer { Interval = 250 };
         _runtimeTimer.Tick += (_, _) => _runtime.Tick();
@@ -32,6 +35,7 @@ public sealed class SimulatorForm : WebViewForm
             _runtimeTimer.Stop();
             _runtimeTimer.Dispose();
             _runtime.Published -= Runtime_Published;
+            _questGraph.Changed -= QuestGraph_Changed;
             if (_hub.Events is EventChannel<SimulatorEvent> events)
             {
                 events.Published -= Events_Published;
@@ -62,7 +66,8 @@ public sealed class SimulatorForm : WebViewForm
             type = "snapshot",
             version = VersionInfo.InformationalVersion,
             snapshot,
-            runtime = _runtime.State
+            runtime = _runtime.State,
+            questGraph = _questGraph.Value
         }, new JsonSerializerOptions
         {
             PropertyNamingPolicy = JsonNamingPolicy.CamelCase
@@ -323,6 +328,24 @@ public sealed class SimulatorForm : WebViewForm
             DateTimeOffset.UtcNow,
             String(root, "source", "Simulator"),
             payload));
+    }
+
+    private void QuestGraph_Changed(object? sender, EventArgs e)
+    {
+        AppLogger.Info("SimulatorForm: Quest Graph изменён.", $"nodes={_questGraph.Value.Nodes.Count}; connections={_questGraph.Value.Connections.Count}");
+
+        if (IsDisposed || !IsHandleCreated)
+        {
+            return;
+        }
+
+        try
+        {
+            BeginInvoke((Action)PushSnapshot);
+        }
+        catch (InvalidOperationException)
+        {
+        }
     }
 
     private void Runtime_Published(object? sender, QuestRuntimeEvent e)

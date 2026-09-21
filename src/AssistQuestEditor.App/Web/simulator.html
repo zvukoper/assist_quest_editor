@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Симулятор</title>
-<link rel="stylesheet" href="theme.css?v=1.0.40.112">
+<link rel="stylesheet" href="theme.css?v=1.0.40.113">
 <style>
   .mapSurface { position:relative; overflow:hidden; }
   #mapCanvas { display:block; width:100%; height:100%; cursor:default; touch-action:none; background:#0d1014; }
@@ -19,20 +19,10 @@
     </div>
     <div class="topSpacer"></div>
     <div class="hud" id="hud"></div>
-    <div class="runtimeMonitor" id="runtimeMonitor" aria-live="polite">
-      <div class="runtimeState" id="runtimeState"><span class="statusDot"></span>Остановлен</div>
-      <div class="runtimeDetails">
-        <span id="runtimeNode">Нода: —</span>
-        <span id="runtimeWait">Ожидание: —</span>
-        <span id="runtimeEvent">Событие: —</span>
-      </div>
-    </div>
-    <button class="toolButton eventTool" id="hornEventTop">HornPressed</button>
-    <button class="toolButton primary" id="runtimeStart">Запустить квест</button>
-    <button class="toolButton" id="runtimeStop">Остановить квест</button>
     <button class="toolButton" id="reset">Сбросить</button>
   </header>
   <div class="simBody">
+    <aside class="runtimeSide" id="runtimeSide"></aside>
     <section class="mapSurface" id="mapWrap">
       <canvas id="mapCanvas"></canvas>
       <div class="mapLegend">
@@ -44,6 +34,6 @@
     <aside class="simSide" id="side"></aside>
   </div>
 </div>
-<script src="web_log.js?v=1.0.40.112"></script><script src="simulator.js?v=1.0.40.112"></script>
+<script src="web_log.js?v=1.0.40.113"></script><script src="simulator.js?v=1.0.40.113"></script>
 </body>
 </html>

@@ -109,7 +109,7 @@ public sealed class MainForm : WebViewForm
             return;
         }
 
-        _simulator = new SimulatorForm(_hub, _runtime);
+        _simulator = new SimulatorForm(_hub, _runtime, _questGraph);
         _simulator.FormClosed += (_, _) => _simulator = null;
         PlaceOnSecondaryScreen(_simulator);
         _simulator.Show(this);
