@@ -207,7 +207,13 @@ try {
   if (!choiceBox) throw new Error("Не удалось получить границы Choice node.");
   await page.mouse.click(choiceBox.x + 20, choiceBox.y + 20, { button: "right" });
   await page.getByText("Нода", { exact: true }).waitFor();
-  await page.getByRole("button", { name: "Сохранить", exact: true }).waitFor();
+  await page.getByRole("button", { name: "Сохранить", exact: true }).click();
+  if (!await page.evaluate(() => window.__messages.some(message => message.action === "graph_save"))) {
+    throw new Error("Команда «Сохранить» из меню ноды не отправила graph_save.");
+  }
+
+  await page.mouse.click(choiceBox.x + 20, choiceBox.y + 20, { button: "right" });
+  await page.getByText("Нода", { exact: true }).waitFor();
   await page.getByRole("button", { name: "Удалить", exact: true }).waitFor();
   await page.keyboard.press("Escape");
 
@@ -227,11 +233,34 @@ try {
     throw new Error("Delete после подтверждения не отправил graph_remove_node.");
   }
 
-  // Right-click Add menu and Choice availability.
+  // Right-click Add menu: it must stay inside the viewport and scroll by mouse wheel.
   const contextX = svgBox.x + 240;
   const contextY = svgBox.y + 140;
   await page.mouse.click(contextX, contextY, { button: "right" });
   await page.getByText("Add", { exact: true }).waitFor();
+
+  const addMenu = page.locator(".graphContextMenu");
+  const addMenuGeometry = await addMenu.evaluate(menu => ({
+    top: menu.getBoundingClientRect().top,
+    bottom: menu.getBoundingClientRect().bottom,
+    scrollHeight: menu.scrollHeight,
+    clientHeight: menu.clientHeight,
+    scrollTop: menu.scrollTop
+  }));
+  if (addMenuGeometry.top < 0 || addMenuGeometry.bottom > (await page.evaluate(() => window.innerHeight))) {
+    throw new Error("Меню Add выходит за пределы окна.");
+  }
+  if (addMenuGeometry.scrollHeight <= addMenuGeometry.clientHeight) {
+    throw new Error("Меню Add не стало прокручиваемым.");
+  }
+
+  await addMenu.hover();
+  await page.mouse.wheel(0, 700);
+  const addMenuScrolled = await addMenu.evaluate(menu => menu.scrollTop);
+  if (addMenuScrolled <= addMenuGeometry.scrollTop) {
+    throw new Error("Колесо мыши не прокрутило меню Add.");
+  }
+
   const choiceMenuItem = page.locator(".graphContextMenuItem[data-node-type=\"Choice\"]");
   await choiceMenuItem.waitFor();
   await choiceMenuItem.scrollIntoViewIfNeeded();
