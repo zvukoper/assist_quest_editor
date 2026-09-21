@@ -196,3 +196,26 @@ Scene Editor R1 переведён с UI-заглушки на canonical pipelin
 - версия выпуска: 1.0.40.131-QUEST-SCENE-EDITOR-R1.
 
 Следующий слой Scene Editor: отдельное редактирование Dialogue/Choice resources, timeline, preview, actor/camera/animation, copy/paste и minimap.
+
+
+## 2026-09-21 — 1.0.40.132 Scene Editor R2: Quest Graph interaction parity
+
+После физического сравнения Scene Editor и Quest Graph зафиксировано правило: canvas Scene Editor не изобретается заново. Он использует адаптированную копию отработанного Quest Graph interaction layer.
+
+Унаследованы:
+- геометрический socket hit-test;
+- pointer capture;
+- drag с локальным preview и одной финальной записью координат;
+- pan средней кнопкой и Space + ЛКМ;
+- zoom колесом вокруг курсора;
+- snap кабеля;
+- hover/compatible/incompatible подсветка и cursor states;
+- pending connection preview;
+- context menu у canvas/node/socket с clamp и wheel scrolling;
+- DEL с подтверждением;
+- per-node dirty marker и очистка после Host save;
+- тот же node visual markup и connector zones.
+
+Также SceneGraphLayout синхронизирован с каноническим Quest Graph layout, а theme CSS получил те же #questGraphSvg эффекты для #sceneGraphSvg.
+
+Версия физического тестирования: 1.0.40.132-QUEST-SCENE-EDITOR-R2.
