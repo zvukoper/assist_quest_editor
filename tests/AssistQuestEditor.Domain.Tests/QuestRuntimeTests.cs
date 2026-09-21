@@ -1,3 +1,5 @@
+using System.Text.Json;
+using System.Text.Json.Serialization;
 using AssistQuestEditor.Domain;
 using Xunit;
 
@@ -97,6 +99,155 @@ public sealed class QuestRuntimeTests
             new Dictionary<string, string>()));
 
         Assert.Equal(QuestRuntimeStatus.Completed, runtime.State.Status);
+    }
+
+    [Fact]
+    public void Scenario01_Graph()
+    {
+        var store = new QuestGraphStore(QuestGraphFactory.CreateStarter());
+
+        Assert.Empty(QuestGraphValidator.Validate(store.Value));
+        var node = store.AddNode("Phase", "Сценарная фаза", 420, 120);
+        Assert.False(string.IsNullOrWhiteSpace(node.NodeId));
+        Assert.Equal(node.NodeId, store.FindNode(node.NodeId)!.NodeId);
+        Assert.True(store.Undo());
+        Assert.True(store.Redo());
+    }
+
+    [Fact]
+    public void Scenario02_Parameters()
+    {
+        var store = new QuestGraphStore(QuestGraphFactory.CreateStarter());
+        var node = store.AddNode("Choice", "Сценарный выбор", 420, 120);
+
+        Assert.Collection(
+            node.Sockets.Where(socket => socket.Direction == SocketDirection.Output),
+            _ => { },
+            _ => { });
+
+        var parameters = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["outputCount"] = "4"
+        };
+
+        var updated = store.UpdateNode(node.NodeId, parameters: parameters);
+
+        Assert.NotNull(updated);
+        Assert.Collection(
+            updated!.Sockets.Where(socket => socket.Direction == SocketDirection.Output),
+            _ => { },
+            _ => { },
+            _ => { },
+            _ => { });
+        Assert.Contains(updated.Sockets, socket => socket.SocketId == $"{node.NodeId}.choice4");
+    }
+
+    [Fact]
+    public void Scenario03_SimpleRuntime()
+    {
+        RuntimeTraversesEffectsAndCompletesSimpleQuest();
+    }
+
+    [Fact]
+    public void Scenario04_Interaction()
+    {
+        ConditionWaitsUntilPlayerReachesWorldPoint();
+    }
+
+    [Fact]
+    public void Scenario05_Event()
+    {
+        WaitForEventResumesOnMatchingSimulatorEvent();
+    }
+
+    [Fact]
+    public void Scenario06_Choice()
+    {
+        var hub = new SimulatorDataSourceAdapter(Array.Empty<WorldPoint>()).Channels;
+        var start = Node("start", "Start");
+        var choice = Node("choice", "Choice");
+        var left = Node("left", "End");
+        var right = Node("right", "End");
+
+        var graph = Graph(
+            new[] { start, choice, left, right },
+            new[]
+            {
+                C("start", start, "out", choice, "in"),
+                new QuestConnection("choice", "choice.choice1", "left", "left.in"),
+                new QuestConnection("choice", "choice.choice2", "right", "right.in")
+            });
+
+        var runtime = new QuestRuntime(new QuestGraphStore(graph), hub);
+        runtime.Start();
+
+        Assert.Equal(QuestRuntimeStatus.Waiting, runtime.State.Status);
+        Assert.Equal("Choice", runtime.State.WaitingFor);
+
+        hub.Events.Publish(new SimulatorEvent(
+            "ChoiceSelected",
+            DateTimeOffset.UtcNow,
+            "Test",
+            new Dictionary<string, string> { ["index"] = "2" }));
+
+        Assert.Equal(QuestRuntimeStatus.Completed, runtime.State.Status);
+        Assert.Equal("right", runtime.State.CurrentNodeId);
+    }
+
+    [Fact]
+    public void Scenario07_SaveLoad()
+    {
+        var graph = QuestGraphFactory.CreateStarter();
+        var choice = new QuestNode(
+            "choice",
+            "Choice",
+            "Выбор",
+            720,
+            160,
+            QuestNodeCatalog.CreateSockets(
+                "Choice",
+                "choice",
+                new Dictionary<string, string> { ["outputCount"] = "3" }))
+        {
+            Parameters = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["outputCount"] = "3"
+            }
+        };
+
+        graph = graph with
+        {
+            Nodes = graph.Nodes.Append(choice).ToArray(),
+            Connections = graph.Connections.Append(
+                new QuestConnection("choice", "choice.choice1", "end", "end.in")).ToArray()
+        };
+
+        var document = new QuestDefinitionDocument(
+            1,
+            new QuestDefinition(
+                graph.Id,
+                graph.Name,
+                "Сценарный тест",
+                graph,
+                new[] { "ruslan_start" }));
+
+        var options = new JsonSerializerOptions
+        {
+            PropertyNamingPolicy = JsonNamingPolicy.CamelCase
+        };
+        options.Converters.Add(new JsonStringEnumConverter());
+
+        var json = JsonSerializer.Serialize(document, options);
+        var restored = JsonSerializer.Deserialize<QuestDefinitionDocument>(json, options);
+
+        Assert.NotNull(restored);
+        Assert.Equal(1, restored!.SchemaVersion);
+        Assert.Equal(document.Definition.Id, restored.Definition.Id);
+        Assert.Equal(document.Definition.Graph.Id, restored.Definition.Graph.Id);
+        Assert.Equal(document.Definition.Graph.Name, restored.Definition.Graph.Name);
+        Assert.Equal("3", restored.Definition.Graph.Nodes.Single(x => x.NodeId == "choice").Parameters["outputCount"]);
+        Assert.Contains(restored.Definition.Graph.Connections, x =>
+            x.FromNodeId == "choice" && x.FromSocketId == "choice.choice1" && x.ToNodeId == "end");
     }
 
     private static QuestNode Node(string id, string type, params (string Key, string Value)[] parameters)
