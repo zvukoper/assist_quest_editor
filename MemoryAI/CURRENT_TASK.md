@@ -29,16 +29,14 @@ Quest Graph больше не является статической SVG-заг
 
 ## Сейчас делать
 
-Следующий функциональный слой:
+Текущий рабочий слой — Quest Runtime + системная автоматическая проверка. Quest Graph authoring baseline уже подключён к canonical Runtime и Simulator.
 
-1. довести Quest Graph Editor до следующего цикла: перетаскивание нод, pan/zoom, validation, undo/redo и сохранение definition;
-2. затем canonical Quest Runtime и registry handlers;
-3. интеграция Simulator → Runtime;
-4. автоматические переходы эталонного квеста Руслана;
-4. runtime UI: маркеры, уведомления, диалоги, выборы и награды;
-5. сохранение и восстановление состояния;
-6. сохранение графа, undo/redo и миграции схем;
-7. полноценное редактирование World Resolver и связей с графом.
+1. довести canonical Runtime Registry и обработчики нод;
+2. пройти матрицу из семи автоматических сценариев и использовать её как обязательный регрессионный барьер;
+3. реализовать полный эталонный квест Руслана на canonical graph;
+4. довести Runtime UI: маркеры, уведомления, диалоги, выборы и награды;
+5. добавить отдельное сохранение/восстановление Quest Runtime State;
+6. затем продолжить специализированные редакторы, Scene Graph и World Resolver.
 
 ## Не делать сейчас
 
@@ -90,7 +88,7 @@ Web-ресурсы src/AssistQuestEditor.App/Web и data/world/sdo_points.json �
 
 Причина пустого Simulator найдена: C# snapshot сериализовался с PascalCase, тогда как Web UI ожидает camelCase.
 
-Текущая рабочая версия: 1.0.40.110-QUEST-GRAPH-AUTHORING-R1.
+Текущая рабочая версия: 1.0.40.111-QUEST-RUNTIME-R1.
 
 Последние рабочие вехи:
 - 1.0.40.106 — исправлена camelCase сериализация Simulator snapshot;
@@ -98,6 +96,7 @@ Web-ресурсы src/AssistQuestEditor.App/Web и data/world/sdo_points.json �
 - 1.0.40.108 — начат функциональный Quest Graph Editor через общий QuestGraphStore;
 - 1.0.40.109 — добавлены drag нод, wheel zoom и regression smoke для canvas interaction;
 - 1.0.40.110 — добавлены pan canvas, canonical параметры нод, динамические sockets и JSON Save/Open/New.
+- 1.0.40.111 — добавлен Quest Runtime, интеграция Simulator → Runtime, пробуждение Runtime по ChannelChanged, корректное продолжение после Choice и матрица из семи автоматических сценариев.
 
 Перед физическим тестированием пользователя версия обязательно увеличивается.
 
@@ -114,7 +113,7 @@ Web-ресурсы src/AssistQuestEditor.App/Web и data/world/sdo_points.json �
 - Graph Web UI работает через действия graph_add_node, graph_update_node, graph_remove_node, graph_connect, graph_disconnect.
 - Состояние выбора ноды в браузере является только presentation state.
 
-Текущий Graph Editor поддерживает: выбор ноды, добавление нод из списка типов, редактирование Title/X/Y, удаление нод, создание/удаление связей Output → Input, Undo/Redo через QuestGraphStore и canonical validation.
+Текущий Graph Editor поддерживает: выбор ноды, добавление нод из списка типов, редактирование Title/X/Y и Parameters, динамические sockets, удаление нод, создание/удаление связей Output → Input, Undo/Redo, validation и JSON New/Open/Save/Save As.
 
 Host передаёт Graph UI enum значения строками через `JsonStringEnumConverter`, поэтому SocketDirection, FlowKind и GraphDiagnosticSeverity имеют единый transport contract.
 
@@ -126,11 +125,23 @@ Quest Graph smoke проверяет реальный `editor.js`: загруз�
 - Domain regression: `tests/AssistQuestEditor.Domain.Tests/QuestGraphStoreTests.cs`.
 - Web regression: `ci/selection_context_smoke.mjs` и `ci/quest_graph_smoke.mjs`.
 - CI: Node, Chromium/Playwright, web syntax, .NET build/test, single-file publish.
+- CI запускает отдельную матрицу: Graph / Parameters / Simple Runtime / Interaction / Event / Choice / Save/Load.
+- После автоматических проверок формируется `MemoryAI/LOGS/assist_quest_editor.log` и artifact с логом и TRX.
 
 
 
-## Последняя проверочная точка
+## Runtime и автоматическая матрица
 
-Quest Graph smoke проверяет реальный `editor.js`: загрузку `quest_graph`, создание ноды через `graph_add_node` и изменение свойств через `graph_update_node`.
+`QuestRuntime` находится в `src/AssistQuestEditor.Domain/QuestRuntime.cs` и получает данные только через Data Channel contracts. Simulator публикует события и изменения каналов; Host записывает runtime transitions/events в диагностический лог.
 
-Последний физически тестируемый выпуск: `1.0.40.109-QUEST-EDITOR-INTERACTION-R1`. Следующий физический тест выполняется на `1.0.40.110-QUEST-GRAPH-AUTHORING-R1`.
+Автоматическая матрица:
+- 1 Graph
+- 2 Parameters
+- 3 Simple Runtime
+- 4 Interaction
+- 5 Event
+- 6 Choice
+- 7 Save/Load
+
+Последний физически тестируемый выпуск: `1.0.40.109-QUEST-EDITOR-INTERACTION-R1`.
+Следующий физический тест выполняется после зелёного CI на версии `1.0.40.112`.
