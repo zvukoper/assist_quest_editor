@@ -466,6 +466,7 @@
   function drawCategoryLegend(ctx, width, height, points) {
     const counts = new Map();
     for (const point of points) {
+      if (point.isCity) continue;
       const q = worldToScreen(point.position.x, point.position.z);
       if (q.x < 0 || q.y < 0 || q.x > width || q.y > height) continue;
       const key = point.category || point.name || "СДО";
@@ -880,8 +881,11 @@
     const p = snapshot.player.position;
     const selected = snapshot.selection?.point;
     const points = snapshot.world?.points || [];
+    const sdoCount = points.filter(point => !point.isCity).length;
+    const cityCount = points.filter(point => point.isCity).length;
     hud.innerHTML = [
-      "<span class='badge blue'>СДО " + points.length.toLocaleString("ru-RU") + "</span>",
+      "<span class='badge blue'>СДО " + sdoCount.toLocaleString("ru-RU") + "</span>",
+      "<span class='badge blue'>Города " + cityCount.toLocaleString("ru-RU") + "</span>",
       "<span class='badge blue'>X " + Math.round(p.x) + "</span>",
       "<span class='badge blue'>Y " + Math.round(p.y) + "</span>",
       "<span class='badge blue'>Z " + Math.round(p.z) + "</span>",
