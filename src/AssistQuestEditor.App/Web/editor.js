@@ -707,6 +707,7 @@
 
     ins.querySelector("#saveGraphNode").addEventListener("click", () => {
       queueDirtyNode(node.nodeId);
+      updateGraphVisuals();
       send({
         action: "graph_update_node",
         nodeId: node.nodeId,
