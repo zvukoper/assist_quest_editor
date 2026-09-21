@@ -88,7 +88,7 @@ Web-ресурсы src/AssistQuestEditor.App/Web и data/world/sdo_points.json �
 
 Причина пустого Simulator найдена: C# snapshot сериализовался с PascalCase, тогда как Web UI ожидает camelCase.
 
-Текущая рабочая версия: 1.0.40.128-QUEST-EXAMPLE-R1.
+Текущая рабочая версия: 1.0.40.129-QUEST-SIM-INVENTORY-R1.
 
 Последние рабочие вехи:
 - 1.0.40.106 — исправлена camelCase сериализация Simulator snapshot;
@@ -150,3 +150,21 @@ Quest Graph smoke проверяет реальный `editor.js`: загруз�
 
 Последний физически тестируемый выпуск: `1.0.40.125-QUEST-RUNTIME-WAIT-FIX-R1`.
 Следующий физический тест выполняется на версии `1.0.40.128-QUEST-EXAMPLE-R1`.
+
+## 2026-09-21 — 1.0.40.129 Simulator Inventory / Player HUD
+
+Слой Simulator теперь содержит минимальную gameplay-подачу инвентаря и player state:
+
+- backpack button внизу карты + клавиша `I`;
+- 24 inventory slots;
+- `ruslan.raw_meat` визуализируется как «Мясо» с цветным квадратом;
+- новые предметы имеют оранжевый пульсирующий beacon; закрытый backpack пульсирует при наличии непросмотренного предмета;
+- hover по предмету помечает его просмотренным через Data Channel;
+- квестовые GiveItem/RemoveItem показывают уведомления на 6 секунд с fade 100ms и входным смещением 22px;
+- ручные изменения Simulator inventory уведомления не показывают;
+- верхняя player state panel: здоровье, энергия/жидкость, усталость;
+- нижняя панель: деньги, опыт, резерв;
+- соседняя панель `Персонаж` с семью SPECIAL-like статами и двумя навыками;
+- buffs/debuffs зарезервированы и документированы, но не отображаются/не применяются;
+- добавлены player-state quest nodes;
+- snapshot rendering, Choice rendering и detached Journal refresh coalesced, чтобы убрать повторные перерисовки и мерцание.
