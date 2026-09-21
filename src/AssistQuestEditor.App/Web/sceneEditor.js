@@ -994,7 +994,7 @@
     };
   }
 
-  let activeSceneGraphContextMenu = null;
+  let activeSceneContextMenu = null;
 
   function queueSceneDirtyNode(nodeId) {
     if (nodeId) sceneDirtyNodeIds.add(nodeId);
@@ -1005,13 +1005,13 @@
   }
 
   function closeSceneContextMenu() {
-    activeSceneGraphContextMenu?.remove();
-    activeSceneGraphContextMenu = null;
+    activeSceneContextMenu?.remove();
+    activeSceneContextMenu = null;
   }
 
   function placeSceneContextMenu(menu, clientX, clientY) {
     document.body.appendChild(menu);
-    activeSceneGraphContextMenu = menu;
+    activeSceneContextMenu = menu;
 
     const clampToViewport = () => {
       const viewportWidth = Math.max(1, window.innerWidth);
@@ -1071,7 +1071,7 @@
   function sceneContextMenuButton(text, handler) {
     const button = document.createElement("button");
     button.type = "button";
-    button.className = "sceneGraphContextMenuItem";
+    button.className = "graphContextMenuItem";
     button.textContent = text;
     button.addEventListener("click", event => {
       event.preventDefault();
@@ -1085,17 +1085,17 @@
     closeSceneContextMenu();
 
     const menu = document.createElement("div");
-    menu.className = "sceneGraphContextMenu";
+    menu.className = "graphContextMenu";
     menu.dataset.menuKind = "add";
 
     const heading = document.createElement("div");
-    heading.className = "sceneGraphContextMenuTitle";
+    heading.className = "graphContextMenuTitle";
     heading.textContent = "Add";
     menu.appendChild(heading);
 
     if (pendingOutput) {
       const hint = document.createElement("div");
-      hint.className = "sceneGraphContextMenuHint";
+      hint.className = "graphContextMenuHint";
       hint.textContent = "Новая нода будет подключена к выбранному Output.";
       menu.appendChild(hint);
     }
@@ -1141,16 +1141,16 @@
     if (!node) return;
 
     const menu = document.createElement("div");
-    menu.className = "sceneGraphContextMenu";
+    menu.className = "graphContextMenu";
     menu.dataset.menuKind = "node";
 
     const heading = document.createElement("div");
-    heading.className = "sceneGraphContextMenuTitle";
+    heading.className = "graphContextMenuTitle";
     heading.textContent = "Нода";
     menu.appendChild(heading);
 
     const name = document.createElement("div");
-    name.className = "sceneGraphContextMenuHint";
+    name.className = "graphContextMenuHint";
     name.textContent = node.title + " · " + node.nodeType;
     menu.appendChild(name);
 
@@ -1180,22 +1180,22 @@
     );
 
     const menu = document.createElement("div");
-    menu.className = "sceneGraphContextMenu";
+    menu.className = "graphContextMenu";
     menu.dataset.menuKind = "connection";
 
     const heading = document.createElement("div");
-    heading.className = "sceneGraphContextMenuTitle";
+    heading.className = "graphContextMenuTitle";
     heading.textContent = "Коннектор";
     menu.appendChild(heading);
 
     const hint = document.createElement("div");
-    hint.className = "sceneGraphContextMenuHint";
+    hint.className = "graphContextMenuHint";
     hint.textContent = socket.name + " · " + socket.direction;
     menu.appendChild(hint);
 
     if (!connections.length) {
       const empty = document.createElement("div");
-      empty.className = "sceneGraphContextMenuHint";
+      empty.className = "graphContextMenuHint";
       empty.textContent = "Соединений нет.";
       menu.appendChild(empty);
     } else {
@@ -1374,13 +1374,13 @@
   }
 
   document.addEventListener("pointerdown", event => {
-    if (activeSceneGraphContextMenu && !activeSceneGraphContextMenu.contains(event.target)) {
+    if (activeSceneContextMenu && !activeSceneContextMenu.contains(event.target)) {
       closeSceneContextMenu();
     }
   });
 
   document.addEventListener("keydown", event => {
-    if (event.key === "Escape" && activeSceneGraphContextMenu) {
+    if (event.key === "Escape" && activeSceneContextMenu) {
       closeSceneContextMenu();
       event.preventDefault();
       return;
