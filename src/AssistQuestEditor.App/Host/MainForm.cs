@@ -69,7 +69,7 @@ public sealed class MainForm : WebViewForm
                     if (_hub is SimulatorDataChannelHub simulatorHub)
                     {
                         simulatorHub.Reset();
-                        _simulator?.PushSnapshot();
+                        _simulator?.RequestSnapshot("main reset");
                     }
                     break;
 
