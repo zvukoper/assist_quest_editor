@@ -137,8 +137,12 @@ if ($SkipChecks) {
 Write-Host ''
 Write-Host '=== Сборка ===' -ForegroundColor Cyan
 
-$compileArgs = @()
-if ($NoLaunch) { $compileArgs += '-NoLaunch' }
+# Параметры передаются хэш-таблицей, а не массивом строк.
+# Сплаттинг массива со строкой «-NoLaunch» для параметра типа [switch] не
+# работает: строка воспринимается как обычный аргумент, switch остаётся $false,
+# и приложение запускается вопреки флагу. Хэш-таблица привязывает параметр по имени.
+$compileArgs = @{}
+if ($NoLaunch) { $compileArgs['NoLaunch'] = $true }
 
 & (Join-Path $PSScriptRoot 'compile.ps1') @compileArgs
 if ($LASTEXITCODE -ne 0) {
