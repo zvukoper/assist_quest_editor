@@ -244,3 +244,21 @@ WolvenKit решает другую задачу: authoring и исследов�
 - Quest graph view: https://github.com/WolvenKit/WolvenKit/blob/main/WolvenKit/Views/Documents/QuestPhaseGraphView.xaml
 
 Дата этого конспекта: 2026-09-20.
+
+## 8. Inventory reference check — 2026-09-21
+
+Для минимального Simulator inventory повторно просмотрены актуальные inventory-related RED4 sources в зафиксированном upstream WolvenKit HEAD `11720772f1e20581301b3dec88a59f7b5ee05675`:
+
+- `WolvenKit.RED4/Types/Classes/gameSItemStack.cs` — stack identity через `ItemID` и количество через `Quantity`;
+- `WolvenKit.RED4/Types/Classes/gameInventoryItemData.cs` — presentation/runtime metadata, включая `Name`, `Description`, `IsNew`, `IsBroken`, `SlotIndex` и `PositionInBackpack`;
+- `WolvenKit.RED4/Types/Classes/InventoryDataManagerV2.cs` — inventory management/transactions boundary;
+- `WolvenKit.RED4/Types/Classes/UIInventoryItemsManager.cs` — отдельный UI-side inventory manager;
+- `WolvenKit.RED4/Types/Classes/ItemsNotificationQueue.cs` — отдельная очередь inventory/currency/XP notifications; текущий источник содержит `ShowDuration = 6.0F`.
+
+Следствие для Assist Quest Editor:
+
+1. Inventory canonical state использует стабильный `ItemId` и quantity.
+2. Item definition/metadata отделены от stack quantity.
+3. Состояние нового предмета — presentation/runtime state, а не часть QuestDefinition.
+4. Уведомления — отдельная Simulator presentation semantics, а не Effect внутри конкретного квеста.
+5. Мы не копируем REDengine types; это game-agnostic адаптация тех же архитектурных границ.
