@@ -615,7 +615,7 @@ public sealed class SimulatorForm : WebViewForm
                 pointId = GetParameter(node, "worldPointId");
                 radius = TryGetDouble(GetParameter(node, "triggerRadius"));
             }
-            else if (type is "condition" or "waitforcondition" &&
+            else if ((type is "condition" or "waitforcondition") &&
                      GetParameter(node, "operator").Equals("distancecompare", StringComparison.OrdinalIgnoreCase))
             {
                 pointId = GetParameter(node, "worldPointId", GetParameter(node, "right"));
