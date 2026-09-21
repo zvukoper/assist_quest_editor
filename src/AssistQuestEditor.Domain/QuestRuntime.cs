@@ -448,6 +448,11 @@ public sealed class QuestRuntime
                     MoveToFirstOutput(node);
                     break;
 
+                case "setreserve":
+                    ApplyReserve(node);
+                    MoveToFirstOutput(node);
+                    break;
+
                 case "setcharacterstat":
                     ApplyCharacterStat(node);
                     MoveToFirstOutput(node);
@@ -911,6 +916,15 @@ public sealed class QuestRuntime
         };
 
         _hub.Get<PlayerProgressState>("player-progress").Set(next, "QuestRuntime");
+    }
+
+    private void ApplyReserve(QuestNode node)
+    {
+        var amount = Math.Max(0, ParseInt(GetParameter(node, "value"), 0));
+        var current = _hub.Get<PlayerProgressState>("player-progress").Value;
+        _hub.Get<PlayerProgressState>("player-progress").Set(
+            current with { Reserve = amount },
+            "QuestRuntime");
     }
 
     private void ApplyCharacterStat(QuestNode node)
