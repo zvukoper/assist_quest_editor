@@ -33,7 +33,7 @@ jobs:
         id: playwright_install
         continue-on-error: true
         shell: pwsh
-        run: npm install --no-save playwright@latest
+        run: npm install --no-save playwright@1.57.0
 
       - name: Установить Chromium для Playwright
         id: chromium_install
