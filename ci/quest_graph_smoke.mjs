@@ -351,10 +351,58 @@ try {
   }
 
   const viewBoxBeforePan = await page.locator("#questGraphSvg").getAttribute("viewBox");
-  await page.mouse.move(svgBox.x + svgBox.width / 2, svgBox.y + svgBox.height / 2);
-  await page.mouse.down({ button: "middle" });
-  await page.mouse.move(svgBox.x + svgBox.width / 2 + 120, svgBox.y + svgBox.height / 2 + 80);
-  await page.mouse.up({ button: "middle" });
+  const panStartX = svgBox.x + svgBox.width / 2;
+  const panStartY = svgBox.y + svgBox.height / 2;
+  const panEndX = panStartX + 120;
+  const panEndY = panStartY + 80;
+
+  await page.evaluate(({ x, y }) => {
+    const svg = document.getElementById("questGraphSvg");
+    if (!svg) throw new Error("Quest Graph SVG не найден для проверки pan.");
+
+    svg.dispatchEvent(new PointerEvent("pointerdown", {
+      bubbles: true,
+      cancelable: true,
+      pointerId: 7,
+      pointerType: "mouse",
+      isPrimary: true,
+      button: 1,
+      buttons: 4,
+      clientX: x,
+      clientY: y
+    }));
+  }, { x: panStartX, y: panStartY });
+
+  await page.evaluate(({ x, y }) => {
+    const svg = document.getElementById("questGraphSvg");
+    svg.dispatchEvent(new PointerEvent("pointermove", {
+      bubbles: true,
+      cancelable: true,
+      pointerId: 7,
+      pointerType: "mouse",
+      isPrimary: true,
+      button: -1,
+      buttons: 4,
+      clientX: x,
+      clientY: y
+    }));
+  }, { x: panEndX, y: panEndY });
+
+  await page.evaluate(({ x, y }) => {
+    const svg = document.getElementById("questGraphSvg");
+    svg.dispatchEvent(new PointerEvent("pointerup", {
+      bubbles: true,
+      cancelable: true,
+      pointerId: 7,
+      pointerType: "mouse",
+      isPrimary: true,
+      button: 1,
+      buttons: 0,
+      clientX: x,
+      clientY: y
+    }));
+  }, { x: panEndX, y: panEndY });
+
   await page.waitForTimeout(20);
   const viewBoxAfterPan = await page.locator("#questGraphSvg").getAttribute("viewBox");
   const panBefore = viewBoxBeforePan.split(/\s+/).map(Number);
