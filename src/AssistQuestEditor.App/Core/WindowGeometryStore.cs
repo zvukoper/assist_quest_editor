@@ -80,7 +80,7 @@ public static class WindowGeometryStore
     {
         private readonly Form _form;
         private readonly string _key;
-        private readonly Timer _saveTimer;
+        private readonly System.Windows.Forms.Timer _saveTimer;
         private bool _resetPending;
         private Rectangle _boundsAtReset;
 
@@ -88,7 +88,7 @@ public static class WindowGeometryStore
         {
             _form = form;
             _key = key;
-            _saveTimer = new Timer { Interval = 450 };
+            _saveTimer = new System.Windows.Forms.Timer { Interval = 450 };
             _saveTimer.Tick += (_, _) =>
             {
                 _saveTimer.Stop();
