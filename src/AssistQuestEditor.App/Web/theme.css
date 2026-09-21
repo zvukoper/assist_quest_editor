@@ -122,3 +122,13 @@ input,select,textarea{padding:4px 5px;border-radius:4px;font-size:10px}textarea{
 }
 .graphContextMenuItem:hover{background:var(--hover);color:#fff}
 .graphContextMenuItem:disabled{opacity:.35;cursor:not-allowed}
+
+#questGraphSvg .nodeConnectorZone{pointer-events:none;stroke:none}
+#questGraphSvg .nodeConnectorZone.inputZone{fill:rgba(18,171,229,.035)}
+#questGraphSvg .nodeConnectorZone.outputZone{fill:rgba(250,176,3,.035)}
+#questGraphSvg .nodeConnectorSeparator{stroke:rgba(255,255,255,.16);stroke-width:1}
+#questGraphSvg .nodeLabel{fill:#a6a6a6;font-size:10px;font-family:var(--font-ui)}
+#questGraphSvg .nodeId{fill:#68737f;font-size:8px;font-family:var(--font-ui)}
+#questGraphSvg .socketLabel{fill:#8f9baa;font-size:9px;font-family:var(--font-ui);pointer-events:none}
+#questGraphSvg .socketGroup{cursor:pointer}
+#questGraphSvg .node .nodeTitle{font-size:11px}

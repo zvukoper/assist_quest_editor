@@ -26,6 +26,18 @@
   let runtimeState = { status: "Stopped", currentNodeId: null };
   let executedNodeIds = new Set();
 
+  const GRAPH_NODE_TYPES = [
+    ["Start", "Начало"], ["End", "Завершение"], ["Phase", "Фаза"],
+    ["Interaction", "Интеракция"], ["Condition", "Условие"], ["And", "AND"],
+    ["Or", "OR"], ["Not", "NOT"], ["Switch", "Переключатель"], ["Random", "Случайная ветка"],
+    ["Wait", "Ожидание"], ["WaitForCondition", "Ожидать условие"], ["WaitForEvent", "Ожидать событие"],
+    ["Choice", "Выбор"],
+    ["SetStatus", "Установить статус"], ["SetStep", "Установить этап"], ["SetFlag", "Установить флаг"],
+    ["SetVariable", "Установить переменную"], ["DialogueScene", "Сцена диалога"], ["Reward", "Награда"],
+    ["GiveItem", "Выдать предмет"], ["RemoveItem", "Удалить предмет"],
+    ["AddReputation", "Добавить репутацию"], ["RemoveReputation", "Уменьшить репутацию"]
+  ];
+
   const configs = {
     graph: { title: "Нодовый редактор квестов", draw: renderGraph },
     scene: { title: "Редактор сцен и диалогов", draw: renderScene },
@@ -84,18 +96,6 @@
       return;
     }
 
-  const GRAPH_NODE_TYPES = [
-    ["Start", "Начало"], ["End", "Завершение"], ["Phase", "Фаза"],
-    ["Interaction", "Интеракция"], ["Condition", "Условие"], ["And", "AND"],
-    ["Or", "OR"], ["Not", "NOT"], ["Switch", "Переключатель"], ["Random", "Случайная ветка"],
-    ["Wait", "Ожидание"], ["WaitForCondition", "Ожидать условие"], ["WaitForEvent", "Ожидать событие"],
-    ["Choice", "Выбор"],
-    ["SetStatus", "Установить статус"], ["SetStep", "Установить этап"], ["SetFlag", "Установить флаг"],
-    ["SetVariable", "Установить переменную"], ["DialogueScene", "Сцена диалога"], ["Reward", "Награда"],
-    ["GiveItem", "Выдать предмет"], ["RemoveItem", "Удалить предмет"],
-    ["AddReputation", "Добавить репутацию"], ["RemoveReputation", "Уменьшить репутацию"]
-  ];
-
     ws.innerHTML =
       "<div class='toolbar' style='margin-bottom:10px;flex-wrap:wrap'>" +
         "<button class='toolButton' id='newGraph'>Новый</button>" +
@@ -147,12 +147,15 @@
     updateGraphInspector(ins);
   }
 
-  const GRAPH_NODE_WIDTH = 210;
+  const GRAPH_NODE_WIDTH = 260;
+  const GRAPH_NODE_INPUT_ZONE = 62;
+  const GRAPH_NODE_OUTPUT_ZONE = 62;
+  const GRAPH_NODE_CENTER_X = GRAPH_NODE_INPUT_ZONE + (GRAPH_NODE_WIDTH - GRAPH_NODE_INPUT_ZONE - GRAPH_NODE_OUTPUT_ZONE) / 2;
 
   function graphNodeHeight(node) {
     const inputs = node.sockets.filter(socket => socket.direction === "Input").length;
     const outputs = node.sockets.filter(socket => socket.direction === "Output").length;
-    return Math.max(110, 72 + Math.max(inputs, outputs) * 22);
+    return Math.max(110, 78 + Math.max(inputs, outputs) * 22);
   }
 
   function graphEdges() {
@@ -196,25 +199,40 @@
 
     const position = getGraphNodePosition(node);
     const nodeHeight = graphNodeHeight(node);
+    const title = fitNodeText(node.title, 21);
+    const nodeType = fitNodeText(node.nodeType, 18);
+    const nodeId = fitNodeText(node.nodeId, 21);
+    const centerWidth = GRAPH_NODE_WIDTH - GRAPH_NODE_INPUT_ZONE - GRAPH_NODE_OUTPUT_ZONE;
+
     return "<g class='node" + selected + executed + active + source + "' data-node-id='" + escapeHtml(node.nodeId) + "' transform='translate(" + position.x + " " + position.y + ")'>" +
       "<rect class='nodeRect' rx='8' width='" + GRAPH_NODE_WIDTH + "' height='" + nodeHeight + "'></rect>" +
-      "<text class='nodeTitle' x='14' y='26'>" + escapeHtml(node.nodeType) + "</text>" +
-      "<text class='nodeExecutedMark' x='" + (GRAPH_NODE_WIDTH - 14) + "' y='25' text-anchor='middle'>✓</text>" +
-      "<text x='14' y='49' fill='#a6a6a6' font-size='11'>" + escapeHtml(node.title) + "</text>" +
-      "<text x='14' y='91' fill='#737f8b' font-size='9'>" + escapeHtml(node.nodeId) + "</text>" +
+      "<rect class='nodeConnectorZone inputZone' x='1' y='1' width='" + (GRAPH_NODE_INPUT_ZONE - 1) + "' height='" + (nodeHeight - 2) + "' rx='7'></rect>" +
+      "<rect class='nodeConnectorZone outputZone' x='" + GRAPH_NODE_OUTPUT_ZONE + "' y='1' width='" + (GRAPH_NODE_OUTPUT_ZONE - 1) + "' height='" + (nodeHeight - 2) + "' rx='7'></rect>" +
+      "<line class='nodeConnectorSeparator' x1='" + GRAPH_NODE_INPUT_ZONE + "' y1='6' x2='" + GRAPH_NODE_INPUT_ZONE + "' y2='" + (nodeHeight - 6) + "'></line>" +
+      "<line class='nodeConnectorSeparator' x1='" + (GRAPH_NODE_WIDTH - GRAPH_NODE_OUTPUT_ZONE) + "' y1='6' x2='" + (GRAPH_NODE_WIDTH - GRAPH_NODE_OUTPUT_ZONE) + "' y2='" + (nodeHeight - 6) + "'></line>" +
+      "<text class='nodeTitle' x='" + (GRAPH_NODE_INPUT_ZONE + centerWidth / 2) + "' y='27' text-anchor='middle'>" + escapeHtml(nodeType) + "</text>" +
+      "<text class='nodeExecutedMark' x='" + (GRAPH_NODE_WIDTH / 2) + "' y='" + (nodeHeight - 13) + "' text-anchor='middle'>✓</text>" +
+      "<text class='nodeLabel' x='" + (GRAPH_NODE_INPUT_ZONE + centerWidth / 2) + "' y='49' text-anchor='middle'>" + escapeHtml(title) + "</text>" +
+      "<text class='nodeId' x='" + (GRAPH_NODE_INPUT_ZONE + centerWidth / 2) + "' y='" + (nodeHeight - 13) + "' text-anchor='middle'>" + escapeHtml(nodeId) + "</text>" +
       inputs.map((socket, index) =>
         "<g class='socketGroup' data-socket-direction='Input' data-socket-id='" + escapeHtml(socket.socketId) + "'>" +
           "<circle class='socket input' cx='0' cy='" + (22 + index * 22) + "' r='6'></circle>" +
-          "<text x='10' y='" + (26 + index * 22) + "' fill='#8f9baa' font-size='9'>" + escapeHtml(socket.name) + "</text>" +
+          "<text class='socketLabel inputLabel' x='10' y='" + (26 + index * 22) + "'>" + escapeHtml(fitNodeText(socket.name, 9)) + "</text>" +
         "</g>"
       ).join("") +
       outputs.map((socket, index) =>
         "<g class='socketGroup' data-socket-direction='Output' data-socket-id='" + escapeHtml(socket.socketId) + "'>" +
           "<circle class='socket output' cx='" + GRAPH_NODE_WIDTH + "' cy='" + (22 + index * 22) + "' r='6'></circle>" +
-          "<text x='" + (GRAPH_NODE_WIDTH - 10) + "' y='" + (26 + index * 22) + "' text-anchor='end' fill='#8f9baa' font-size='9'>" + escapeHtml(socket.name) + "</text>" +
+          "<text class='socketLabel outputLabel' x='" + (GRAPH_NODE_WIDTH - 10) + "' y='" + (26 + index * 22) + "' text-anchor='end'>" + escapeHtml(fitNodeText(socket.name, 9)) + "</text>" +
         "</g>"
       ).join("") +
     "</g>";
+  }
+
+  function fitNodeText(value, maxChars) {
+    const text = String(value ?? "");
+    if (text.length <= maxChars) return text;
+    return text.slice(0, Math.max(1, maxChars - 1)) + "…";
   }
 
   function bindGraphInteractions(svg) {
