@@ -391,6 +391,48 @@ public sealed class QuestRuntimeTests
     }
 
     [Fact]
+    public void VariableEqualsConditionReadsRuntimeState()
+    {
+        var hub = new SimulatorDataAdapter(Array.Empty<WorldPoint>()).Channels;
+        var start = Node("start", "Start");
+        var condition = Node(
+            "condition",
+            "Condition",
+            ("operator", "VariableEquals"),
+            ("left", "scene.ruslan_start.lastChoiceId"),
+            ("comparison", "=="),
+            ("right", "ruslan.offer.accept"));
+        var yes = Node("yes", "End");
+        var no = Node("no", "End");
+
+        var states = hub.Get<RuntimeStatesState>("states").Value;
+        hub.Get<RuntimeStatesState>("states").Set(
+            states with
+            {
+                Variables = new Dictionary<string, string>
+                {
+                    ["scene.ruslan_start.lastChoiceId"] = "ruslan.offer.accept"
+                }
+            },
+            "Тест");
+
+        var graph = Graph(
+            new[] { start, condition, yes, no },
+            new[]
+            {
+                C("start", start, "out", condition, "in"),
+                C("condition", condition, "true", yes, "in"),
+                C("condition", condition, "false", no, "in")
+            });
+
+        var runtime = new QuestRuntime(new QuestGraphStore(graph), hub);
+        runtime.Start();
+
+        Assert.Equal(QuestRuntimeStatus.Completed, runtime.State.Status);
+        Assert.Equal("yes", runtime.State.CurrentNodeId);
+    }
+
+    [Fact]
     public void Scenario07_SaveLoad()
     {
         var graph = QuestGraphFactory.CreateStarter();

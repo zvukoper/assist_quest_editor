@@ -88,7 +88,7 @@ Web-ресурсы src/AssistQuestEditor.App/Web и data/world/sdo_points.json �
 
 Причина пустого Simulator найдена: C# snapshot сериализовался с PascalCase, тогда как Web UI ожидает camelCase.
 
-Текущая рабочая версия: 1.0.40.127-QUEST-SCENE-R1.
+Текущая рабочая версия: 1.0.40.128-QUEST-EXAMPLE-R1.
 
 Последние рабочие вехи:
 - 1.0.40.106 — исправлена camelCase сериализация Simulator snapshot;
@@ -149,4 +149,4 @@ Quest Graph smoke проверяет реальный `editor.js`: загруз�
 - 7 Save/Load
 
 Последний физически тестируемый выпуск: `1.0.40.125-QUEST-RUNTIME-WAIT-FIX-R1`.
-Следующий физический тест выполняется на версии `1.0.40.127-QUEST-SCENE-R1`.
+Следующий физический тест выполняется на версии `1.0.40.128-QUEST-EXAMPLE-R1`.

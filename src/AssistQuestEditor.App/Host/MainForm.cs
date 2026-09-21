@@ -27,8 +27,8 @@ public sealed class MainForm : WebViewForm
         }
 
         _hub = hub;
-        _questGraph = new QuestGraphStore(QuestGraphFactory.CreateStarter());
-        _sceneCatalog = SceneCatalogFactory.CreateStarter();
+        _questGraph = new QuestGraphStore(QuestDefinitionLoader.LoadOrFallback());
+        _sceneCatalog = SceneCatalogLoader.Load();
         _sceneRuntime = new SceneRuntime(_sceneCatalog, _hub);
         _runtime = new QuestRuntime(_questGraph, _hub, _sceneRuntime);
         _sceneRuntime.Published += SceneRuntime_Published;

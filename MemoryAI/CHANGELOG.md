@@ -1,5 +1,16 @@
 # Журнал изменений памяти и архитектуры
 
+## 2026-09-21 — 1.0.40.128 Готовый учебный квест
+
+- Scene catalog загружает canonical Scene Definition из `data/scenes/*.json`;
+- учебный Quest Definition загружается из `data/quests/tutorial_ruslan_shashlik.json` и используется как стартовый graph;
+- Condition получил оператор `VariableEquals` для ветвления по результату Scene Choice;
+- добавлены три Scene Definition: `ruslan_start`, `gosha_meat`, `ruslan_finish`;
+- добавлен полный учебный маршрут с World interaction, Inventory и Reputation;
+- добавлен `README_TUTORIAL_RUSLAN.md`, объясняющий связь Quest Graph, Scene Graph, ресурса Choice и Data Channels;
+- версия поднята до `1.0.40.128-QUEST-EXAMPLE-R1`.
+
+
 ## 2026-09-21 — 1.0.40.127 Canonical Scene Graph + SceneRuntime
 
 - добавлены самостоятельные canonical ресурсы SceneDefinition, SceneGraph, SceneNode, SceneDialogue, SceneChoice и SceneChoiceOption;

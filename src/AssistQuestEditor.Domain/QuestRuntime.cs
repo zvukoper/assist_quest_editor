@@ -534,6 +534,10 @@ public sealed class QuestRuntime
                 GetFlag(GetParameter(parameters, "left")).ToString(),
                 GetParameter(parameters, "right"),
                 GetParameter(parameters, "comparison", "==")),
+            "variableequals" => Compare(
+                GetVariable(GetParameter(parameters, "left")),
+                GetParameter(parameters, "right"),
+                GetParameter(parameters, "comparison", "==")),
             "distancecompare" => EvaluateDistance(parameters),
             _ => false
         };
@@ -877,6 +881,11 @@ public sealed class QuestRuntime
 
     private bool GetFlag(string key) =>
         _hub.Get<RuntimeStatesState>("states").Value.Flags.TryGetValue(key, out var value) && value;
+
+    private string GetVariable(string key) =>
+        _hub.Get<RuntimeStatesState>("states").Value.Variables.TryGetValue(key, out var value)
+            ? value
+            : string.Empty;
 
     private int GetItemCount(string key) =>
         _hub.Get<InventoryState>("inventory").Value.Items.TryGetValue(key, out var value) ? value : 0;
