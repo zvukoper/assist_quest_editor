@@ -698,7 +698,7 @@
       "<span class='badge blue'>Z " + Math.round(p.z) + "</span>",
       "<span class='badge accent'>" + (selected ? "Выбрана: " + escapeHtml(selected.name || selected.category) : "Точка не выбрана") + "</span>"
     ].join("");
-    renderRuntimeMonitor();
+    renderRuntimeSidebar();
   }
 
     function renderSide() {
