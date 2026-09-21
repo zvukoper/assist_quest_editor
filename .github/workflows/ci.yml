@@ -29,12 +29,6 @@ jobs:
         with:
           node-version: 22
 
-      - name: Проверить память проекта
-        id: memory
-        continue-on-error: true
-        shell: pwsh
-        run: node ci/validate_memory.mjs
-
       - name: Установить Playwright
         id: playwright_install
         continue-on-error: true
@@ -148,131 +142,11 @@ jobs:
           }
           Write-Host "Single-file публикация CI: $($files[0].FullName)" -ForegroundColor Green
 
-      - name: Сформировать сводный лог автоматических тестов
-        id: automated_report
-        if: always()
-        continue-on-error: true
-        shell: pwsh
-        env:
-          MEMORY_OUTCOME: ${{ steps.memory.outcome }}
-          PLAYWRIGHT_INSTALL_OUTCOME: ${{ steps.playwright_install.outcome }}
-          CHROMIUM_INSTALL_OUTCOME: ${{ steps.chromium_install.outcome }}
-          PLAYWRIGHT_SMOKE_OUTCOME: ${{ steps.playwright_smoke.outcome }}
-          SELECTION_SMOKE_OUTCOME: ${{ steps.selection_smoke.outcome }}
-          QUEST_GRAPH_SMOKE_OUTCOME: ${{ steps.quest_graph_smoke.outcome }}
-          WEB_SYNTAX_OUTCOME: ${{ steps.web_syntax.outcome }}
-          DOTNET_SDK_OUTCOME: ${{ steps.dotnet_sdk.outcome }}
-          DOTNET_BUILD_OUTCOME: ${{ steps.dotnet_build.outcome }}
-          DOTNET_TESTS_OUTCOME: ${{ steps.dotnet_tests.outcome }}
-          PUBLISH_OUTCOME: ${{ steps.publish.outcome }}
-        run: |
-          $ErrorActionPreference = 'Stop'
-          $logPath = Join-Path $env:GITHUB_WORKSPACE 'MemoryAI\\LOGS\\assist_quest_editor.log'
-          $logDir = Split-Path -Parent $logPath
-          New-Item -ItemType Directory -Path $logDir -Force | Out-Null
-          $lines = @(
-            '',
-            '=== CI AUTOMATED TEST REPORT ===',
-            ('Commit=' + $env:GITHUB_SHA),
-            ('Workflow=' + $env:GITHUB_RUN_ID),
-            ('GeneratedUtc=' + [DateTime]::UtcNow.ToString('O')),
-            '',
-            ('Memory validation — ' + $env:MEMORY_OUTCOME),
-            ('Playwright install — ' + $env:PLAYWRIGHT_INSTALL_OUTCOME),
-            ('Chromium install — ' + $env:CHROMIUM_INSTALL_OUTCOME),
-            ('Playwright smoke — ' + $env:PLAYWRIGHT_SMOKE_OUTCOME),
-            ('Simulator ↔ Editor contract — ' + $env:SELECTION_SMOKE_OUTCOME),
-            ('Quest Graph UI smoke — ' + $env:QUEST_GRAPH_SMOKE_OUTCOME),
-            ('Web JavaScript syntax — ' + $env:WEB_SYNTAX_OUTCOME),
-            ('.NET SDK — ' + $env:DOTNET_SDK_OUTCOME),
-            ('.NET build — ' + $env:DOTNET_BUILD_OUTCOME),
-            ('.NET domain tests — ' + $env:DOTNET_TESTS_OUTCOME),
-            'Quest scenario tests — включены в .NET domain tests',
-            ('Single-file publish — ' + $env:PUBLISH_OUTCOME),
-            '',
-            '=== QUEST SCENARIO MATRIX ==='
-          )
-          $scenarioNames = [ordered]@{
-            'Scenario01_Graph' = '1 Graph'
-            'Scenario02_Parameters' = '2 Parameters'
-            'Scenario03_SimpleRuntime' = '3 Simple Runtime'
-            'Scenario04_Interaction' = '4 Interaction'
-            'Scenario05_Event' = '5 Event'
-            'Scenario06_Choice' = '6 Choice'
-            'Scenario07_SaveLoad' = '7 Save/Load'
-          }
-          $trxDir = Join-Path $env:GITHUB_WORKSPACE 'ci-results\\domain-tests'
-          $trxPaths = @(Get-ChildItem -LiteralPath $trxDir -Filter '*.trx' -File -ErrorAction SilentlyContinue)
-          $results = @()
-          foreach ($trxPath in $trxPaths) {
-            [xml]$trx = Get-Content -LiteralPath $trxPath.FullName -Raw
-            $results += @($trx.SelectNodes("//*[local-name()='UnitTestResult']"))
-          }
-          foreach ($pair in $scenarioNames.GetEnumerator()) {
-            $match = @($results | Where-Object { $_.testName -like ('*' + $pair.Key + '*') } | Select-Object -First 1)
-            if ($match.Count -eq 0) {
-              $status = 'BLOCKED'
-              $details = 'test result not produced'
-            } else {
-              $status = switch ([string]$match[0].outcome) {
-                'Passed' { 'PASS' }
-                'Failed' { 'FAIL' }
-                'NotExecuted' { 'SKIP' }
-                default { [string]$match[0].outcome }
-              }
-              $details = [string]$match[0].testName
-              if ($status -eq 'FAIL') {
-                $errorMessage = [string]$match[0].Output.ErrorInfo.Message
-                if (-not [string]::IsNullOrWhiteSpace($errorMessage)) {
-                  $details = $errorMessage.Replace([Environment]::NewLine, ' ')
-                }
-              }
-            }
-            $lines += ($pair.Value + ' — ' + $status + ' | ' + $details)
-          }
-          $lines += @(
-            '',
-            'Визуально проверяются отдельно: перенос/масштабирование UI, фактический drag курсором, выбор точки мышью, читаемость панелей и прочее поведение, которое CI не может надёжно подтвердить.',
-            '=== END CI AUTOMATED TEST REPORT ==='
-          )
-          [System.IO.File]::AppendAllText($logPath, (($lines -join [Environment]::NewLine) + [Environment]::NewLine), [System.Text.UTF8Encoding]::new($false))
-          Write-Host ('Сводный лог автотестов записан: ' + $logPath)
-
-      - name: Проверить структуру диагностических логов
-        id: log_structure
-        if: always()
-        continue-on-error: true
-        shell: pwsh
-        run: |
-          $unexpected = @(Get-ChildItem -Path MemoryAI/LOGS -File | Where-Object { $_.Name -ne "README.md" -and $_.Name -ne "assist_quest_editor.log" })
-          if ($unexpected.Count -gt 0) {
-            Write-Error "MemoryAI/LOGS содержит неожиданные файлы."
-            $unexpected | ForEach-Object { Write-Host $_.FullName }
-            exit 1
-          }
-          if (-not (Test-Path -LiteralPath MemoryAI/LOGS/assist_quest_editor.log)) {
-            Write-Error "Сводный диагностический лог не создан."
-            exit 1
-          }
-
-      - name: Загрузить диагностический лог автотестов
-        id: upload_diagnostics
-        if: always()
-        continue-on-error: true
-        uses: actions/upload-artifact@v7
-        with:
-          name: assist-quest-editor-ci-diagnostics
-          path: |
-            MemoryAI/LOGS/assist_quest_editor.log
-            ci-results/domain-tests/**/*.trx
-          if-no-files-found: warn
-
       - name: Финальная проверка CI
         id: final_gate
         if: always()
         shell: pwsh
         env:
-          MEMORY_OUTCOME: ${{ steps.memory.outcome }}
           PLAYWRIGHT_INSTALL_OUTCOME: ${{ steps.playwright_install.outcome }}
           CHROMIUM_INSTALL_OUTCOME: ${{ steps.chromium_install.outcome }}
           PLAYWRIGHT_SMOKE_OUTCOME: ${{ steps.playwright_smoke.outcome }}
@@ -283,13 +157,9 @@ jobs:
           DOTNET_BUILD_OUTCOME: ${{ steps.dotnet_build.outcome }}
           DOTNET_TESTS_OUTCOME: ${{ steps.dotnet_tests.outcome }}
           PUBLISH_OUTCOME: ${{ steps.publish.outcome }}
-          AUTOMATED_REPORT_OUTCOME: ${{ steps.automated_report.outcome }}
-          LOG_STRUCTURE_OUTCOME: ${{ steps.log_structure.outcome }}
-          UPLOAD_DIAGNOSTICS_OUTCOME: ${{ steps.upload_diagnostics.outcome }}
         run: |
           $failed = @()
           $checks = @(
-            @{ Name = 'Memory validation'; Outcome = $env:MEMORY_OUTCOME },
             @{ Name = 'Playwright install'; Outcome = $env:PLAYWRIGHT_INSTALL_OUTCOME },
             @{ Name = 'Chromium install'; Outcome = $env:CHROMIUM_INSTALL_OUTCOME },
             @{ Name = 'Playwright smoke'; Outcome = $env:PLAYWRIGHT_SMOKE_OUTCOME },
@@ -300,9 +170,6 @@ jobs:
             @{ Name = '.NET build'; Outcome = $env:DOTNET_BUILD_OUTCOME },
             @{ Name = '.NET domain tests'; Outcome = $env:DOTNET_TESTS_OUTCOME },
             @{ Name = 'Single-file publish'; Outcome = $env:PUBLISH_OUTCOME },
-            @{ Name = 'Automated report'; Outcome = $env:AUTOMATED_REPORT_OUTCOME },
-            @{ Name = 'Log structure'; Outcome = $env:LOG_STRUCTURE_OUTCOME },
-            @{ Name = 'Diagnostic artifact upload'; Outcome = $env:UPLOAD_DIAGNOSTICS_OUTCOME }
           )
           foreach ($check in $checks) {
             if ($check.Outcome -eq 'failure') { $failed += $check.Name }

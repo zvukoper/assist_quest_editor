@@ -126,7 +126,7 @@ Quest Graph smoke проверяет реальный `editor.js`: загруз�
 - Web regression: `ci/selection_context_smoke.mjs` и `ci/quest_graph_smoke.mjs`.
 - CI: Node, Chromium/Playwright, web syntax, .NET build/test, single-file publish.
 - CI запускает отдельную матрицу: Graph / Parameters / Simple Runtime / Interaction / Event / Choice / Save/Load.
-- После автоматических проверок формируется `MemoryAI/LOGS/assist_quest_editor.log` и artifact с логом и TRX.
+- `MemoryAI/LOGS` остаётся контейнером физических диагностических логов; CI его не проверяет и не загружает.
 
 
 

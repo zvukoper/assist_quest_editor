@@ -182,6 +182,94 @@ try {
   }
 
   const svgBox = await page.locator("#questGraphSvg").boundingBox();
+
+  // Right-click Add menu and Choice availability.
+  const contextX = svgBox.x + 240;
+  const contextY = svgBox.y + 140;
+  await page.mouse.click(contextX, contextY, { button: "right" });
+  await page.getByText("Add", { exact: true }).waitFor();
+  await page.locator(".graphContextMenuItem").filter({ hasText: "Выбор (Choice)" }).waitFor();
+  await page.locator(".graphContextMenuItem").filter({ hasText: "Выбор (Choice)" }).click();
+  await page.waitForTimeout(20);
+
+  const contextAdded = await page.evaluate(() =>
+    window.__messages.slice().reverse().find(message =>
+      message.action === "graph_add_node" &&
+      message.nodeType === "Choice"
+    )
+  );
+  if (!contextAdded || !Number.isFinite(contextAdded.x) || !Number.isFinite(contextAdded.y)) {
+    throw new Error("Контекстное меню Add не отправило корректный graph_add_node для Choice.");
+  }
+
+  // While connection mode is active, Add must keep the selected Output as
+  // the source so the Host can immediately connect the new node's first Input.
+  const startOutput = page.locator("[data-node-id='start'] .socketGroup[data-socket-direction='Output']");
+  const startOutputBox = await startOutput.boundingBox();
+  if (!startOutputBox) {
+    throw new Error("Не удалось получить границы Start Output socket.");
+  }
+
+  await page.mouse.click(
+    startOutputBox.x + startOutputBox.width / 2,
+    startOutputBox.y + startOutputBox.height / 2
+  );
+
+  const connectX = svgBox.x + 520;
+  const connectY = svgBox.y + 360;
+  const beforeConnectMessages = await page.evaluate(() => window.__messages.length);
+  await page.mouse.click(connectX, connectY, { button: "right" });
+  await page.locator(".graphContextMenuItem").filter({ hasText: "Фаза (Phase)" }).click();
+  await page.waitForTimeout(20);
+
+  const addAndConnect = await page.evaluate(index =>
+    window.__messages.slice(index).find(message =>
+      message.action === "graph_add_node" &&
+      message.nodeType === "Phase" &&
+      message.connectFromNodeId === "start" &&
+      message.connectFromSocketId === "start.out"
+    ),
+    beforeConnectMessages
+  );
+  if (!addAndConnect) {
+    throw new Error("Add из режима соединения не сохранил источник Output для автоматического подключения.");
+  }
+
+  // Regression for the old vertical cable cursor lag. The SVG CTM accounts
+  // for preserveAspectRatio/letterboxing while manual rect math did not.
+  const endX = svgBox.x + svgBox.width * 0.82;
+  const endY = svgBox.y + svgBox.height * 0.27;
+  await page.mouse.click(
+    startOutputBox.x + startOutputBox.width / 2,
+    startOutputBox.y + startOutputBox.height / 2
+  );
+  await page.mouse.move(endX, endY);
+
+  const pendingPath = await page.locator("#questGraphConnectionPreview .pendingEdge").getAttribute("d");
+  if (!pendingPath) {
+    throw new Error("Не удалось получить preview кабеля.");
+  }
+
+  const expectedPoint = await page.evaluate(({x, y}) => {
+    const svg = document.getElementById("questGraphSvg");
+    return new DOMPoint(x, y).matrixTransform(svg.getScreenCTM().inverse());
+  }, { x: endX, y: endY });
+
+  const match = pendingPath.match(/s([-d.]+)s([-d.]+)$/);
+  if (!match) {
+    throw new Error("Не удалось разобрать конечную точку preview кабеля: " + pendingPath);
+  }
+
+  const actualX = Number(match[1]);
+  const actualY = Number(match[2]);
+  if (Math.abs(actualX - expectedPoint.x) > 0.01 || Math.abs(actualY - expectedPoint.y) > 0.01) {
+    throw new Error(
+      "Preview кабеля не совпадает с курсором: actual=(" +
+      actualX + "," + actualY + "), expected=(" +
+      expectedPoint.x + "," + expectedPoint.y + ")"
+    );
+  }
+
   if (!svgBox) {
     throw new Error("Не удалось получить границы Quest Graph canvas.");
   }

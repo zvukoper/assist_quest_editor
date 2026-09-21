@@ -9,6 +9,5 @@
 - В рабочем состоянии приложение должно уметь собирать сюда необходимые журналы кнопкой на основной форме.
 - app_workflow содержит подробную последовательность выполнения.
 - app_data содержит потенциально шумные снимки значений.
-- После CI в `assist_quest_editor.log` в конце добавляется `CI AUTOMATED TEST REPORT` с матрицей Graph / Parameters / Simple Runtime / Interaction / Event / Choice / Save/Load.
-- CI также сохраняет этот лог и `.trx` результаты в artifact `assist-quest-editor-ci-diagnostics`.
+- CI не проверяет содержимое этой папки, не изменяет её и не загружает её как artifact.
 - Не складывать сюда секреты, пароли и токены.

@@ -101,3 +101,24 @@ input,select,textarea{padding:4px 5px;border-radius:4px;font-size:10px}textarea{
 #questGraphSvg .pendingEdge{stroke:#fff;stroke-width:4;stroke-dasharray:10 7;animation:questRuntimeDash .6s linear infinite;opacity:1}
 
 .settingsButton{color:var(--accent);border-color:rgba(250,176,3,.28);font-size:15px;line-height:1;min-width:32px;padding:6px 9px}.settingsButton:hover{color:var(--accent-2);border-color:rgba(250,176,3,.55)}
+
+.graphContextMenu{
+  position:fixed;z-index:100000;min-width:205px;max-width:280px;padding:5px;
+  border:1px solid rgba(250,176,3,.35);border-radius:8px;
+  background:rgba(23,24,25,.98);box-shadow:0 14px 34px rgba(0,0,0,.45);
+  backdrop-filter:blur(8px);animation:uiFadeZoom 90ms ease both;
+}
+.graphContextMenuTitle{
+  padding:6px 8px 5px;color:var(--accent);font-size:10px;font-weight:800;
+  letter-spacing:.55px;text-transform:uppercase;border-bottom:1px solid var(--border);
+}
+.graphContextMenuHint{
+  padding:6px 8px;color:var(--muted);font-size:9px;line-height:1.35;
+  border-bottom:1px solid rgba(255,255,255,.06);
+}
+.graphContextMenuItem{
+  display:block;width:100%;padding:6px 8px;text-align:left;border:0;border-radius:5px;
+  background:transparent;color:#dfe5ec;font-size:10px;cursor:pointer;
+}
+.graphContextMenuItem:hover{background:var(--hover);color:#fff}
+.graphContextMenuItem:disabled{opacity:.35;cursor:not-allowed}

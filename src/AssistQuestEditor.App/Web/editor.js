@@ -84,16 +84,17 @@
       return;
     }
 
-    const nodeTypes = [
-      ["Start", "Начало"], ["End", "Завершение"], ["Phase", "Фаза"],
-      ["Interaction", "Интеракция"], ["Condition", "Условие"], ["And", "AND"],
-      ["Or", "OR"], ["Not", "NOT"], ["Switch", "Переключатель"], ["Random", "Случайная ветка"],
-      ["Wait", "Ожидание"], ["WaitForCondition", "Ожидать условие"], ["WaitForEvent", "Ожидать событие"],
-      ["SetStatus", "Установить статус"], ["SetStep", "Установить этап"], ["SetFlag", "Установить флаг"],
-      ["SetVariable", "Установить переменную"], ["DialogueScene", "Сцена диалога"], ["Reward", "Награда"],
-      ["GiveItem", "Выдать предмет"], ["RemoveItem", "Удалить предмет"],
-      ["AddReputation", "Добавить репутацию"], ["RemoveReputation", "Уменьшить репутацию"]
-    ];
+  const GRAPH_NODE_TYPES = [
+    ["Start", "Начало"], ["End", "Завершение"], ["Phase", "Фаза"],
+    ["Interaction", "Интеракция"], ["Condition", "Условие"], ["And", "AND"],
+    ["Or", "OR"], ["Not", "NOT"], ["Switch", "Переключатель"], ["Random", "Случайная ветка"],
+    ["Wait", "Ожидание"], ["WaitForCondition", "Ожидать условие"], ["WaitForEvent", "Ожидать событие"],
+    ["Choice", "Выбор"],
+    ["SetStatus", "Установить статус"], ["SetStep", "Установить этап"], ["SetFlag", "Установить флаг"],
+    ["SetVariable", "Установить переменную"], ["DialogueScene", "Сцена диалога"], ["Reward", "Награда"],
+    ["GiveItem", "Выдать предмет"], ["RemoveItem", "Удалить предмет"],
+    ["AddReputation", "Добавить репутацию"], ["RemoveReputation", "Уменьшить репутацию"]
+  ];
 
     ws.innerHTML =
       "<div class='toolbar' style='margin-bottom:10px;flex-wrap:wrap'>" +
@@ -107,7 +108,7 @@
         "</span>" +
         "<span class='badge'>" + escapeHtml(graphDocument.path ? graphDocument.path : "Новый документ") + "</span>" +
         "<select id='graphNodeType' class='toolButton'>" +
-          nodeTypes.map(([type, label]) => "<option value='" + escapeHtml(type) + "'>" + escapeHtml(label) + " (" + escapeHtml(type) + ")</option>").join("") +
+          GRAPH_NODE_TYPES.map(([type, label]) => "<option value='" + escapeHtml(type) + "'>" + escapeHtml(label) + " (" + escapeHtml(type) + ")</option>").join("") +
         "</select>" +
         "<input id='graphNodeTitle' class='toolButton' style='width:190px' placeholder='Название новой ноды'>" +
         "<button class='toolButton primary' id='addGraphNode'>Добавить ноду</button>" +
@@ -225,6 +226,13 @@
     const setViewBox = () => {
       svg.setAttribute("viewBox", graphViewport.x + " " + graphViewport.y + " " + graphViewport.width + " " + graphViewport.height);
     };
+
+    svg.addEventListener("contextmenu", event => {
+      event.preventDefault();
+      event.stopPropagation();
+      const graphPoint = clientToGraph(svg, event.clientX, event.clientY);
+      openGraphContextMenu(svg, event.clientX, event.clientY, graphPoint);
+    });
 
     svg.addEventListener("pointerdown", event => {
       const wantsPan = event.button === 1 || (event.button === 0 && graphSpaceDown);
@@ -860,16 +868,10 @@
   }
 
   function renderRegistry(ws, ins) {
-    const types = [
-      "Start", "End", "Phase", "Interaction", "Condition", "And", "Or", "Not",
-      "Switch", "Random", "Wait", "WaitForCondition", "WaitForEvent", "SetStatus",
-      "SetStep", "SetFlag", "SetVariable", "DialogueScene", "Reward", "GiveItem",
-      "RemoveItem", "AddReputation", "RemoveReputation"
-    ];
     ws.innerHTML =
       "<div class='card'><div class='miniLabel'>Node Registry</div><p>Каждый тип ноды имеет schema, визуальный редактор и runtime handler.</p></div>" +
       "<div class='tagCloud' style='margin-top:12px'>" +
-        types.map(type => "<span class='badge'>" + escapeHtml(type) + "</span>").join("") +
+        GRAPH_NODE_TYPES.map(([type]) => "<span class='badge'>" + escapeHtml(type) + "</span>").join("") +
       "</div>";
     ins.innerHTML =
       "<div class='badge accent'>Registry</div><h3 style='margin:10px 0 4px'>Типы нод</h3>" +
@@ -881,12 +883,97 @@
   }
 
   function clientToGraph(svg, clientX, clientY) {
+    const ctm = svg.getScreenCTM?.();
+    if (ctm?.inverse) {
+      const point = new DOMPoint(clientX, clientY).matrixTransform(ctm.inverse());
+      return { x: point.x, y: point.y };
+    }
+
+    // Fallback for environments without SVG CTM support.
     const rect = svg.getBoundingClientRect();
     const viewBox = svg.viewBox.baseVal;
     return {
       x: viewBox.x + ((clientX - rect.left) / rect.width) * viewBox.width,
       y: viewBox.y + ((clientY - rect.top) / rect.height) * viewBox.height
     };
+  }
+
+  let activeGraphContextMenu = null;
+
+  function closeGraphContextMenu() {
+    activeGraphContextMenu?.remove();
+    activeGraphContextMenu = null;
+  }
+
+  function openGraphContextMenu(svg, clientX, clientY, graphPoint) {
+    closeGraphContextMenu();
+
+    const menu = document.createElement("div");
+    menu.className = "graphContextMenu";
+
+    const heading = document.createElement("div");
+    heading.className = "graphContextMenuTitle";
+    heading.textContent = "Add";
+    menu.appendChild(heading);
+
+    if (pendingOutput) {
+      const hint = document.createElement("div");
+      hint.className = "graphContextMenuHint";
+      hint.textContent = "Новая нода будет подключена к выбранному Output.";
+      menu.appendChild(hint);
+    }
+
+    GRAPH_NODE_TYPES.forEach(([type, label]) => {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "graphContextMenuItem";
+      button.textContent = label + " (" + type + ")";
+      if (pendingOutput && type === "Start") button.disabled = true;
+
+      button.addEventListener("click", event => {
+        event.preventDefault();
+        event.stopPropagation();
+
+        const connectionSource = pendingOutput
+          ? {
+              connectFromNodeId: pendingOutput.nodeId,
+              connectFromSocketId: pendingOutput.socketId
+            }
+          : {};
+
+        send({
+          action: "graph_add_node",
+          nodeType: type,
+          title: type,
+          x: Math.round(graphPoint.x),
+          y: Math.round(graphPoint.y),
+          ...connectionSource
+        });
+
+        pendingOutput = null;
+        pendingConnectionPoint = null;
+        closeGraphContextMenu();
+        refreshGraphEdges(svg);
+      });
+
+      menu.appendChild(button);
+    });
+
+    document.body.appendChild(menu);
+    activeGraphContextMenu = menu;
+
+    const menuRect = menu.getBoundingClientRect();
+    const left = Math.min(
+      Math.max(6, clientX),
+      Math.max(6, window.innerWidth - menuRect.width - 6)
+    );
+    const top = Math.min(
+      Math.max(6, clientY),
+      Math.max(6, window.innerHeight - menuRect.height - 6)
+    );
+
+    menu.style.left = left + "px";
+    menu.style.top = top + "px";
   }
 
   function refreshGraphEdges(svg) {
@@ -992,7 +1079,19 @@
     webview.addEventListener("message", handleWebviewMessage);
   }
 
+  document.addEventListener("pointerdown", event => {
+    if (activeGraphContextMenu && !activeGraphContextMenu.contains(event.target)) {
+      closeGraphContextMenu();
+    }
+  });
+
   document.addEventListener("keydown", event => {
+    if (event.key === "Escape" && activeGraphContextMenu) {
+      closeGraphContextMenu();
+      event.preventDefault();
+      return;
+    }
+
     if (event.key === "Escape" && pendingOutput) {
       pendingOutput = null;
       pendingConnectionPoint = null;
@@ -1027,6 +1126,7 @@
 
   window.addEventListener("blur", () => {
     graphSpaceDown = false;
+    closeGraphContextMenu();
   });
 
   window.addEventListener("hashchange", render);

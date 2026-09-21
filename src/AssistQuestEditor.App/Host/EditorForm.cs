@@ -144,6 +144,42 @@ public sealed class EditorForm : WebViewForm
                     Number(root, "x", 420),
                     Number(root, "y", 120));
 
+                var connectFromNodeId = OptionalString(root, "connectFromNodeId");
+                var connectFromSocketId = OptionalString(root, "connectFromSocketId");
+
+                if (!string.IsNullOrWhiteSpace(connectFromNodeId) &&
+                    !string.IsNullOrWhiteSpace(connectFromSocketId))
+                {
+                    var targetSocket = node.Sockets.FirstOrDefault(
+                        socket => socket.Direction == SocketDirection.Input);
+
+                    if (targetSocket is null)
+                    {
+                        _questGraph.RemoveNode(node.NodeId);
+                        throw new InvalidOperationException(
+                            $"Нода «{node.NodeType}» не имеет входного socket.");
+                    }
+
+                    var result = _questGraph.Connect(
+                        connectFromNodeId,
+                        connectFromSocketId,
+                        node.NodeId,
+                        targetSocket.SocketId);
+
+                    if (!result.Added)
+                    {
+                        _questGraph.RemoveNode(node.NodeId);
+                        throw new InvalidOperationException(
+                            result.Error ?? "Не удалось автоматически подключить новую ноду.");
+                    }
+
+                    var connection = result.Connection!;
+                    AppLogger.Info(
+                        "Quest Graph: новая нода автоматически подключена.",
+                        $"node={node.NodeId}; from={connection.FromNodeId}:{connection.FromSocketId}; " +
+                        $"to={connection.ToNodeId}:{connection.ToSocketId}");
+                }
+
                 AppLogger.Info("Quest Graph: добавлена нода.",
                     $"id={node.NodeId}; type={node.NodeType}");
                 PostQuestGraph(node.NodeId);
@@ -535,6 +571,18 @@ public sealed class EditorForm : WebViewForm
         return string.IsNullOrWhiteSpace(value)
             ? throw new InvalidOperationException($"Не задано значение «{name}».")
             : value;
+    }
+
+    private static string? OptionalString(JsonElement root, string name)
+    {
+        if (!root.TryGetProperty(name, out var value) ||
+            value.ValueKind is JsonValueKind.Null or JsonValueKind.Undefined)
+        {
+            return null;
+        }
+
+        var text = value.GetString();
+        return string.IsNullOrWhiteSpace(text) ? null : text;
     }
 
     private static string String(JsonElement root, string name, string? fallback)
