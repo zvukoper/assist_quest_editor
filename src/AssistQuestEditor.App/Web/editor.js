@@ -21,6 +21,8 @@
   let graphPreviewPositions = new Map();
   let graphViewport = { x: 0, y: 0, width: 1200, height: 720 };
   let graphDocument = { path: "", dirty: false };
+  let graphDirtyNodeIds = new Set();
+  let pendingDirtySelection = false;
   let graphSpaceDown = false;
   let pendingConnectionPoint = null;
   let runtimeState = { status: "Stopped", currentNodeId: null };
@@ -137,6 +139,7 @@
     ws.querySelector("#addGraphNode").addEventListener("click", () => {
       const type = ws.querySelector("#graphNodeType").value;
       const nodeTitle = ws.querySelector("#graphNodeTitle").value.trim() || type;
+      pendingDirtySelection = true;
       send({ action: "graph_add_node", nodeType: type, title: nodeTitle, x: 420, y: 120 });
     });
     ws.querySelector("#fitGraph").addEventListener("click", fitGraph);
@@ -194,6 +197,7 @@
     const active = node.nodeId === runtimeState.currentNodeId &&
       ["Running", "Waiting"].includes(runtimeStatusName(runtimeState.status)) ? " runtime-active" : "";
     const source = pendingOutput?.nodeId === node.nodeId ? " connection-source" : "";
+    const dirty = graphDirtyNodeIds.has(node.nodeId) ? " dirty" : "";
     const inputs = node.sockets.filter(socket => socket.direction === "Input");
     const outputs = node.sockets.filter(socket => socket.direction === "Output");
 
@@ -204,12 +208,13 @@
     const nodeId = fitNodeText(node.nodeId, 21);
     const centerWidth = GRAPH_NODE_WIDTH - GRAPH_NODE_INPUT_ZONE - GRAPH_NODE_OUTPUT_ZONE;
 
-    return "<g class='node" + selected + executed + active + source + "' data-node-id='" + escapeHtml(node.nodeId) + "' transform='translate(" + position.x + " " + position.y + ")'>" +
+    return "<g class='node" + selected + executed + active + source + dirty + "' data-node-id='" + escapeHtml(node.nodeId) + "' transform='translate(" + position.x + " " + position.y + ")'>" +
       "<rect class='nodeRect' rx='8' width='" + GRAPH_NODE_WIDTH + "' height='" + nodeHeight + "'></rect>" +
       "<rect class='nodeConnectorZone inputZone' x='1' y='1' width='" + (GRAPH_NODE_INPUT_ZONE - 1) + "' height='" + (nodeHeight - 2) + "' rx='7'></rect>" +
       "<rect class='nodeConnectorZone outputZone' x='" + GRAPH_NODE_OUTPUT_ZONE + "' y='1' width='" + (GRAPH_NODE_OUTPUT_ZONE - 1) + "' height='" + (nodeHeight - 2) + "' rx='7'></rect>" +
       "<line class='nodeConnectorSeparator' x1='" + GRAPH_NODE_INPUT_ZONE + "' y1='6' x2='" + GRAPH_NODE_INPUT_ZONE + "' y2='" + (nodeHeight - 6) + "'></line>" +
       "<line class='nodeConnectorSeparator' x1='" + (GRAPH_NODE_WIDTH - GRAPH_NODE_OUTPUT_ZONE) + "' y1='6' x2='" + (GRAPH_NODE_WIDTH - GRAPH_NODE_OUTPUT_ZONE) + "' y2='" + (nodeHeight - 6) + "'></line>" +
+      "<text class='nodeDirtyMark' x='" + (GRAPH_NODE_WIDTH / 2) + "' y='15' text-anchor='middle'>★</text>" +
       "<text class='nodeTitle' x='" + (GRAPH_NODE_INPUT_ZONE + centerWidth / 2) + "' y='27' text-anchor='middle'>" + escapeHtml(nodeType) + "</text>" +
       "<text class='nodeExecutedMark' x='" + (GRAPH_NODE_WIDTH - GRAPH_NODE_OUTPUT_ZONE - 10) + "' y='27' text-anchor='middle'>✓</text>" +
       "<text class='nodeLabel' x='" + (GRAPH_NODE_INPUT_ZONE + centerWidth / 2) + "' y='49' text-anchor='middle'>" + escapeHtml(title) + "</text>" +
@@ -248,8 +253,35 @@
     svg.addEventListener("contextmenu", event => {
       event.preventDefault();
       event.stopPropagation();
+
+      const socket = event.target.closest?.(".socketGroup");
+      if (socket) {
+        const node = socket.closest(".node");
+        if (!node) return;
+        openGraphConnectionContextMenu(
+          svg,
+          event.clientX,
+          event.clientY,
+          node.dataset.nodeId,
+          socket.dataset.socketId
+        );
+        return;
+      }
+
+      const node = event.target.closest?.(".node");
+      if (node) {
+        const nodeId = node.dataset.nodeId;
+        selectedGraphNodeId = nodeId;
+        pendingOutput = null;
+        pendingConnectionPoint = null;
+        updateGraphVisuals();
+        updateGraphInspector(document.getElementById("inspector"));
+        openGraphNodeContextMenu(svg, event.clientX, event.clientY, nodeId);
+        return;
+      }
+
       const graphPoint = clientToGraph(svg, event.clientX, event.clientY);
-      openGraphContextMenu(svg, event.clientX, event.clientY, graphPoint);
+      openGraphAddContextMenu(svg, event.clientX, event.clientY, graphPoint);
     });
 
     svg.addEventListener("pointerdown", event => {
@@ -387,6 +419,7 @@
       if (finished.moved && preview) {
         const node = questGraph?.nodes?.find(item => item.nodeId === finished.nodeId);
         if (node && (preview.x !== node.x || preview.y !== node.y)) {
+          queueDirtyNode(node.nodeId);
           send({
             action: "graph_update_node",
             nodeId: node.nodeId,
@@ -467,6 +500,7 @@
 
         if (direction === "Input" && pendingOutput) {
           if (isCompatibleInput(nodeId, socketId)) {
+            queueDirtyNodes(pendingOutput.nodeId, nodeId);
             send({
               action: "graph_connect",
               fromNodeId: pendingOutput.nodeId,
@@ -671,6 +705,7 @@
     });
 
     ins.querySelector("#saveGraphNode").addEventListener("click", () => {
+      queueDirtyNode(node.nodeId);
       send({
         action: "graph_update_node",
         nodeId: node.nodeId,
@@ -682,14 +717,13 @@
     });
 
     ins.querySelector("#deleteGraphNode").addEventListener("click", () => {
-      selectedGraphNodeId = null;
-      pendingOutput = null;
-      send({ action: "graph_remove_node", nodeId: node.nodeId });
+      requestGraphNodeDelete(node.nodeId);
     });
 
     ins.querySelectorAll("[data-disconnect]").forEach(button => {
       button.addEventListener("click", () => {
         const connection = JSON.parse(decodeURIComponent(button.dataset.disconnect));
+        queueDirtyNodes(connection.fromNodeId, connection.toNodeId);
         send({
           action: "graph_disconnect",
           fromNodeId: connection.fromNodeId,
@@ -699,6 +733,13 @@
         });
       });
     });
+  }
+
+  function isTextEntryTarget(target) {
+    const element = target instanceof Element ? target : null;
+    if (!element) return false;
+    if (element.matches("input, textarea, select, [contenteditable='true']")) return true;
+    return Boolean(element.closest("input, textarea, select, [contenteditable='true']"));
   }
 
   function fitGraph() {
@@ -922,12 +963,55 @@
 
   let activeGraphContextMenu = null;
 
+  function queueDirtyNode(nodeId) {
+    if (nodeId) graphDirtyNodeIds.add(nodeId);
+  }
+
+  function queueDirtyNodes(...nodeIds) {
+    nodeIds.filter(Boolean).forEach(nodeId => graphDirtyNodeIds.add(nodeId));
+  }
+
   function closeGraphContextMenu() {
     activeGraphContextMenu?.remove();
     activeGraphContextMenu = null;
   }
 
-  function openGraphContextMenu(svg, clientX, clientY, graphPoint) {
+  function placeGraphContextMenu(menu, clientX, clientY) {
+    document.body.appendChild(menu);
+    activeGraphContextMenu = menu;
+
+    menu.style.maxHeight = Math.max(100, window.innerHeight - 12) + "px";
+    menu.style.overflowY = "auto";
+
+    const menuRect = menu.getBoundingClientRect();
+    menu.style.left = clamp(
+      clientX,
+      6,
+      Math.max(6, window.innerWidth - menuRect.width - 6)
+    ) + "px";
+    menu.style.top = clamp(
+      clientY,
+      6,
+      Math.max(6, window.innerHeight - menuRect.height - 6)
+    ) + "px";
+
+    menu.addEventListener("wheel", event => event.stopPropagation(), { passive: true });
+  }
+
+  function graphContextMenuButton(text, handler) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "graphContextMenuItem";
+    button.textContent = text;
+    button.addEventListener("click", event => {
+      event.preventDefault();
+      event.stopPropagation();
+      handler();
+    });
+    return button;
+  }
+
+  function openGraphAddContextMenu(svg, clientX, clientY, graphPoint) {
     closeGraphContextMenu();
 
     const menu = document.createElement("div");
@@ -946,23 +1030,19 @@
     }
 
     GRAPH_NODE_TYPES.forEach(([type, label]) => {
-      const button = document.createElement("button");
-      button.type = "button";
-      button.className = "graphContextMenuItem";
-      button.dataset.nodeType = type;
-      button.textContent = label + " (" + type + ")";
-      if (pendingOutput && type === "Start") button.disabled = true;
-
-      button.addEventListener("click", event => {
-        event.preventDefault();
-        event.stopPropagation();
-
+      const button = graphContextMenuButton(label + " (" + type + ")", () => {
         const connectionSource = pendingOutput
           ? {
               connectFromNodeId: pendingOutput.nodeId,
               connectFromSocketId: pendingOutput.socketId
             }
           : {};
+
+        if (pendingOutput) {
+          queueDirtyNodes(pendingOutput.nodeId);
+        } else {
+          pendingDirtySelection = true;
+        }
 
         send({
           action: "graph_add_node",
@@ -976,27 +1056,131 @@
         pendingOutput = null;
         pendingConnectionPoint = null;
         closeGraphContextMenu();
-        refreshGraphEdges(svg);
       });
-
+      button.dataset.nodeType = type;
+      if (pendingOutput && type === "Start") button.disabled = true;
       menu.appendChild(button);
     });
 
-    document.body.appendChild(menu);
-    activeGraphContextMenu = menu;
+    placeGraphContextMenu(menu, clientX, clientY);
+  }
 
-    const menuRect = menu.getBoundingClientRect();
-    const left = Math.min(
-      Math.max(6, clientX),
-      Math.max(6, window.innerWidth - menuRect.width - 6)
-    );
-    const top = Math.min(
-      Math.max(6, clientY),
-      Math.max(6, window.innerHeight - menuRect.height - 6)
+  function openGraphNodeContextMenu(svg, clientX, clientY, nodeId) {
+    closeGraphContextMenu();
+
+    const node = questGraph?.nodes?.find(item => item.nodeId === nodeId);
+    if (!node) return;
+
+    const menu = document.createElement("div");
+    menu.className = "graphContextMenu";
+
+    const heading = document.createElement("div");
+    heading.className = "graphContextMenuTitle";
+    heading.textContent = "Нода";
+    menu.appendChild(heading);
+
+    const name = document.createElement("div");
+    name.className = "graphContextMenuHint";
+    name.textContent = node.title + " · " + node.nodeType;
+    menu.appendChild(name);
+
+    menu.appendChild(graphContextMenuButton("Сохранить", () => {
+      send({ action: "graph_save" });
+      closeGraphContextMenu();
+    }));
+
+    menu.appendChild(graphContextMenuButton("Удалить", () => {
+      requestGraphNodeDelete(nodeId);
+      closeGraphContextMenu();
+    }));
+
+    placeGraphContextMenu(menu, clientX, clientY);
+  }
+
+  function openGraphConnectionContextMenu(svg, clientX, clientY, nodeId, socketId) {
+    closeGraphContextMenu();
+
+    const node = questGraph?.nodes?.find(item => item.nodeId === nodeId);
+    const socket = node?.sockets?.find(item => item.socketId === socketId);
+    if (!node || !socket) return;
+
+    const connections = questGraph.connections.filter(connection =>
+      (connection.fromNodeId === nodeId && connection.fromSocketId === socketId) ||
+      (connection.toNodeId === nodeId && connection.toSocketId === socketId)
     );
 
-    menu.style.left = left + "px";
-    menu.style.top = top + "px";
+    const menu = document.createElement("div");
+    menu.className = "graphContextMenu";
+
+    const heading = document.createElement("div");
+    heading.className = "graphContextMenuTitle";
+    heading.textContent = "Коннектор";
+    menu.appendChild(heading);
+
+    const hint = document.createElement("div");
+    hint.className = "graphContextMenuHint";
+    hint.textContent = socket.name + " · " + socket.direction;
+    menu.appendChild(hint);
+
+    if (!connections.length) {
+      const empty = document.createElement("div");
+      empty.className = "graphContextMenuHint";
+      empty.textContent = "Соединений нет.";
+      menu.appendChild(empty);
+    } else {
+      connections.forEach(connection => {
+        const source = connection.fromNodeId + ":" + connection.fromSocketId;
+        const target = connection.toNodeId + ":" + connection.toSocketId;
+        menu.appendChild(graphContextMenuButton(
+          "Разорвать соединение: " + source + " → " + target,
+          () => {
+            queueDirtyNodes(connection.fromNodeId, connection.toNodeId);
+            send({
+              action: "graph_disconnect",
+              fromNodeId: connection.fromNodeId,
+              fromSocketId: connection.fromSocketId,
+              toNodeId: connection.toNodeId,
+              toSocketId: connection.toSocketId
+            });
+            closeGraphContextMenu();
+          }
+        ));
+      });
+    }
+
+    if (pendingOutput) {
+      menu.appendChild(graphContextMenuButton("Отменить выбор Output", () => {
+        pendingOutput = null;
+        pendingConnectionPoint = null;
+        const graphSvg = document.getElementById("questGraphSvg");
+        if (graphSvg) refreshGraphEdges(graphSvg);
+        closeGraphContextMenu();
+      }));
+    }
+
+    placeGraphContextMenu(menu, clientX, clientY);
+  }
+
+  function requestGraphNodeDelete(nodeId) {
+    const node = questGraph?.nodes?.find(item => item.nodeId === nodeId);
+    if (!node) return false;
+
+    const confirmed = window.confirm(
+      "Удалить ноду «" + node.title + "» (" + node.nodeType + ")?\n\n" +
+      "Все связанные с ней соединения также будут удалены."
+    );
+    if (!confirmed) return false;
+
+    selectedGraphNodeId = null;
+    if (pendingOutput?.nodeId === nodeId) {
+      pendingOutput = null;
+      pendingConnectionPoint = null;
+    }
+
+    send({ action: "graph_remove_node", nodeId });
+    const graphSvg = document.getElementById("questGraphSvg");
+    if (graphSvg) refreshGraphEdges(graphSvg);
+    return true;
   }
 
   function refreshGraphEdges(svg) {
@@ -1129,6 +1313,19 @@
       graphSpaceDown = true;
       if (currentId() === "graph") event.preventDefault();
     }
+
+    if (
+      currentId() === "graph" &&
+      event.key === "Delete" &&
+      !isTextEntryTarget(event.target) &&
+      selectedGraphNodeId
+    ) {
+      if (requestGraphNodeDelete(selectedGraphNodeId)) {
+        event.preventDefault();
+      }
+      return;
+    }
+
     if (currentId() !== "graph" || !(event.ctrlKey || event.metaKey)) return;
     const key = event.key.toLowerCase();
     if (key === "z" && !event.shiftKey) {
