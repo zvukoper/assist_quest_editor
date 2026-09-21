@@ -48,9 +48,8 @@ if (!currentTask.includes("1.0.40.101-QUEST-EDITOR-DUAL-WINDOW-R1")) {
 const logDir = path.join(root, "MemoryAI/LOGS");
 const entries = fs.readdirSync(logDir);
 
-// В каталоге логов допустимы только диагностические файлы. Состояние локального
-// прогона и признак активности редактора лежат в `.ci-state`, потому что папка
-// логов очищается после успешной публикации.
+// В каталоге логов допустимы только диагностические файлы. Журналы и отчёт
+// отслеживаются git: они нужны для разбора падений, а сборка чистит каталог.
 const allowedFiles = new Set(["README.md", "CI_errors.md"]);
 
 const unexpected = entries.filter(
@@ -58,9 +57,12 @@ const unexpected = entries.filter(
 );
 
 if (unexpected.length) {
-  console.error("MemoryAI/LOGS может содержать только README.md, CI_errors.md и временные .log:");
+  console.error("MemoryAI/LOGS может содержать только README.md, CI_errors.md и журналы .log:");
   for (const name of unexpected) console.error("- " + name);
   process.exit(1);
 }
 
-console.log("Проверка памяти: OK (" + required.length + " обязательных файлов). Временно разрешены диагностические .log; compile.ps1 очищает их перед публикацией.");
+console.log(
+  "Проверка памяти: OK (" + required.length + " обязательных файлов). " +
+    "Журналы и CI_errors.md отслеживаются git; compile.ps1 очищает каталог перед публикацией."
+);
