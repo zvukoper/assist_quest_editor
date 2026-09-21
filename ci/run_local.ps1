@@ -6,6 +6,7 @@
     Повторяет шаги CI на этой машине без GitHub Actions:
         Playwright install / Chromium install / Playwright smoke /
         Simulator <-> Editor contract / Quest Graph UI smoke /
+        Scene Graph UI smoke / Quest Graph layout / Pan follows cursor /
         Web JavaScript syntax / .NET SDK / .NET build / domain tests /
         single-file publish.
 
@@ -506,6 +507,21 @@ Invoke-Check -Name 'Quest Graph Playwright smoke' -Body {
 # Шаг 5.1: кнопка «Перестроить» в нодовом редакторе.
 Invoke-Check -Name 'Перестроение нод Quest Graph' -Body {
     node ci/graph_layout_smoke.mjs
+}
+
+# Шаг 5.2: smoke реального sceneEditor.js. В workflow GitHub эта проверка есть,
+# а в локальном прогоне её не было — из-за этого проверка устарела незаметно
+# (ждала переименованный #sceneEditTitle) и падала ещё до сценария.
+Invoke-Check -Name 'Scene Graph UI smoke' -Body {
+    node ci/scene_graph_smoke.mjs
+}
+
+# Шаг 5.3: pan средней кнопкой следует за курсором в обоих нодовых редакторах.
+# Отдельная проверка нужна потому, что pan-ассерты в quest/scene smoke требуют
+# лишь изменения viewBox: при несовпадении аспекта канваса и viewBox pan
+# «разбегается», но viewBox всё равно меняется, и слабые ассерты это пропускают.
+Invoke-Check -Name 'Pan следует за курсором' -Body {
+    node ci/pan_smoke.mjs
 }
 
 # Шаг 6: синтаксис web JavaScript.

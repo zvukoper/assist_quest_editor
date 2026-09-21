@@ -698,6 +698,48 @@ try {
     throw new Error("Pan средней кнопкой не изменил viewport.");
   }
 
+  // Pan обязан следовать за курсором: графовая точка под указателем не должна
+  // смещаться за время протяжки. Проверка только «viewBox изменился» слишком
+  // слабая: при несовпадении аспекта канваса и viewBox pan разбегается, но
+  // viewBox всё равно меняется. Полный набор геометрий — в ci/pan_smoke.mjs.
+  const panDrift = await page.evaluate(() => {
+    const svg = document.getElementById("questGraphSvg");
+    const toGraph = (clientX, clientY) => {
+      const point = new DOMPoint(clientX, clientY)
+        .matrixTransform(svg.getScreenCTM().inverse());
+      return { x: point.x, y: point.y };
+    };
+
+    const rect = svg.getBoundingClientRect();
+    const startX = rect.left + rect.width / 2;
+    const startY = rect.top + rect.height / 2;
+    const before = toGraph(startX, startY);
+
+    const fire = (type, clientX, clientY, buttons) => svg.dispatchEvent(
+      new PointerEvent(type, {
+        bubbles: true, cancelable: true, pointerId: 7, pointerType: "mouse",
+        isPrimary: true, button: type === "pointermove" ? -1 : 1,
+        buttons, clientX, clientY
+      })
+    );
+
+    fire("pointerdown", startX, startY, 4);
+    fire("pointermove", startX + 80, startY + 60, 4);
+    fire("pointerup", startX + 80, startY + 60, 0);
+
+    const after = toGraph(startX + 80, startY + 60);
+    return {
+      driftX: Math.abs(after.x - before.x),
+      driftY: Math.abs(after.y - before.y)
+    };
+  });
+  if (panDrift.driftX > 0.5 || panDrift.driftY > 0.5) {
+    throw new Error(
+      "Pan средней кнопкой не следует за курсором: дрейф (" +
+      panDrift.driftX.toFixed(2) + ", " + panDrift.driftY.toFixed(2) + ")."
+    );
+  }
+
   await page.getByRole("button", { name: "Новый" }).click();
   if (!await page.evaluate(() => window.__messages.some(message => message.action === "graph_new"))) {
     throw new Error("UI не отправил graph_new.");

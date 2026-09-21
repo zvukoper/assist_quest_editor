@@ -117,7 +117,10 @@ try {
   }, definition);
 
   await page.locator("#sceneGraphSvg .nodeTitle", { hasText: "SceneStart" }).waitFor();
-  await page.locator("#sceneEditTitle").waitFor();
+  // Инспектор Scene Editor переименован в sceneGraphEditTitle при синхронизации с
+  // механикой Quest Graph. Проверка ждала старое имя и падала по таймауту ещё до
+  // начала сценария, поэтому не ловила ни одного реального дефекта.
+  await page.locator("#sceneGraphEditTitle").waitFor();
 
   if (errors.length) throw new Error("Scene Editor pageerror при инициализации: " + errors.join(" | "));
 
@@ -194,7 +197,7 @@ try {
 
   // Inspector + dirty.
   await page.locator("[data-node-id='choice']").click();
-  await page.locator("#sceneEditTitle").fill("Выбор обновлён");
+  await page.locator("#sceneGraphEditTitle").fill("Выбор обновлён");
   await page.getByRole("button", { name: "Сохранить свойства" }).click();
   await page.waitForTimeout(20);
   if (!await page.locator("[data-node-id='choice'].dirty").count())
@@ -332,6 +335,48 @@ try {
 
   const afterPan = await page.locator("#sceneGraphSvg").getAttribute("viewBox");
   if (beforePan === afterPan) throw new Error("Pan не изменил viewport.");
+
+  // Pan обязан следовать за курсором: графовая точка под указателем не должна
+  // смещаться за время протяжки. Проверка только «viewBox изменился» слишком
+  // слабая: при несовпадении аспекта канваса и viewBox pan разбегается, но
+  // viewBox всё равно меняется. Полный набор геометрий — в ci/pan_smoke.mjs.
+  const panDrift = await page.evaluate(() => {
+    const svg = document.getElementById("sceneGraphSvg");
+    const toGraph = (clientX, clientY) => {
+      const point = new DOMPoint(clientX, clientY)
+        .matrixTransform(svg.getScreenCTM().inverse());
+      return { x: point.x, y: point.y };
+    };
+
+    const rect = svg.getBoundingClientRect();
+    const startX = rect.left + rect.width / 2;
+    const startY = rect.top + rect.height / 2;
+    const before = toGraph(startX, startY);
+
+    const fire = (type, clientX, clientY, buttons) => svg.dispatchEvent(
+      new PointerEvent(type, {
+        bubbles: true, cancelable: true, pointerId: 72, pointerType: "mouse",
+        isPrimary: true, button: type === "pointermove" ? -1 : 1,
+        buttons, clientX, clientY
+      })
+    );
+
+    fire("pointerdown", startX, startY, 4);
+    fire("pointermove", startX + 80, startY + 60, 4);
+    fire("pointerup", startX + 80, startY + 60, 0);
+
+    const after = toGraph(startX + 80, startY + 60);
+    return {
+      driftX: Math.abs(after.x - before.x),
+      driftY: Math.abs(after.y - before.y)
+    };
+  });
+  if (panDrift.driftX > 0.5 || panDrift.driftY > 0.5) {
+    throw new Error(
+      "Pan не следует за курсором: дрейф (" +
+      panDrift.driftX.toFixed(2) + ", " + panDrift.driftY.toFixed(2) + ")."
+    );
+  }
 
   // Wheel zoom.
   const beforeZoom = (await page.locator("#sceneGraphSvg").getAttribute("viewBox")).split(/\s+/).map(Number);

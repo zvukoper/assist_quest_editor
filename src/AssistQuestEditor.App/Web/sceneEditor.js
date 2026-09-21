@@ -432,17 +432,23 @@
 
     svg.addEventListener("pointermove", event => {
       if (panState && event.pointerId === panState.pointerId) {
-        const rect = svg.getBoundingClientRect();
-        if (rect.width > 0 && rect.height > 0) {
-          const scaleX = svg.viewBox.baseVal.width / rect.width;
-          const scaleY = svg.viewBox.baseVal.height / rect.height;
-          sceneViewport.x -= (event.clientX - panState.lastX) * scaleX;
-          sceneViewport.y -= (event.clientY - panState.lastY) * scaleY;
-          panState.lastX = event.clientX;
-          panState.lastY = event.clientY;
-          setViewBox();
-          refreshSceneEdges(svg);
-        }
+        // Канвас должен «нести» содержимое: графовая точка под указателем
+        // обязана остаться той же. Поэтому сдвиг viewBox берётся из реального
+        // преобразования экран → граф (clientToSceneGraph опирается на CTM),
+        // а не из отношения viewBox.width / rect.width.
+        //
+        // Последнее верно только при совпадении аспекта канваса и viewBox.
+        // Иначе SVG с preserveAspectRatio по умолчанию («xMidYMid meet»)
+        // вписывает viewBox с полями, масштаб по осям перестаёт выражаться
+        // этими отношениями, и pan «разбегается» по оси с полями.
+        const graphPointer = clientToSceneGraph(svg, event.clientX, event.clientY);
+        const graphPrevious = clientToSceneGraph(svg, panState.lastX, panState.lastY);
+        sceneViewport.x -= graphPointer.x - graphPrevious.x;
+        sceneViewport.y -= graphPointer.y - graphPrevious.y;
+        panState.lastX = event.clientX;
+        panState.lastY = event.clientY;
+        setViewBox();
+        refreshSceneEdges(svg);
         event.preventDefault();
         return;
       }
@@ -986,11 +992,22 @@
     }
 
     // Fallback for environments without SVG CTM support.
+    // Повторяет preserveAspectRatio="xMidYMid meet": viewBox вписывается с
+    // сохранением пропорций и центрируется, поэтому по одной оси возникают поля.
+    // Делить на rect.width/rect.height здесь нельзя — это верно только при
+    // совпадении аспектов, иначе координата уезжает по оси с полями.
     const rect = svg.getBoundingClientRect();
     const viewBox = svg.viewBox.baseVal;
+    const scale = Math.min(rect.width / viewBox.width, rect.height / viewBox.height);
+    if (!(scale > 0)) {
+      return { x: viewBox.x, y: viewBox.y };
+    }
+
+    const offsetX = rect.left + (rect.width - viewBox.width * scale) / 2;
+    const offsetY = rect.top + (rect.height - viewBox.height * scale) / 2;
     return {
-      x: viewBox.x + ((clientX - rect.left) / rect.width) * viewBox.width,
-      y: viewBox.y + ((clientY - rect.top) / rect.height) * viewBox.height
+      x: viewBox.x + (clientX - offsetX) / scale,
+      y: viewBox.y + (clientY - offsetY) / scale
     };
   }
 
