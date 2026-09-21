@@ -229,15 +229,15 @@ try {
   // Context menu on connector/node/background.
   await page.locator("[data-node-id='choice'] .socketGroup[data-socket-direction='Input'] .socket")
     .click({ button: "right" });
-  const connectionMenu = page.locator(".sceneContextMenu[data-menu-kind='connection']");
+  const connectionMenu = page.locator(".graphContextMenu[data-menu-kind='connection']");
   await connectionMenu.waitFor();
-  if (await page.locator(".sceneContextMenu[data-menu-kind='add']").count())
+  if (await page.locator(".graphContextMenu[data-menu-kind='add']").count())
     throw new Error("ПКМ по socket открыл Add вместо Connection menu.");
   await connectionMenu.getByText("Коннектор", { exact: true }).waitFor();
   await page.keyboard.press("Escape");
 
   await page.locator("[data-node-id='choice']").click({ button: "right" });
-  const nodeMenu = page.locator(".sceneContextMenu[data-menu-kind='node']");
+  const nodeMenu = page.locator(".graphContextMenu[data-menu-kind='node']");
   await nodeMenu.waitFor();
   await nodeMenu.getByText("Нода", { exact: true }).waitFor();
   await page.keyboard.press("Escape");
@@ -259,7 +259,7 @@ try {
   // Add menu must remain inside viewport and scroll.
   await page.setViewportSize({ width: 1280, height: 420 });
   await page.locator("#sceneGraphSvg").click({ button: "right", position: { x: 220, y: 120 } });
-  const addMenu = page.locator(".sceneContextMenu[data-menu-kind='add']");
+  const addMenu = page.locator(".graphContextMenu[data-menu-kind='add']");
   await addMenu.waitFor();
   const geometry = await addMenu.evaluate(menu => ({
     top: menu.getBoundingClientRect().top,
