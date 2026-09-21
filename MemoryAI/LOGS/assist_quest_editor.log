@@ -1,55 +1,181 @@
-2026-09-21 21:20:07.749 [INFO] [PID 6100] [TID 2] === Assist Quest Editor START === | Version=1.0.40.131-QUEST-SPLASH-R1; BaseDirectory=C:\Users\Admin\AppData\Local\Temp\.net\AssistQuestEditor\LeeybFqI75K1\; CurrentDirectory=F:\repo\assist_quest_editor; LogPath=F:\repo\assist_quest_editor\MemoryAI\LOGS\assist_quest_editor.log
-2026-09-21 21:20:07.778 [INFO] [PID 6100] [TID 2] Splash: подготовка. | path=C:\Users\Admin\AppData\Local\Temp\.net\AssistQuestEditor\LeeybFqI75K1\Assets\SplashScreen.png; exists=True
-2026-09-21 21:20:07.909 [INFO] [PID 6100] [TID 2] Загрузка СДО world data.
-2026-09-21 21:20:07.931 [INFO] [PID 6100] [TID 2] SdoWorldDataLoader.Load() | path=C:\Users\Admin\AppData\Local\Temp\.net\AssistQuestEditor\LeeybFqI75K1\data/world/sdo_points.json; exists=True
-2026-09-21 21:20:07.936 [INFO] [PID 6100] [TID 2] Файл СДО прочитан. | bytes=756275; chars=708222
-2026-09-21 21:20:08.003 [INFO] [PID 6100] [TID 2] Метаданные СДО разобраны. | schema=1; source=zvukoper/ets2_assist:data/editor_static_data; categoryCount=71; pointCount=5115; parsedPoints=5115
-2026-09-21 21:20:08.006 [INFO] [PID 6100] [TID 2] СДО-точки отфильтрованы. | input=5115; valid=5115; invalid=0
-2026-09-21 21:20:08.013 [INFO] [PID 6100] [TID 2] СДО world points готовы. | count=5115; X=[118733,199063]; Y=[-41,7734,220,812]; Z=[-110503,-43350,1]
-2026-09-21 21:20:08.014 [INFO] [PID 6100] [TID 2] CityWorldDataLoader.Load() | path=C:\Users\Admin\AppData\Local\Temp\.net\AssistQuestEditor\LeeybFqI75K1\data/world/cities.json; exists=True
-2026-09-21 21:20:08.018 [INFO] [PID 6100] [TID 2] Города world points готовы. | input=77; valid=77; invalid=0
-2026-09-21 21:20:08.018 [INFO] [PID 6100] [TID 2] World data загружены. | sdo=5115; cities=77; total=5192
-2026-09-21 21:20:08.024 [INFO] [PID 6100] [TID 2] Создан SimulatorDataSourceAdapter. | channels=15; points=5192
-2026-09-21 21:20:08.054 [INFO] [PID 6100] [TID 2] QuestDefinitionLoader.LoadOrFallback() | path=C:\Users\Admin\AppData\Local\Temp\.net\AssistQuestEditor\LeeybFqI75K1\data/quests/tutorial_ruslan_shashlik.json; exists=True
-2026-09-21 21:20:08.085 [INFO] [PID 6100] [TID 2] Учебный Quest Definition загружен. | questId=tutorial_ruslan_shashlik; nodes=29; connections=28
-2026-09-21 21:20:08.086 [INFO] [PID 6100] [TID 2] SceneCatalogLoader.Load() | directory=C:\Users\Admin\AppData\Local\Temp\.net\AssistQuestEditor\LeeybFqI75K1\data/scenes; exists=True
-2026-09-21 21:20:08.094 [INFO] [PID 6100] [TID 2] Scene Definition загружена. | id=gosha_meat; path=C:\Users\Admin\AppData\Local\Temp\.net\AssistQuestEditor\LeeybFqI75K1\data/scenes\gosha_meat.json
-2026-09-21 21:20:08.095 [INFO] [PID 6100] [TID 2] Scene Definition загружена. | id=ruslan_finish; path=C:\Users\Admin\AppData\Local\Temp\.net\AssistQuestEditor\LeeybFqI75K1\data/scenes\ruslan_finish.json
-2026-09-21 21:20:08.095 [INFO] [PID 6100] [TID 2] Scene Definition загружена. | id=ruslan_start; path=C:\Users\Admin\AppData\Local\Temp\.net\AssistQuestEditor\LeeybFqI75K1\data/scenes\ruslan_start.json
-2026-09-21 21:20:08.095 [INFO] [PID 6100] [TID 2] Scene catalog готов. | sceneCount=3
-2026-09-21 21:20:08.101 [INFO] [PID 6100] [TID 2] MainForm создан. Запуск Application.Run().
-2026-09-21 21:20:08.120 [INFO] [PID 6100] [TID 2] WebView2: начало инициализации. | form=Assist Quest Editor — Редактор; page=main.html
-2026-09-21 21:20:08.459 [INFO] [PID 6100] [TID 2] WebView2: CoreWebView2 создан. | browser=153.0.4234.48
-2026-09-21 21:20:08.472 [INFO] [PID 6100] [TID 2] WebView2: Navigate. | form=Assist Quest Editor — Редактор; uri=file:///C:/Users/Admin/AppData/Local/Temp/.net/AssistQuestEditor/LeeybFqI75K1/Web/main.html?v=1.0.40.131; sourceExists=True; sourceBytes=6059
-2026-09-21 21:20:08.565 [INFO] [PID 6100] [TID 2] WEB: Web document load завершён. | {"title":"Assist Quest Editor","url":"file:///C:/Users/Admin/AppData/Local/Temp/.net/AssistQuestEditor/LeeybFqI75K1/Web/main.html?v=1.0.40.131"}
-2026-09-21 21:20:08.569 [INFO] [PID 6100] [TID 2] WebView2: NavigationCompleted. | form=Assist Quest Editor — Редактор; success=True; error=Unknown
-2026-09-21 21:20:08.569 [INFO] [PID 6100] [TID 2] WebView2: browser ready. | form=Assist Quest Editor — Редактор; page=main.html
-2026-09-21 21:20:08.587 [INFO] [PID 6100] [TID 2] WebView2: начало инициализации. | form=Assist Quest Editor — Симулятор; page=simulator.html
-2026-09-21 21:20:08.662 [INFO] [PID 6100] [TID 2] Splash: завершён. | Основной WebView2 готов.
-2026-09-21 21:20:08.672 [INFO] [PID 6100] [TID 2] WebView2: CoreWebView2 создан. | browser=153.0.4234.48
-2026-09-21 21:20:08.673 [INFO] [PID 6100] [TID 2] WebView2: Navigate. | form=Assist Quest Editor — Симулятор; uri=file:///C:/Users/Admin/AppData/Local/Temp/.net/AssistQuestEditor/LeeybFqI75K1/Web/simulator.html?v=1.0.40.131; sourceExists=True; sourceBytes=2705
-2026-09-21 21:20:08.690 [INFO] [PID 6100] [TID 2] WEB: Simulator Web UI готов. | {"canvas":true,"side":true,"url":"file:///C:/Users/Admin/AppData/Local/Temp/.net/AssistQuestEditor/LeeybFqI75K1/Web/simulator.html?v=1.0.40.131"}
-2026-09-21 21:20:08.691 [INFO] [PID 6100] [TID 2] WEB: Simulator interface layer готов. | {"layer":true}
-2026-09-21 21:20:08.692 [INFO] [PID 6100] [TID 2] WEB: Web document load завершён. | {"title":"Симулятор","url":"file:///C:/Users/Admin/AppData/Local/Temp/.net/AssistQuestEditor/LeeybFqI75K1/Web/simulator.html?v=1.0.40.131"}
-2026-09-21 21:20:08.699 [INFO] [PID 6100] [TID 2] WebView2: NavigationCompleted. | form=Assist Quest Editor — Симулятор; success=True; error=Unknown
-2026-09-21 21:20:08.700 [INFO] [PID 6100] [TID 2] WebView2: browser ready. | form=Assist Quest Editor — Симулятор; page=simulator.html
-2026-09-21 21:20:08.700 [INFO] [PID 6100] [TID 2] SimulatorForm: browser ready, отправляю snapshot.
-2026-09-21 21:20:08.701 [INFO] [PID 6100] [TID 2] SimulatorForm: формирование snapshot. | points=5192; selected=<none>; player=WorldCoordinate { X = 158898, Y = 89,5193, Z = -76926,55 }
-2026-09-21 21:20:08.760 [INFO] [PID 6100] [TID 2] SimulatorForm: отправляю snapshot в WebView2. | jsonChars=1307494; points=5192
-2026-09-21 21:20:08.845 [INFO] [PID 6100] [TID 2] WEB: Simulator получил snapshot. | {"points":5192,"selectedPointId":null,"player":{"x":158898,"y":89.5193,"z":-76926.55},"version":"1.0.40.131-QUEST-SPLASH-R1"}
-2026-09-21 21:20:17.160 [INFO] [PID 6100] [TID 2] WebView2: получено действие. | form=Assist Quest Editor — Редактор; action=open_editor
-2026-09-21 21:20:17.170 [INFO] [PID 6100] [TID 2] WebView2: начало инициализации. | form=Assist Quest Editor — Редактор сцен — Новый документ; page=editor.html#scene
-2026-09-21 21:20:17.235 [INFO] [PID 6100] [TID 2] WebView2: CoreWebView2 создан. | browser=153.0.4234.48
-2026-09-21 21:20:17.236 [INFO] [PID 6100] [TID 2] WebView2: Navigate. | form=Assist Quest Editor — Редактор сцен — Новый документ; uri=file:///C:/Users/Admin/AppData/Local/Temp/.net/AssistQuestEditor/LeeybFqI75K1/Web/editor.html?v=1.0.40.131#scene; sourceExists=True; sourceBytes=931
-2026-09-21 21:20:17.262 [INFO] [PID 6100] [TID 2] WEB: Web document load завершён. | {"title":"Редактор","url":"file:///C:/Users/Admin/AppData/Local/Temp/.net/AssistQuestEditor/LeeybFqI75K1/Web/editor.html?v=1.0.40.131#scene"}
-2026-09-21 21:20:17.269 [INFO] [PID 6100] [TID 2] WebView2: NavigationCompleted. | form=Assist Quest Editor — Редактор сцен — Новый документ; success=True; error=Unknown
-2026-09-21 21:20:17.269 [INFO] [PID 6100] [TID 2] WebView2: browser ready. | form=Assist Quest Editor — Редактор сцен — Новый документ; page=editor.html#scene
-2026-09-21 21:20:44.979 [INFO] [PID 6100] [TID 2] WebView2: получено действие. | form=Assist Quest Editor — Редактор; action=open_editor
-2026-09-21 21:20:44.985 [INFO] [PID 6100] [TID 2] WebView2: начало инициализации. | form=Assist Quest Editor — Нодовый редактор — Новый документ; page=editor.html#graph
-2026-09-21 21:20:45.038 [INFO] [PID 6100] [TID 2] WebView2: CoreWebView2 создан. | browser=153.0.4234.48
-2026-09-21 21:20:45.039 [INFO] [PID 6100] [TID 2] WebView2: Navigate. | form=Assist Quest Editor — Нодовый редактор — Новый документ; uri=file:///C:/Users/Admin/AppData/Local/Temp/.net/AssistQuestEditor/LeeybFqI75K1/Web/editor.html?v=1.0.40.131#graph; sourceExists=True; sourceBytes=931
-2026-09-21 21:20:45.100 [INFO] [PID 6100] [TID 2] WEB: Web document load завершён. | {"title":"Редактор","url":"file:///C:/Users/Admin/AppData/Local/Temp/.net/AssistQuestEditor/LeeybFqI75K1/Web/editor.html?v=1.0.40.131#graph"}
-2026-09-21 21:20:45.101 [INFO] [PID 6100] [TID 2] WebView2: NavigationCompleted. | form=Assist Quest Editor — Нодовый редактор — Новый документ; success=True; error=Unknown
-2026-09-21 21:20:45.101 [INFO] [PID 6100] [TID 2] WebView2: browser ready. | form=Assist Quest Editor — Нодовый редактор — Новый документ; page=editor.html#graph
-2026-09-21 21:20:54.822 [INFO] [PID 6100] [TID 2] Application.Run завершён.
-2026-09-21 21:20:54.823 [INFO] [PID 6100] [TID 2] === Assist Quest Editor END ===
+2026-09-21 21:39:19.323 [INFO] [PID 25732] [TID 2] === Assist Quest Editor START === | Version=1.0.40.132-QUEST-SCENE-EDITOR-R2; BaseDirectory=C:\Users\Admin\AppData\Local\Temp\.net\AssistQuestEditor\4ar0mj6I2seH\; CurrentDirectory=F:\repo\assist_quest_editor; LogPath=F:\repo\assist_quest_editor\MemoryAI\LOGS\assist_quest_editor.log
+2026-09-21 21:39:19.335 [INFO] [PID 25732] [TID 2] Splash: подготовка. | path=C:\Users\Admin\AppData\Local\Temp\.net\AssistQuestEditor\4ar0mj6I2seH\Assets\SplashScreen.png; exists=True
+2026-09-21 21:39:19.467 [INFO] [PID 25732] [TID 2] Загрузка СДО world data.
+2026-09-21 21:39:19.502 [INFO] [PID 25732] [TID 2] SdoWorldDataLoader.Load() | path=C:\Users\Admin\AppData\Local\Temp\.net\AssistQuestEditor\4ar0mj6I2seH\data/world/sdo_points.json; exists=True
+2026-09-21 21:39:19.507 [INFO] [PID 25732] [TID 2] Файл СДО прочитан. | bytes=756275; chars=708222
+2026-09-21 21:39:19.564 [INFO] [PID 25732] [TID 2] Метаданные СДО разобраны. | schema=1; source=zvukoper/ets2_assist:data/editor_static_data; categoryCount=71; pointCount=5115; parsedPoints=5115
+2026-09-21 21:39:19.566 [INFO] [PID 25732] [TID 2] СДО-точки отфильтрованы. | input=5115; valid=5115; invalid=0
+2026-09-21 21:39:19.571 [INFO] [PID 25732] [TID 2] СДО world points готовы. | count=5115; X=[118733,199063]; Y=[-41,7734,220,812]; Z=[-110503,-43350,1]
+2026-09-21 21:39:19.572 [INFO] [PID 25732] [TID 2] CityWorldDataLoader.Load() | path=C:\Users\Admin\AppData\Local\Temp\.net\AssistQuestEditor\4ar0mj6I2seH\data/world/cities.json; exists=True
+2026-09-21 21:39:19.575 [INFO] [PID 25732] [TID 2] Города world points готовы. | input=77; valid=77; invalid=0
+2026-09-21 21:39:19.576 [INFO] [PID 25732] [TID 2] World data загружены. | sdo=5115; cities=77; total=5192
+2026-09-21 21:39:19.582 [INFO] [PID 25732] [TID 2] Создан SimulatorDataSourceAdapter. | channels=15; points=5192
+2026-09-21 21:39:19.689 [INFO] [PID 25732] [TID 2] QuestDefinitionLoader.LoadOrFallback() | path=C:\Users\Admin\AppData\Local\Temp\.net\AssistQuestEditor\4ar0mj6I2seH\data/quests/tutorial_ruslan_shashlik.json; exists=True
+2026-09-21 21:39:19.739 [INFO] [PID 25732] [TID 2] Учебный Quest Definition загружен. | questId=tutorial_ruslan_shashlik; nodes=29; connections=28
+2026-09-21 21:39:19.740 [INFO] [PID 25732] [TID 2] SceneCatalogLoader.Load() | directory=C:\Users\Admin\AppData\Local\Temp\.net\AssistQuestEditor\4ar0mj6I2seH\data/scenes; exists=True
+2026-09-21 21:39:19.749 [INFO] [PID 25732] [TID 2] Scene Definition загружена. | id=gosha_meat; path=C:\Users\Admin\AppData\Local\Temp\.net\AssistQuestEditor\4ar0mj6I2seH\data/scenes\gosha_meat.json
+2026-09-21 21:39:19.750 [INFO] [PID 25732] [TID 2] Scene Definition загружена. | id=ruslan_finish; path=C:\Users\Admin\AppData\Local\Temp\.net\AssistQuestEditor\4ar0mj6I2seH\data/scenes\ruslan_finish.json
+2026-09-21 21:39:19.751 [INFO] [PID 25732] [TID 2] Scene Definition загружена. | id=ruslan_start; path=C:\Users\Admin\AppData\Local\Temp\.net\AssistQuestEditor\4ar0mj6I2seH\data/scenes\ruslan_start.json
+2026-09-21 21:39:19.751 [INFO] [PID 25732] [TID 2] Scene catalog готов. | sceneCount=3
+2026-09-21 21:39:19.755 [INFO] [PID 25732] [TID 2] MainForm создан. Запуск Application.Run().
+2026-09-21 21:39:19.774 [INFO] [PID 25732] [TID 2] WebView2: начало инициализации. | form=Assist Quest Editor — Редактор; page=main.html
+2026-09-21 21:39:20.077 [INFO] [PID 25732] [TID 2] WebView2: CoreWebView2 создан. | browser=153.0.4234.48
+2026-09-21 21:39:20.091 [INFO] [PID 25732] [TID 2] WebView2: Navigate. | form=Assist Quest Editor — Редактор; uri=file:///C:/Users/Admin/AppData/Local/Temp/.net/AssistQuestEditor/4ar0mj6I2seH/Web/main.html?v=1.0.40.132; sourceExists=True; sourceBytes=6059
+2026-09-21 21:39:20.164 [INFO] [PID 25732] [TID 2] WEB: Web document load завершён. | {"title":"Assist Quest Editor","url":"file:///C:/Users/Admin/AppData/Local/Temp/.net/AssistQuestEditor/4ar0mj6I2seH/Web/main.html?v=1.0.40.132"}
+2026-09-21 21:39:20.180 [INFO] [PID 25732] [TID 2] WebView2: NavigationCompleted. | form=Assist Quest Editor — Редактор; success=True; error=Unknown
+2026-09-21 21:39:20.180 [INFO] [PID 25732] [TID 2] WebView2: browser ready. | form=Assist Quest Editor — Редактор; page=main.html
+2026-09-21 21:39:20.197 [INFO] [PID 25732] [TID 2] WebView2: начало инициализации. | form=Assist Quest Editor — Симулятор; page=simulator.html
+2026-09-21 21:39:20.278 [INFO] [PID 25732] [TID 2] Splash: завершён. | Основной WebView2 готов.
+2026-09-21 21:39:20.311 [INFO] [PID 25732] [TID 2] WebView2: CoreWebView2 создан. | browser=153.0.4234.48
+2026-09-21 21:39:20.312 [INFO] [PID 25732] [TID 2] WebView2: Navigate. | form=Assist Quest Editor — Симулятор; uri=file:///C:/Users/Admin/AppData/Local/Temp/.net/AssistQuestEditor/4ar0mj6I2seH/Web/simulator.html?v=1.0.40.132; sourceExists=True; sourceBytes=2705
+2026-09-21 21:39:20.339 [INFO] [PID 25732] [TID 2] WEB: Simulator Web UI готов. | {"canvas":true,"side":true,"url":"file:///C:/Users/Admin/AppData/Local/Temp/.net/AssistQuestEditor/4ar0mj6I2seH/Web/simulator.html?v=1.0.40.132"}
+2026-09-21 21:39:20.341 [INFO] [PID 25732] [TID 2] WEB: Simulator interface layer готов. | {"layer":true}
+2026-09-21 21:39:20.342 [INFO] [PID 25732] [TID 2] WEB: Web document load завершён. | {"title":"Симулятор","url":"file:///C:/Users/Admin/AppData/Local/Temp/.net/AssistQuestEditor/4ar0mj6I2seH/Web/simulator.html?v=1.0.40.132"}
+2026-09-21 21:39:20.350 [INFO] [PID 25732] [TID 2] WebView2: NavigationCompleted. | form=Assist Quest Editor — Симулятор; success=True; error=Unknown
+2026-09-21 21:39:20.350 [INFO] [PID 25732] [TID 2] WebView2: browser ready. | form=Assist Quest Editor — Симулятор; page=simulator.html
+2026-09-21 21:39:20.351 [INFO] [PID 25732] [TID 2] SimulatorForm: browser ready, отправляю snapshot.
+2026-09-21 21:39:20.353 [INFO] [PID 25732] [TID 2] SimulatorForm: формирование snapshot. | points=5192; selected=<none>; player=WorldCoordinate { X = 158898, Y = 89,5193, Z = -76926,55 }
+2026-09-21 21:39:20.424 [INFO] [PID 25732] [TID 2] SimulatorForm: отправляю snapshot в WebView2. | jsonChars=1307500; points=5192
+2026-09-21 21:39:20.503 [INFO] [PID 25732] [TID 2] WEB: Simulator получил snapshot. | {"points":5192,"selectedPointId":null,"player":{"x":158898,"y":89.5193,"z":-76926.55},"version":"1.0.40.132-QUEST-SCENE-EDITOR-R2"}
+2026-09-21 21:39:26.365 [INFO] [PID 25732] [TID 2] WebView2: получено действие. | form=Assist Quest Editor — Редактор; action=open_editor
+2026-09-21 21:39:26.374 [INFO] [PID 25732] [TID 2] WebView2: начало инициализации. | form=Assist Quest Editor — Редактор сцен — Новый документ; page=editor.html#scene
+2026-09-21 21:39:26.431 [INFO] [PID 25732] [TID 2] WebView2: CoreWebView2 создан. | browser=153.0.4234.48
+2026-09-21 21:39:26.431 [INFO] [PID 25732] [TID 2] WebView2: Navigate. | form=Assist Quest Editor — Редактор сцен — Новый документ; uri=file:///C:/Users/Admin/AppData/Local/Temp/.net/AssistQuestEditor/4ar0mj6I2seH/Web/editor.html?v=1.0.40.132#scene; sourceExists=True; sourceBytes=931
+2026-09-21 21:39:26.454 [INFO] [PID 25732] [TID 2] WEB: Web document load завершён. | {"title":"Редактор","url":"file:///C:/Users/Admin/AppData/Local/Temp/.net/AssistQuestEditor/4ar0mj6I2seH/Web/editor.html?v=1.0.40.132#scene"}
+2026-09-21 21:39:26.461 [INFO] [PID 25732] [TID 2] WebView2: NavigationCompleted. | form=Assist Quest Editor — Редактор сцен — Новый документ; success=True; error=Unknown
+2026-09-21 21:39:26.461 [INFO] [PID 25732] [TID 2] WebView2: browser ready. | form=Assist Quest Editor — Редактор сцен — Новый документ; page=editor.html#scene
+2026-09-21 21:39:28.250 [INFO] [PID 25732] [TID 2] WebView2: получено действие. | form=Assist Quest Editor — Редактор сцен — Новый документ; action=scene_layout
+2026-09-21 21:39:28.268 [INFO] [PID 25732] [TID 2] Scene Graph: выполнено перестроение раскладки. | scene=ruslan_start; nodes=5; moved=5
+2026-09-21 21:39:29.565 [INFO] [PID 25732] [TID 2] WebView2: получено действие. | form=Assist Quest Editor — Редактор сцен — Новый документ *; action=scene_update_node
+2026-09-21 21:39:30.970 [INFO] [PID 25732] [TID 2] WebView2: получено действие. | form=Assist Quest Editor — Редактор сцен — Новый документ *; action=scene_update_node
+2026-09-21 21:39:34.741 [INFO] [PID 25732] [TID 2] WebView2: получено действие. | form=Assist Quest Editor — Редактор сцен — Новый документ *; action=scene_connect
+2026-09-21 21:39:34.751 [ERROR] [PID 25732] [TID 2] EditorForm: ошибка обработки web action. | System.InvalidOperationException: Входной socket уже подключён. \n    at AssistQuestEditor.App.EditorForm.HandleSceneAction(JsonElement root, String action) \n    at AssistQuestEditor.App.EditorForm.OnWebMessage(String json)
+2026-09-21 21:39:37.857 [INFO] [PID 25732] [TID 2] WebView2: получено действие. | form=Assist Quest Editor — Редактор сцен — Новый документ *; action=scene_save
+2026-09-21 21:39:42.927 [INFO] [PID 25732] [TID 2] Scene Editor: документ сохранён. | path=F:\repo\assist_quest_editor\data\quests\Разговор с Русланом.json; scene=ruslan_start; bytes=4098
+2026-09-21 21:39:58.114 [INFO] [PID 25732] [TID 2] WebView2: получено действие. | form=Assist Quest Editor — Редактор; action=open_editor
+2026-09-21 21:39:58.121 [INFO] [PID 25732] [TID 2] WebView2: начало инициализации. | form=Assist Quest Editor — Нодовый редактор — Новый документ; page=editor.html#graph
+2026-09-21 21:39:58.177 [INFO] [PID 25732] [TID 2] WebView2: CoreWebView2 создан. | browser=153.0.4234.48
+2026-09-21 21:39:58.178 [INFO] [PID 25732] [TID 2] WebView2: Navigate. | form=Assist Quest Editor — Нодовый редактор — Новый документ; uri=file:///C:/Users/Admin/AppData/Local/Temp/.net/AssistQuestEditor/4ar0mj6I2seH/Web/editor.html?v=1.0.40.132#graph; sourceExists=True; sourceBytes=931
+2026-09-21 21:39:58.233 [INFO] [PID 25732] [TID 2] WEB: Web document load завершён. | {"title":"Редактор","url":"file:///C:/Users/Admin/AppData/Local/Temp/.net/AssistQuestEditor/4ar0mj6I2seH/Web/editor.html?v=1.0.40.132#graph"}
+2026-09-21 21:39:58.235 [INFO] [PID 25732] [TID 2] WebView2: NavigationCompleted. | form=Assist Quest Editor — Нодовый редактор — Новый документ; success=True; error=Unknown
+2026-09-21 21:39:58.235 [INFO] [PID 25732] [TID 2] WebView2: browser ready. | form=Assist Quest Editor — Нодовый редактор — Новый документ; page=editor.html#graph
+2026-09-21 21:40:03.046 [INFO] [PID 25732] [TID 2] WebView2: получено действие. | form=Assist Quest Editor — Редактор; action=open_editor
+2026-09-21 21:40:03.055 [INFO] [PID 25732] [TID 2] WebView2: начало инициализации. | form=Assist Quest Editor — Редактор сцен — Новый документ; page=editor.html#scene
+2026-09-21 21:40:03.107 [INFO] [PID 25732] [TID 2] WebView2: CoreWebView2 создан. | browser=153.0.4234.48
+2026-09-21 21:40:03.108 [INFO] [PID 25732] [TID 2] WebView2: Navigate. | form=Assist Quest Editor — Редактор сцен — Новый документ; uri=file:///C:/Users/Admin/AppData/Local/Temp/.net/AssistQuestEditor/4ar0mj6I2seH/Web/editor.html?v=1.0.40.132#scene; sourceExists=True; sourceBytes=931
+2026-09-21 21:40:03.138 [INFO] [PID 25732] [TID 2] WEB: Web document load завершён. | {"title":"Редактор","url":"file:///C:/Users/Admin/AppData/Local/Temp/.net/AssistQuestEditor/4ar0mj6I2seH/Web/editor.html?v=1.0.40.132#scene"}
+2026-09-21 21:40:03.141 [INFO] [PID 25732] [TID 2] WebView2: NavigationCompleted. | form=Assist Quest Editor — Редактор сцен — Новый документ; success=True; error=Unknown
+2026-09-21 21:40:03.141 [INFO] [PID 25732] [TID 2] WebView2: browser ready. | form=Assist Quest Editor — Редактор сцен — Новый документ; page=editor.html#scene
+2026-09-21 21:40:24.107 [INFO] [PID 25732] [TID 2] WebView2: получено действие. | form=Assist Quest Editor — Редактор сцен — Новый документ; action=scene_connect
+2026-09-21 21:40:24.107 [ERROR] [PID 25732] [TID 2] EditorForm: ошибка обработки web action. | System.InvalidOperationException: Входной socket уже подключён. \n    at AssistQuestEditor.App.EditorForm.HandleSceneAction(JsonElement root, String action) \n    at AssistQuestEditor.App.EditorForm.OnWebMessage(String json)
+2026-09-21 21:40:28.265 [INFO] [PID 25732] [TID 2] WebView2: получено действие. | form=Assist Quest Editor — Редактор сцен — Новый документ; action=scene_connect
+2026-09-21 21:40:28.265 [ERROR] [PID 25732] [TID 2] EditorForm: ошибка обработки web action. | System.InvalidOperationException: Входной socket уже подключён. \n    at AssistQuestEditor.App.EditorForm.HandleSceneAction(JsonElement root, String action) \n    at AssistQuestEditor.App.EditorForm.OnWebMessage(String json)
+2026-09-21 21:40:32.546 [INFO] [PID 25732] [TID 2] WebView2: получено действие. | form=Assist Quest Editor — Редактор сцен — Новый документ; action=scene_disconnect
+2026-09-21 21:40:34.123 [INFO] [PID 25732] [TID 2] WebView2: получено действие. | form=Assist Quest Editor — Редактор сцен — Новый документ *; action=scene_connect
+2026-09-21 21:40:34.123 [ERROR] [PID 25732] [TID 2] EditorForm: ошибка обработки web action. | System.InvalidOperationException: Входной socket уже подключён. \n    at AssistQuestEditor.App.EditorForm.HandleSceneAction(JsonElement root, String action) \n    at AssistQuestEditor.App.EditorForm.OnWebMessage(String json)
+2026-09-21 21:40:36.014 [INFO] [PID 25732] [TID 2] WebView2: получено действие. | form=Assist Quest Editor — Редактор сцен — Новый документ *; action=scene_disconnect
+2026-09-21 21:40:36.936 [INFO] [PID 25732] [TID 2] WebView2: получено действие. | form=Assist Quest Editor — Редактор сцен — Новый документ *; action=scene_update_node
+2026-09-21 21:40:38.317 [INFO] [PID 25732] [TID 2] WebView2: получено действие. | form=Assist Quest Editor — Редактор сцен — Новый документ *; action=scene_connect
+2026-09-21 21:40:40.147 [INFO] [PID 25732] [TID 2] WebView2: получено действие. | form=Assist Quest Editor — Редактор сцен — Новый документ *; action=scene_connect
+2026-09-21 21:40:40.147 [ERROR] [PID 25732] [TID 2] EditorForm: ошибка обработки web action. | System.InvalidOperationException: Входной socket уже подключён. \n    at AssistQuestEditor.App.EditorForm.HandleSceneAction(JsonElement root, String action) \n    at AssistQuestEditor.App.EditorForm.OnWebMessage(String json)
+2026-09-21 21:40:42.378 [INFO] [PID 25732] [TID 2] WebView2: получено действие. | form=Assist Quest Editor — Редактор сцен — Новый документ *; action=scene_disconnect
+2026-09-21 21:40:43.240 [INFO] [PID 25732] [TID 2] WebView2: получено действие. | form=Assist Quest Editor — Редактор сцен — Новый документ *; action=scene_update_node
+2026-09-21 21:40:44.205 [INFO] [PID 25732] [TID 2] WebView2: получено действие. | form=Assist Quest Editor — Редактор сцен — Новый документ *; action=scene_connect
+2026-09-21 21:40:45.509 [INFO] [PID 25732] [TID 2] WebView2: получено действие. | form=Assist Quest Editor — Редактор сцен — Новый документ *; action=scene_connect
+2026-09-21 21:41:09.412 [INFO] [PID 25732] [TID 2] WebView2: получено действие. | form=Assist Quest Editor — Редактор сцен — Новый документ *; action=scene_add_node
+2026-09-21 21:41:09.415 [INFO] [PID 25732] [TID 2] Scene Graph: добавлена нода. | id=scene-node-3c8286cb; type=SceneWait
+2026-09-21 21:41:10.356 [INFO] [PID 25732] [TID 2] WebView2: получено действие. | form=Assist Quest Editor — Редактор сцен — Новый документ *; action=scene_update_node
+2026-09-21 21:41:12.300 [INFO] [PID 25732] [TID 2] WebView2: получено действие. | form=Assist Quest Editor — Редактор сцен — Новый документ *; action=scene_add_node
+2026-09-21 21:41:12.300 [INFO] [PID 25732] [TID 2] Scene Graph: добавлена нода. | id=scene-node-6d65353d; type=SceneStart
+2026-09-21 21:41:14.228 [INFO] [PID 25732] [TID 2] WebView2: получено действие. | form=Assist Quest Editor — Редактор сцен — Новый документ *; action=scene_update_node
+2026-09-21 21:41:17.980 [INFO] [PID 25732] [TID 2] WebView2: получено действие. | form=Assist Quest Editor — Редактор сцен — Новый документ *; action=scene_update_node
+2026-09-21 21:41:19.710 [INFO] [PID 25732] [TID 2] WebView2: получено действие. | form=Assist Quest Editor — Редактор сцен — Новый документ *; action=scene_remove_node
+2026-09-21 21:41:21.456 [INFO] [PID 25732] [TID 2] WebView2: получено действие. | form=Assist Quest Editor — Редактор сцен — Новый документ *; action=scene_remove_node
+2026-09-21 21:41:43.780 [INFO] [PID 25732] [TID 2] WebView2: получено действие. | form=Assist Quest Editor — Редактор сцен — Новый документ *; action=scene_update_node
+2026-09-21 21:41:45.562 [INFO] [PID 25732] [TID 2] WebView2: получено действие. | form=Assist Quest Editor — Редактор сцен — Новый документ *; action=scene_save
+2026-09-21 21:41:49.290 [INFO] [PID 25732] [TID 2] Scene Editor: документ сохранён. | path=F:\repo\assist_quest_editor\data\quests\Разговор с Русланом.json; scene=ruslan_start; bytes=4100
+2026-09-21 21:42:41.858 [INFO] [PID 25732] [TID 2] WebView2: получено действие. | form=Assist Quest Editor — Редактор сцен — Разговор с Русланом.json; action=scene_update_node
+2026-09-21 21:42:45.076 [INFO] [PID 25732] [TID 2] WebView2: получено действие. | form=Assist Quest Editor — Редактор сцен — Разговор с Русланом.json *; action=scene_connect
+2026-09-21 21:42:46.633 [INFO] [PID 25732] [TID 2] WebView2: получено действие. | form=Assist Quest Editor — Редактор сцен — Разговор с Русланом.json *; action=scene_connect
+2026-09-21 21:42:51.004 [INFO] [PID 25732] [TID 2] WebView2: получено действие. | form=Assist Quest Editor — Редактор сцен — Разговор с Русланом.json *; action=scene_undo
+2026-09-21 21:42:51.332 [INFO] [PID 25732] [TID 2] WebView2: получено действие. | form=Assist Quest Editor — Редактор сцен — Разговор с Русланом.json *; action=scene_undo
+2026-09-21 21:42:51.628 [INFO] [PID 25732] [TID 2] WebView2: получено действие. | form=Assist Quest Editor — Редактор сцен — Разговор с Русланом.json *; action=scene_undo
+2026-09-21 21:42:53.780 [INFO] [PID 25732] [TID 2] WebView2: получено действие. | form=Assist Quest Editor — Редактор сцен — Разговор с Русланом.json *; action=scene_redo
+2026-09-21 21:42:54.492 [INFO] [PID 25732] [TID 2] WebView2: получено действие. | form=Assist Quest Editor — Редактор сцен — Разговор с Русланом.json *; action=scene_redo
+2026-09-21 21:42:54.900 [INFO] [PID 25732] [TID 2] WebView2: получено действие. | form=Assist Quest Editor — Редактор сцен — Разговор с Русланом.json *; action=scene_redo
+2026-09-21 21:42:55.676 [INFO] [PID 25732] [TID 2] WebView2: получено действие. | form=Assist Quest Editor — Редактор сцен — Разговор с Русланом.json *; action=scene_undo
+2026-09-21 21:42:55.916 [INFO] [PID 25732] [TID 2] WebView2: получено действие. | form=Assist Quest Editor — Редактор сцен — Разговор с Русланом.json *; action=scene_undo
+2026-09-21 21:42:56.212 [INFO] [PID 25732] [TID 2] WebView2: получено действие. | form=Assist Quest Editor — Редактор сцен — Разговор с Русланом.json *; action=scene_undo
+2026-09-21 21:43:02.693 [INFO] [PID 25732] [TID 2] WebView2: получено действие. | form=Assist Quest Editor — Редактор сцен — Разговор с Русланом.json *; action=scene_save_as
+2026-09-21 21:43:05.684 [INFO] [PID 25732] [TID 2] Scene Editor: документ сохранён. | path=F:\repo\assist_quest_editor\data\quests\Разговор с Русланом2.json; scene=ruslan_start; bytes=4100
+2026-09-21 21:43:10.929 [INFO] [PID 25732] [TID 2] WebView2: получено действие. | form=Assist Quest Editor — Редактор сцен — Разговор с Русланом2.json; action=scene_update_node
+2026-09-21 21:43:14.368 [INFO] [PID 25732] [TID 2] Scene Editor: документ сохранён. | path=F:\repo\assist_quest_editor\data\quests\Разговор с Русланом2.json; scene=ruslan_start; bytes=4100
+2026-09-21 21:43:19.169 [INFO] [PID 25732] [TID 2] WebView2: получено действие. | form=Assist Quest Editor — Редактор; action=open_editor
+2026-09-21 21:43:19.177 [INFO] [PID 25732] [TID 2] WebView2: начало инициализации. | form=Assist Quest Editor — Редактор сцен — Новый документ; page=editor.html#scene
+2026-09-21 21:43:19.237 [INFO] [PID 25732] [TID 2] WebView2: CoreWebView2 создан. | browser=153.0.4234.48
+2026-09-21 21:43:19.237 [INFO] [PID 25732] [TID 2] WebView2: Navigate. | form=Assist Quest Editor — Редактор сцен — Новый документ; uri=file:///C:/Users/Admin/AppData/Local/Temp/.net/AssistQuestEditor/4ar0mj6I2seH/Web/editor.html?v=1.0.40.132#scene; sourceExists=True; sourceBytes=931
+2026-09-21 21:43:19.289 [INFO] [PID 25732] [TID 2] WEB: Web document load завершён. | {"title":"Редактор","url":"file:///C:/Users/Admin/AppData/Local/Temp/.net/AssistQuestEditor/4ar0mj6I2seH/Web/editor.html?v=1.0.40.132#scene"}
+2026-09-21 21:43:19.292 [INFO] [PID 25732] [TID 2] WebView2: NavigationCompleted. | form=Assist Quest Editor — Редактор сцен — Новый документ; success=True; error=Unknown
+2026-09-21 21:43:19.293 [INFO] [PID 25732] [TID 2] WebView2: browser ready. | form=Assist Quest Editor — Редактор сцен — Новый документ; page=editor.html#scene
+2026-09-21 21:43:21.575 [INFO] [PID 25732] [TID 2] WebView2: получено действие. | form=Assist Quest Editor — Редактор сцен — Новый документ; action=scene_open
+2026-09-21 21:43:41.715 [INFO] [PID 25732] [TID 2] Scene Editor: документ открыт. | path=F:\repo\assist_quest_editor\data\quests\Разговор с Русланом.json; scene=ruslan_start; schema=1
+2026-09-21 21:43:43.925 [INFO] [PID 25732] [TID 2] WebView2: получено действие. | form=Assist Quest Editor — Редактор сцен — Разговор с Русланом.json; action=scene_open_last
+2026-09-21 21:43:43.927 [INFO] [PID 25732] [TID 2] Scene Editor: документ открыт. | path=F:\repo\assist_quest_editor\data\quests\Разговор с Русланом.json; scene=ruslan_start; schema=1
+2026-09-21 21:43:59.159 [INFO] [PID 25732] [TID 2] WebView2: получено действие. | form=Assist Quest Editor — Редактор сцен — Разговор с Русланом.json; action=scene_validate
+2026-09-21 21:44:07.519 [INFO] [PID 25732] [TID 2] WebView2: получено действие. | form=Assist Quest Editor — Редактор сцен — Разговор с Русланом.json; action=scene_validate
+2026-09-21 21:44:28.917 [INFO] [PID 25732] [TID 2] WebView2: получено действие. | form=Assist Quest Editor — Редактор сцен — Разговор с Русланом.json; action=scene_layout
+2026-09-21 21:44:28.918 [INFO] [PID 25732] [TID 2] Scene Graph: выполнено перестроение раскладки. | scene=ruslan_start; nodes=5; moved=2
+2026-09-21 21:44:35.941 [INFO] [PID 25732] [TID 2] WebView2: получено действие. | form=Assist Quest Editor — Редактор сцен — Разговор с Русланом.json *; action=scene_save
+2026-09-21 21:44:35.943 [INFO] [PID 25732] [TID 2] Scene Editor: документ сохранён. | path=F:\repo\assist_quest_editor\data\quests\Разговор с Русланом.json; scene=ruslan_start; bytes=4099
+2026-09-21 21:44:50.629 [INFO] [PID 25732] [TID 2] WebView2: получено действие. | form=Assist Quest Editor — Редактор; action=open_editor
+2026-09-21 21:44:50.636 [INFO] [PID 25732] [TID 2] WebView2: начало инициализации. | form=Assist Quest Editor — Инспектор каналов; page=editor.html#channels
+2026-09-21 21:44:50.691 [INFO] [PID 25732] [TID 2] WebView2: CoreWebView2 создан. | browser=153.0.4234.48
+2026-09-21 21:44:50.692 [INFO] [PID 25732] [TID 2] WebView2: Navigate. | form=Assist Quest Editor — Инспектор каналов; uri=file:///C:/Users/Admin/AppData/Local/Temp/.net/AssistQuestEditor/4ar0mj6I2seH/Web/editor.html?v=1.0.40.132#channels; sourceExists=True; sourceBytes=931
+2026-09-21 21:44:50.746 [INFO] [PID 25732] [TID 2] WEB: Web document load завершён. | {"title":"Редактор","url":"file:///C:/Users/Admin/AppData/Local/Temp/.net/AssistQuestEditor/4ar0mj6I2seH/Web/editor.html?v=1.0.40.132#channels"}
+2026-09-21 21:44:50.750 [INFO] [PID 25732] [TID 2] WebView2: NavigationCompleted. | form=Assist Quest Editor — Инспектор каналов; success=True; error=Unknown
+2026-09-21 21:44:50.751 [INFO] [PID 25732] [TID 2] WebView2: browser ready. | form=Assist Quest Editor — Инспектор каналов; page=editor.html#channels
+2026-09-21 21:44:56.294 [INFO] [PID 25732] [TID 2] WebView2: получено действие. | form=Assist Quest Editor — Редактор; action=open_editor
+2026-09-21 21:44:56.302 [INFO] [PID 25732] [TID 2] WebView2: начало инициализации. | form=Assist Quest Editor — Редактор условий и действий; page=editor.html#conditions
+2026-09-21 21:44:56.355 [INFO] [PID 25732] [TID 2] WebView2: CoreWebView2 создан. | browser=153.0.4234.48
+2026-09-21 21:44:56.356 [INFO] [PID 25732] [TID 2] WebView2: Navigate. | form=Assist Quest Editor — Редактор условий и действий; uri=file:///C:/Users/Admin/AppData/Local/Temp/.net/AssistQuestEditor/4ar0mj6I2seH/Web/editor.html?v=1.0.40.132#conditions; sourceExists=True; sourceBytes=931
+2026-09-21 21:44:56.378 [INFO] [PID 25732] [TID 2] WEB: Web document load завершён. | {"title":"Редактор","url":"file:///C:/Users/Admin/AppData/Local/Temp/.net/AssistQuestEditor/4ar0mj6I2seH/Web/editor.html?v=1.0.40.132#conditions"}
+2026-09-21 21:44:56.386 [INFO] [PID 25732] [TID 2] WebView2: NavigationCompleted. | form=Assist Quest Editor — Редактор условий и действий; success=True; error=Unknown
+2026-09-21 21:44:56.386 [INFO] [PID 25732] [TID 2] WebView2: browser ready. | form=Assist Quest Editor — Редактор условий и действий; page=editor.html#conditions
+2026-09-21 21:45:05.452 [INFO] [PID 25732] [TID 2] WebView2: получено действие. | form=Assist Quest Editor — Редактор; action=open_editor
+2026-09-21 21:45:05.460 [INFO] [PID 25732] [TID 2] WebView2: начало инициализации. | form=Assist Quest Editor — Редактор мира; page=editor.html#world
+2026-09-21 21:45:05.513 [INFO] [PID 25732] [TID 2] WebView2: CoreWebView2 создан. | browser=153.0.4234.48
+2026-09-21 21:45:05.514 [INFO] [PID 25732] [TID 2] WebView2: Navigate. | form=Assist Quest Editor — Редактор мира; uri=file:///C:/Users/Admin/AppData/Local/Temp/.net/AssistQuestEditor/4ar0mj6I2seH/Web/editor.html?v=1.0.40.132#world; sourceExists=True; sourceBytes=931
+2026-09-21 21:45:05.542 [INFO] [PID 25732] [TID 2] WEB: Web document load завершён. | {"title":"Редактор","url":"file:///C:/Users/Admin/AppData/Local/Temp/.net/AssistQuestEditor/4ar0mj6I2seH/Web/editor.html?v=1.0.40.132#world"}
+2026-09-21 21:45:05.548 [INFO] [PID 25732] [TID 2] WebView2: NavigationCompleted. | form=Assist Quest Editor — Редактор мира; success=True; error=Unknown
+2026-09-21 21:45:05.549 [INFO] [PID 25732] [TID 2] WebView2: browser ready. | form=Assist Quest Editor — Редактор мира; page=editor.html#world
+2026-09-21 21:45:08.897 [INFO] [PID 25732] [TID 2] WebView2: получено действие. | form=Assist Quest Editor — Редактор мира; action=coordinate_request
+2026-09-21 21:45:11.168 [INFO] [PID 25732] [TID 2] WebView2: получено действие. | form=Assist Quest Editor — Редактор мира; action=coordinate_request
+2026-09-21 21:45:14.157 [INFO] [PID 25732] [TID 2] WebView2: получено действие. | form=Assist Quest Editor — Редактор; action=open_simulator
+2026-09-21 21:45:16.940 [INFO] [PID 25732] [TID 2] WebView2: получено действие. | form=Assist Quest Editor — Симулятор; action=select_point
+2026-09-21 21:45:16.941 [INFO] [PID 25732] [TID 2] SimulatorForm: обработка web action. | json={"action":"select_point","id":"sdo:male:0x5242439b4e800000"}
+2026-09-21 21:45:16.950 [INFO] [PID 25732] [TID 2] Simulator: событие опубликовано. | event=ChannelChanged; source=Карта симулятора; payload={"channel":"world-selection","description":"Выбрана СДО-точка sdo:male:0x5242439b4e800000"}
+2026-09-21 21:45:16.958 [INFO] [PID 25732] [TID 2] SimulatorForm: формирование snapshot. | points=5192; selected=sdo:male:0x5242439b4e800000; player=WorldCoordinate { X = 158898, Y = 89,5193, Z = -76926,55 }
+2026-09-21 21:45:16.963 [INFO] [PID 25732] [TID 2] SimulatorForm: отправляю snapshot в WebView2. | jsonChars=1307756; points=5192
+2026-09-21 21:45:16.992 [INFO] [PID 25732] [TID 2] WEB: Simulator получил snapshot. | {"points":5192,"selectedPointId":"sdo:male:0x5242439b4e800000","player":{"x":158898,"y":89.5193,"z":-76926.55},"version":"1.0.40.132-QUEST-SCENE-EDITOR-R2"}
+2026-09-21 21:45:18.468 [INFO] [PID 25732] [TID 2] WebView2: получено действие. | form=Assist Quest Editor — Редактор мира; action=coordinate_request
+2026-09-21 21:45:24.072 [INFO] [PID 25732] [TID 2] WebView2: получено действие. | form=Assist Quest Editor — Редактор мира; action=coordinate_request
+2026-09-21 21:45:24.673 [INFO] [PID 25732] [TID 2] WebView2: получено действие. | form=Assist Quest Editor — Редактор мира; action=coordinate_request
+2026-09-21 21:45:26.416 [INFO] [PID 25732] [TID 2] WebView2: получено действие. | form=Assist Quest Editor — Редактор мира; action=coordinate_request
+2026-09-21 21:45:27.086 [INFO] [PID 25732] [TID 2] WebView2: получено действие. | form=Assist Quest Editor — Редактор мира; action=coordinate_request
+2026-09-21 21:45:30.394 [INFO] [PID 25732] [TID 2] WebView2: получено действие. | form=Assist Quest Editor — Редактор мира; action=coordinate_request
+2026-09-21 21:45:33.848 [INFO] [PID 25732] [TID 2] WebView2: получено действие. | form=Assist Quest Editor — Редактор мира; action=coordinate_request
+2026-09-21 21:45:35.387 [INFO] [PID 25732] [TID 2] WebView2: получено действие. | form=Assist Quest Editor — Симулятор; action=select_point
+2026-09-21 21:45:35.387 [INFO] [PID 25732] [TID 2] SimulatorForm: обработка web action. | json={"action":"select_point","id":"sdo:village_house_5:0x51bd6987f8800005"}
+2026-09-21 21:45:35.389 [INFO] [PID 25732] [TID 2] Simulator: событие опубликовано. | event=ChannelChanged; source=Карта симулятора; payload={"channel":"world-selection","description":"Выбрана СДО-точка sdo:village_house_5:0x51bd6987f8800005"}
+2026-09-21 21:45:35.394 [INFO] [PID 25732] [TID 2] SimulatorForm: формирование snapshot. | points=5192; selected=sdo:village_house_5:0x51bd6987f8800005; player=WorldCoordinate { X = 158898, Y = 89,5193, Z = -76926,55 }
+2026-09-21 21:45:35.399 [INFO] [PID 25732] [TID 2] SimulatorForm: отправляю snapshot в WebView2. | jsonChars=1307823; points=5192
+2026-09-21 21:45:35.430 [INFO] [PID 25732] [TID 2] WEB: Simulator получил snapshot. | {"points":5192,"selectedPointId":"sdo:village_house_5:0x51bd6987f8800005","player":{"x":158898,"y":89.5193,"z":-76926.55},"version":"1.0.40.132-QUEST-SCENE-EDITOR-R2"}
+2026-09-21 21:45:37.397 [INFO] [PID 25732] [TID 2] WebView2: получено действие. | form=Assist Quest Editor — Симулятор; action=select_point
+2026-09-21 21:45:37.398 [INFO] [PID 25732] [TID 2] SimulatorForm: обработка web action. | json={"action":"select_point","id":"sdo:forest_fire:0x518f351131800000"}
+2026-09-21 21:45:37.399 [INFO] [PID 25732] [TID 2] Simulator: событие опубликовано. | event=ChannelChanged; source=Карта симулятора; payload={"channel":"world-selection","description":"Выбрана СДО-точка sdo:forest_fire:0x518f351131800000"}
+2026-09-21 21:45:37.403 [INFO] [PID 25732] [TID 2] SimulatorForm: формирование snapshot. | points=5192; selected=sdo:forest_fire:0x518f351131800000; player=WorldCoordinate { X = 158898, Y = 89,5193, Z = -76926,55 }
+2026-09-21 21:45:37.407 [INFO] [PID 25732] [TID 2] SimulatorForm: отправляю snapshot в WebView2. | jsonChars=1307795; points=5192
+2026-09-21 21:45:37.436 [INFO] [PID 25732] [TID 2] WEB: Simulator получил snapshot. | {"points":5192,"selectedPointId":"sdo:forest_fire:0x518f351131800000","player":{"x":158898,"y":89.5193,"z":-76926.55},"version":"1.0.40.132-QUEST-SCENE-EDITOR-R2"}
+2026-09-21 21:45:39.550 [INFO] [PID 25732] [TID 2] WebView2: получено действие. | form=Assist Quest Editor — Редактор мира; action=coordinate_request
+2026-09-21 21:45:48.920 [INFO] [PID 25732] [TID 2] Application.Run завершён.
+2026-09-21 21:45:48.920 [INFO] [PID 25732] [TID 2] === Assist Quest Editor END ===

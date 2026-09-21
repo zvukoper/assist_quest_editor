@@ -155,8 +155,7 @@ input,select,textarea{padding:4px 5px;border-radius:4px;font-size:10px}textarea{
    Нужна, чтобы до клика было видно, что указатель попал именно в сокет,
    а не в край ноды: круг сокета лежит на границе, и без подсветки это
    неочевидно. */
-#questGraphSvg .socketGroup.hovered .socket, и без подсветки это
-   неочевидно. */
+#questGraphSvg .socketGroup.hovered .socket,
 #sceneGraphSvg .socketGroup.hovered .socket{
   stroke:#fff;stroke-width:3;filter:drop-shadow(0 0 7px rgba(255,255,255,.85))
 }
@@ -165,7 +164,7 @@ input,select,textarea{padding:4px 5px;border-radius:4px;font-size:10px}textarea{
 
 /* Совместимый Input, когда уже выбран Output: зелёная обводка поверх белой.
    Это подтверждение, что соединение будет принято. */
-#questGraphSvg .socketGroup.hovered.compatible .socket, что соединение будет принято. */
+#questGraphSvg .socketGroup.hovered.compatible .socket,
 #sceneGraphSvg .socketGroup.hovered.compatible .socket{
   stroke:var(--lime);stroke-width:4;filter:drop-shadow(0 0 9px rgba(17,251,6,.9))
 }
@@ -174,8 +173,6 @@ input,select,textarea{padding:4px 5px;border-radius:4px;font-size:10px}textarea{
 
 /* Несовместимая цель: красная обводка — соединение не будет создано. */
 #questGraphSvg .socketGroup.hovered.incompatible .socket,
-
-/* Несовместимая цель: красная обводка — соединение не будет создано. */
 #sceneGraphSvg .socketGroup.hovered.incompatible .socket{
   stroke:var(--red);stroke-width:3;filter:drop-shadow(0 0 7px rgba(207,12,12,.85))
 }
@@ -184,8 +181,6 @@ input,select,textarea{padding:4px 5px;border-radius:4px;font-size:10px}textarea{
    not-allowed — соединение невозможно. Первое указание на сокет — уже сам
    crosshair вместо стрелки/руки ноды. */
 #questGraphSvg .socketGroup,
-   not-allowed — соединение невозможно. Первое указание на сокет — уже сам
-   crosshair вместо стрелки/руки ноды. */
 #sceneGraphSvg .socketGroup{cursor:crosshair}
 #questGraphSvg .socketGroup.hovered.compatible,
 #sceneGraphSvg .socketGroup.hovered.compatible{cursor:copy}
@@ -196,7 +191,7 @@ input,select,textarea{padding:4px 5px;border-radius:4px;font-size:10px}textarea{
    - без этого конец preview-кабеля идёт точно за курсором и перекрывает сокет,
      из-за чего курсор мигает между «палец» и «стрелка»;
    - связи визуальные, никаких обработчиков на них нет. */
-#questGraphSvg .edge, никаких обработчиков на них нет. */
+#questGraphSvg .edge,
 #sceneGraphSvg .edge{pointer-events:none}
 #questGraphSvg .pendingEdge,
 #sceneGraphSvg .pendingEdge{pointer-events:none}
