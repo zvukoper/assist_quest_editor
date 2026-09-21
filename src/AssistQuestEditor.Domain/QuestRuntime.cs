@@ -143,6 +143,14 @@ public sealed class QuestRuntime
                 LastEvent = value.EventType
             };
             Publish("RuntimeEventMatched", value.Source, State.CurrentNodeId, $"Событие {value.EventType} принято.");
+            var node = FindCurrentNode();
+            if (node is null)
+            {
+                Fail("Ожидающая нода не найдена.");
+                return;
+            }
+
+            MoveToFirstOutput(node);
             Advance();
             return;
         }
@@ -423,6 +431,7 @@ public sealed class QuestRuntime
         ResetWaiting();
         State = State with { Status = QuestRuntimeStatus.Running, WaitingFor = null, LastEvent = "WaitingConditionMet" };
         MoveToFirstOutput(node);
+        Advance();
     }
 
     private void MoveToFirstOutput(QuestNode node)

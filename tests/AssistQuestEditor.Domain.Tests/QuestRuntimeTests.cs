@@ -59,7 +59,7 @@ public sealed class QuestRuntimeTests
         var runtime = new QuestRuntime(store, hub);
 
         hub.Get<PlayerState>("player").Set(
-            new PlayerState(new WorldCoordinate(0, 0, 0), 0, 0, false, true),
+            new PlayerState(new WorldCoordinate(-1000, 0, -1000), 0, 0, false, true),
             "Тест начальной позиции");
 
         runtime.Start();
