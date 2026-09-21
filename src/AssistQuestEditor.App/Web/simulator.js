@@ -17,6 +17,8 @@
   let runtimeTargetKey = "";
   let dragPlayerPosition = null;
   let journalDetached = false;
+  let lastQuestVisualLogKey = "";
+  let lastQuestTargetResolutionKey = "";
   const DISTANCE_RINGS = [25, 50, 100, 250, 500, 1000, 1500, 2000];
 
   function formatPosition(position) {
@@ -27,6 +29,36 @@
   const escapeHtml = value => String(value ?? "").replace(/[&<>"']/g, char => ({
     "&": "&amp;", "<": "&lt;", ">": "&gt;", "\"": "&quot;", "'": "&#39;"
   }[char]));
+
+  function runtimeStatusName(status) {
+    if (typeof status === "string") return status;
+    const numeric = Number(status);
+    return Number.isInteger(numeric)
+      ? ([ "Stopped", "Running", "Waiting", "Completed", "Failed" ][numeric] || String(status))
+      : String(status ?? "");
+  }
+
+  function logQuestTargetResolution(stage) {
+    const info = runtimeTargetInfo();
+    const key = stage + "|" + runtimeStatusName(runtime?.status) + "|" +
+      String(runtime?.currentNodeId || "") + "|" + String(info.point?.id || "") + "|" + info.kind;
+    if (key === lastQuestTargetResolutionKey) return info;
+    lastQuestTargetResolutionKey = key;
+    window.assistQuestLog?.("INFO", "Quest UI: целевая точка вычислена.", {
+      stage,
+      runtimeStatus: runtimeStatusName(runtime?.status),
+      rawRuntimeStatus: runtime?.status,
+      currentNodeId: runtime?.currentNodeId || null,
+      targetKind: info.kind,
+      targetPointId: info.point?.id || null,
+      targetName: info.point?.name || null,
+      targetCategory: info.point?.category || null,
+      targetPosition: info.point?.position || null,
+      radius: info.radius,
+      found: !!info.point
+    });
+    return info;
+  }
 
   const sections = [
     ["player", "Игрок и мир"],
@@ -150,6 +182,44 @@
     drawDistanceRings(ctx, width, height, playerForDraw?.position);
     drawRuntimeTarget(ctx, playerForDraw?.position);
     drawPlayer(ctx, playerForDraw);
+
+    const visualInfo = runtimeTargetInfo();
+    const targetScreen = visualInfo.point
+      ? worldToScreen(visualInfo.point.position.x, visualInfo.point.position.z)
+      : null;
+    const playerScreen = playerForDraw?.position
+      ? worldToScreen(playerForDraw.position.x, playerForDraw.position.z)
+      : null;
+    const targetVisible = !!targetScreen &&
+      targetScreen.x >= -24 && targetScreen.y >= -24 &&
+      targetScreen.x <= width + 24 && targetScreen.y <= height + 24;
+    const visualKey = [
+      runtimeStatusName(runtime?.status),
+      runtime?.currentNodeId || "",
+      visualInfo.point?.id || "",
+      Math.round(playerScreen?.x || 0),
+      Math.round(playerScreen?.y || 0),
+      Math.round(targetScreen?.x || 0),
+      Math.round(targetScreen?.y || 0),
+      Math.round(camera.mpp * 100) / 100
+    ].join("|");
+    if (visualKey !== lastQuestVisualLogKey) {
+      lastQuestVisualLogKey = visualKey;
+      window.assistQuestLog?.("INFO", "Quest UI: карта перерисована.", {
+        runtimeStatus: runtimeStatusName(runtime?.status),
+        rawRuntimeStatus: runtime?.status,
+        currentNodeId: runtime?.currentNodeId || null,
+        targetPointId: visualInfo.point?.id || null,
+        targetHighlighted: !!visualInfo.point,
+        targetRendered: !!targetScreen,
+        targetVisible,
+        targetScreen,
+        playerScreen,
+        targetRadiusPx: Number.isFinite(visualInfo.radius) ? visualInfo.radius / camera.mpp : null,
+        measurementRingsRendered: DISTANCE_RINGS.filter(value => value / camera.mpp >= 3)
+      });
+    }
+
     drawCategoryLegend(ctx, width, height, points);
     drawScaleBar(ctx, width, height);
     drawHud();
@@ -599,7 +669,7 @@
 
   function runtimeExpectedEvent() {
     const node = getRuntimeNode();
-    if (!node || runtime?.status !== "Waiting") return null;
+    if (!node || runtimeStatusName(runtime?.status) !== "Waiting") return null;
 
     const type = String(node.nodeType || "").toLowerCase();
     if (type === "waitforevent") {
@@ -616,7 +686,7 @@
   }
 
   function focusRuntimeTarget() {
-    if (runtime?.status !== "Waiting") {
+    if (runtimeStatusName(runtime?.status) !== "Waiting") {
       runtimeTargetKey = "";
       return;
     }
@@ -657,7 +727,7 @@
   }
 
   function drawRuntimeTarget(ctx, playerPosition = null) {
-    if (!snapshot || runtime?.status !== "Waiting" || !questGraph) return;
+    if (!snapshot || runtimeStatusName(runtime?.status) !== "Waiting" || !questGraph) return;
     const info = runtimeTargetInfo();
     if (!info.point) return;
 
@@ -718,7 +788,7 @@
   function renderRuntimeSidebar() {
     if (!runtimeSide || !snapshot) return;
 
-    const status = runtime?.status || (snapshot?.system?.runtimeRunning ? "Running" : "Stopped");
+    const status = runtimeStatusName(runtime?.status || (snapshot?.system?.runtimeRunning ? "Running" : "Stopped"));
     const node = getRuntimeNode();
     const info = runtimeTargetInfo();
     const expectedEvent = runtimeExpectedEvent();
@@ -1094,7 +1164,33 @@
       questGraph = message.questGraph || questGraph;
       journalDetached = !!message.journalDetached;
       selectedPointId = snapshot.selection?.point?.id || null;
+
+      window.assistQuestLog?.("INFO", "Quest UI: snapshot загружен.", {
+        graph: questGraph ? {
+          id: questGraph.id,
+          name: questGraph.name,
+          nodes: questGraph.nodes?.length || 0,
+          connections: questGraph.connections?.length || 0
+        } : null,
+        runtime: runtime ? {
+          status: runtimeStatusName(runtime.status),
+          rawStatus: runtime.status,
+          currentNodeId: runtime.currentNodeId,
+          waitingFor: runtime.waitingFor,
+          lastEvent: runtime.lastEvent,
+          lastTransition: runtime.lastTransition
+        } : null
+      });
+
+      const targetInfo = logQuestTargetResolution("snapshot");
       focusRuntimeTarget();
+      window.assistQuestLog?.("INFO", "Quest UI: камера и ожидаемая цель обработаны.", {
+        currentNodeId: runtime?.currentNodeId || null,
+        targetPointId: targetInfo.point?.id || null,
+        targetFound: !!targetInfo.point,
+        camera
+      });
+
       window.assistWebLog?.("INFO", "Simulator получил snapshot.", {
         points: snapshot.world?.points?.length ?? 0,
         selectedPointId,
@@ -1110,6 +1206,17 @@
 
     if (message.type === "runtime_event") {
       runtime = message.runtime || runtime;
+      window.assistQuestLog?.("INFO", "Quest UI: Runtime event получен.", {
+        event: message["@event"] || message.event || null,
+        runtime: runtime ? {
+          status: runtimeStatusName(runtime.status),
+          rawStatus: runtime.status,
+          currentNodeId: runtime.currentNodeId,
+          waitingFor: runtime.waitingFor,
+          lastTransition: runtime.lastTransition
+        } : null
+      });
+      logQuestTargetResolution("runtime_event");
       focusRuntimeTarget();
       if (message["@event"] || message.event) {
         eventHistory.unshift({
@@ -1127,6 +1234,14 @@
     }
 
     if (message.type === "event") {
+      window.assistQuestLog?.("INFO", "Quest UI: Simulator event получен.", {
+        event: message["@event"] || message.event || null,
+        runtime: runtime ? {
+          status: runtimeStatusName(runtime.status),
+          currentNodeId: runtime.currentNodeId,
+          waitingFor: runtime.waitingFor
+        } : null
+      });
       focusRuntimeTarget();
       eventHistory.unshift(message["@event"] || message.event);
       eventHistory.splice(12);
@@ -1212,6 +1327,12 @@
         x: world.x,
         y: snapshot.player.position.y,
         z: world.z
+      });
+      window.assistQuestLog?.("INFO", "Quest UI: игрок перемещён.", {
+        position: { x: world.x, y: snapshot.player.position.y, z: world.z },
+        runtimeStatus: runtimeStatusName(runtime?.status),
+        waitingFor: runtime?.waitingFor || null,
+        currentNodeId: runtime?.currentNodeId || null
       });
       draggingPlayer = false;
       dragPlayerPosition = null;

@@ -12,6 +12,13 @@
     }
   };
 
+  window.assistQuestLog = (level, message, details = null) => {
+    try {
+      post({ action: "quest_log", level, message, details });
+    } catch {
+    }
+  };
+
   const originalError = console.error.bind(console);
   const originalWarn = console.warn.bind(console);
 

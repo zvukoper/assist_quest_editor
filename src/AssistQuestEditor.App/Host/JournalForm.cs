@@ -80,17 +80,48 @@ public sealed class JournalForm : Form
 
     public void SetEntries(IEnumerable<SimulatorJournalEntry> entries)
     {
-        var items = entries.ToArray();
-        var lines = items.Select(entry =>
+        _log.SuspendLayout();
+        _log.Clear();
+
+        foreach (var entry in entries)
         {
             var time = entry.Timestamp.ToLocalTime().ToString("HH:mm:ss");
             var source = string.IsNullOrWhiteSpace(entry.Source) ? "Источник" : entry.Source;
-            var detail = string.IsNullOrWhiteSpace(entry.Message) ? "" : "  " + entry.Message;
-            return $"{time}  {entry.EventType}  [{source}]{detail}";
-        });
+            var detail = string.IsNullOrWhiteSpace(entry.Message) ? string.Empty : "  " + entry.Message;
 
-        _log.Text = string.Join(Environment.NewLine, lines);
+            _log.SelectionStart = _log.TextLength;
+            _log.SelectionLength = 0;
+            _log.SelectionColor = Color.FromArgb(125, 135, 148);
+            _log.AppendText(time + "  ");
+
+            _log.SelectionStart = _log.TextLength;
+            _log.SelectionLength = 0;
+            _log.SelectionColor = EventColor(entry.EventType);
+            _log.AppendText(entry.EventType);
+
+            _log.SelectionStart = _log.TextLength;
+            _log.SelectionLength = 0;
+            _log.SelectionColor = Color.FromArgb(205, 215, 225);
+            _log.AppendText("  [" + source + "]" + detail + Environment.NewLine);
+        }
+
         _log.SelectionStart = 0;
         _log.SelectionLength = 0;
+        _log.ResumeLayout();
+    }
+
+    private static Color EventColor(string eventType)
+    {
+        return eventType.ToLowerInvariant() switch
+        {
+            "runtimestarted" or "questcompleted" => Color.FromArgb(110, 230, 150),
+            "runtimewaiting" => Color.FromArgb(250, 176, 3),
+            "runtimeeventmatched" => Color.FromArgb(110, 220, 255),
+            "nodetransition" or "nodeentered" => Color.FromArgb(140, 175, 255),
+            "runtimefailed" => Color.FromArgb(255, 112, 112),
+            "channelchanged" => Color.FromArgb(150, 155, 165),
+            "hornpressed" => Color.FromArgb(255, 145, 190),
+            _ => Color.FromArgb(205, 215, 225)
+        };
     }
 }

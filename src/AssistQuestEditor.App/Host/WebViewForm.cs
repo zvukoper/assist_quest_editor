@@ -109,17 +109,51 @@ public abstract class WebViewForm : Form
             {
                 var level = root.TryGetProperty("level", out var levelNode) ? levelNode.GetString() : "INFO";
                 var message = root.TryGetProperty("message", out var messageNode) ? messageNode.GetString() : "Web log";
-                var details = root.TryGetProperty("details", out var detailsNode) ? detailsNode.ToString() : null;
+                var details = root.TryGetProperty("details", out var detailsNode)
+                    ? FormatWebLogDetails(detailsNode)
+                    : null;
+                var logMessage = "WEB: " + (message ?? "Web info");
+
                 if (string.Equals(level, "ERROR", StringComparison.OrdinalIgnoreCase))
-                    AppLogger.Error("WEB: " + (message ?? "Web error"), details: details);
+                    AppLogger.Error(logMessage, details: details);
                 else if (string.Equals(level, "WARN", StringComparison.OrdinalIgnoreCase))
-                    AppLogger.Warn("WEB: " + (message ?? "Web warning"), details);
+                    AppLogger.Warn(logMessage, details);
                 else
-                    AppLogger.Info("WEB: " + (message ?? "Web info"), details);
+                    AppLogger.Info(logMessage, details);
+
+                if (Text.Contains("Симулятор", StringComparison.OrdinalIgnoreCase))
+                {
+                    if (string.Equals(level, "ERROR", StringComparison.OrdinalIgnoreCase))
+                        QuestLogger.Error(logMessage, details: details);
+                    else if (string.Equals(level, "WARN", StringComparison.OrdinalIgnoreCase))
+                        QuestLogger.Warn(logMessage, details);
+                    else
+                        QuestLogger.Info(logMessage, details);
+                }
                 return;
             }
 
-            AppLogger.Info("WebView2: получено действие.", "form=" + Text + "; action=" + (action ?? "<none>"));
+            if (string.Equals(action, "quest_log", StringComparison.OrdinalIgnoreCase))
+            {
+                var level = root.TryGetProperty("level", out var levelNode) ? levelNode.GetString() : "INFO";
+                var message = root.TryGetProperty("message", out var messageNode) ? messageNode.GetString() : "Quest UI log";
+                var details = root.TryGetProperty("details", out var detailsNode)
+                    ? FormatWebLogDetails(detailsNode)
+                    : null;
+
+                if (string.Equals(level, "ERROR", StringComparison.OrdinalIgnoreCase))
+                    QuestLogger.Error(message ?? "Quest UI error", details: details);
+                else if (string.Equals(level, "WARN", StringComparison.OrdinalIgnoreCase))
+                    QuestLogger.Warn(message ?? "Quest UI warning", details);
+                else
+                    QuestLogger.Info(message ?? "Quest UI info", details);
+                return;
+            }
+
+            var actionDetails = "form=" + Text + "; action=" + (action ?? "<none>");
+            AppLogger.Info("WebView2: получено действие.", actionDetails);
+            if (Text.Contains("Симулятор", StringComparison.OrdinalIgnoreCase))
+                QuestLogger.Info("Simulator WebView action.", actionDetails);
         }
         catch (Exception ex)
         {
@@ -127,6 +161,14 @@ public abstract class WebViewForm : Form
         }
 
         OnWebMessage(e.WebMessageAsJson);
+    }
+
+    private static string FormatWebLogDetails(JsonElement element)
+    {
+        if (element.ValueKind == JsonValueKind.String)
+            return element.GetString() ?? string.Empty;
+
+        return element.GetRawText();
     }
 
     protected void PostJson(string json)

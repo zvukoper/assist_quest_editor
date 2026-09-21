@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using AssistQuestEditor.Domain;
 
 namespace AssistQuestEditor.App;
@@ -9,6 +10,13 @@ public sealed class SimulatorForm : WebViewForm
     private readonly QuestRuntime _runtime;
     private readonly QuestGraphStore _questGraph;
     private readonly System.Windows.Forms.Timer _runtimeTimer;
+    private static readonly JsonSerializerOptions SnapshotJsonOptions = new()
+    {
+        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+        Converters = { new JsonStringEnumConverter() }
+    };
+
+    private string _lastQuestSnapshotLogKey = string.Empty;
     private readonly List<SimulatorJournalEntry> _journalEntries = new();
     private JournalForm? _journalForm;
     private bool _journalDetached;
@@ -70,6 +78,7 @@ public sealed class SimulatorForm : WebViewForm
         var pointCount = snapshot.World.Points.Count;
         AppLogger.Info("SimulatorForm: формирование snapshot.",
             $"points={pointCount}; selected={snapshot.Selection.Point?.Id ?? "<none>"}; player={snapshot.Player.Position}");
+        LogQuestSnapshot("snapshot");
 
         var payload = JsonSerializer.Serialize(new
         {
@@ -79,10 +88,7 @@ public sealed class SimulatorForm : WebViewForm
             runtime = _runtime.State,
             questGraph = _questGraph.Value,
             journalDetached = _journalDetached
-        }, new JsonSerializerOptions
-        {
-            PropertyNamingPolicy = JsonNamingPolicy.CamelCase
-        });
+        }, SnapshotJsonOptions);
 
         AppLogger.Info("SimulatorForm: отправляю snapshot в WebView2.", $"jsonChars={payload.Length}; points={pointCount}");
         PostJson(payload);
@@ -204,6 +210,17 @@ public sealed class SimulatorForm : WebViewForm
         _hub.Get<PlayerState>("player").Set(
             old with { Position = position },
             "Редактор игрока");
+
+        if (_runtime.State.Status == QuestRuntimeStatus.Waiting)
+        {
+            QuestLogger.Info("Quest Runtime: игрок перемещён во время ожидания.",
+                QuestLogger.Json(new
+                {
+                    position,
+                    waitingFor = _runtime.State.WaitingFor,
+                    currentNodeId = _runtime.State.CurrentNodeId
+                }));
+        }
     }
 
     private void SelectPoint(JsonElement root)
@@ -355,14 +372,17 @@ public sealed class SimulatorForm : WebViewForm
 
     private void DetachJournal()
     {
+        QuestLogger.Info("Journal: отделение журнала.");
         _journalDetached = true;
         AppUiPreferencesStore.Save(new AppUiPreferences(_journalDetached));
         OpenJournalWindow();
+        QuestLogger.Info("Journal: настройка сохранена.", QuestLogger.Json(new { journalDetached = _journalDetached }));
         PushSnapshot();
     }
 
     private void ReturnJournalToSidebar()
     {
+        QuestLogger.Info("Journal: возврат журнала в сайдбар.");
         _journalDetached = false;
         AppUiPreferencesStore.Save(new AppUiPreferences(_journalDetached));
 
@@ -373,11 +393,18 @@ public sealed class SimulatorForm : WebViewForm
             _journalForm = null;
         }
 
+        QuestLogger.Info("Journal: настройка сохранена.", QuestLogger.Json(new { journalDetached = _journalDetached }));
         PushSnapshot();
     }
 
     private void OpenJournalWindow()
     {
+        QuestLogger.Info("Journal: открытие окна.", QuestLogger.Json(new
+        {
+            entryCount = _journalEntries.Count,
+            detached = _journalDetached
+        }));
+
         if (_journalForm is not null && !_journalForm.IsDisposed)
         {
             _journalForm.WindowState = FormWindowState.Normal;
@@ -392,6 +419,7 @@ public sealed class SimulatorForm : WebViewForm
         _journalForm.ReturnToSidebarRequested += JournalForm_ReturnToSidebarRequested;
         _journalForm.FormClosed += (_, _) => _journalForm = null;
         _journalForm.Show(this);
+        QuestLogger.Info("Journal: native окно показано.", QuestLogger.Json(new { entryCount = _journalEntries.Count }));
     }
 
     private void JournalForm_ReturnToSidebarRequested(object? sender, EventArgs e)
@@ -413,12 +441,23 @@ public sealed class SimulatorForm : WebViewForm
             _journalEntries.RemoveRange(250, _journalEntries.Count - 250);
         }
 
+        QuestLogger.Info("Journal: событие добавлено.", QuestLogger.Json(new
+        {
+            eventType,
+            timestamp,
+            source,
+            message,
+            entryCount = _journalEntries.Count,
+            detached = _journalDetached
+        }));
+
         _journalForm?.SetEntries(_journalEntries);
     }
 
     private void QuestGraph_Changed(object? sender, EventArgs e)
     {
         AppLogger.Info("SimulatorForm: Quest Graph изменён.", $"nodes={_questGraph.Value.Nodes.Count}; connections={_questGraph.Value.Connections.Count}");
+        LogQuestGraph("graph_changed");
 
         if (IsDisposed || !IsHandleCreated)
         {
@@ -438,6 +477,36 @@ public sealed class SimulatorForm : WebViewForm
     {
         AppendJournal(e.EventType, e.Timestamp, e.Source, e.Message);
 
+        QuestLogger.Info("Quest Runtime: событие опубликовано.", QuestLogger.Json(new
+        {
+            stage = e.EventType,
+            eventType = e.EventType,
+            timestamp = e.Timestamp,
+            source = e.Source,
+            nodeId = e.NodeId,
+            runtimeState = _runtime.State,
+            message = e.Message
+        }));
+
+        if (e.EventType.Equals("RuntimeStarted", StringComparison.OrdinalIgnoreCase))
+            LogQuestGraph("runtime_started");
+
+        if (e.NodeId is not null)
+        {
+            var node = _questGraph.FindNode(e.NodeId);
+            if (node is not null)
+            {
+                QuestLogger.Info("Quest Runtime: активная нода.", QuestLogger.Json(new
+                {
+                    nodeId = node.NodeId,
+                    nodeType = node.NodeType,
+                    title = node.Title,
+                    parameters = node.Parameters,
+                    sockets = node.Sockets
+                }));
+            }
+        }
+
         AppLogger.Info(
             "Quest Runtime: событие.",
             $"event={e.EventType}; source={e.Source}; node={e.NodeId ?? "<none>"}; status={_runtime.State.Status}; waiting={_runtime.State.WaitingFor ?? "<none>"}; transition={_runtime.State.LastTransition}; message={e.Message}");
@@ -456,10 +525,7 @@ public sealed class SimulatorForm : WebViewForm
                     type = "runtime_event",
                     @event = e,
                     runtime = _runtime.State
-                }, new JsonSerializerOptions
-                {
-                    PropertyNamingPolicy = JsonNamingPolicy.CamelCase
-                }));
+                }, SnapshotJsonOptions));
                 PushSnapshot();
             }));
         }
@@ -476,9 +542,18 @@ public sealed class SimulatorForm : WebViewForm
             e.Source,
             e.Payload.Count == 0 ? string.Empty : JsonSerializer.Serialize(e.Payload));
 
+        QuestLogger.Info("Simulator: событие опубликовано.", QuestLogger.Json(new
+        {
+            eventType = e.EventType,
+            timestamp = e.Timestamp,
+            source = e.Source,
+            payload = e.Payload,
+            runtimeState = _runtime.State
+        }));
+
         AppLogger.Info(
             "Simulator: событие опубликовано.",
-            $"event={e.EventType}; source={e.Source}; payload={JsonSerializer.Serialize(e.Payload)}");
+            $"event={e.EventType}; source={e.Source}; payload={QuestLogger.Json(e.Payload)}");
 
         if (IsDisposed || !IsHandleCreated)
         {
@@ -496,6 +571,126 @@ public sealed class SimulatorForm : WebViewForm
         catch (InvalidOperationException)
         {
         }
+    }
+
+    private void LogQuestGraph(string stage)
+    {
+        var graph = _questGraph.Value;
+        QuestLogger.Info("QuestGraph: сформирована/загружена логика.", QuestLogger.Json(new
+        {
+            stage,
+            questId = graph.Id,
+            name = graph.Name,
+            nodeCount = graph.Nodes.Count,
+            connectionCount = graph.Connections.Count,
+            nodes = graph.Nodes.Select(node => new
+            {
+                nodeId = node.NodeId,
+                nodeType = node.NodeType,
+                title = node.Title,
+                position = new { node.X, node.Y },
+                parameters = node.Parameters,
+                sockets = node.Sockets
+            }),
+            connections = graph.Connections
+        }));
+    }
+
+    private void LogQuestSnapshot(string stage)
+    {
+        var state = _runtime.State;
+        var graph = _questGraph.Value;
+        var node = state.CurrentNodeId is null ? null : graph.Nodes.FirstOrDefault(x =>
+            x.NodeId.Equals(state.CurrentNodeId, StringComparison.OrdinalIgnoreCase));
+
+        object? target = null;
+        if (node is not null)
+        {
+            var type = node.NodeType.ToLowerInvariant();
+            string? pointId = null;
+            double? radius = null;
+
+            if (type == "interaction")
+            {
+                pointId = GetParameter(node, "worldPointId");
+                radius = TryGetDouble(GetParameter(node, "triggerRadius"));
+            }
+            else if (type is "condition" or "waitforcondition" &&
+                     GetParameter(node, "operator").Equals("distancecompare", StringComparison.OrdinalIgnoreCase))
+            {
+                pointId = GetParameter(node, "worldPointId", GetParameter(node, "right"));
+                radius = TryGetDouble(GetParameter(node, "triggerRadius"));
+            }
+
+            if (!string.IsNullOrWhiteSpace(pointId))
+            {
+                var point = _hub.Get<WorldState>("world").Value.Points.FirstOrDefault(x =>
+                    x.Id.Equals(pointId, StringComparison.OrdinalIgnoreCase));
+                var player = _hub.Get<PlayerState>("player").Value.Position;
+                var distance = point is null ? (double?)null : Distance(player, point.Position);
+                target = new
+                {
+                    pointId,
+                    found = point is not null,
+                    name = point?.Name,
+                    category = point?.Category,
+                    position = point?.Position,
+                    radius,
+                    distance,
+                    withinRadius = distance.HasValue && radius.HasValue && distance.Value <= radius.Value,
+                    player
+                };
+            }
+        }
+
+        var key = QuestLogger.Json(new
+        {
+            stage,
+            status = state.Status,
+            currentNodeId = state.CurrentNodeId,
+            waitingFor = state.WaitingFor,
+            target
+        });
+
+        if (string.Equals(key, _lastQuestSnapshotLogKey, StringComparison.Ordinal))
+            return;
+
+        _lastQuestSnapshotLogKey = key;
+        QuestLogger.Info("Quest UI: snapshot, ожидаемая цель и Runtime.", QuestLogger.Json(new
+        {
+            stage,
+            questId = graph.Id,
+            questName = graph.Name,
+            graphNodes = graph.Nodes.Count,
+            graphConnections = graph.Connections.Count,
+            runtimeState = state,
+            currentNode = node is null ? null : new
+            {
+                nodeId = node.NodeId,
+                nodeType = node.NodeType,
+                title = node.Title,
+                parameters = node.Parameters,
+                sockets = node.Sockets
+            },
+            target
+        }));
+    }
+
+    private static string GetParameter(QuestNode node, string key, string fallback = "") =>
+        node.Parameters.TryGetValue(key, out var value) ? value : fallback;
+
+    private static double? TryGetDouble(string value) =>
+        double.TryParse(value, System.Globalization.NumberStyles.Float,
+            System.Globalization.CultureInfo.InvariantCulture, out var parsed)
+            ? parsed
+            : null;
+
+    private static double Distance(WorldCoordinate a, WorldCoordinate b)
+    {
+        var dx = a.X - b.X;
+        var dy = a.Y - b.Y;
+        var dz = a.Z - b.Z;
+        return Math.Sqrt(dx * dx + dy * dy + dz * dz);
     }
 
     private static string Required(JsonElement root, string name)
