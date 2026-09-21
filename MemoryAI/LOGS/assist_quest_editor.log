@@ -634,3 +634,5 @@
 2026-09-21 16:38:37.213 [INFO] [PID 22668] [TID 2] WEB: Simulator получил snapshot. | {"points":5192,"selectedPointId":null,"player":{"x":158898,"y":89.5193,"z":-76926.55},"version":"1.0.40.126-QUEST-INTERFACE-CHOICE-R1"}
 2026-09-21 16:38:37.215 [INFO] [PID 22668] [TID 2] WEB: Simulator получил snapshot. | {"points":5192,"selectedPointId":null,"player":{"x":158898,"y":89.5193,"z":-76926.55},"version":"1.0.40.126-QUEST-INTERFACE-CHOICE-R1"}
 2026-09-21 16:38:43.925 [INFO] [PID 22668] [TID 2] WebView2: получено действие. | form=Assist Quest Editor — Редактор; action=push_logs
+2026-09-21 16:38:49.402 [INFO] [PID 22668] [TID 2] Application.Run завершён.
+2026-09-21 16:38:49.402 [INFO] [PID 22668] [TID 2] === Assist Quest Editor END ===
