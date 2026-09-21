@@ -429,7 +429,7 @@ public sealed class EditorForm : WebViewForm
                     : Path.GetFileName(path)
             };
 
-            if (dialog.ShowDialog(this) != DialogResult.OK) return;
+            if (dialog.ShowDialog(this) != DialogResult.OK) return false;
             path = dialog.FileName;
         }
 
