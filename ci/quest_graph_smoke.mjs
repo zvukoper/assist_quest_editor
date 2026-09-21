@@ -191,8 +191,10 @@ try {
   const contextY = svgBox.y + 140;
   await page.mouse.click(contextX, contextY, { button: "right" });
   await page.getByText("Add", { exact: true }).waitFor();
-  await page.locator(".graphContextMenuItem").filter({ hasText: "Выбор (Choice)" }).waitFor();
-  await page.locator(".graphContextMenuItem").filter({ hasText: "Выбор (Choice)" }).click();
+  const choiceMenuItem = page.locator(".graphContextMenuItem[data-node-type=\"Choice\"]");
+  await choiceMenuItem.waitFor();
+  await choiceMenuItem.scrollIntoViewIfNeeded();
+  await choiceMenuItem.click();
   await page.waitForTimeout(20);
 
   const contextAdded = await page.evaluate(() =>
@@ -218,7 +220,10 @@ try {
 
   const beforeConnectMessages = await page.evaluate(() => window.__messages.length);
   await page.mouse.click(svgBox.x + 520, svgBox.y + 360, { button: "right" });
-  await page.locator(".graphContextMenuItem").filter({ hasText: "Фаза (Phase)" }).click();
+  const phaseMenuItem = page.locator(".graphContextMenuItem[data-node-type=\"Phase\"]");
+  await phaseMenuItem.waitFor();
+  await phaseMenuItem.scrollIntoViewIfNeeded();
+  await phaseMenuItem.click();
   await page.waitForTimeout(20);
 
   const addAndConnect = await page.evaluate(index =>
