@@ -467,3 +467,23 @@ Scene Graph является самостоятельной canonical модел
 В актуальном WolvenKit scnChoiceNode является Scene Graph node, а scnChoiceNodeOption связывается с отдельным screenplay item через ScreenplayOptionId; текст разрешается через screenplay/localization storage. Наш SceneChoiceOption — упрощённый game-agnostic эквивалент этого принципа. Полноценный localization resource layer добавляется отдельно.
 
 Текущий Quest Graph Choice сознательно оставлен как compatibility/regression seam. После физической проверки DialogueScene → SceneRuntime → Choice его presentation-параметры можно выводить из canonical Scene модели и затем убрать прямую зависимость Choice от QuestNode.Parameters.
+
+## 20. Simulator inventory, player HUD and character state
+
+Simulator gameplay state is divided by responsibility:
+
+- `InventoryState` stores stable `ItemId` → quantity and a separate `NewItemIds` presentation-state set.
+- `ItemDefinition` stores presentation metadata (`Name`, `Description`, `Category`, `Color`) independently from quantity.
+- `PlayerVitalsState` stores health, energy, hydration and fatigue.
+- `PlayerProgressState` stores money, experience and a reserved third resource.
+- `CharacterState` stores SPECIAL-like stats, skills and reserved Buffs/Debuffs.
+
+Quest-driven inventory changes are published as a dedicated `InventoryChanged` event. Simulator presentation shows acquisition/removal notifications only when the event source is `QuestRuntime`. Manual simulator inventory edits therefore remain silent.
+
+The current starter item catalog is intentionally tiny and code-backed. The intended future direction is a resource-centric Item Editor and item definition files; the gameplay inventory must continue to refer to stable ItemIds.
+
+Player-state quest effects are explicit node types: `SetHealth`, `SetEnergy`, `SetHydration`, `SetFatigue`, `AddExperience`, `AddMoney`, `RemoveMoney`, `SetCharacterStat`. They modify channels through Runtime and never call Web UI directly.
+
+Backpack, item 'new' beacon, notifications, tooltips and Character panel are Simulator presentation. They are not part of QuestDefinition.
+
+Buff/debuff semantics are documented separately in `MemoryAI/CHARACTER_EFFECTS.md`. In this stage they are reserved only: not displayed and not automatically applied.
