@@ -1040,9 +1040,8 @@
 
         if (pendingOutput) {
           queueDirtyNodes(pendingOutput.nodeId);
-        } else {
-          pendingDirtySelection = true;
         }
+        pendingDirtySelection = true;
 
         send({
           action: "graph_add_node",
@@ -1165,6 +1164,13 @@
     const node = questGraph?.nodes?.find(item => item.nodeId === nodeId);
     if (!node) return false;
 
+    const relatedNodeIds = questGraph.connections
+      .filter(connection =>
+        connection.fromNodeId === nodeId || connection.toNodeId === nodeId
+      )
+      .flatMap(connection => [connection.fromNodeId, connection.toNodeId])
+      .filter(relatedNodeId => relatedNodeId !== nodeId);
+
     const confirmed = window.confirm(
       "Удалить ноду «" + node.title + "» (" + node.nodeType + ")?\n\n" +
       "Все связанные с ней соединения также будут удалены."
@@ -1177,6 +1183,7 @@
       pendingConnectionPoint = null;
     }
 
+    queueDirtyNodes(...relatedNodeIds);
     send({ action: "graph_remove_node", nodeId });
     const graphSvg = document.getElementById("questGraphSvg");
     if (graphSvg) refreshGraphEdges(graphSvg);
