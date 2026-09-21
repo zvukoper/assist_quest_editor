@@ -20,6 +20,8 @@ public sealed class SimulatorForm : WebViewForm
     private readonly List<SimulatorJournalEntry> _journalEntries = new();
     private JournalForm? _journalForm;
     private bool _journalDetached;
+    private bool _snapshotRequestScheduled;
+    private bool _journalRefreshScheduled;
 
     public SimulatorForm(IDataChannelHub hub, QuestRuntime runtime, QuestGraphStore questGraph)
         : base(
@@ -86,6 +88,7 @@ public sealed class SimulatorForm : WebViewForm
             type = "snapshot",
             version = VersionInfo.InformationalVersion,
             snapshot,
+            itemCatalog = ItemCatalogFactory.CreateStarter(),
             runtime = _runtime.State,
             questGraph = _questGraph.Value,
             journalDetached = _journalDetached
@@ -102,7 +105,7 @@ public sealed class SimulatorForm : WebViewForm
         {
             using var document = JsonDocument.Parse(json);
             var root = document.RootElement;
-            var action = root.GetProperty("action").GetString();
+            var action = root.GetProperty("action").GetString() ?? string.Empty;
 
             switch (action)
             {
@@ -138,6 +141,22 @@ public sealed class SimulatorForm : WebViewForm
 
                 case "set_inventory":
                     SetInventory(root);
+                    break;
+
+                case "mark_inventory_seen":
+                    MarkInventorySeen(root);
+                    break;
+
+                case "set_vitals":
+                    SetPlayerVitals(root);
+                    break;
+
+                case "set_progress":
+                    SetPlayerProgress(root);
+                    break;
+
+                case "set_character_stat":
+                    SetCharacterStat(root);
                     break;
 
                 case "set_reputation":
@@ -192,7 +211,7 @@ public sealed class SimulatorForm : WebViewForm
                     return;
             }
 
-            PushSnapshot();
+            RequestSnapshot("web action " + action);
         }
         catch (Exception ex)
         {
@@ -305,7 +324,68 @@ public sealed class SimulatorForm : WebViewForm
         {
             [key] = Math.Max(0, amount)
         };
-        _hub.Get<InventoryState>("inventory").Set(new InventoryState(items), "Редактор инвентаря");
+        var newIds = new HashSet<string>(state.NewItemIds, StringComparer.OrdinalIgnoreCase);
+        if (amount <= 0)
+        {
+            newIds.Remove(key);
+        }
+
+        _hub.Get<InventoryState>("inventory").Set(
+            new InventoryState(items, newIds.ToArray()),
+            "Редактор инвентаря");
+    }
+
+    private void MarkInventorySeen(JsonElement root)
+    {
+        var key = Required(root, "itemId");
+        var state = _hub.Get<InventoryState>("inventory").Value;
+        var newIds = new HashSet<string>(state.NewItemIds, StringComparer.OrdinalIgnoreCase);
+        if (!newIds.Remove(key))
+        {
+            return;
+        }
+
+        _hub.Get<InventoryState>("inventory").Set(
+            new InventoryState(state.Items, newIds.ToArray()),
+            "Simulator UI");
+    }
+
+    private void SetPlayerVitals(JsonElement root)
+    {
+        var current = _hub.Get<PlayerVitalsState>("player-vitals").Value;
+        var next = current with
+        {
+            Health = Math.Clamp(Number(root, "health", current.Health), 0, current.MaxHealth),
+            Energy = Math.Clamp(Number(root, "energy", current.Energy), 0, current.MaxEnergy),
+            Hydration = Math.Clamp(Number(root, "hydration", current.Hydration), 0, current.MaxHydration),
+            Fatigue = Math.Clamp(Number(root, "fatigue", current.Fatigue), 0, current.MaxFatigue)
+        };
+        _hub.Get<PlayerVitalsState>("player-vitals").Set(next, "Редактор потребностей");
+    }
+
+    private void SetPlayerProgress(JsonElement root)
+    {
+        var current = _hub.Get<PlayerProgressState>("player-progress").Value;
+        var next = current with
+        {
+            Money = Math.Max(0, (int)Number(root, "money", current.Money)),
+            Experience = Math.Max(0, (int)Number(root, "experience", current.Experience)),
+            Reserve = Math.Max(0, (int)Number(root, "reserve", current.Reserve))
+        };
+        _hub.Get<PlayerProgressState>("player-progress").Set(next, "Редактор прогресса");
+    }
+
+    private void SetCharacterStat(JsonElement root)
+    {
+        var key = Required(root, "stat");
+        var current = _hub.Get<CharacterState>("character").Value;
+        var stats = new Dictionary<string, int>(current.Stats, StringComparer.OrdinalIgnoreCase)
+        {
+            [key] = Math.Clamp((int)Number(root, "value", 5), 0, 10)
+        };
+        _hub.Get<CharacterState>("character").Set(
+            current with { Stats = stats },
+            "Редактор персонажа");
     }
 
     private void SetReputation(JsonElement root)
@@ -491,7 +571,7 @@ public sealed class SimulatorForm : WebViewForm
             detached = _journalDetached
         }));
 
-        _journalForm?.SetEntries(_journalEntries);
+        RequestJournalRefresh();
     }
 
     private void QuestGraph_Changed(object? sender, EventArgs e)
@@ -504,13 +584,7 @@ public sealed class SimulatorForm : WebViewForm
             return;
         }
 
-        try
-        {
-            BeginInvoke((Action)PushSnapshot);
-        }
-        catch (InvalidOperationException)
-        {
-        }
+        RequestSnapshot("quest graph changed");
     }
 
     private void Runtime_Published(object? sender, QuestRuntimeEvent e)
@@ -566,7 +640,7 @@ public sealed class SimulatorForm : WebViewForm
                     @event = e,
                     runtime = _runtime.State
                 }, SnapshotJsonOptions));
-                PushSnapshot();
+                RequestSnapshot("runtime event");
             }));
         }
         catch (InvalidOperationException)
@@ -605,11 +679,34 @@ public sealed class SimulatorForm : WebViewForm
             BeginInvoke((Action)(() =>
             {
                 PostJson(JsonSerializer.Serialize(new { type = "event", @event = e }));
-                PushSnapshot();
+                RequestSnapshot("simulator event");
             }));
         }
         catch (InvalidOperationException)
         {
+        }
+    }
+
+    private void RequestJournalRefresh()
+    {
+        if (_journalForm is null || _journalForm.IsDisposed ||
+            _journalRefreshScheduled || IsDisposed || !IsHandleCreated)
+        {
+            return;
+        }
+
+        _journalRefreshScheduled = true;
+        try
+        {
+            BeginInvoke((Action)(() =>
+            {
+                _journalRefreshScheduled = false;
+                _journalForm?.SetEntries(_journalEntries);
+            }));
+        }
+        catch (InvalidOperationException)
+        {
+            _journalRefreshScheduled = false;
         }
     }
 
@@ -634,6 +731,29 @@ public sealed class SimulatorForm : WebViewForm
             }),
             connections = graph.Connections
         }));
+    }
+
+    private void RequestSnapshot(string reason)
+    {
+        if (Browser.CoreWebView2 is null || IsDisposed || !IsHandleCreated ||
+            _snapshotRequestScheduled)
+        {
+            return;
+        }
+
+        _snapshotRequestScheduled = true;
+        try
+        {
+            BeginInvoke((Action)(() =>
+            {
+                _snapshotRequestScheduled = false;
+                PushSnapshot();
+            }));
+        }
+        catch (InvalidOperationException)
+        {
+            _snapshotRequestScheduled = false;
+        }
     }
 
     private void LogQuestSnapshot(string stage)
