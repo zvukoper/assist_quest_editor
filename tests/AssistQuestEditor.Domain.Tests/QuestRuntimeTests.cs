@@ -31,7 +31,9 @@ public sealed class QuestRuntimeTests
         runtime.Start();
 
         Assert.Equal(QuestRuntimeStatus.Completed, runtime.State.Status);
-        Assert.Equal("done", hub.Get<QuestStatusesState>("quest-statuses").Value.Quests.Single().Step);
+        var questStatus = hub.Get<QuestStatusesState>("quest-statuses").Value.Quests
+            .Single(x => x.QuestId == graph.Id);
+        Assert.Equal("done", questStatus.Step);
         Assert.Equal(2, hub.Get<InventoryState>("inventory").Value.Items["meat"]);
     }
 
@@ -55,6 +57,10 @@ public sealed class QuestRuntimeTests
 
         var store = new QuestGraphStore(graph);
         var runtime = new QuestRuntime(store, hub);
+
+        hub.Get<PlayerState>("player").Set(
+            new PlayerState(new WorldCoordinate(0, 0, 0), 0, 0, false, true),
+            "Тест начальной позиции");
 
         runtime.Start();
 

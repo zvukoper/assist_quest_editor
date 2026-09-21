@@ -241,7 +241,7 @@ jobs:
             'Визуально проверяются отдельно: перенос/масштабирование UI, фактический drag курсором, выбор точки мышью, читаемость панелей и прочее поведение, которое CI не может надёжно подтвердить.',
             '=== END CI AUTOMATED TEST REPORT ==='
           )
-          [File]::AppendAllText($logPath, (($lines -join [Environment]::NewLine) + [Environment]::NewLine), [System.Text.UTF8Encoding]::new($false))
+          [System.IO.File]::AppendAllText($logPath, (($lines -join [Environment]::NewLine) + [Environment]::NewLine), [System.Text.UTF8Encoding]::new($false))
           Write-Host ('Сводный лог автотестов записан: ' + $logPath)
 
       - name: Проверить структуру диагностических логов
