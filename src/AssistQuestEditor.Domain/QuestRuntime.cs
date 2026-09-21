@@ -723,7 +723,6 @@ public sealed class QuestRuntime
 
     private void ResetWaiting()
     {
-        _waitingEventType = null;
         _waitUntil = null;
     }
 

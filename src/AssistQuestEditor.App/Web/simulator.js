@@ -479,7 +479,7 @@
         "<div class='kv'><span>Runtime</span><span>" + (runtime?.status || (snapshot.system.runtimeRunning ? "Running" : "Stopped")) + "</span></div>",
         "<div class='kv'><span>Текущая нода</span><span>" + escapeHtml(runtime?.currentNodeId || "—") + "</span></div>",
         "<div class='kv'><span>Ожидание</span><span>" + escapeHtml(runtime?.waitingFor || "—") + "</span></div>",
-        "<div class='kv'><span>Режим</span><span>" + escapeHtml(snapshot.system.runtimeMode) + "</span></div>"
+        "<div class='kv'><span>Режим</span><span>" + escapeHtml(snapshot.system.runtimeMode) + "</span></div>",
         "<div class='kv'><span>Последний переход</span><span>" + escapeHtml(snapshot.system.lastTransition) + "</span></div>",
         "<div class='kv'><span>Последнее событие</span><span>" + escapeHtml(snapshot.system.lastEvent || "—") + "</span></div>",
         "<div class='notice' style='margin-top:10px'>Системный канал диагностический и не является источником игровых данных.</div>"
