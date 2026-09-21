@@ -169,7 +169,7 @@ jobs:
             @{ Name = '.NET SDK'; Outcome = $env:DOTNET_SDK_OUTCOME },
             @{ Name = '.NET build'; Outcome = $env:DOTNET_BUILD_OUTCOME },
             @{ Name = '.NET domain tests'; Outcome = $env:DOTNET_TESTS_OUTCOME },
-            @{ Name = 'Single-file publish'; Outcome = $env:PUBLISH_OUTCOME },
+            @{ Name = 'Single-file publish'; Outcome = $env:PUBLISH_OUTCOME }
           )
           foreach ($check in $checks) {
             if ($check.Outcome -eq 'failure') { $failed += $check.Name }
