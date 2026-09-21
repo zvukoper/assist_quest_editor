@@ -1,3 +1,5 @@
+using System.Globalization;
+
 namespace AssistQuestEditor.Domain;
 
 public interface IDataChannel
@@ -482,9 +484,9 @@ public sealed class SimulatorDataChannelHub : IDataChannelHub
                 new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
                 {
                     ["itemId"] = itemId,
-                    ["previousCount"] = before.ToString(System.Globalization.CultureInfo.InvariantCulture),
-                    ["currentCount"] = after.ToString(System.Globalization.CultureInfo.InvariantCulture),
-                    ["delta"] = delta.ToString(System.Globalization.CultureInfo.InvariantCulture)
+                    ["previousCount"] = before.ToString(CultureInfo.InvariantCulture),
+                    ["currentCount"] = after.ToString(CultureInfo.InvariantCulture),
+                    ["delta"] = delta.ToString(CultureInfo.InvariantCulture)
                 }));
         }
     }
