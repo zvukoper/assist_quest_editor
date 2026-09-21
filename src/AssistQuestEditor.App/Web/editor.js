@@ -251,35 +251,15 @@
     };
 
     svg.addEventListener("contextmenu", event => {
+      const socket = event.target.closest?.(".socketGroup");
+      const node = event.target.closest?.(".node");
+
+      // Connector/node menus are bound directly below. Keep the canvas handler
+      // reserved for the empty graph background.
+      if (socket || node) return;
+
       event.preventDefault();
       event.stopPropagation();
-
-      const socket = event.target.closest?.(".socketGroup");
-      if (socket) {
-        const node = socket.closest(".node");
-        if (!node) return;
-        openGraphConnectionContextMenu(
-          svg,
-          event.clientX,
-          event.clientY,
-          node.dataset.nodeId,
-          socket.dataset.socketId
-        );
-        return;
-      }
-
-      const node = event.target.closest?.(".node");
-      if (node) {
-        const nodeId = node.dataset.nodeId;
-        selectedGraphNodeId = nodeId;
-        pendingOutput = null;
-        pendingConnectionPoint = null;
-        updateGraphVisuals();
-        updateGraphInspector(document.getElementById("inspector"));
-        openGraphNodeContextMenu(svg, event.clientX, event.clientY, nodeId);
-        return;
-      }
-
       const graphPoint = clientToGraph(svg, event.clientX, event.clientY);
       openGraphAddContextMenu(svg, event.clientX, event.clientY, graphPoint);
     });
@@ -471,6 +451,27 @@
     }, { passive: false });
 
     svg.querySelectorAll(".node").forEach(node => {
+      node.addEventListener("contextmenu", event => {
+        event.preventDefault();
+        event.stopPropagation();
+
+        const socket = event.target.closest?.(".socketGroup");
+        if (socket) return;
+
+        const nodeId = node.dataset.nodeId;
+        selectedGraphNodeId = nodeId;
+        pendingOutput = null;
+        pendingConnectionPoint = null;
+        updateGraphVisuals();
+        updateGraphInspector(document.getElementById("inspector"));
+        openGraphNodeContextMenu(
+          svg,
+          event.clientX,
+          event.clientY,
+          nodeId
+        );
+      });
+
       node.addEventListener("click", event => {
         if (event.target.closest(".socketGroup")) return;
         selectedGraphNodeId = node.dataset.nodeId;
@@ -480,6 +481,22 @@
     });
 
     svg.querySelectorAll(".socketGroup").forEach(socket => {
+      socket.addEventListener("contextmenu", event => {
+        event.preventDefault();
+        event.stopPropagation();
+
+        const node = socket.closest(".node");
+        if (!node) return;
+
+        openGraphConnectionContextMenu(
+          svg,
+          event.clientX,
+          event.clientY,
+          node.dataset.nodeId,
+          socket.dataset.socketId
+        );
+      });
+
       socket.addEventListener("click", event => {
         event.stopPropagation();
 
