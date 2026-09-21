@@ -192,22 +192,27 @@ try {
 
   // Right-click on a connector must open the connection menu, not Add.
   const choiceInput = page.locator("[data-node-id='choice'] .socketGroup[data-socket-direction='Input']");
-  const choiceInputBox = await choiceInput.boundingBox();
-  if (!choiceInputBox) throw new Error("Не удалось получить границы Choice Input socket.");
-  await page.mouse.click(choiceInputBox.x + 3, choiceInputBox.y + 3, { button: "right" });
-  await page.getByText("Коннектор", { exact: true }).waitFor();
-  if (await page.locator(".graphContextMenuItem[data-node-type]").count()) {
+  await choiceInput.waitFor();
+  await choiceInput.click({ button: "right" });
+
+  const connectionMenu = page.locator(".graphContextMenu[data-menu-kind='connection']");
+  await connectionMenu.waitFor();
+  if (await page.locator(".graphContextMenu[data-menu-kind='add']").count()) {
     throw new Error("ПКМ по коннектору открыл меню создания ноды.");
   }
-  await page.getByText("Разорвать соединение:", { exact: false }).first().waitFor();
+  await connectionMenu.getByText("Коннектор", { exact: true }).waitFor();
+  await connectionMenu.getByText("Разорвать соединение:", { exact: false }).first().waitFor();
   await page.keyboard.press("Escape");
 
   // Right-click on a node opens node actions.
   const choiceBox = await page.locator("[data-node-id='choice']").boundingBox();
   if (!choiceBox) throw new Error("Не удалось получить границы Choice node.");
-  await page.mouse.click(choiceBox.x + 20, choiceBox.y + 20, { button: "right" });
-  await page.getByText("Нода", { exact: true }).waitFor();
-  await page.getByRole("button", { name: "Сохранить", exact: true }).click();
+  await page.locator("[data-node-id='choice']").click({ button: "right" });
+
+  const nodeMenu = page.locator(".graphContextMenu[data-menu-kind='node']");
+  await nodeMenu.waitFor();
+  await nodeMenu.getByText("Нода", { exact: true }).waitFor();
+  await nodeMenu.getByRole("button", { name: "Сохранить", exact: true }).click();
   if (!await page.evaluate(() => window.__messages.some(message => message.action === "graph_save"))) {
     throw new Error("Команда «Сохранить» из меню ноды не отправила graph_save.");
   }
