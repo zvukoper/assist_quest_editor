@@ -888,9 +888,9 @@
         "<div class='inventorySlot' data-game-tooltip='" + escapeHtml(item.description || item.name) + "'>" +
           "<button class='inventoryItemButton' type='button' data-inventory-item='" + escapeHtml(itemId) + "' data-game-tooltip='" + escapeHtml((item.name || itemId) + ". " + (item.description || "")) + "'>" +
             "<span class='inventoryItemSquare' style='background:" + escapeHtml(item.color || "#59636d") + "'>" + (String(itemId).toLowerCase() === "ruslan.raw_meat" ? "М" : "") + "</span>" +
-            "<span class='inventoryItemName'>" + escapeHtml(item.name || itemId) + "</span>" +
+            "<span class='inventoryItemName'>" + escapeHtml(item.name || itemId) + (isNew ? " <span class='inventoryNewDot' aria-label='Новый предмет'></span>" : "") + "</span>" +
             "<span class='inventoryItemQty'>×" + Number(quantity) + "</span>" +
-            (isNew ? "<span class='inventoryNewDot' aria-label='Новый предмет'></span>" : "") +
+
           "</button>" +
         "</div>"
       );
