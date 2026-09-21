@@ -53,6 +53,37 @@ public sealed class EditorForm : WebViewForm
         };
     }
 
+    protected override void OnFormClosing(FormClosingEventArgs e)
+    {
+        if (_isGraphEditor && _documentDirty)
+        {
+            var result = MessageBox.Show(
+                this,
+                "В Quest Graph есть несохранённые изменения.\r\n\r\n" +
+                "Да — сохранить все изменения в файл.\r\n" +
+                "Нет — закрыть без сохранения.\r\n" +
+                "Отмена — вернуться в редактор.",
+                "Несохранённые изменения",
+                MessageBoxButtons.YesNoCancel,
+                MessageBoxIcon.Warning,
+                MessageBoxDefaultButton.Button1);
+
+            if (result == DialogResult.Cancel)
+            {
+                e.Cancel = true;
+                return;
+            }
+
+            if (result == DialogResult.Yes && !SaveGraph(saveAs: false))
+            {
+                e.Cancel = true;
+                return;
+            }
+        }
+
+        base.OnFormClosing(e);
+    }
+
     protected override void OnBrowserReady()
     {
         PostSimulatorContext();
@@ -351,7 +382,7 @@ public sealed class EditorForm : WebViewForm
                 Multiselect = false
             };
 
-            if (dialog.ShowDialog(this) != DialogResult.OK) return;
+            if (dialog.ShowDialog(this) != DialogResult.OK) return false;
             path = dialog.FileName;
         }
 
@@ -381,7 +412,7 @@ public sealed class EditorForm : WebViewForm
         AppLogger.Info("Quest Graph: документ открыт.", $"path={path}; schema={document.SchemaVersion}");
     }
 
-    private void SaveGraph(bool saveAs)
+    private bool SaveGraph(bool saveAs)
     {
         var path = _currentDefinitionPath;
 
@@ -422,6 +453,7 @@ public sealed class EditorForm : WebViewForm
 
         AppLogger.Info("Quest Graph: документ сохранён.",
             $"path={_currentDefinitionPath}; schema={DefinitionSchemaVersion}; bytes={output.Length}");
+        return true;
     }
 
     private void SaveLastDefinitionPath()
