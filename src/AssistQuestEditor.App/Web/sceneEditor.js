@@ -1433,4 +1433,4 @@
     sceneSpaceDown = false;
     closeSceneContextMenu();
   });
-
+})();
