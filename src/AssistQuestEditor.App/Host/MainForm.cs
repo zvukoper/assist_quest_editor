@@ -100,9 +100,7 @@ public sealed class MainForm : WebViewForm
             try
             {
                 result = GitLogPublisher.PublishLogs();
-                if (result.Success)
-                    AppLogger.Info("GitHub: загрузка LOGS завершена.", result.Message);
-                else
+                if (!result.Success)
                     AppLogger.Error("GitHub: загрузка LOGS не выполнена.", details: result.Message + Environment.NewLine + result.Details);
             }
             catch (Exception ex)

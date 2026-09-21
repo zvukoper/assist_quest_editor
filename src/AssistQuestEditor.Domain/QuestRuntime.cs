@@ -56,6 +56,7 @@ public sealed class QuestRuntime
     public void Start()
     {
         ResetWaiting();
+        ClearInterface();
         State = State with
         {
             QuestId = _graphStore.Value.Id,
@@ -75,6 +76,7 @@ public sealed class QuestRuntime
     public void Stop(string reason = "Runtime остановлен")
     {
         ResetWaiting();
+        ClearInterface();
         State = State with
         {
             Status = QuestRuntimeStatus.Stopped,
@@ -167,6 +169,19 @@ public sealed class QuestRuntime
         if (string.Equals(State.WaitingFor, "Choice", StringComparison.OrdinalIgnoreCase) &&
             value.EventType.Equals("ChoiceSelected", StringComparison.OrdinalIgnoreCase))
         {
+            var activeDialog = _hub.Get<InterfaceState>("interfaces").Value.ActiveDialog;
+            if (activeDialog is not null &&
+                value.Payload.TryGetValue("requestId", out var requestId) &&
+                !string.Equals(activeDialog.RequestId, requestId, StringComparison.OrdinalIgnoreCase))
+            {
+                Publish(
+                    "RuntimeInterfaceIgnored",
+                    value.Source,
+                    State.CurrentNodeId,
+                    $"Устаревший запрос интерфейса «{requestId}» проигнорирован.");
+                return;
+            }
+
             var index = ParseInt(value.Payload, "index", 1);
             var node = FindCurrentNode();
             var output = node?.Sockets
@@ -180,6 +195,7 @@ public sealed class QuestRuntime
             }
 
             ResetWaiting();
+            ClearInterface();
             State = State with
             {
                 Status = QuestRuntimeStatus.Running,
@@ -269,6 +285,11 @@ public sealed class QuestRuntime
                     return;
 
                 case "choice":
+                    if (!OpenChoiceDialog(node))
+                    {
+                        return;
+                    }
+
                     Wait("Choice");
                     return;
 
@@ -334,6 +355,68 @@ public sealed class QuestRuntime
         }
 
         Fail($"Слишком много переходов подряд (>{MaxTransitionsPerPass}). Возможен цикл без ожидания.");
+    }
+
+    private bool OpenChoiceDialog(QuestNode node)
+    {
+        var outputs = node.Sockets
+            .Where(socket => socket.Direction == SocketDirection.Output)
+            .ToArray();
+
+        if (outputs.Length == 0)
+        {
+            Fail($"У Choice «{node.NodeId}» нет вариантов выбора.");
+            return false;
+        }
+
+        var options = outputs
+            .Select((socket, index) =>
+            {
+                var text = GetParameter(
+                    node,
+                    $"choice{index + 1}Text",
+                    string.IsNullOrWhiteSpace(socket.Name) ? $"Вариант {index + 1}" : socket.Name);
+
+                return new InterfaceChoiceOption(
+                    $"{node.NodeId}.choice{index + 1}",
+                    text);
+            })
+            .ToArray();
+
+        var speaker = GetParameter(node, "speaker", "Квест");
+        var prompt = GetParameter(node, "text",
+            GetParameter(node, "prompt", "Выберите вариант."));
+        var requestId = $"{_graphStore.Value.Id}:{node.NodeId}:{Guid.NewGuid():N}";
+
+        _hub.Get<InterfaceState>("interfaces").Set(
+            new InterfaceState(
+                new InterfaceChoiceDialog(
+                    requestId,
+                    node.Title,
+                    speaker,
+                    prompt,
+                    options)),
+            "QuestRuntime");
+
+        Publish(
+            "RuntimeInterfaceRequested",
+            "QuestRuntime",
+            node.NodeId,
+            $"Открыт интерфейс Choice: {requestId}.");
+
+        return true;
+    }
+
+    private void ClearInterface()
+    {
+        if (_hub.Get<InterfaceState>("interfaces").Value.ActiveDialog is null)
+        {
+            return;
+        }
+
+        _hub.Get<InterfaceState>("interfaces").Set(
+            new InterfaceState(null),
+            "QuestRuntime");
     }
 
     private void EvaluateCondition(QuestNode node)
@@ -512,6 +595,7 @@ public sealed class QuestRuntime
     private void Complete()
     {
         ResetWaiting();
+        ClearInterface();
         SetQuestStatus(QuestStatus.Completed, GetQuestStep());
         State = State with
         {
@@ -527,6 +611,7 @@ public sealed class QuestRuntime
     private void Fail(string message)
     {
         ResetWaiting();
+        ClearInterface();
         SetQuestStatus(QuestStatus.Failed, GetQuestStep());
         State = State with
         {

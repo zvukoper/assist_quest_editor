@@ -201,6 +201,11 @@ public sealed class SimulatorDataChannelHub : IDataChannelHub
             "Система",
             new SystemState(true, "Симулятор", "", "Приложение запущено"));
 
+        Interfaces = new DataChannel<InterfaceState>(
+            "interfaces",
+            "Интерфейсы",
+            new InterfaceState(null));
+
         _channels = new Dictionary<string, IDataChannel>(StringComparer.OrdinalIgnoreCase)
         {
             [Player.Key] = Player,
@@ -213,7 +218,8 @@ public sealed class SimulatorDataChannelHub : IDataChannelHub
             [Reputation.Key] = Reputation,
             [Telemetry.Key] = Telemetry,
             [Environment.Key] = Environment,
-            [System.Key] = System
+            [System.Key] = System,
+            [Interfaces.Key] = Interfaces
         };
 
         foreach (var channel in _channels.Values)
@@ -233,6 +239,7 @@ public sealed class SimulatorDataChannelHub : IDataChannelHub
     public DataChannel<TelemetryState> Telemetry { get; }
     public DataChannel<EnvironmentState> Environment { get; }
     public DataChannel<SystemState> System { get; }
+    public DataChannel<InterfaceState> Interfaces { get; }
 
     public EventChannel<SimulatorEvent> Events { get; } = new();
     IEventChannel<SimulatorEvent> IDataChannelHub.Events => Events;
@@ -289,6 +296,7 @@ public sealed class SimulatorDataChannelHub : IDataChannelHub
         Telemetry.Set(new TelemetryState(0, 800, 0, 0, 0, 78, 82, 34, 0, 0, 0, 0, false), "Сброс симулятора");
         Environment.Set(new EnvironmentState("Ясно", 0, "12:30", 5000), "Сброс симулятора");
         System.Set(new SystemState(true, "Симулятор", "", "Симуляция сброшена"), "Сброс симулятора");
+        Interfaces.Set(new InterfaceState(null), "Сброс симулятора");
     }
 
     public IReadOnlyCollection<DataChannelDescriptor> Describe() =>
@@ -313,7 +321,8 @@ public sealed class SimulatorDataChannelHub : IDataChannelHub
             Reputation.Value,
             Telemetry.Value,
             Environment.Value,
-            System.Value);
+            System.Value,
+            Interfaces.Value);
 
     private void Subscribe(IDataChannel channel)
     {
@@ -363,6 +372,15 @@ public sealed class SimulatorDataChannelHub : IDataChannelHub
         else if (channel is DataChannel<SystemState> system)
         {
             system.Changed += (_, args) => PublishTransition("system", args.Source, "Изменено состояние системы");
+        }
+        else if (channel is DataChannel<InterfaceState> interfaces)
+        {
+            interfaces.Changed += (_, args) => PublishTransition(
+                "interfaces",
+                args.Source,
+                args.CurrentValue.ActiveDialog is null
+                    ? "Интерфейсный запрос закрыт"
+                    : $"Открыт диалог выбора {args.CurrentValue.ActiveDialog.RequestId}");
         }
     }
 

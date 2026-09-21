@@ -11,10 +11,10 @@
     <Prefer32Bit>false</Prefer32Bit>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
 
-    <Version>1.0.40.124</Version>
-    <AssemblyVersion>1.0.40.124</AssemblyVersion>
-    <FileVersion>1.0.40.124</FileVersion>
-    <AssemblyInformationalVersion>1.0.40.124-QUEST-MAP-CITIES-HOVER-R1</AssemblyInformationalVersion>
+    <Version>1.0.40.126</Version>
+    <AssemblyVersion>1.0.40.126</AssemblyVersion>
+    <FileVersion>1.0.40.126</FileVersion>
+    <AssemblyInformationalVersion>1.0.40.126-QUEST-INTERFACE-CHOICE-R1</AssemblyInformationalVersion>
     <PublishSingleFile>true</PublishSingleFile>
     <SelfContained>true</SelfContained>
     <RuntimeIdentifier>win-x64</RuntimeIdentifier>

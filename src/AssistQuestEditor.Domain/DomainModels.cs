@@ -69,6 +69,20 @@ public sealed record RuntimeStatesState(
     string? DialogueId,
     string? DialogueAnchor);
 
+public sealed record InterfaceChoiceOption(
+    string Id,
+    string Text);
+
+public sealed record InterfaceChoiceDialog(
+    string RequestId,
+    string Title,
+    string Speaker,
+    string Text,
+    IReadOnlyList<InterfaceChoiceOption> Options);
+
+public sealed record InterfaceState(
+    InterfaceChoiceDialog? ActiveDialog);
+
 public sealed record InventoryState(
     IReadOnlyDictionary<string, int> Items);
 
@@ -167,4 +181,5 @@ public sealed record SimulatorSnapshot(
     ReputationState Reputation,
     TelemetryState Telemetry,
     EnvironmentState Environment,
-    SystemState System);
+    SystemState System,
+    InterfaceState Interfaces);

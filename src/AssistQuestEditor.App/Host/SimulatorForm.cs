@@ -156,6 +156,10 @@ public sealed class SimulatorForm : WebViewForm
                     EmitEvent(root);
                     break;
 
+                case "interface_choice":
+                    InterfaceChoice(root);
+                    break;
+
                 case "detach_journal":
                     DetachJournal();
                     break;
@@ -351,6 +355,39 @@ public sealed class SimulatorForm : WebViewForm
                 VisibilityMeters = Number(root, "visibility", old.VisibilityMeters)
             },
             "Редактор окружения");
+    }
+
+    private void InterfaceChoice(JsonElement root)
+    {
+        var dialog = _hub.Get<InterfaceState>("interfaces").Value.ActiveDialog;
+        if (dialog is null)
+        {
+            throw new InvalidOperationException("Активный интерфейс выбора отсутствует.");
+        }
+
+        var requestId = String(root, "requestId");
+        if (!string.Equals(dialog.RequestId, requestId, StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidOperationException("Запрос интерфейса уже неактуален.");
+        }
+
+        var index = (int)Number(root, "index", 0);
+        if (index < 1 || index > dialog.Options.Count)
+        {
+            throw new InvalidOperationException("Недопустимый номер варианта выбора.");
+        }
+
+        var option = dialog.Options[index - 1];
+        _hub.Events.Publish(new SimulatorEvent(
+            "ChoiceSelected",
+            DateTimeOffset.UtcNow,
+            "Interface",
+            new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["requestId"] = dialog.RequestId,
+                ["index"] = index.ToString(System.Globalization.CultureInfo.InvariantCulture),
+                ["optionId"] = option.Id
+            }));
     }
 
     private void EmitEvent(JsonElement root)

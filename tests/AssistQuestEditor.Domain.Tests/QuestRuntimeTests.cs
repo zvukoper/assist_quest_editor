@@ -228,6 +228,14 @@ public sealed class QuestRuntimeTests
         Assert.Equal(QuestRuntimeStatus.Waiting, runtime.State.Status);
         Assert.Equal("Choice", runtime.State.WaitingFor);
 
+        var dialog = hub.Get<InterfaceState>("interfaces").Value.ActiveDialog;
+        Assert.NotNull(dialog);
+        Assert.StartsWith("runtime-test:choice:", dialog!.RequestId);
+        Assert.Equal("Квест", dialog.Speaker);
+        Assert.Equal(2, dialog.Options.Count);
+        Assert.Equal("Выбор 1", dialog.Options[0].Text);
+        Assert.Equal("Выбор 2", dialog.Options[1].Text);
+
         hub.Events.Publish(new SimulatorEvent(
             "ChoiceSelected",
             DateTimeOffset.UtcNow,
@@ -236,6 +244,68 @@ public sealed class QuestRuntimeTests
 
         Assert.Equal(QuestRuntimeStatus.Completed, runtime.State.Status);
         Assert.Equal("right", runtime.State.CurrentNodeId);
+        Assert.Null(hub.Get<InterfaceState>("interfaces").Value.ActiveDialog);
+    }
+
+    [Fact]
+    public void ChoiceInterfaceSupportsBothBranchesAcrossRuns()
+    {
+        var graphStart = Node("start", "Start");
+        var choice = Node("choice", "Choice");
+        var left = Node("left", "End");
+        var right = Node("right", "End");
+
+        var graph = Graph(
+            new[] { graphStart, choice, left, right },
+            new[]
+            {
+                C("start", graphStart, "out", choice, "in"),
+                new QuestConnection("choice", "choice.choice1", "left", "left.in"),
+                new QuestConnection("choice", "choice.choice2", "right", "right.in")
+            });
+
+        var firstHub = new SimulatorDataSourceAdapter(Array.Empty<WorldPoint>()).Channels;
+        var firstRuntime = new QuestRuntime(new QuestGraphStore(graph), firstHub);
+        firstRuntime.Start();
+
+        var firstDialog = firstHub.Get<InterfaceState>("interfaces").Value.ActiveDialog;
+        Assert.NotNull(firstDialog);
+
+        firstHub.Events.Publish(new SimulatorEvent(
+            "ChoiceSelected",
+            DateTimeOffset.UtcNow,
+            "Interface",
+            new Dictionary<string, string>
+            {
+                ["requestId"] = firstDialog!.RequestId,
+                ["index"] = "1"
+            }));
+
+        Assert.Equal(QuestRuntimeStatus.Completed, firstRuntime.State.Status);
+        Assert.Equal("left", firstRuntime.State.CurrentNodeId);
+        Assert.Null(firstHub.Get<InterfaceState>("interfaces").Value.ActiveDialog);
+
+        var secondHub = new SimulatorDataSourceAdapter(Array.Empty<WorldPoint>()).Channels;
+        var secondRuntime = new QuestRuntime(new QuestGraphStore(graph), secondHub);
+        secondRuntime.Start();
+
+        var secondDialog = secondHub.Get<InterfaceState>("interfaces").Value.ActiveDialog;
+        Assert.NotNull(secondDialog);
+        Assert.NotEqual(firstDialog.RequestId, secondDialog!.RequestId);
+
+        secondHub.Events.Publish(new SimulatorEvent(
+            "ChoiceSelected",
+            DateTimeOffset.UtcNow,
+            "Interface",
+            new Dictionary<string, string>
+            {
+                ["requestId"] = secondDialog.RequestId,
+                ["index"] = "2"
+            }));
+
+        Assert.Equal(QuestRuntimeStatus.Completed, secondRuntime.State.Status);
+        Assert.Equal("right", secondRuntime.State.CurrentNodeId);
+        Assert.Null(secondHub.Get<InterfaceState>("interfaces").Value.ActiveDialog);
     }
 
     [Fact]
