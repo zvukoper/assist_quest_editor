@@ -1014,28 +1014,36 @@
     document.body.appendChild(menu);
     activeGraphContextMenu = menu;
 
-    menu.style.maxHeight = Math.max(100, window.innerHeight - 12) + "px";
+    const viewportWidth = Math.max(1, window.innerWidth);
+    const viewportHeight = Math.max(1, window.innerHeight);
+    const maxHeight = Math.max(100, viewportHeight - 12);
+
+    // Context menus are fixed to the viewport. Give the menu an explicit
+    // height cap based on the real viewport so overflow is handled by the
+    // menu itself rather than by a transformed bounding box.
+    menu.style.maxHeight = maxHeight + "px";
+    menu.style.height = "auto";
     menu.style.overflowY = "auto";
 
-    // The context menu has a scale-in animation. Measure the full-size box
-    // before applying the viewport clamp so the animation cannot make the
-    // final menu extend beyond the screen.
-    const animation = menu.style.animation;
+    // Measure with animation disabled and clamp using the untransformed
+    // layout dimensions. Do not restore the transform animation: a transform
+    // changes getBoundingClientRect() after placement and can move the menu
+    // outside the viewport again.
     menu.style.animation = "none";
-    const menuRect = menu.getBoundingClientRect();
+
+    const menuWidth = Math.min(menu.scrollWidth, Math.max(100, viewportWidth - 12));
+    const menuHeight = Math.min(menu.scrollHeight, maxHeight);
 
     menu.style.left = clamp(
       clientX,
       6,
-      Math.max(6, window.innerWidth - menuRect.width - 6)
+      Math.max(6, viewportWidth - menuWidth - 6)
     ) + "px";
     menu.style.top = clamp(
       clientY,
       6,
-      Math.max(6, window.innerHeight - menuRect.height - 6)
+      Math.max(6, viewportHeight - menuHeight - 6)
     ) + "px";
-
-    menu.style.animation = animation;
 
     menu.addEventListener("wheel", event => event.stopPropagation(), { passive: true });
   }
