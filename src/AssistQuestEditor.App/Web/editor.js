@@ -1014,38 +1014,55 @@
     document.body.appendChild(menu);
     activeGraphContextMenu = menu;
 
-    const viewportWidth = Math.max(1, window.innerWidth);
-    const viewportHeight = Math.max(1, window.innerHeight);
-    const maxHeight = Math.max(100, viewportHeight - 12);
+    const clampToViewport = () => {
+      const viewportWidth = Math.max(1, window.innerWidth);
+      const viewportHeight = Math.max(1, window.innerHeight);
+      const maxHeight = Math.max(100, viewportHeight - 12);
 
-    // Context menus are fixed to the viewport. Give the menu an explicit
-    // height cap based on the real viewport so overflow is handled by the
-    // menu itself rather than by a transformed bounding box.
-    menu.style.maxHeight = maxHeight + "px";
-    menu.style.height = "auto";
-    menu.style.overflowY = "auto";
+      menu.style.maxHeight = maxHeight + "px";
+      menu.style.height = "auto";
+      menu.style.overflowY = "auto";
+      menu.style.animation = "none";
 
-    // Measure with animation disabled and clamp using the untransformed
-    // layout dimensions. Do not restore the transform animation: a transform
-    // changes getBoundingClientRect() after placement and can move the menu
-    // outside the viewport again.
-    menu.style.animation = "none";
+      const rect = menu.getBoundingClientRect();
+      menu.style.left = clamp(
+        clientX,
+        6,
+        Math.max(6, viewportWidth - rect.width - 6)
+      ) + "px";
+      menu.style.top = clamp(
+        clientY,
+        6,
+        Math.max(6, viewportHeight - rect.height - 6)
+      ) + "px";
 
-    const menuWidth = Math.min(menu.scrollWidth, Math.max(100, viewportWidth - 12));
-    const menuHeight = Math.min(menu.scrollHeight, maxHeight);
+      // One more pass after the coordinates are applied. This uses the real
+      // border-box size, so borders/padding cannot push the menu past the edge.
+      const placedRect = menu.getBoundingClientRect();
+      const left = clamp(
+        placedRect.left,
+        6,
+        Math.max(6, viewportWidth - placedRect.width - 6)
+      );
+      const top = clamp(
+        placedRect.top,
+        6,
+        Math.max(6, viewportHeight - placedRect.height - 6)
+      );
 
-    menu.style.left = clamp(
-      clientX,
-      6,
-      Math.max(6, viewportWidth - menuWidth - 6)
-    ) + "px";
-    menu.style.top = clamp(
-      clientY,
-      6,
-      Math.max(6, viewportHeight - menuHeight - 6)
-    ) + "px";
+      menu.style.left = left + "px";
+      menu.style.top = top + "px";
+    };
 
-    menu.addEventListener("wheel", event => event.stopPropagation(), { passive: true });
+    clampToViewport();
+
+    menu.addEventListener("wheel", event => {
+      if (menu.scrollHeight > menu.clientHeight) {
+        menu.scrollTop += event.deltaY;
+        event.preventDefault();
+      }
+      event.stopPropagation();
+    }, { passive: false });
   }
 
   function graphContextMenuButton(text, handler) {
