@@ -221,12 +221,14 @@
       "<text class='nodeId' x='" + (GRAPH_NODE_INPUT_ZONE + centerWidth / 2) + "' y='" + (nodeHeight - 13) + "' text-anchor='middle'>" + escapeHtml(nodeId) + "</text>" +
       inputs.map((socket, index) =>
         "<g class='socketGroup' data-socket-direction='Input' data-socket-id='" + escapeHtml(socket.socketId) + "'>" +
+          "<rect class='socketHitArea inputHitArea' x='-8' y='" + (10 + index * 22) + "' width='" + (GRAPH_NODE_INPUT_ZONE + 2) + "' height='24' rx='8'></rect>" +
           "<circle class='socket input' cx='0' cy='" + (22 + index * 22) + "' r='6'></circle>" +
           "<text class='socketLabel inputLabel' x='10' y='" + (26 + index * 22) + "'>" + escapeHtml(fitNodeText(socket.name, 9)) + "</text>" +
         "</g>"
       ).join("") +
       outputs.map((socket, index) =>
         "<g class='socketGroup' data-socket-direction='Output' data-socket-id='" + escapeHtml(socket.socketId) + "'>" +
+          "<rect class='socketHitArea outputHitArea' x='" + (GRAPH_NODE_WIDTH - GRAPH_NODE_OUTPUT_ZONE - 2) + "' y='" + (10 + index * 22) + "' width='" + (GRAPH_NODE_OUTPUT_ZONE + 10) + "' height='24' rx='8'></rect>" +
           "<circle class='socket output' cx='" + GRAPH_NODE_WIDTH + "' cy='" + (22 + index * 22) + "' r='6'></circle>" +
           "<text class='socketLabel outputLabel' x='" + (GRAPH_NODE_WIDTH - 10) + "' y='" + (26 + index * 22) + "' text-anchor='end'>" + escapeHtml(fitNodeText(socket.name, 9)) + "</text>" +
         "</g>"
