@@ -48,7 +48,7 @@ input,select,textarea{width:100%;border:1px solid var(--border);border-radius:6p
 .notice{padding:10px;border-left:2px solid var(--accent);background:rgba(250,176,3,.055);color:#e9edf2;font-size:11px;line-height:1.5;border-radius:5px}
 .footer{height:28px;flex:0 0 28px;display:flex;align-items:center;padding:0 14px;border-top:1px solid var(--border);color:#6e7782;font-size:10px}
 .mapSurface{position:relative;width:100%;height:100%;overflow:hidden;background:#101419}.mapSurface::before{content:"";position:absolute;inset:0;background:linear-gradient(rgba(255,255,255,.035) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,.035) 1px,transparent 1px);background-size:32px 32px;pointer-events:none}
-svg{width:100%;height:100%;display:block}#questGraphSvg{touch-action:none;user-select:none;cursor:default}#questGraphSvg.panActive{cursor:grabbing}.node{cursor:grab}.node:active{cursor:grabbing}.nodeRect{fill:#23272d;stroke:rgba(255,255,255,.14);stroke-width:1}.node.selected .nodeRect{stroke:var(--accent);stroke-width:1.5}.nodeTitle{font-size:12px;fill:#fff;font-family:var(--font-ui)}.socket{fill:#0b0d11;stroke:var(--muted);stroke-width:1}.socket.output{stroke:var(--accent)}.edge{fill:none;stroke:#7d8792;stroke-width:2;opacity:.85}.edge.cut{stroke:var(--red);stroke-dasharray:5 4}
+svg{width:100%;height:100%;display:block}#questGraphSvg,#sceneGraphSvg{touch-action:none;user-select:none;cursor:default}#questGraphSvg.panActive,#sceneGraphSvg.panActive{cursor:grabbing}.node{cursor:grab}.node:active{cursor:grabbing}.nodeRect{fill:#23272d;stroke:rgba(255,255,255,.14);stroke-width:1}.node.selected .nodeRect{stroke:var(--accent);stroke-width:1.5}.nodeTitle{font-size:12px;fill:#fff;font-family:var(--font-ui)}.socket{fill:#0b0d11;stroke:var(--muted);stroke-width:1}.socket.output{stroke:var(--accent)}.edge{fill:none;stroke:#7d8792;stroke-width:2;opacity:.85}.edge.cut{stroke:var(--red);stroke-dasharray:5 4}
 .poi{cursor:pointer}.poi circle{fill:#20252a;stroke:var(--accent);stroke-width:2}.poi.active circle{fill:var(--accent);stroke:#1b1b1b}.poi text{fill:#e7edf4;font-size:11px;font-family:var(--font-ui)}.playerMarker{cursor:grab}.playerMarker:active{cursor:grabbing}.playerMarker circle{fill:var(--blue);stroke:#d8f6ff;stroke-width:2;filter:drop-shadow(0 0 6px rgba(18,171,229,.45))}
 .simTitle{font-weight:800}.simSub{color:var(--muted);font-size:11px}.hud{display:flex;gap:6px;align-items:center;flex-wrap:wrap}.eventTool{border-color:rgba(207,12,12,.35);color:#ff8b8b}.eventTool:hover{border-color:rgba(207,12,12,.65);background:rgba(207,12,12,.12)}.simBody{display:grid;grid-template-columns:285px minmax(0,1fr) 350px;height:calc(100% - 58px);min-height:0}.runtimeSide{border-right:1px solid var(--border);background:rgba(23,24,25,.98);overflow:auto;min-width:0}.runtimeSideHeader{padding:0 0 8px;border-bottom:1px solid var(--border)}.runtimeQuestName{padding:8px 12px 0;color:#dfe5ec;font-size:12px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.runtimeControls{display:grid;grid-template-columns:1fr 1fr;gap:6px;padding:10px 12px;border-bottom:1px solid var(--border)}.runtimeStatusCard{margin:10px 12px;padding:9px 10px;border:1px solid rgba(255,255,255,.1);border-radius:8px;background:rgba(255,255,255,.035);font-size:12px}.runtimeStatusCard[data-status="waiting"]{color:var(--accent);border-color:rgba(250,176,3,.35)}.runtimeStatusCard[data-status="running"]{color:var(--lime);border-color:rgba(17,251,6,.25)}.runtimeStatusCard[data-status="completed"]{color:#8bd8ff;border-color:rgba(139,216,255,.3)}.runtimeStatusCard[data-status="failed"]{color:#ff7070;border-color:rgba(255,112,112,.3)}.runtimeStatusCard[data-status="stopped"]{color:var(--muted)}.runtimeBlock{padding:10px 12px;border-bottom:1px solid rgba(255,255,255,.07)}.runtimeNodeName{margin-top:6px;font-size:13px;font-weight:800}.runtimeNodeType{margin-top:3px;color:var(--muted);font-size:10px;word-break:break-word}.runtimeTransition{margin-top:6px;font-size:11px;line-height:1.45;color:#d9e2ec}.runtimeTargetBlock{background:rgba(250,176,3,.022)}.targetTitle{margin-top:6px;color:var(--muted);font-size:11px}.targetName{display:block;margin-top:3px;font-size:14px;color:#fff}.targetCategory{margin-top:2px;color:var(--accent);font-size:10px}.targetStatus{margin-top:8px;padding:8px;border-radius:6px;background:rgba(250,176,3,.08);border-left:2px solid var(--accent);font-size:10px;line-height:1.35}.targetMissing{margin-top:6px;padding:8px;border-radius:6px;background:rgba(207,12,12,.09);border-left:2px solid var(--red);font-size:10px;line-height:1.4}.targetMissing code{color:#ffb2b2}.eventTarget{display:block;margin-top:6px;font-size:17px;color:#ff8b8b}.runtimeEventList{max-height:180px;margin-top:7px}.simSide{border-left:1px solid var(--border);background:rgba(23,24,25,.98);overflow:auto}.scaleBadge{font-size:10px;fill:#d9e2ec}.scaleBadgeBg{fill:rgba(10,12,16,.84);stroke:rgba(255,255,255,.14);stroke-width:1}
 .acc{border-bottom:1px solid var(--border)}.accHead{display:flex;align-items:center;justify-content:space-between;padding:10px 12px;cursor:pointer;background:transparent}.accHead:hover{background:var(--hover)}.accHead strong{font-size:12px}.accHead span{color:var(--muted);font-size:10px}.accBody{padding:0 12px 10px;display:none}.acc.open .accBody{display:block}
@@ -93,14 +93,22 @@ input,select,textarea{padding:4px 5px;border-radius:4px;font-size:10px}textarea{
 .versionChip[data-state="running"] .versionPushIcon{color:var(--accent);animation:versionPushRotate .75s linear infinite}
 .versionChip[data-state="success"]{color:var(--lime);border-color:rgba(17,251,6,.3)}
 .versionChip[data-state="error"]{color:#ff7070;border-color:rgba(207,12,12,.38)}
-#questGraphSvg .node.runtime-active .nodeRect{stroke:var(--lime);stroke-width:6;stroke-dasharray:10 8;animation:questRuntimeDash .9s linear infinite;filter:drop-shadow(0 0 6px rgba(17,251,6,.35))}
-#questGraphSvg .node.executed .nodeExecutedMark{fill:var(--lime);opacity:1}
-#questGraphSvg .node .nodeExecutedMark{fill:transparent;opacity:0;font-size:18px;font-weight:900;font-family:Arial,sans-serif}
-#questGraphSvg .node.connection-source .nodeRect{stroke:#fff;stroke-width:5;filter:drop-shadow(0 0 5px rgba(255,255,255,.38))}
-#questGraphSvg .nodeDirtyMark{fill:var(--accent);font-size:13px;font-weight:900;font-family:Arial,sans-serif;opacity:0}
-#questGraphSvg .node.dirty .nodeDirtyMark{opacity:1}
-#questGraphSvg .socketGroup.compatible .socket{fill:var(--lime);stroke:var(--lime);stroke-width:3;filter:drop-shadow(0 0 4px rgba(17,251,6,.5))}
-#questGraphSvg .pendingEdge{stroke:#fff;stroke-width:4;stroke-dasharray:10 7;animation:questRuntimeDash .6s linear infinite;opacity:1}
+#questGraphSvg .node.runtime-active .nodeRect,
+#sceneGraphSvg .node.runtime-active .nodeRect{stroke:var(--lime);stroke-width:6;stroke-dasharray:10 8;animation:questRuntimeDash .9s linear infinite;filter:drop-shadow(0 0 6px rgba(17,251,6,.35))}
+#questGraphSvg .node.executed .nodeExecutedMark,
+#sceneGraphSvg .node.executed .nodeExecutedMark{fill:var(--lime);opacity:1}
+#questGraphSvg .node .nodeExecutedMark,
+#sceneGraphSvg .node .nodeExecutedMark{fill:transparent;opacity:0;font-size:18px;font-weight:900;font-family:Arial,sans-serif}
+#questGraphSvg .node.connection-source .nodeRect,
+#sceneGraphSvg .node.connection-source .nodeRect{stroke:#fff;stroke-width:5;filter:drop-shadow(0 0 5px rgba(255,255,255,.38))}
+#questGraphSvg .nodeDirtyMark,
+#sceneGraphSvg .nodeDirtyMark{fill:var(--accent);font-size:13px;font-weight:900;font-family:Arial,sans-serif;opacity:0}
+#questGraphSvg .node.dirty .nodeDirtyMark,
+#sceneGraphSvg .node.dirty .nodeDirtyMark{opacity:1}
+#questGraphSvg .socketGroup.compatible .socket,
+#sceneGraphSvg .socketGroup.compatible .socket{fill:var(--lime);stroke:var(--lime);stroke-width:3;filter:drop-shadow(0 0 4px rgba(17,251,6,.5))}
+#questGraphSvg .pendingEdge,
+#sceneGraphSvg .pendingEdge{stroke:#fff;stroke-width:4;stroke-dasharray:10 7;animation:questRuntimeDash .6s linear infinite;opacity:1}
 
 .settingsButton{color:var(--accent);border-color:rgba(250,176,3,.28);font-size:15px;line-height:1;min-width:32px;padding:6px 9px}.settingsButton:hover{color:var(--accent-2);border-color:rgba(250,176,3,.55)}
 
@@ -125,50 +133,75 @@ input,select,textarea{padding:4px 5px;border-radius:4px;font-size:10px}textarea{
 .graphContextMenuItem:hover{background:var(--hover);color:#fff}
 .graphContextMenuItem:disabled{opacity:.35;cursor:not-allowed}
 
-#questGraphSvg .nodeConnectorZone{pointer-events:none;stroke:none}
-#questGraphSvg .nodeConnectorZone.inputZone{fill:rgba(18,171,229,.035)}
-#questGraphSvg .nodeConnectorZone.outputZone{fill:rgba(250,176,3,.035)}
-#questGraphSvg .nodeConnectorSeparator{stroke:rgba(255,255,255,.16);stroke-width:1}
-#questGraphSvg .nodeLabel{fill:#a6a6a6;font-size:10px;font-family:var(--font-ui)}
-#questGraphSvg .nodeId{fill:#68737f;font-size:8px;font-family:var(--font-ui)}
-#questGraphSvg .socketLabel{fill:#8f9baa;font-size:9px;font-family:var(--font-ui);pointer-events:none}
-#questGraphSvg .socketHitArea{fill:transparent;stroke:none;pointer-events:all}
+#questGraphSvg .nodeConnectorZone,
+
+#sceneGraphSvg .nodeConnectorZone{pointer-events:none;stroke:none}
+#questGraphSvg .nodeConnectorZone.inputZone,
+#sceneGraphSvg .nodeConnectorZone.inputZone{fill:rgba(18,171,229,.035)}
+#questGraphSvg .nodeConnectorZone.outputZone,
+#sceneGraphSvg .nodeConnectorZone.outputZone{fill:rgba(250,176,3,.035)}
+#questGraphSvg .nodeConnectorSeparator,
+#sceneGraphSvg .nodeConnectorSeparator{stroke:rgba(255,255,255,.16);stroke-width:1}
+#questGraphSvg .nodeLabel,
+#sceneGraphSvg .nodeLabel{fill:#a6a6a6;font-size:10px;font-family:var(--font-ui)}
+#questGraphSvg .nodeId,
+#sceneGraphSvg .nodeId{fill:#68737f;font-size:8px;font-family:var(--font-ui)}
+#questGraphSvg .socketLabel,
+#sceneGraphSvg .socketLabel{fill:#8f9baa;font-size:9px;font-family:var(--font-ui);pointer-events:none}
+#questGraphSvg .socketHitArea,
+#sceneGraphSvg .socketHitArea{fill:transparent;stroke:none;pointer-events:all}
 
 /* Подсветка сокета под курсором: толстая белая обводка.
    Нужна, чтобы до клика было видно, что указатель попал именно в сокет,
    а не в край ноды: круг сокета лежит на границе, и без подсветки это
    неочевидно. */
-#questGraphSvg .socketGroup.hovered .socket{
+#questGraphSvg .socketGroup.hovered .socket, и без подсветки это
+   неочевидно. */
+#sceneGraphSvg .socketGroup.hovered .socket{
   stroke:#fff;stroke-width:3;filter:drop-shadow(0 0 7px rgba(255,255,255,.85))
 }
-#questGraphSvg .socketGroup.hovered .socketLabel{fill:#fff}
+#questGraphSvg .socketGroup.hovered .socketLabel,
+#sceneGraphSvg .socketGroup.hovered .socketLabel{fill:#fff}
 
 /* Совместимый Input, когда уже выбран Output: зелёная обводка поверх белой.
    Это подтверждение, что соединение будет принято. */
-#questGraphSvg .socketGroup.hovered.compatible .socket{
+#questGraphSvg .socketGroup.hovered.compatible .socket, что соединение будет принято. */
+#sceneGraphSvg .socketGroup.hovered.compatible .socket{
   stroke:var(--lime);stroke-width:4;filter:drop-shadow(0 0 9px rgba(17,251,6,.9))
 }
-#questGraphSvg .socketGroup.hovered.compatible .socketLabel{fill:var(--lime)}
+#questGraphSvg .socketGroup.hovered.compatible .socketLabel,
+#sceneGraphSvg .socketGroup.hovered.compatible .socketLabel{fill:var(--lime)}
 
 /* Несовместимая цель: красная обводка — соединение не будет создано. */
-#questGraphSvg .socketGroup.hovered.incompatible .socket{
+#questGraphSvg .socketGroup.hovered.incompatible .socket,
+
+/* Несовместимая цель: красная обводка — соединение не будет создано. */
+#sceneGraphSvg .socketGroup.hovered.incompatible .socket{
   stroke:var(--red);stroke-width:3;filter:drop-shadow(0 0 7px rgba(207,12,12,.85))
 }
 
 /* Курсор подтверждает результат: crosshair — сокет, copy — совместимый Input,
    not-allowed — соединение невозможно. Первое указание на сокет — уже сам
    crosshair вместо стрелки/руки ноды. */
-#questGraphSvg .socketGroup{cursor:crosshair}
-#questGraphSvg .socketGroup.hovered.compatible{cursor:copy}
-#questGraphSvg .socketGroup.hovered.incompatible{cursor:not-allowed}
+#questGraphSvg .socketGroup,
+   not-allowed — соединение невозможно. Первое указание на сокет — уже сам
+   crosshair вместо стрелки/руки ноды. */
+#sceneGraphSvg .socketGroup{cursor:crosshair}
+#questGraphSvg .socketGroup.hovered.compatible,
+#sceneGraphSvg .socketGroup.hovered.compatible{cursor:copy}
+#questGraphSvg .socketGroup.hovered.incompatible,
+#sceneGraphSvg .socketGroup.hovered.incompatible{cursor:not-allowed}
 
 /* Кабели не должны перехватывать указатель:
    - без этого конец preview-кабеля идёт точно за курсором и перекрывает сокет,
      из-за чего курсор мигает между «палец» и «стрелка»;
    - связи визуальные, никаких обработчиков на них нет. */
-#questGraphSvg .edge{pointer-events:none}
-#questGraphSvg .pendingEdge{pointer-events:none}
-#questGraphSvg .node .nodeTitle{font-size:11px}
+#questGraphSvg .edge, никаких обработчиков на них нет. */
+#sceneGraphSvg .edge{pointer-events:none}
+#questGraphSvg .pendingEdge,
+#sceneGraphSvg .pendingEdge{pointer-events:none}
+#questGraphSvg .node .nodeTitle,
+#sceneGraphSvg .node .nodeTitle{font-size:11px}
 
 
 /* Quest Runtime interface dialog */
