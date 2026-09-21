@@ -39,3 +39,4 @@ appsettings.local.json
 
 # Local CI results (TRX). GitHub Actions keeps these as an artifact in the runner workspace.
 ci-results/
+/MemoryAI/ollama_parsed_usage.txt
