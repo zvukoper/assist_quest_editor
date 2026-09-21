@@ -180,3 +180,19 @@ Quest Graph smoke проверяет реальный `editor.js`: загруз�
 - buffs/debuffs зарезервированы и документированы, но не отображаются/не применяются;
 - добавлены player-state quest nodes;
 - snapshot rendering, Choice rendering и detached Journal refresh coalesced, чтобы убрать повторные перерисовки и мерцание.
+
+## 2026-09-21 — 1.0.40.131 Scene Editor R1
+
+Scene Editor R1 переведён с UI-заглушки на canonical pipeline:
+
+- SceneDefinition → SceneGraphStore → EditorForm Host → WebView Scene Editor;
+- добавлены CRUD для Scene nodes и connections с проверкой Output → Input;
+- Node Registry содержит SceneStart, Dialogue, Choice, SceneWait, SceneEvent и SceneEnd;
+- добавлены Undo/Redo, validation и JSON New/Open/Last/Save/Save As;
+- добавлена кнопка «Перестроить»: раскладка считается в Domain через SceneGraphLayout, а не в браузере;
+- Drag нод, pan, wheel zoom, context menu, подтверждение DEL и соединение Output → Input являются presentation interaction;
+- SceneCatalog получил список ресурсов и Upsert, поэтому сохранённая сцена сразу становится видна SceneRuntime;
+- добавлены domain regression SceneGraphStoreTests и Playwright smoke ci/scene_graph_smoke.mjs;
+- версия выпуска: 1.0.40.131-QUEST-SCENE-EDITOR-R1.
+
+Следующий слой Scene Editor: отдельное редактирование Dialogue/Choice resources, timeline, preview, actor/camera/animation, copy/paste и minimap.

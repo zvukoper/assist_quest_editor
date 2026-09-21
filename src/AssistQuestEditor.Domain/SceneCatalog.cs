@@ -7,7 +7,7 @@ public interface ISceneCatalog
 
 public sealed class SceneCatalog : ISceneCatalog
 {
-    private readonly IReadOnlyDictionary<string, SceneDefinition> _scenes;
+    private readonly Dictionary<string, SceneDefinition> _scenes;
 
     public SceneCatalog(IEnumerable<SceneDefinition> scenes)
     {
@@ -18,8 +18,23 @@ public sealed class SceneCatalog : ISceneCatalog
             .ToDictionary(scene => scene.Id, StringComparer.OrdinalIgnoreCase);
     }
 
+    public IReadOnlyList<SceneDefinition> Scenes =>
+        _scenes.Values
+            .OrderBy(scene => scene.Title, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(scene => scene.Id, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
     public bool TryGetScene(string sceneId, out SceneDefinition scene) =>
         _scenes.TryGetValue(sceneId, out scene!);
+
+    public void Upsert(SceneDefinition scene)
+    {
+        ArgumentNullException.ThrowIfNull(scene);
+        if (string.IsNullOrWhiteSpace(scene.Id))
+            throw new ArgumentException("Scene Definition должен иметь Id.", nameof(scene));
+
+        _scenes[scene.Id] = scene;
+    }
 }
 
 public static class SceneCatalogFactory

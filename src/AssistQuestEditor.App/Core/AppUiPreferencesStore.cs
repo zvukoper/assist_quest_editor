@@ -12,6 +12,7 @@ public sealed record WindowGeometry(
 public sealed record AppUiPreferences(
     bool JournalDetached = true,
     string? LastQuestDefinitionPath = null,
+    string? LastSceneDefinitionPath = null,
     Dictionary<string, WindowGeometry>? Windows = null);
 
 public static class AppUiPreferencesStore

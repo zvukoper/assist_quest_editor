@@ -373,3 +373,18 @@ JSON может быть форматом хранения/экспорта, н�
 ## 2026-09-21 — Inventory technical debt
 
 Зафиксировано: подключение Inventory к Quest Runtime уже рабочее для базовых `GiveItem`, `RemoveItem` и `ItemCountCompare`, однако semantics пока минимальны. Отложены полноценная обработка недостаточного количества при RemoveItem, stack/unique rules, validation item definitions и связанные inventory constraints. Это сознательно не блокирует текущий Scene Editor этап.
+
+
+## 2026-09-21 — Scene Editor R1 checkpoint
+
+Canonical Scene authoring следует тому же правилу, что и Quest Graph: Web UI отправляет действия, источником истины остаётся domain resource.
+
+Контракт:
+- SceneDefinition — полный ресурс сцены;
+- SceneGraphStore — mutable authoring state внутри Host;
+- SceneGraphLayout — детерминированная раскладка нод;
+- SceneGraphValidator — domain validation;
+- EditorForm — transport/actions и JSON persistence;
+- sceneEditor.js — presentation: drag/pan/zoom, sockets, context menu, inspector и toolbar.
+
+Обязательная кнопка «Перестроить» должна сохраняться во всех последующих версиях, пока Scene Editor содержит ноды.

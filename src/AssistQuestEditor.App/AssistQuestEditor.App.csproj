@@ -11,10 +11,10 @@
     <Prefer32Bit>false</Prefer32Bit>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
 
-    <Version>1.0.40.130</Version>
-    <AssemblyVersion>1.0.40.130</AssemblyVersion>
-    <FileVersion>1.0.40.130</FileVersion>
-    <AssemblyInformationalVersion>1.0.40.130-QUEST-SPLASH-R1</AssemblyInformationalVersion>
+    <Version>1.0.40.131</Version>
+    <AssemblyVersion>1.0.40.131</AssemblyVersion>
+    <FileVersion>1.0.40.131</FileVersion>
+    <AssemblyInformationalVersion>1.0.40.131-QUEST-SPLASH-R1</AssemblyInformationalVersion>
     <PublishSingleFile>true</PublishSingleFile>
     <SelfContained>true</SelfContained>
     <RuntimeIdentifier>win-x64</RuntimeIdentifier>

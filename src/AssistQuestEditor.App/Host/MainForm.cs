@@ -8,6 +8,7 @@ public sealed class MainForm : WebViewForm
     private readonly IDataChannelHub _hub;
     private readonly QuestGraphStore _questGraph;
     private readonly SceneCatalog _sceneCatalog;
+    private readonly SceneGraphStore _sceneGraph;
     private readonly SceneRuntime _sceneRuntime;
     private readonly QuestRuntime _runtime;
     private readonly Dictionary<string, EditorForm> _editors = new(StringComparer.OrdinalIgnoreCase);
@@ -29,6 +30,10 @@ public sealed class MainForm : WebViewForm
         _hub = hub;
         _questGraph = new QuestGraphStore(QuestDefinitionLoader.LoadOrFallback());
         _sceneCatalog = SceneCatalogLoader.Load();
+        var initialScene = _sceneCatalog.TryGetScene("ruslan_start", out var ruslanStart)
+            ? ruslanStart
+            : _sceneCatalog.Scenes.FirstOrDefault() ?? SceneCatalogFactory.CreateStarter().Scenes.First();
+        _sceneGraph = new SceneGraphStore(initialScene);
         _sceneRuntime = new SceneRuntime(_sceneCatalog, _hub);
         _runtime = new QuestRuntime(_questGraph, _hub, _sceneRuntime);
         _sceneRuntime.Published += SceneRuntime_Published;
@@ -208,7 +213,14 @@ public sealed class MainForm : WebViewForm
             return;
         }
 
-        var form = new EditorForm(page.Item1, page.Item2, _hub, _questGraph, _runtime);
+        var form = new EditorForm(
+            page.Item1,
+            page.Item2,
+            _hub,
+            _questGraph,
+            _sceneGraph,
+            _sceneCatalog,
+            _runtime);
         _editors[page.Item2] = form;
         form.FormClosed += (_, _) => _editors.Remove(page.Item2);
         PlaceAuxiliaryWindow(form, _editors.Count);

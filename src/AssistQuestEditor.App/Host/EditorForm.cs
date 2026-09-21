@@ -18,29 +18,48 @@ public sealed class EditorForm : WebViewForm
     private const int DefinitionSchemaVersion = 1;
 
     private readonly QuestGraphStore _questGraph;
+    private readonly SceneGraphStore _sceneGraph;
+    private readonly SceneCatalog _sceneCatalog;
     private readonly QuestRuntime _runtime;
     private readonly HashSet<string> _executedNodeIds = new(StringComparer.OrdinalIgnoreCase);
     private readonly bool _isGraphEditor;
+    private readonly bool _isSceneEditor;
     private string? _currentDefinitionPath;
     private string? _lastDefinitionPath;
+    private string? _currentScenePath;
+    private string? _lastScenePath;
     private bool _documentDirty;
+    private bool _sceneDocumentDirty;
 
     public string WindowKey { get; }
 
-    public EditorForm(string title, string page, IDataChannelHub hub, QuestGraphStore questGraph, QuestRuntime runtime)
+    public EditorForm(
+        string title,
+        string page,
+        IDataChannelHub hub,
+        QuestGraphStore questGraph,
+        SceneGraphStore sceneGraph,
+        SceneCatalog sceneCatalog,
+        QuestRuntime runtime)
         : base($"Assist Quest Editor — {title}", page, new Size(1380, 900), "editor:" + page)
     {
         WindowKey = "editor:" + page;
         _player = hub.Get<PlayerState>("player");
         _selection = hub.Get<WorldSelectionState>("world-selection");
         _questGraph = questGraph;
+        _sceneGraph = sceneGraph;
+        _sceneCatalog = sceneCatalog;
         _runtime = runtime;
-        _lastDefinitionPath = AppUiPreferencesStore.Load().LastQuestDefinitionPath;
+        var preferences = AppUiPreferencesStore.Load();
+        _lastDefinitionPath = preferences.LastQuestDefinitionPath;
+        _lastScenePath = preferences.LastSceneDefinitionPath;
         _isGraphEditor = page.EndsWith("#graph", StringComparison.OrdinalIgnoreCase);
+        _isSceneEditor = page.EndsWith("#scene", StringComparison.OrdinalIgnoreCase);
 
         _player.Changed += Player_Changed;
         _selection.Changed += Selection_Changed;
         _questGraph.Changed += QuestGraph_Changed;
+        _sceneGraph.Changed += SceneGraph_Changed;
         _runtime.Published += Runtime_Published;
         UpdateWindowTitle();
 
@@ -49,6 +68,7 @@ public sealed class EditorForm : WebViewForm
             _player.Changed -= Player_Changed;
             _selection.Changed -= Selection_Changed;
             _questGraph.Changed -= QuestGraph_Changed;
+            _sceneGraph.Changed -= SceneGraph_Changed;
             _runtime.Published -= Runtime_Published;
         };
     }
@@ -81,6 +101,32 @@ public sealed class EditorForm : WebViewForm
             }
         }
 
+        if (_isSceneEditor && _sceneDocumentDirty)
+        {
+            var result = MessageBox.Show(
+                this,
+                "В Scene Graph есть несохранённые изменения.\r\n\r\n" +
+                "Да — сохранить все изменения в файл.\r\n" +
+                "Нет — закрыть без сохранения.\r\n" +
+                "Отмена — вернуться в редактор.",
+                "Несохранённые изменения",
+                MessageBoxButtons.YesNoCancel,
+                MessageBoxIcon.Warning,
+                MessageBoxDefaultButton.Button1);
+
+            if (result == DialogResult.Cancel)
+            {
+                e.Cancel = true;
+                return;
+            }
+
+            if (result == DialogResult.Yes && !SaveScene(saveAs: false))
+            {
+                e.Cancel = true;
+                return;
+            }
+        }
+
         base.OnFormClosing(e);
     }
 
@@ -91,6 +137,12 @@ public sealed class EditorForm : WebViewForm
         {
             PostQuestGraph();
             PostRuntimeState();
+        }
+
+        if (_isSceneEditor)
+        {
+            PostSceneCatalog();
+            PostSceneGraph();
         }
     }
 
@@ -112,6 +164,10 @@ public sealed class EditorForm : WebViewForm
             {
                 HandleGraphAction(root, action);
             }
+            else if (_isSceneEditor)
+            {
+                HandleSceneAction(root, action);
+            }
         }
         catch (Exception ex)
         {
@@ -121,6 +177,155 @@ public sealed class EditorForm : WebViewForm
                 type = "host_error",
                 message = "Ошибка команды редактора: " + ex.Message
             }, WebJsonOptions));
+        }
+    }
+
+    private void HandleSceneAction(JsonElement root, string? action)
+    {
+        switch (action)
+        {
+            case "scene_new":
+                _sceneGraph.Replace(SceneCatalogFactory.CreateStarter().Scenes.First());
+                _currentScenePath = null;
+                _sceneDocumentDirty = false;
+                UpdateWindowTitle();
+                PostSceneCatalog();
+                PostSceneGraph();
+                AppLogger.Info("Scene Editor: создан новый документ.");
+                break;
+
+            case "scene_open":
+                OpenScene();
+                break;
+
+            case "scene_open_last":
+                OpenLastScene();
+                break;
+
+            case "scene_open_resource":
+            {
+                var sceneId = Required(root, "sceneId");
+                if (!_sceneCatalog.TryGetScene(sceneId, out var scene))
+                    throw new InvalidOperationException("Scene «" + sceneId + "» не найдена.");
+
+                _sceneGraph.Replace(scene);
+                _currentScenePath = ResolveScenePath(scene.Id);
+                _sceneDocumentDirty = false;
+                UpdateWindowTitle();
+                PostSceneGraph();
+                break;
+            }
+
+            case "scene_save":
+                SaveScene(saveAs: false);
+                break;
+
+            case "scene_save_as":
+                SaveScene(saveAs: true);
+                break;
+
+            case "scene_validate":
+                PostSceneGraph();
+                break;
+
+            case "scene_layout":
+            {
+                if (_sceneGraph.Value.Graph.Nodes.Count == 0)
+                    throw new InvalidOperationException("В Scene Graph нет нод для перестроения.");
+
+                var moved = _sceneGraph.ApplyLayout();
+                AppLogger.Info(
+                    "Scene Graph: выполнено перестроение раскладки.",
+                    "scene=" + _sceneGraph.Value.Id +
+                    "; nodes=" + _sceneGraph.Value.Graph.Nodes.Count +
+                    "; moved=" + moved);
+                PostSceneGraph();
+                break;
+            }
+
+            case "scene_add_node":
+            {
+                var node = _sceneGraph.AddNode(
+                    String(root, "nodeType", "Dialogue"),
+                    String(root, "title", "Dialogue"),
+                    Number(root, "x", 420),
+                    Number(root, "y", 120));
+
+                AppLogger.Info(
+                    "Scene Graph: добавлена нода.",
+                    "id=" + node.NodeId + "; type=" + node.NodeType);
+                PostSceneGraph(node.NodeId);
+                break;
+            }
+
+            case "scene_update_node":
+            {
+                var nodeId = Required(root, "nodeId");
+                var updated = _sceneGraph.UpdateNode(
+                    nodeId,
+                    String(root, "title", null),
+                    NumberOrNull(root, "x"),
+                    NumberOrNull(root, "y"),
+                    Parameters(root, "parameters"));
+
+                if (updated is null)
+                    throw new InvalidOperationException("Нода не найдена: " + nodeId);
+
+                PostSceneGraph(updated.NodeId);
+                break;
+            }
+
+            case "scene_remove_node":
+            {
+                var nodeId = Required(root, "nodeId");
+                if (!_sceneGraph.RemoveNode(nodeId))
+                    throw new InvalidOperationException("Нода не найдена: " + nodeId);
+
+                PostSceneGraph();
+                break;
+            }
+
+            case "scene_connect":
+            {
+                var result = _sceneGraph.Connect(
+                    Required(root, "fromNodeId"),
+                    Required(root, "fromSocketId"),
+                    Required(root, "toNodeId"),
+                    Required(root, "toSocketId"));
+
+                if (!result.Added)
+                    throw new InvalidOperationException(result.Error ?? "Связь не создана.");
+
+                PostSceneGraph();
+                break;
+            }
+
+            case "scene_disconnect":
+            {
+                var connection = new SceneConnection(
+                    Required(root, "fromNodeId"),
+                    Required(root, "fromSocketId"),
+                    Required(root, "toNodeId"),
+                    Required(root, "toSocketId"));
+
+                if (!_sceneGraph.Disconnect(connection))
+                    throw new InvalidOperationException("Связь не найдена.");
+
+                PostSceneGraph();
+                break;
+            }
+
+            case "scene_undo":
+                if (!_sceneGraph.Undo())
+                    throw new InvalidOperationException("Нет изменений для отмены.");
+                PostSceneGraph();
+                break;
+
+            case "scene_redo":
+                if (!_sceneGraph.Redo())
+                    throw new InvalidOperationException("Нет изменений для повтора.");
+                PostSceneGraph();
+                break;
         }
     }
 
@@ -477,6 +682,173 @@ public sealed class EditorForm : WebViewForm
         AppUiPreferencesStore.Save(preferences with { LastQuestDefinitionPath = _lastDefinitionPath });
     }
 
+    private void OpenScene()
+    {
+        using var dialog = new OpenFileDialog
+        {
+            Title = "Открыть Scene Definition",
+            Filter = "Scene Definition (*.json)|*.json|JSON (*.json)|*.json|Все файлы (*.*)|*.*",
+            Multiselect = false
+        };
+
+        if (!string.IsNullOrWhiteSpace(_lastScenePath) && File.Exists(_lastScenePath))
+        {
+            dialog.InitialDirectory = Path.GetDirectoryName(_lastScenePath);
+            dialog.FileName = Path.GetFileName(_lastScenePath);
+        }
+
+        if (dialog.ShowDialog(this) == DialogResult.OK)
+            LoadSceneFromPath(dialog.FileName);
+    }
+
+    private void OpenLastScene()
+    {
+        if (string.IsNullOrWhiteSpace(_lastScenePath) || !File.Exists(_lastScenePath))
+        {
+            OpenScene();
+            return;
+        }
+
+        LoadSceneFromPath(_lastScenePath);
+    }
+
+    private void LoadSceneFromPath(string path)
+    {
+        var document = JsonSerializer.Deserialize<SceneDefinitionDocument>(
+            File.ReadAllText(path),
+            WebJsonOptions) ?? throw new InvalidOperationException("Файл Scene Definition пуст или повреждён.");
+
+        if (document.SchemaVersion != DefinitionSchemaVersion)
+            throw new InvalidOperationException(
+                "Неподдерживаемая версия схемы Scene Definition: " +
+                document.SchemaVersion + ". Поддерживается " + DefinitionSchemaVersion + ".");
+
+        _sceneCatalog.Upsert(document.Definition);
+        _sceneGraph.Replace(document.Definition);
+        _currentScenePath = path;
+        _lastScenePath = path;
+        SaveLastScenePath();
+        _sceneDocumentDirty = false;
+        UpdateWindowTitle();
+        PostSceneCatalog();
+        PostSceneGraph();
+        AppLogger.Info(
+            "Scene Editor: документ открыт.",
+            "path=" + path + "; scene=" + document.Definition.Id + "; schema=" + document.SchemaVersion);
+    }
+
+    private bool SaveScene(bool saveAs)
+    {
+        var path = _currentScenePath;
+
+        if (saveAs || string.IsNullOrWhiteSpace(path))
+        {
+            using var dialog = new SaveFileDialog
+            {
+                Title = "Сохранить Scene Definition",
+                Filter = "Scene Definition (*.json)|*.json|JSON (*.json)|*.json",
+                DefaultExt = "json",
+                AddExtension = true,
+                FileName = string.IsNullOrWhiteSpace(path)
+                    ? SanitizeFileName(_sceneGraph.Value.Title) + ".json"
+                    : Path.GetFileName(path)
+            };
+
+            if (dialog.ShowDialog(this) != DialogResult.OK)
+                return false;
+
+            path = dialog.FileName;
+        }
+
+        _sceneCatalog.Upsert(_sceneGraph.Value);
+        var document = new SceneDefinitionDocument(DefinitionSchemaVersion, _sceneGraph.Value);
+        var output = JsonSerializer.Serialize(document, WebJsonOptions);
+        File.WriteAllText(path!, output);
+
+        _currentScenePath = path;
+        _lastScenePath = path;
+        SaveLastScenePath();
+        _sceneDocumentDirty = false;
+        UpdateWindowTitle();
+        PostSceneCatalog();
+        PostSceneGraph();
+        AppLogger.Info(
+            "Scene Editor: документ сохранён.",
+            "path=" + _currentScenePath + "; scene=" + _sceneGraph.Value.Id + "; bytes=" + output.Length);
+        return true;
+    }
+
+    private void SaveLastScenePath()
+    {
+        var preferences = AppUiPreferencesStore.Load();
+        AppUiPreferencesStore.Save(preferences with { LastSceneDefinitionPath = _lastScenePath });
+    }
+
+    private string ResolveScenePath(string sceneId)
+    {
+        var path = Path.Combine(AppContext.BaseDirectory, "data", "scenes", sceneId + ".json");
+        return File.Exists(path) ? path : string.Empty;
+    }
+
+    private void PostSceneCatalog()
+    {
+        if (!_isSceneEditor || Browser.CoreWebView2 is null)
+            return;
+
+        PostJson(JsonSerializer.Serialize(new
+        {
+            type = "scene_catalog",
+            scenes = _sceneCatalog.Scenes.Select(scene => new
+            {
+                id = scene.Id,
+                title = scene.Title
+            }).ToArray()
+        }, WebJsonOptions));
+    }
+
+    private void PostSceneGraph(string? selectedNodeId = null)
+    {
+        if (!_isSceneEditor || Browser.CoreWebView2 is null)
+            return;
+
+        PostJson(JsonSerializer.Serialize(new
+        {
+            type = "scene_definition",
+            definition = _sceneGraph.Value,
+            selectedNodeId,
+            canUndo = _sceneGraph.CanUndo,
+            canRedo = _sceneGraph.CanRedo,
+            validation = SceneGraphValidator.Validate(_sceneGraph.Value),
+            documentPath = _currentScenePath ?? string.Empty,
+            lastDocumentPath = _lastScenePath ?? string.Empty,
+            documentDirty = _sceneDocumentDirty
+        }, WebJsonOptions));
+    }
+
+    private void SceneGraph_Changed(object? sender, EventArgs e)
+    {
+        if (!_isSceneEditor)
+            return;
+
+        _sceneDocumentDirty = true;
+        UpdateWindowTitle();
+        PushSceneGraphOnUiThread();
+    }
+
+    private void PushSceneGraphOnUiThread()
+    {
+        if (IsDisposed || !IsHandleCreated)
+            return;
+
+        try
+        {
+            BeginInvoke((Action)PostSceneGraph);
+        }
+        catch (InvalidOperationException)
+        {
+        }
+    }
+
     private void Runtime_Published(object? sender, QuestRuntimeEvent e)
     {
         if (!_isGraphEditor) return;
@@ -517,11 +889,22 @@ public sealed class EditorForm : WebViewForm
 
     private void UpdateWindowTitle()
     {
-        if (!_isGraphEditor) return;
-        var fileName = string.IsNullOrWhiteSpace(_currentDefinitionPath)
-            ? "Новый документ"
-            : Path.GetFileName(_currentDefinitionPath);
-        Text = $"Assist Quest Editor — Нодовый редактор — {fileName}" + (_documentDirty ? " *" : string.Empty);
+        if (_isGraphEditor)
+        {
+            var fileName = string.IsNullOrWhiteSpace(_currentDefinitionPath)
+                ? "Новый документ"
+                : Path.GetFileName(_currentDefinitionPath);
+            Text = $"Assist Quest Editor — Нодовый редактор — {fileName}" + (_documentDirty ? " *" : string.Empty);
+            return;
+        }
+
+        if (_isSceneEditor)
+        {
+            var fileName = string.IsNullOrWhiteSpace(_currentScenePath)
+                ? "Новый документ"
+                : Path.GetFileName(_currentScenePath);
+            Text = $"Assist Quest Editor — Редактор сцен — {fileName}" + (_sceneDocumentDirty ? " *" : string.Empty);
+        }
     }
 
     private static string SanitizeFileName(string value)

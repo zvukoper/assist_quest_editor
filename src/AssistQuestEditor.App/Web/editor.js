@@ -1017,28 +1017,12 @@
   }
 
   function renderScene(ws, ins) {
-    ws.innerHTML =
-      "<div class='layoutTwo'>" +
-        "<section class='panel'><div class='panelTitle'>Scene Graph</div><div class='panelBody'>" +
-          sceneItem("ruslan_start", "Начало разговора с Русланом", true) +
-          sceneItem("ruslan_job_offer", "Предложение поручения", false) +
-          sceneItem("gosha_meat", "Получение мяса", false) +
-          sceneItem("ruslan_completed", "Завершение", false) +
-        "</div></section>" +
-        "<section class='panel'><div class='panelTitle'>Предпросмотр</div><div class='panelBody'>" +
-          "<div class='notice'>Scene Graph отвечает за подачу сцены. QuestState и Data Channels здесь только читаются.</div>" +
-          "<div class='card zoomIn' style='margin-top:12px'><div class='miniLabel'>Руслан</div><h3>Есть для тебя особое предложение.</h3><p>Предпросмотр диалогового блока. Позже сюда добавятся варианты, таймлайн, актёры, звук, камера и VFX.</p></div>" +
-        "</div></section>" +
-      "</div>";
-
-    ins.innerHTML =
-      "<div class='badge'>Scene</div>" +
-      "<h3 style='margin:10px 0 4px'>Диалоговая сцена</h3>" +
-      "<div class='notice'>Сцена не владеет runtime-состоянием квеста.</div>";
-  }
-
-  function sceneItem(id, label, active) {
-    return "<button class='listButton " + (active ? "active" : "") + "' data-scene='" + id + "'>" + escapeHtml(label) + "</button>";
+    if (window.__assistSceneEditor?.render) {
+      window.__assistSceneEditor.render(ws, ins);
+      return;
+    }
+    ws.innerHTML = "<div class='notice'>Scene Editor не загружен.</div>";
+    ins.innerHTML = "";
   }
 
   function renderWorld(ws, ins) {
