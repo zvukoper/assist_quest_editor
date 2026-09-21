@@ -1498,6 +1498,7 @@
       });
       if (!hadSnapshot) fitWorld();
       scheduleUiRender();
+      renderSide();
       return;
     }
 
@@ -1524,6 +1525,7 @@
         eventHistory.splice(12);
       }
       scheduleUiRender();
+      renderSide();
       return;
     }
 
@@ -1546,6 +1548,7 @@
         eventHistory.splice(12);
       }
       scheduleUiRender();
+      renderSide();
       return;
     }
 
