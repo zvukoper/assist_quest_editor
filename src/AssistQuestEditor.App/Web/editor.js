@@ -945,6 +945,7 @@
       const button = document.createElement("button");
       button.type = "button";
       button.className = "graphContextMenuItem";
+      button.dataset.nodeType = type;
       button.textContent = label + " (" + type + ")";
       if (pendingOutput && type === "Start") button.disabled = true;
 
