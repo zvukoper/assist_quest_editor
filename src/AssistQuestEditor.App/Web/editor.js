@@ -1017,7 +1017,13 @@
     menu.style.maxHeight = Math.max(100, window.innerHeight - 12) + "px";
     menu.style.overflowY = "auto";
 
+    // The context menu has a scale-in animation. Measure the full-size box
+    // before applying the viewport clamp so the animation cannot make the
+    // final menu extend beyond the screen.
+    const animation = menu.style.animation;
+    menu.style.animation = "none";
     const menuRect = menu.getBoundingClientRect();
+
     menu.style.left = clamp(
       clientX,
       6,
@@ -1028,6 +1034,8 @@
       6,
       Math.max(6, window.innerHeight - menuRect.height - 6)
     ) + "px";
+
+    menu.style.animation = animation;
 
     menu.addEventListener("wheel", event => event.stopPropagation(), { passive: true });
   }
