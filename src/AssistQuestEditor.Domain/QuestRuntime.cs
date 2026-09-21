@@ -413,6 +413,46 @@ public sealed class QuestRuntime
                     MoveToFirstOutput(node);
                     break;
 
+                case "sethealth":
+                    ApplyVital(node, "health");
+                    MoveToFirstOutput(node);
+                    break;
+
+                case "setenergy":
+                    ApplyVital(node, "energy");
+                    MoveToFirstOutput(node);
+                    break;
+
+                case "sethydration":
+                    ApplyVital(node, "hydration");
+                    MoveToFirstOutput(node);
+                    break;
+
+                case "setfatigue":
+                    ApplyVital(node, "fatigue");
+                    MoveToFirstOutput(node);
+                    break;
+
+                case "addexperience":
+                    ApplyProgress(node, "experience", +1);
+                    MoveToFirstOutput(node);
+                    break;
+
+                case "addmoney":
+                    ApplyProgress(node, "money", +1);
+                    MoveToFirstOutput(node);
+                    break;
+
+                case "removemoney":
+                    ApplyProgress(node, "money", -1);
+                    MoveToFirstOutput(node);
+                    break;
+
+                case "setcharacterstat":
+                    ApplyCharacterStat(node);
+                    MoveToFirstOutput(node);
+                    break;
+
                 case "addreputation":
                     ApplyReputation(node, +1);
                     MoveToFirstOutput(node);
@@ -819,13 +859,77 @@ public sealed class QuestRuntime
         }
 
         var amount = Math.Max(0, ParseInt(GetParameter(node, "count"), 1)) * sign;
-        var state = _hub.Get<InventoryState>("inventory").Value;
-        var items = new Dictionary<string, int>(state.Items, StringComparer.OrdinalIgnoreCase)
+        var current = _hub.Get<InventoryState>("inventory").Value;
+        var previousCount = current.Items.TryGetValue(itemId, out var existing) ? existing : 0;
+        var nextCount = Math.Max(0, previousCount + amount);
+        var items = new Dictionary<string, int>(current.Items, StringComparer.OrdinalIgnoreCase)
         {
-            [itemId] = Math.Max(0, GetItemCount(itemId) + amount)
+            [itemId] = nextCount
         };
+
+        var newIds = new HashSet<string>(current.NewItemIds, StringComparer.OrdinalIgnoreCase);
+        if (amount > 0 && nextCount > 0)
+        {
+            newIds.Add(itemId);
+        }
+
+        if (nextCount == 0)
+        {
+            newIds.Remove(itemId);
+        }
+
         _hub.Get<InventoryState>("inventory").Set(
-            new InventoryState(items),
+            new InventoryState(items, newIds.ToArray()),
+            "QuestRuntime");
+    }
+
+    private void ApplyVital(QuestNode node, string property)
+    {
+        var value = Math.Clamp(ParseDouble(GetParameter(node, "value"), 0), 0, 100);
+        var current = _hub.Get<PlayerVitalsState>("player-vitals").Value;
+        var next = property switch
+        {
+            "health" => current with { Health = value },
+            "energy" => current with { Energy = value },
+            "hydration" => current with { Hydration = value },
+            "fatigue" => current with { Fatigue = value },
+            _ => current
+        };
+
+        _hub.Get<PlayerVitalsState>("player-vitals").Set(next, "QuestRuntime");
+    }
+
+    private void ApplyProgress(QuestNode node, string property, int sign)
+    {
+        var amount = ParseInt(GetParameter(node, "amount"), 0) * sign;
+        var current = _hub.Get<PlayerProgressState>("player-progress").Value;
+        var next = property switch
+        {
+            "money" => current with { Money = Math.Max(0, current.Money + amount) },
+            "experience" => current with { Experience = Math.Max(0, current.Experience + amount) },
+            _ => current
+        };
+
+        _hub.Get<PlayerProgressState>("player-progress").Set(next, "QuestRuntime");
+    }
+
+    private void ApplyCharacterStat(QuestNode node)
+    {
+        var stat = GetParameter(node, "stat");
+        if (string.IsNullOrWhiteSpace(stat))
+        {
+            return;
+        }
+
+        var value = Math.Clamp(ParseInt(GetParameter(node, "value"), 0), 0, 10);
+        var current = _hub.Get<CharacterState>("character").Value;
+        var stats = new Dictionary<string, int>(current.Stats, StringComparer.OrdinalIgnoreCase)
+        {
+            [stat] = value
+        };
+
+        _hub.Get<CharacterState>("character").Set(
+            current with { Stats = stats },
             "QuestRuntime");
     }
 
