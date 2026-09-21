@@ -6,6 +6,12 @@ on:
       - main
   workflow_dispatch:
 
+# Не держим одновременно несколько одинаковых CI-проверок для main.
+# Новый запуск отменяет устаревший незавершённый запуск.
+concurrency:
+  group: assist-quest-editor-main
+  cancel-in-progress: true
+
 permissions:
   contents: read
 
