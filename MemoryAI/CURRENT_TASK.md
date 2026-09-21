@@ -151,6 +151,10 @@ Quest Graph smoke проверяет реальный `editor.js`: загруз�
 Последний физически тестируемый выпуск: `1.0.40.125-QUEST-RUNTIME-WAIT-FIX-R1`.
 Следующий физический тест выполняется на версии `1.0.40.128-QUEST-EXAMPLE-R1`.
 
+## Отложенная задача — полноценная валидация Inventory
+
+Текущие `GiveItem`/`RemoveItem` подключены к canonical `inventory` Data Channel и работают с `ItemId + quantity`, но пока отсутствуют полноценные правила inventory semantics: ошибка/ветка при недостаточном количестве для `RemoveItem`, явная политика stack/unique item, проверка допустимости item definition и другие ограничения. Не считать текущую реализацию финальной inventory-системой. Вернуться к этому после завершения Scene Editor baseline.
+
 ## 2026-09-21 — 1.0.40.130 Splash startup surface
 
 - добавлен отдельный стартовый экран `SplashScreen.png` размером 800×450 из `src/AssistQuestEditor.App/Assets`;

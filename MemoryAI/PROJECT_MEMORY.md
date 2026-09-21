@@ -368,3 +368,8 @@ JSON может быть форматом хранения/экспорта, н�
 ## 2026-09-21 — Интерфейсные запросы Runtime
 
 Для интерактивных Runtime-нод введён отдельный Data Channel `interfaces`. Сейчас он используется для Choice: Runtime публикует `InterfaceChoiceDialog`, Simulator отображает модальное окно, а ответ UI возвращает через `IEventChannel` событием `ChoiceSelected` с `requestId` и `index`. RequestId уникален для каждого показа интерфейса, чтобы старые ответы не пересекались с новым запуском квеста.
+
+
+## 2026-09-21 — Inventory technical debt
+
+Зафиксировано: подключение Inventory к Quest Runtime уже рабочее для базовых `GiveItem`, `RemoveItem` и `ItemCountCompare`, однако semantics пока минимальны. Отложены полноценная обработка недостаточного количества при RemoveItem, stack/unique rules, validation item definitions и связанные inventory constraints. Это сознательно не блокирует текущий Scene Editor этап.
