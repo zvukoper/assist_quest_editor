@@ -191,7 +191,7 @@ try {
   }
 
   // Right-click on a connector must open the connection menu, not Add.
-  const choiceInput = page.locator("[data-node-id='choice'] .socketGroup[data-socket-direction='Input']");
+  const choiceInput = page.locator("[data-node-id='choice'] .socketGroup[data-socket-direction='Input'] .socket");
   await choiceInput.waitFor();
   await choiceInput.click({ button: "right" });
 
