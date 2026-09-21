@@ -190,6 +190,10 @@ try {
     throw new Error("Не удалось получить границы Quest Graph canvas.");
   }
 
+  // Use a compact viewport so the Add menu is guaranteed to exercise its
+  // viewport clamp and wheel scrolling behavior.
+  await page.setViewportSize({ width: 1280, height: 420 });
+
   // Right-click on a connector must open the connection menu, not Add.
   const choiceInput = page.locator("[data-node-id='choice'] .socketGroup[data-socket-direction='Input'] .socket");
   await choiceInput.waitFor();
