@@ -3,6 +3,12 @@
   const side = document.getElementById("side");
   const hud = document.getElementById("hud");
   const runtimeSide = document.getElementById("runtimeSide");
+  const playerOverlay = document.getElementById("playerOverlay");
+  const backpackButton = document.getElementById("backpackButton");
+  const backpackNewDot = document.getElementById("backpackNewDot");
+  const inventoryPanel = document.getElementById("inventoryPanel");
+  const characterPanel = document.getElementById("characterPanel");
+  const inventoryNotifications = document.getElementById("inventoryNotifications");
   const send = payload => window.chrome?.webview?.postMessage(payload);
 
   let snapshot = null;
@@ -20,6 +26,9 @@
   let journalDetached = false;
   let lastQuestVisualLogKey = "";
   let lastQuestTargetResolutionKey = "";
+  let gameplayInventoryOpen = false;
+  const locallySeenInventoryItems = new Set();
+  let uiRenderScheduled = false;
   const DISTANCE_RINGS = [25, 50, 100, 250, 500, 1000, 1500, 2000];
 
   function formatPosition(position) {
@@ -66,6 +75,9 @@
     ["facts", "Факты"],
     ["statuses", "Статусы"],
     ["states", "Состояния"],
+    ["vitals", "Потребности"],
+    ["progress", "Деньги / опыт"],
+    ["character", "Персонаж"],
     ["inventory", "Инвентарь"],
     ["reputation", "Репутация"],
     ["telemetry", "Телеметрия"],
@@ -800,6 +812,210 @@
     ctx.restore();
   }
 
+
+  const CHARACTER_STAT_LABELS = {
+    strength: "Сила",
+    perception: "Восприятие",
+    endurance: "Выносливость",
+    charisma: "Харизма",
+    intelligence: "Интеллект",
+    agility: "Ловкость",
+    luck: "Удача"
+  };
+
+  function itemCatalogDefinition(itemId) {
+    const key = String(itemId || "").toLowerCase();
+    const found = (window.__assistItemCatalog || []).find(item =>
+      String(item.id || "").toLowerCase() === key);
+    return found || {
+      id: itemId,
+      name: itemId,
+      description: "Предмет без зарегистрированного описания.",
+      category: "Неизвестный предмет",
+      color: "#59636d"
+    };
+  }
+
+  function inventoryNewItemIds() {
+    return new Set((snapshot?.inventory?.newItemIds || []).map(value =>
+      String(value).toLowerCase()));
+  }
+
+  function isInventoryItemNew(itemId) {
+    return inventoryNewItemIds().has(String(itemId).toLowerCase()) &&
+      !locallySeenInventoryItems.has(String(itemId).toLowerCase());
+  }
+
+  function percent(value, max) {
+    const maximum = Number(max);
+    return Math.max(0, Math.min(100,
+      maximum > 0 ? Number(value || 0) / maximum * 100 : 0));
+  }
+
+  function renderVitalsPanel() {
+    const v = snapshot?.playerVitals || {};
+    const n = value => Math.round(Number(value || 0));
+    return [
+      "<div class='gamePanelHeader'><div><div class='gamePanelTitle'>Инвентарь</div><div class='gamePanelSub'>Состояние и содержимое</div></div><div class='gamePanelSub'>I — открыть / закрыть</div></div>",
+      "<div class='gameVitals'>",
+        "<div class='vitalRow' data-game-tooltip='Здоровье: текущее значение от 0 до максимума.'><span class='vitalLabel'>Здоровье</span><div class='vitalTrack'><div class='vitalFill health' style='width:" + percent(v.health, v.maxHealth) + "%'></div></div><span class='vitalValue'>" + n(v.health) + "%</span></div>",
+        "<div class='vitalDual'>",
+          "<div class='vitalDualCell' data-game-tooltip='Энергия: запас сил игрока.'><span class='vitalLabel'>Энергия</span><div class='vitalTrack'><div class='vitalFill energy' style='width:" + percent(v.energy, v.maxEnergy) + "%'></div></div></div>",
+          "<div class='vitalDualCell' data-game-tooltip='Жидкость: уровень гидратации игрока.'><span class='vitalLabel'>Жидкость</span><div class='vitalTrack'><div class='vitalFill hydration' style='width:" + percent(v.hydration, v.maxHydration) + "%'></div></div></div>",
+        "</div>",
+        "<div class='vitalRow' data-game-tooltip='Усталость: 0 — полностью отдохнул, 100 — максимальная усталость.'><span class='vitalLabel'>Усталость</span><div class='vitalTrack'><div class='vitalFill fatigue' style='width:" + percent(v.fatigue, v.maxFatigue) + "%'></div></div><span class='vitalValue'>" + n(v.fatigue) + "%</span></div>",
+      "</div>"
+    ].join("");
+  }
+
+  function renderInventoryGrid() {
+    const items = Object.entries(snapshot?.inventory?.items || {})
+      .filter(([, quantity]) => Number(quantity) > 0)
+      .sort(([a], [b]) => a.localeCompare(b));
+
+    const slots = [];
+    for (let index = 0; index < 24; index++) {
+      const pair = items[index];
+      if (!pair) {
+        slots.push("<div class='inventorySlot empty' data-game-tooltip='Свободная ячейка инвентаря.'></div>");
+        continue;
+      }
+
+      const [itemId, quantity] = pair;
+      const item = itemCatalogDefinition(itemId);
+      const isNew = isInventoryItemNew(itemId);
+      slots.push(
+        "<div class='inventorySlot' data-game-tooltip='" + escapeHtml(item.description || item.name) + "'>" +
+          "<button class='inventoryItemButton' type='button' data-inventory-item='" + escapeHtml(itemId) + "' data-game-tooltip='" + escapeHtml((item.name || itemId) + ". " + (item.description || "")) + "'>" +
+            "<span class='inventoryItemSquare' style='background:" + escapeHtml(item.color || "#59636d") + "'>" + (String(itemId).toLowerCase() === "ruslan.raw_meat" ? "М" : "") + "</span>" +
+            "<span class='inventoryItemName'>" + escapeHtml(item.name || itemId) + "</span>" +
+            "<span class='inventoryItemQty'>×" + Number(quantity) + "</span>" +
+            (isNew ? "<span class='inventoryNewDot' aria-label='Новый предмет'></span>" : "") +
+          "</button>" +
+        "</div>"
+      );
+    }
+    return slots.join("");
+  }
+
+  function renderInventoryPanel() {
+    if (!inventoryPanel || !snapshot) return;
+    const progress = snapshot.playerProgress || {};
+    inventoryPanel.innerHTML =
+      renderVitalsPanel() +
+      "<div class='inventoryGrid'>" + renderInventoryGrid() + "</div>" +
+      "<div class='inventoryFooter'>" +
+        "<div class='inventoryFooterCell' data-game-tooltip='Деньги игрока.'>₽ <strong>" + Number(progress.money || 0).toLocaleString("ru-RU") + "</strong></div>" +
+        "<div class='inventoryFooterCell' data-game-tooltip='Опыт игрока. Увеличивается через AddExperience.'>XP <strong>" + Number(progress.experience || 0).toLocaleString("ru-RU") + "</strong></div>" +
+        "<div class='inventoryFooterCell' data-game-tooltip='Резервный ресурс для будущих механик.'>Резерв <strong>" + Number(progress.reserve || 0).toLocaleString("ru-RU") + "</strong></div>" +
+      "</div>";
+
+    inventoryPanel.querySelectorAll("[data-inventory-item]").forEach(button => {
+      button.addEventListener("mouseenter", () => {
+        const id = String(button.dataset.inventoryItem || "").toLowerCase();
+        if (!id) return;
+        locallySeenInventoryItems.add(id);
+        send({ action: "mark_inventory_seen", itemId: id });
+        renderGameplayPanels();
+      });
+    });
+  }
+
+  function renderCharacterPanel() {
+    if (!characterPanel || !snapshot) return;
+    const character = snapshot.character || {};
+    const stats = Object.entries(character.stats || {});
+    const skills = character.skills || [];
+
+    characterPanel.innerHTML =
+      "<div class='gamePanelHeader'><div><div class='gamePanelTitle'>Персонаж</div><div class='gamePanelSub'>S.P.E.C.I.A.L.-подобные параметры</div></div></div>" +
+      "<div class='characterBody'>" +
+        "<div class='characterSectionTitle'>Статы</div>" +
+        "<div class='characterStats'>" +
+          stats.map(([key, value]) =>
+            "<div class='characterStat' data-game-tooltip='" + escapeHtml((CHARACTER_STAT_LABELS[key] || key) + ": " + Number(value) + " из 10") + "'>" +
+              "<span class='characterStatName'>" + escapeHtml(CHARACTER_STAT_LABELS[key] || key) + "</span>" +
+              "<span class='characterStatValue'>" + Number(value) + "</span>" +
+            "</div>"
+          ).join("") +
+        "</div>" +
+        "<div class='characterSectionTitle' style='margin-top:12px'>Скиллы</div>" +
+        "<div class='characterSkills'>" +
+          skills.map(skill =>
+            "<div class='characterSkill' data-game-tooltip='" + escapeHtml(skill.description || skill.name) + "'>" +
+              "<span class='characterSkillName'>" + escapeHtml(skill.name) + "</span>" +
+              "<span class='characterSkillLevel'>" + escapeHtml(skill.levelLabel || (skill.unlocked ? "Получен" : "Не изучен")) + "</span>" +
+              "<div class='characterSkillDesc'>" + escapeHtml(skill.description || "") + "</div>" +
+            "</div>"
+          ).join("") +
+        "</div>" +
+      "</div>";
+  }
+
+  function renderGameplayPanels() {
+    if (!playerOverlay || !backpackButton || !snapshot) return;
+
+    playerOverlay.classList.toggle("visible", gameplayInventoryOpen);
+    playerOverlay.setAttribute("aria-hidden", gameplayInventoryOpen ? "false" : "true");
+    backpackButton.setAttribute("aria-expanded", gameplayInventoryOpen ? "true" : "false");
+
+    const hasNew = [...inventoryNewItemIds()].some(id =>
+      !locallySeenInventoryItems.has(id));
+    backpackButton.classList.toggle("hasNew", hasNew && !gameplayInventoryOpen);
+
+    renderInventoryPanel();
+    renderCharacterPanel();
+  }
+
+  function toggleGameplayInventory(force = null) {
+    gameplayInventoryOpen = force === null ? !gameplayInventoryOpen : !!force;
+    renderGameplayPanels();
+  }
+
+  function showInventoryNotification(itemId, delta) {
+    if (!inventoryNotifications) return;
+
+    const amount = Math.abs(Number(delta) || 0);
+    const item = itemCatalogDefinition(itemId);
+    const type = Number(delta) > 0 ? "add" : "remove";
+    const toast = document.createElement("div");
+    toast.className = "inventoryNotification " + type + " in";
+    toast.innerHTML =
+      "<div class='inventoryNotificationTitle'>" + (type === "add" ? "Получено" : "Изъято") + "</div>" +
+      "<div class='inventoryNotificationName'>" + escapeHtml(item.name || itemId) + " ×" + amount + "</div>";
+    inventoryNotifications.appendChild(toast);
+
+    window.setTimeout(() => {
+      toast.classList.add("closing");
+      window.setTimeout(() => toast.remove(), 100);
+    }, 5900);
+  }
+
+  function handleInventoryEvent(event) {
+    if (!event || event.source !== "QuestRuntime") return;
+    const payload = event.payload || {};
+    const itemId = payload.itemId;
+    const delta = Number(payload.delta || 0);
+    if (!itemId || !delta) return;
+
+    if (delta > 0) {
+      locallySeenInventoryItems.delete(String(itemId).toLowerCase());
+    }
+
+    showInventoryNotification(itemId, delta);
+    renderGameplayPanels();
+  }
+
+  function scheduleUiRender() {
+    if (uiRenderScheduled) return;
+    uiRenderScheduled = true;
+    window.requestAnimationFrame(() => {
+      uiRenderScheduled = false;
+      drawMap();
+      renderGameplayPanels();
+    });
+  }
+
   function renderRuntimeSidebar() {
     if (!runtimeSide || !snapshot) return;
 
@@ -895,10 +1111,13 @@
   }
 
     function renderSide() {
+    const previouslyOpen = new Set(
+      [...side.querySelectorAll(".acc.open")].map(section => section.dataset.section));
     side.innerHTML = sections.map((entry, index) => {
       const id = entry[0];
       const label = entry[1];
-      return "<section class='acc " + (index === 0 ? "open" : "") + "' data-section='" + id + "'>" +
+      const open = previouslyOpen.size === 0 ? index === 0 : previouslyOpen.has(id);
+      return "<section class='acc " + (open ? "open" : "") + "' data-section='" + id + "'>" +
         "<div class='accHead'><strong>" + label + "</strong><span>⌄</span></div>" +
         "<div class='accBody'>" + sectionBody(id) + "</div>" +
       "</section>";
@@ -966,6 +1185,38 @@
       return "<div class='miniLabel'>Флаги</div>" + flags +
         "<div class='miniLabel' style='margin-top:12px'>Переменные</div>" + variables +
         "<div class='inline' style='margin-top:8px'><input id='newVarKey' placeholder='ключ'><input id='newVarValue' placeholder='значение'><button class='smallButton primary' id='addVar'>+</button></div>";
+    }
+
+    if (id === "vitals") {
+      const v = snapshot.playerVitals || {};
+      return [
+        "<div class='fieldGrid'>",
+          field("health", "Здоровье", v.health),
+          field("energy", "Энергия", v.energy),
+          field("hydration", "Жидкость", v.hydration),
+          field("fatigue", "Усталость", v.fatigue),
+        "</div>",
+        "<button class='smallButton primary' id='applyVitals' style='margin-top:8px'>Применить</button>"
+      ].join("");
+    }
+
+    if (id === "progress") {
+      const p = snapshot.playerProgress || {};
+      return [
+        "<div class='fieldGrid'>",
+          field("money", "Деньги", p.money),
+          field("experience", "Опыт", p.experience),
+          field("reserve", "Резерв", p.reserve),
+        "</div>",
+        "<button class='smallButton primary' id='applyProgress' style='margin-top:8px'>Применить</button>"
+      ].join("");
+    }
+
+    if (id === "character") {
+      return Object.entries(snapshot.character?.stats || {}).map(([key, value]) =>
+        "<div class='field' style='margin-top:6px'><label>" + escapeHtml(CHARACTER_STAT_LABELS[key] || key) + "</label><input type='number' data-stat='" + escapeHtml(key) + "' value='" + Number(value) + "'></div>"
+      ).join("") +
+      "<button class='smallButton primary' id='applyCharacter' style='margin-top:8px'>Применить</button>";
     }
 
     if (id === "inventory") {
@@ -1081,6 +1332,35 @@
       input.addEventListener("change", () => send({ action: "set_inventory", key: input.dataset.item, amount: Number(input.value) }));
     });
 
+    side.querySelector("#applyVitals")?.addEventListener("click", () => {
+      send({
+        action: "set_vitals",
+        health: Number(side.querySelector("[data-t='health']").value),
+        energy: Number(side.querySelector("[data-t='energy']").value),
+        hydration: Number(side.querySelector("[data-t='hydration']").value),
+        fatigue: Number(side.querySelector("[data-t='fatigue']").value)
+      });
+    });
+
+    side.querySelector("#applyProgress")?.addEventListener("click", () => {
+      send({
+        action: "set_progress",
+        money: Number(side.querySelector("[data-t='money']").value),
+        experience: Number(side.querySelector("[data-t='experience']").value),
+        reserve: Number(side.querySelector("[data-t='reserve']").value)
+      });
+    });
+
+    side.querySelector("#applyCharacter")?.addEventListener("click", () => {
+      side.querySelectorAll("[data-stat]").forEach(input => {
+        send({
+          action: "set_character_stat",
+          stat: input.dataset.stat,
+          value: Number(input.value)
+        });
+      });
+    });
+
     side.querySelectorAll("[data-rep]").forEach(input => {
       input.addEventListener("change", () => send({ action: "set_reputation", key: input.dataset.rep, amount: Number(input.value) }));
     });
@@ -1178,6 +1458,7 @@
     if (message.type === "snapshot") {
       const hadSnapshot = !!snapshot;
       snapshot = message.snapshot;
+      window.__assistItemCatalog = Array.isArray(message.itemCatalog) ? message.itemCatalog : [];
       runtime = message.runtime || null;
       questGraph = message.questGraph || questGraph;
       journalDetached = !!message.journalDetached;
@@ -1216,9 +1497,7 @@
         version: message.version
       });
       if (!hadSnapshot) fitWorld();
-      drawMap();
-      renderRuntimeSidebar();
-      renderSide();
+      scheduleUiRender();
       return;
     }
 
@@ -1236,18 +1515,15 @@
       });
       logQuestTargetResolution("runtime_event");
       focusRuntimeTarget();
-      if (message["@event"] || message.event) {
-        eventHistory.unshift({
-          eventType: (message["@event"] || message.event).eventType,
-          timestamp: (message["@event"] || message.event).timestamp,
-          source: (message["@event"] || message.event).source
-        });
+      const runtimeEvent = message["@event"] || message.event;
+      if (runtimeEvent) {
+        if (runtimeEvent.eventType === "InventoryChanged") {
+          handleInventoryEvent(runtimeEvent);
+        }
+        eventHistory.unshift(runtimeEvent);
         eventHistory.splice(12);
-        const list = side.querySelector("#eventList");
-        if (list) list.innerHTML = eventHistory.map(renderEvent).join("");
       }
-      renderRuntimeSidebar();
-      renderSide();
+      scheduleUiRender();
       return;
     }
 
@@ -1261,11 +1537,15 @@
         } : null
       });
       focusRuntimeTarget();
-      eventHistory.unshift(message["@event"] || message.event);
-      eventHistory.splice(12);
-      const list = side.querySelector("#eventList");
-      if (list) list.innerHTML = eventHistory.map(renderEvent).join("");
-      renderRuntimeSidebar();
+      const simulatorEvent = message["@event"] || message.event;
+      if (simulatorEvent) {
+        if (simulatorEvent.eventType === "InventoryChanged") {
+          handleInventoryEvent(simulatorEvent);
+        }
+        eventHistory.unshift(simulatorEvent);
+        eventHistory.splice(12);
+      }
+      scheduleUiRender();
       return;
     }
 
@@ -1410,6 +1690,47 @@
   }, { passive: false });
 
   map.addEventListener("contextmenu", event => event.preventDefault());
+
+  backpackButton?.addEventListener("click", () => toggleGameplayInventory());
+
+  document.addEventListener("keydown", event => {
+    if (event.repeat) return;
+    const tag = event.target?.tagName;
+    if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" || event.target?.isContentEditable) return;
+    if (event.key.toLowerCase() === "i") {
+      event.preventDefault();
+      toggleGameplayInventory();
+    }
+  });
+
+  let activeTooltip = null;
+  document.addEventListener("mouseover", event => {
+    const target = event.target?.closest?.("[data-game-tooltip]");
+    if (!target) return;
+
+    const textValue = target.getAttribute("data-game-tooltip");
+    if (!textValue) return;
+
+    if (!activeTooltip) {
+      activeTooltip = document.createElement("div");
+      activeTooltip.id = "assistGameTooltip";
+      activeTooltip.className = "gameTooltip";
+      document.body.appendChild(activeTooltip);
+    }
+
+    activeTooltip.textContent = textValue;
+    activeTooltip.style.display = "block";
+    const rect = target.getBoundingClientRect();
+    activeTooltip.style.left = Math.max(8, Math.min(window.innerWidth - 310, rect.left)) + "px";
+    activeTooltip.style.top = Math.max(8, rect.top - activeTooltip.offsetHeight - 7) + "px";
+  });
+
+  document.addEventListener("mouseout", event => {
+    const target = event.target?.closest?.("[data-game-tooltip]");
+    const related = event.relatedTarget;
+    if (target && related && target.contains(related)) return;
+    if (activeTooltip) activeTooltip.style.display = "none";
+  });
 
   document.getElementById("reset")?.addEventListener("click", () => send({ action: "reset" }));
   window.addEventListener("resize", () => {
