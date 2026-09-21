@@ -117,10 +117,19 @@ if (-not (Test-Path -LiteralPath $exePath)) {
 # Проверяем, что исходные Web-ресурсы существуют перед формированием single-file.
 $webSourceDir = Join-Path $PSScriptRoot 'src\AssistQuestEditor.App\Web'
 $requiredWebFiles = @('main.html', 'main.js', 'simulator.html', 'simulator.js', 'theme.css')
+$requiredAssetFiles = @('SplashScreen.png')
 foreach ($file in $requiredWebFiles) {
     $sourceFile = Join-Path $webSourceDir $file
     if (-not (Test-Path -LiteralPath $sourceFile)) {
         throw "Отсутствует исходный Web-ресурс: $sourceFile"
+    }
+}
+
+$assetSourceDir = Join-Path $PSScriptRoot 'src\\AssistQuestEditor.App\\Assets'
+foreach ($file in $requiredAssetFiles) {
+    $sourceFile = Join-Path $assetSourceDir $file
+    if (-not (Test-Path -LiteralPath $sourceFile)) {
+        throw "Отсутствует исходный Asset: $sourceFile"
     }
 }
 

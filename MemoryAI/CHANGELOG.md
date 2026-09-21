@@ -1,3 +1,11 @@
+## 2026-09-21 — 1.0.40.130 Splash startup surface
+
+- добавлен стартовый экран `SplashScreen.png` 800×450;
+- PNG подключён как publish content и входит в single-file;
+- MainForm скрыт до готовности WebView2, затем splash закрывается;
+- Simulator также раскрывается только после готовности своего WebView2;
+- версия поднята до `1.0.40.130-QUEST-SPLASH-R1`.
+
 ## 2026-09-21 — 1.0.40.129 Simulator Inventory / Player HUD
 
 - added stable ItemId + quantity inventory state and a tiny starter item catalog;

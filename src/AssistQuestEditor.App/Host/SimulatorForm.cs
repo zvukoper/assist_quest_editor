@@ -34,6 +34,7 @@ public sealed class SimulatorForm : WebViewForm
         _runtime = runtime ?? throw new ArgumentNullException(nameof(runtime));
         _questGraph = questGraph ?? throw new ArgumentNullException(nameof(questGraph));
         _journalDetached = AppUiPreferencesStore.Load().JournalDetached;
+        Opacity = 0;
         _questGraph.Changed += QuestGraph_Changed;
         _runtime.Published += Runtime_Published;
         _runtimeTimer = new System.Windows.Forms.Timer { Interval = 250 };
@@ -62,6 +63,7 @@ public sealed class SimulatorForm : WebViewForm
 
     protected override void OnBrowserReady()
     {
+        Opacity = 1;
         AppLogger.Info("SimulatorForm: browser ready, отправляю snapshot.");
         PushSnapshot();
         if (_journalDetached)

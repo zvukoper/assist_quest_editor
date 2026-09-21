@@ -151,6 +151,14 @@ Quest Graph smoke проверяет реальный `editor.js`: загруз�
 Последний физически тестируемый выпуск: `1.0.40.125-QUEST-RUNTIME-WAIT-FIX-R1`.
 Следующий физический тест выполняется на версии `1.0.40.128-QUEST-EXAMPLE-R1`.
 
+## 2026-09-21 — 1.0.40.130 Splash startup surface
+
+- добавлен отдельный стартовый экран `SplashScreen.png` размером 800×450 из `src/AssistQuestEditor.App/Assets`;
+- splash показывается до создания основного WebView UI и закрывается после первого успешного `BrowserReady` главного окна;
+- MainForm и SimulatorForm не показывают промежуточный пустой WebView: они становятся видимыми только после готовности собственного browser;
+- asset включён в self-contained single-file publish;
+- версия поднята до `1.0.40.130-QUEST-SPLASH-R1`.
+
 ## 2026-09-21 — 1.0.40.129 Simulator Inventory / Player HUD
 
 Слой Simulator теперь содержит минимальную gameplay-подачу инвентаря и player state:

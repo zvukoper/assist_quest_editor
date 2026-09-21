@@ -32,9 +32,10 @@ public sealed class MainForm : WebViewForm
         _sceneRuntime = new SceneRuntime(_sceneCatalog, _hub);
         _runtime = new QuestRuntime(_questGraph, _hub, _sceneRuntime);
         _sceneRuntime.Published += SceneRuntime_Published;
-        Shown += (_, _) => OpenSimulator();
+        BrowserReady += MainForm_BrowserReady;
         FormClosed += (_, _) =>
         {
+            BrowserReady -= MainForm_BrowserReady;
             _sceneRuntime.Published -= SceneRuntime_Published;
 
             foreach (var editor in _editors.Values.ToArray())
@@ -45,6 +46,11 @@ public sealed class MainForm : WebViewForm
             _simulator?.Close();
             _settings?.Close();
         };
+    }
+
+    private void MainForm_BrowserReady(object? sender, EventArgs e)
+    {
+        OpenSimulator();
     }
 
     protected override void OnWebMessage(string json)

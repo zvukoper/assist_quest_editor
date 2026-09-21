@@ -10,9 +10,19 @@ internal static class Program
         AppLogger.Info("=== Assist Quest Editor START ===",
             $"Version={VersionInfo.InformationalVersion}; BaseDirectory={AppContext.BaseDirectory}; CurrentDirectory={Environment.CurrentDirectory}; LogPath={AppLogger.LogPath}");
 
+        SplashForm? splash = null;
+        MainForm? mainForm = null;
+
         try
         {
             ApplicationConfiguration.Initialize();
+
+            var splashPath = Path.Combine(AppContext.BaseDirectory, "Assets", "SplashScreen.png");
+            AppLogger.Info("Splash: подготовка.", $"path={splashPath}; exists={File.Exists(splashPath)}");
+            splash = new SplashForm(splashPath);
+            splash.Show();
+            splash.Refresh();
+            Application.DoEvents();
 
             AppLogger.Info("Загрузка СДО world data.");
             var sdoPoints = SdoWorldDataLoader.Load();
@@ -25,7 +35,39 @@ internal static class Program
             AppLogger.Info("Создан SimulatorDataSourceAdapter.",
                 $"channels={simulatorAdapter.Channels.Describe().Count}; points={worldCount}");
 
-            using var mainForm = new MainForm(simulatorAdapter.Channels);
+            mainForm = new MainForm(simulatorAdapter.Channels)
+            {
+                Opacity = 0
+            };
+
+            mainForm.BrowserReady += (_, _) =>
+            {
+                if (mainForm.IsDisposed)
+                {
+                    return;
+                }
+
+                mainForm.BeginInvoke(() =>
+                {
+                    if (mainForm.IsDisposed)
+                    {
+                        return;
+                    }
+
+                    mainForm.Opacity = 1;
+                    mainForm.Activate();
+
+                    if (splash is not null && !splash.IsDisposed)
+                    {
+                        splash.Close();
+                        splash.Dispose();
+                        splash = null;
+                    }
+
+                    AppLogger.Info("Splash: завершён.", "Основной WebView2 готов.");
+                });
+            };
+
             AppLogger.Info("MainForm создан. Запуск Application.Run().");
             Application.Run(mainForm);
             AppLogger.Info("Application.Run завершён.");
@@ -33,6 +75,10 @@ internal static class Program
         catch (Exception ex)
         {
             AppLogger.Error("Необработанное исключение верхнего уровня.", ex);
+            splash?.Close();
+            splash?.Dispose();
+            mainForm?.Dispose();
+
             MessageBox.Show(
                 ex.ToString(),
                 "Assist Quest Editor — ошибка запуска",
@@ -41,6 +87,12 @@ internal static class Program
         }
         finally
         {
+            if (splash is not null && !splash.IsDisposed)
+            {
+                splash.Close();
+                splash.Dispose();
+            }
+
             AppLogger.Info("=== Assist Quest Editor END ===");
         }
     }

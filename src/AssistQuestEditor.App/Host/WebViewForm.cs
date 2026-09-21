@@ -8,6 +8,8 @@ public abstract class WebViewForm : Form
 {
     private readonly string _page;
     private bool _browserReadyRaised;
+
+    public event EventHandler? BrowserReady;
     protected readonly WebView2 Browser;
 
     protected WebViewForm(string title, string page, Size initialSize, string? windowKey = null)
@@ -89,6 +91,7 @@ public abstract class WebViewForm : Form
         _browserReadyRaised = true;
         AppLogger.Info("WebView2: browser ready.", $"form={Text}; page={_page}");
         OnBrowserReady();
+        BrowserReady?.Invoke(this, EventArgs.Empty);
     }
 
     protected virtual void OnBrowserReady()
