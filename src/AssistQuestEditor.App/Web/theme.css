@@ -335,7 +335,7 @@ input,select,textarea{padding:4px 5px;border-radius:4px;font-size:10px}textarea{
 .inventoryItemName{font-size:9px;color:#e7edf4;white-space:nowrap;max-width:100%;overflow:hidden;text-overflow:ellipsis}
 .inventoryItemQty{position:absolute;right:5px;top:4px;color:#fff;font-size:9px;font-weight:800}
 .inventoryNewDot{
-  position:absolute;left:5px;bottom:5px;width:7px;height:7px;border-radius:50%;
+  display:inline-block;width:7px;height:7px;margin-left:4px;vertical-align:middle;border-radius:50%;
   background:#fab003;box-shadow:0 0 7px rgba(250,176,3,.75);
   animation:inventoryBeaconPulse 1s ease-in-out infinite;
 }
