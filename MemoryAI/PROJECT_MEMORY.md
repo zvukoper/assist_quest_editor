@@ -213,9 +213,9 @@ Reference последовательно использовать перед и�
 
 Между Simulator и Editor стабилизирован контракт WebView2: сообщения сериализуются в camelCase. Выбранная СДО и координаты игрока успешно передаются в редактор мира/локаций.
 
-Текущая версия проекта: `1.0.40.108-QUEST-EDITOR-QUEST-GRAPH-R1`.
+Текущая версия проекта: `1.0.40.111-QUEST-RUNTIME-R1`.
 
-Текущий функциональный фокус — Quest Graph Editor. После его стабилизации следующим крупным слоем будет Quest Runtime. Реальная интеграция с ETS2 Assist, телеметрией и игровыми событиями пока запрещена.
+Текущий функциональный фокус — Quest Runtime и его автоматическая регрессия. Quest Graph authoring baseline уже включает drag, pan/zoom, dynamic sockets, undo/redo, validation и JSON persistence. Реальная интеграция с ETS2 Assist, телеметрией и игровыми событиями пока запрещена.
 
 ## 14. Фактическое состояние на 2026-09-20
 
@@ -271,15 +271,12 @@ Graph Web UI:
 - отображение sockets и connections в inspector.
 
 Пока не реализованы:
-- drag нод;
-- полноценный pan/zoom canvas;
-- dynamic sockets beyond catalog defaults;
 - comments;
 - copy/paste;
-- undo/redo;
-- disk save/load;
-- validation;
-- minimap.
+- multi-select;
+- minimap;
+- полноценные schema-редакторы Quest/Scene/Condition/Effect;
+- отдельная persistence для Quest Runtime State.
 
 ### Регрессии, которые уже исправлены
 
@@ -294,7 +291,7 @@ Graph Web UI:
 
 Не переносить canonical graph state в JavaScript. Не подключать ETS2 Assist/telemetry/runtime integration, пока не выполнен следующий утверждённый этап sandbox.
 
-Следующий логичный шаг после текущего R1 — сделать перемещение нод мышью и pan/zoom, затем validation и undo/redo, после чего подключать Graph persistence.
+Следующий логичный шаг — довести canonical Quest Runtime handlers и пройти автоматическую матрицу из семи сценариев. После этого реализовать полный сценарий Руслана и Runtime UI.
 
 ## 13. Что нельзя потерять при смене агента
 
