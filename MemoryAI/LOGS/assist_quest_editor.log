@@ -1,0 +1,84 @@
+2026-09-20 21:55:32.961 [INFO] [PID 7608] [TID 2] === Assist Quest Editor START === | Version=1.0.40.109-QUEST-EDITOR-INTERACTION-R1; BaseDirectory=C:\Users\Admin\AppData\Local\Temp\.net\AssistQuestEditor\A4c2_Sk9FLf2\; CurrentDirectory=F:\repo\assist_quest_editor; LogPath=F:\repo\assist_quest_editor\MemoryAI\LOGS\assist_quest_editor.log
+2026-09-20 21:55:32.972 [INFO] [PID 7608] [TID 2] Загрузка СДО world data.
+2026-09-20 21:55:32.991 [INFO] [PID 7608] [TID 2] SdoWorldDataLoader.Load() | path=C:\Users\Admin\AppData\Local\Temp\.net\AssistQuestEditor\A4c2_Sk9FLf2\data/world/sdo_points.json; exists=True
+2026-09-20 21:55:32.995 [INFO] [PID 7608] [TID 2] Файл СДО прочитан. | bytes=756275; chars=708222
+2026-09-20 21:55:33.051 [INFO] [PID 7608] [TID 2] Метаданные СДО разобраны. | schema=1; source=zvukoper/ets2_assist:data/editor_static_data; categoryCount=71; pointCount=5115; parsedPoints=5115
+2026-09-20 21:55:33.052 [INFO] [PID 7608] [TID 2] СДО-точки отфильтрованы. | input=5115; valid=5115; invalid=0
+2026-09-20 21:55:33.058 [INFO] [PID 7608] [TID 2] СДО world points готовы. | count=5115; X=[118733,199063]; Y=[-41,7734,220,812]; Z=[-110503,-43350,1]
+2026-09-20 21:55:33.058 [INFO] [PID 7608] [TID 2] СДО world data загружены. | points=5115
+2026-09-20 21:55:33.064 [INFO] [PID 7608] [TID 2] Создан SimulatorDataSourceAdapter. | channels=11; points=5115
+2026-09-20 21:55:33.134 [INFO] [PID 7608] [TID 2] MainForm создан. Запуск Application.Run().
+2026-09-20 21:55:33.149 [INFO] [PID 7608] [TID 2] WebView2: начало инициализации. | form=Assist Quest Editor — Редактор; page=main.html
+2026-09-20 21:55:33.211 [INFO] [PID 7608] [TID 2] WebView2: начало инициализации. | form=Assist Quest Editor — Симулятор; page=simulator.html
+2026-09-20 21:55:33.482 [INFO] [PID 7608] [TID 2] WebView2: CoreWebView2 создан. | browser=153.0.4234.48
+2026-09-20 21:55:33.497 [INFO] [PID 7608] [TID 2] WebView2: Navigate. | form=Assist Quest Editor — Редактор; uri=file:///C:/Users/Admin/AppData/Local/Temp/.net/AssistQuestEditor/A4c2_Sk9FLf2/Web/main.html?v=1.0.40.109; sourceExists=True; sourceBytes=5754
+2026-09-20 21:55:33.512 [INFO] [PID 7608] [TID 2] WebView2: CoreWebView2 создан. | browser=153.0.4234.48
+2026-09-20 21:55:33.512 [INFO] [PID 7608] [TID 2] WebView2: Navigate. | form=Assist Quest Editor — Симулятор; uri=file:///C:/Users/Admin/AppData/Local/Temp/.net/AssistQuestEditor/A4c2_Sk9FLf2/Web/simulator.html?v=1.0.40.109; sourceExists=True; sourceBytes=1523
+2026-09-20 21:55:33.591 [INFO] [PID 7608] [TID 2] WEB: Simulator Web UI готов. | {"canvas":true,"side":true,"url":"file:///C:/Users/Admin/AppData/Local/Temp/.net/AssistQuestEditor/A4c2_Sk9FLf2/Web/simulator.html?v=1.0.40.109"}
+2026-09-20 21:55:33.592 [INFO] [PID 7608] [TID 2] WEB: Web document load завершён. | {"title":"Симулятор","url":"file:///C:/Users/Admin/AppData/Local/Temp/.net/AssistQuestEditor/A4c2_Sk9FLf2/Web/simulator.html?v=1.0.40.109"}
+2026-09-20 21:55:33.595 [INFO] [PID 7608] [TID 2] WebView2: NavigationCompleted. | form=Assist Quest Editor — Симулятор; success=True; error=Unknown
+2026-09-20 21:55:33.595 [INFO] [PID 7608] [TID 2] WebView2: browser ready. | form=Assist Quest Editor — Симулятор; page=simulator.html
+2026-09-20 21:55:33.596 [INFO] [PID 7608] [TID 2] SimulatorForm: browser ready, отправляю snapshot.
+2026-09-20 21:55:33.597 [INFO] [PID 7608] [TID 2] SimulatorForm: формирование snapshot. | points=5115; selected=<none>; player=WorldCoordinate { X = 158898, Y = 89,5193, Z = -76926,55 }
+2026-09-20 21:55:33.639 [INFO] [PID 7608] [TID 2] SimulatorForm: отправляю snapshot в WebView2. | jsonChars=1193210; points=5115
+2026-09-20 21:55:33.662 [INFO] [PID 7608] [TID 2] WEB: Web document load завершён. | {"title":"Assist Quest Editor","url":"file:///C:/Users/Admin/AppData/Local/Temp/.net/AssistQuestEditor/A4c2_Sk9FLf2/Web/main.html?v=1.0.40.109"}
+2026-09-20 21:55:33.667 [INFO] [PID 7608] [TID 2] WEB: Simulator получил snapshot. | {"points":5115,"selectedPointId":null,"player":{"x":158898,"y":89.5193,"z":-76926.55},"version":"1.0.40.109-QUEST-EDITOR-INTERACTION-R1"}
+2026-09-20 21:55:33.675 [INFO] [PID 7608] [TID 2] WebView2: NavigationCompleted. | form=Assist Quest Editor — Редактор; success=True; error=Unknown
+2026-09-20 21:55:33.675 [INFO] [PID 7608] [TID 2] WebView2: browser ready. | form=Assist Quest Editor — Редактор; page=main.html
+2026-09-20 21:55:35.300 [INFO] [PID 7608] [TID 2] WebView2: получено действие. | form=Assist Quest Editor — Редактор; action=open_editor
+2026-09-20 21:55:35.309 [INFO] [PID 7608] [TID 2] WebView2: начало инициализации. | form=Assist Quest Editor — Нодовый редактор; page=editor.html#graph
+2026-09-20 21:55:35.369 [INFO] [PID 7608] [TID 2] WebView2: CoreWebView2 создан. | browser=153.0.4234.48
+2026-09-20 21:55:35.370 [INFO] [PID 7608] [TID 2] WebView2: Navigate. | form=Assist Quest Editor — Нодовый редактор; uri=file:///C:/Users/Admin/AppData/Local/Temp/.net/AssistQuestEditor/A4c2_Sk9FLf2/Web/editor.html?v=1.0.40.109#graph; sourceExists=True; sourceBytes=880
+2026-09-20 21:55:35.388 [INFO] [PID 7608] [TID 2] WEB: Web document load завершён. | {"title":"Редактор","url":"file:///C:/Users/Admin/AppData/Local/Temp/.net/AssistQuestEditor/A4c2_Sk9FLf2/Web/editor.html?v=1.0.40.109#graph"}
+2026-09-20 21:55:35.396 [INFO] [PID 7608] [TID 2] WebView2: NavigationCompleted. | form=Assist Quest Editor — Нодовый редактор; success=True; error=Unknown
+2026-09-20 21:55:35.397 [INFO] [PID 7608] [TID 2] WebView2: browser ready. | form=Assist Quest Editor — Нодовый редактор; page=editor.html#graph
+2026-09-20 21:55:38.072 [INFO] [PID 7608] [TID 2] WebView2: получено действие. | form=Assist Quest Editor — Нодовый редактор; action=graph_update_node
+2026-09-20 21:55:38.075 [INFO] [PID 7608] [TID 2] Quest Graph: обновлена нода. | id=start
+2026-09-20 21:55:47.050 [INFO] [PID 7608] [TID 2] WebView2: получено действие. | form=Assist Quest Editor — Нодовый редактор; action=graph_add_node
+2026-09-20 21:55:47.051 [INFO] [PID 7608] [TID 2] Quest Graph: добавлена нода. | id=node-6355a481; type=SetStatus
+2026-09-20 21:55:56.174 [INFO] [PID 7608] [TID 2] WebView2: получено действие. | form=Assist Quest Editor — Нодовый редактор; action=graph_update_node
+2026-09-20 21:55:56.174 [INFO] [PID 7608] [TID 2] Quest Graph: обновлена нода. | id=node-6355a481
+2026-09-20 21:55:58.212 [INFO] [PID 7608] [TID 2] WebView2: получено действие. | form=Assist Quest Editor — Нодовый редактор; action=graph_update_node
+2026-09-20 21:55:58.213 [INFO] [PID 7608] [TID 2] Quest Graph: обновлена нода. | id=node-6355a481
+2026-09-20 21:56:04.448 [INFO] [PID 7608] [TID 2] WebView2: получено действие. | form=Assist Quest Editor — Нодовый редактор; action=graph_update_node
+2026-09-20 21:56:04.449 [INFO] [PID 7608] [TID 2] Quest Graph: обновлена нода. | id=node-6355a481
+2026-09-20 21:56:24.068 [INFO] [PID 7608] [TID 2] WebView2: получено действие. | form=Assist Quest Editor — Нодовый редактор; action=graph_connect
+2026-09-20 21:56:24.069 [INFO] [PID 7608] [TID 2] Quest Graph: создана связь. | from=start:start.out; to=node-6355a481:node-6355a481.in
+2026-09-20 21:56:32.300 [INFO] [PID 7608] [TID 2] WebView2: получено действие. | form=Assist Quest Editor — Нодовый редактор; action=graph_disconnect
+2026-09-20 21:56:32.301 [INFO] [PID 7608] [TID 2] Quest Graph: удалена связь. | from=start:start.out; to=condition:condition.in
+2026-09-20 21:56:35.344 [INFO] [PID 7608] [TID 2] WebView2: получено действие. | form=Assist Quest Editor — Нодовый редактор; action=graph_connect
+2026-09-20 21:56:35.345 [INFO] [PID 7608] [TID 2] Quest Graph: создана связь. | from=node-6355a481:node-6355a481.out; to=condition:condition.in
+2026-09-20 21:56:36.558 [INFO] [PID 7608] [TID 2] WebView2: получено действие. | form=Assist Quest Editor — Нодовый редактор; action=graph_update_node
+2026-09-20 21:56:36.559 [INFO] [PID 7608] [TID 2] Quest Graph: обновлена нода. | id=condition
+2026-09-20 21:56:37.512 [INFO] [PID 7608] [TID 2] WebView2: получено действие. | form=Assist Quest Editor — Нодовый редактор; action=graph_update_node
+2026-09-20 21:56:37.512 [INFO] [PID 7608] [TID 2] Quest Graph: обновлена нода. | id=node-6355a481
+2026-09-20 21:56:39.258 [INFO] [PID 7608] [TID 2] WebView2: получено действие. | form=Assist Quest Editor — Нодовый редактор; action=graph_update_node
+2026-09-20 21:56:39.258 [INFO] [PID 7608] [TID 2] Quest Graph: обновлена нода. | id=start
+2026-09-20 21:56:40.534 [INFO] [PID 7608] [TID 2] WebView2: получено действие. | form=Assist Quest Editor — Нодовый редактор; action=graph_update_node
+2026-09-20 21:56:40.534 [INFO] [PID 7608] [TID 2] Quest Graph: обновлена нода. | id=start
+2026-09-20 21:56:50.318 [INFO] [PID 7608] [TID 2] WebView2: получено действие. | form=Assist Quest Editor — Нодовый редактор; action=graph_update_node
+2026-09-20 21:56:50.319 [INFO] [PID 7608] [TID 2] Quest Graph: обновлена нода. | id=node-6355a481
+2026-09-20 21:56:51.446 [INFO] [PID 7608] [TID 2] WebView2: получено действие. | form=Assist Quest Editor — Нодовый редактор; action=graph_update_node
+2026-09-20 21:56:51.446 [INFO] [PID 7608] [TID 2] Quest Graph: обновлена нода. | id=condition
+2026-09-20 21:56:52.274 [INFO] [PID 7608] [TID 2] WebView2: получено действие. | form=Assist Quest Editor — Нодовый редактор; action=graph_update_node
+2026-09-20 21:56:52.274 [INFO] [PID 7608] [TID 2] Quest Graph: обновлена нода. | id=node-6355a481
+2026-09-20 21:57:00.802 [INFO] [PID 7608] [TID 2] WebView2: получено действие. | form=Assist Quest Editor — Нодовый редактор; action=graph_validate
+2026-09-20 21:57:00.802 [INFO] [PID 7608] [TID 2] Quest Graph: выполнена проверка графа.
+2026-09-20 21:57:17.858 [INFO] [PID 7608] [TID 2] WebView2: получено действие. | form=Assist Quest Editor — Нодовый редактор; action=graph_update_node
+2026-09-20 21:57:17.858 [INFO] [PID 7608] [TID 2] Quest Graph: обновлена нода. | id=dialogue
+2026-09-20 21:57:18.638 [INFO] [PID 7608] [TID 2] WebView2: получено действие. | form=Assist Quest Editor — Нодовый редактор; action=graph_update_node
+2026-09-20 21:57:18.638 [INFO] [PID 7608] [TID 2] Quest Graph: обновлена нода. | id=end
+2026-09-20 21:57:19.906 [INFO] [PID 7608] [TID 2] WebView2: получено действие. | form=Assist Quest Editor — Нодовый редактор; action=graph_update_node
+2026-09-20 21:57:19.906 [INFO] [PID 7608] [TID 2] Quest Graph: обновлена нода. | id=end
+2026-09-20 21:57:21.360 [INFO] [PID 7608] [TID 2] WebView2: получено действие. | form=Assist Quest Editor — Нодовый редактор; action=graph_update_node
+2026-09-20 21:57:21.360 [INFO] [PID 7608] [TID 2] Quest Graph: обновлена нода. | id=dialogue
+2026-09-20 21:57:22.874 [INFO] [PID 7608] [TID 2] WebView2: получено действие. | form=Assist Quest Editor — Нодовый редактор; action=graph_update_node
+2026-09-20 21:57:22.874 [INFO] [PID 7608] [TID 2] Quest Graph: обновлена нода. | id=condition
+2026-09-20 21:57:24.262 [INFO] [PID 7608] [TID 2] WebView2: получено действие. | form=Assist Quest Editor — Нодовый редактор; action=graph_update_node
+2026-09-20 21:57:24.262 [INFO] [PID 7608] [TID 2] Quest Graph: обновлена нода. | id=node-6355a481
+2026-09-20 21:57:26.120 [INFO] [PID 7608] [TID 2] WebView2: получено действие. | form=Assist Quest Editor — Нодовый редактор; action=graph_update_node
+2026-09-20 21:57:26.120 [INFO] [PID 7608] [TID 2] Quest Graph: обновлена нода. | id=start
+2026-09-20 21:57:28.334 [INFO] [PID 7608] [TID 2] WebView2: получено действие. | form=Assist Quest Editor — Нодовый редактор; action=graph_update_node
+2026-09-20 21:57:28.334 [INFO] [PID 7608] [TID 2] Quest Graph: обновлена нода. | id=node-6355a481
+2026-09-20 21:57:54.547 [INFO] [PID 7608] [TID 2] Application.Run завершён.
+2026-09-20 21:57:54.548 [INFO] [PID 7608] [TID 2] === Assist Quest Editor END ===

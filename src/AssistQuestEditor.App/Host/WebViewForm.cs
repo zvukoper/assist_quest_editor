@@ -1,0 +1,179 @@
+using System.Text.Json;
+using Microsoft.Web.WebView2.Core;
+using Microsoft.Web.WebView2.WinForms;
+
+namespace AssistQuestEditor.App;
+
+public abstract class WebViewForm : Form
+{
+    private readonly string _page;
+    private bool _browserReadyRaised;
+    protected readonly WebView2 Browser;
+
+    protected WebViewForm(string title, string page, Size initialSize)
+    {
+        Text = title;
+        _page = page;
+        StartPosition = FormStartPosition.Manual;
+        Size = initialSize;
+        MinimumSize = new Size(900, 600);
+        BackColor = Color.FromArgb(10, 12, 16);
+
+        Browser = new WebView2
+        {
+            Dock = DockStyle.Fill,
+            DefaultBackgroundColor = Color.FromArgb(10, 12, 16),
+            CreationProperties = new CoreWebView2CreationProperties
+            {
+                UserDataFolder = GetWebViewUserDataFolder()
+            }
+        };
+
+        Controls.Add(Browser);
+        Browser.NavigationCompleted += Browser_NavigationCompleted;
+        Load += HandleLoad;
+    }
+
+    private async void HandleLoad(object? sender, EventArgs e)
+    {
+        try
+        {
+            AppLogger.Info("WebView2: начало инициализации.", $"form={Text}; page={_page}");
+            _browserReadyRaised = false;
+            await Browser.EnsureCoreWebView2Async();
+            AppLogger.Info("WebView2: CoreWebView2 создан.", $"browser={Browser.CoreWebView2.Environment.BrowserVersionString}");
+            Browser.WebMessageReceived += Browser_WebMessageReceived;
+
+            var hashIndex = _page.IndexOf("#");
+            var fileName = hashIndex >= 0 ? _page[..hashIndex] : _page;
+            var fragment = hashIndex >= 0 ? _page[(hashIndex + 1)..] : string.Empty;
+            var path = Path.Combine(AppContext.BaseDirectory, "Web", fileName);
+
+            if (!File.Exists(path))
+            {
+                throw new FileNotFoundException("Web-страница не найдена в опубликованном приложении.", path);
+            }
+
+            var uri = new Uri(path).AbsoluteUri;
+            uri += "?v=" + Uri.EscapeDataString(VersionInfo.NumericVersion);
+            if (!string.IsNullOrWhiteSpace(fragment))
+            {
+                uri += "#" + fragment;
+            }
+
+            AppLogger.Info("WebView2: Navigate.", $"form={Text}; uri={uri}; sourceExists={File.Exists(path)}; sourceBytes={new FileInfo(path).Length}");
+            Browser.CoreWebView2.Navigate(uri);
+        }
+        catch (Exception ex)
+        {
+            ShowWebViewError(ex);
+        }
+    }
+
+    private void Browser_NavigationCompleted(object? sender, CoreWebView2NavigationCompletedEventArgs e)
+    {
+        AppLogger.Info("WebView2: NavigationCompleted.", $"form={Text}; success={e.IsSuccess}; error={e.WebErrorStatus}");
+        if (IsDisposed || _browserReadyRaised)
+        {
+            return;
+        }
+
+        if (!e.IsSuccess)
+        {
+            ShowWebViewError(new InvalidOperationException(
+                "Web-страница не загрузилась. Код навигации: " + e.WebErrorStatus));
+            return;
+        }
+
+        _browserReadyRaised = true;
+        AppLogger.Info("WebView2: browser ready.", $"form={Text}; page={_page}");
+        OnBrowserReady();
+    }
+
+    protected virtual void OnBrowserReady()
+    {
+    }
+
+    protected virtual void OnWebMessage(string json)
+    {
+    }
+
+    private void Browser_WebMessageReceived(object? sender, CoreWebView2WebMessageReceivedEventArgs e)
+    {
+        try
+        {
+            using var document = JsonDocument.Parse(e.WebMessageAsJson);
+            var root = document.RootElement;
+            var action = root.TryGetProperty("action", out var actionNode) ? actionNode.GetString() : null;
+            if (string.Equals(action, "web_log", StringComparison.OrdinalIgnoreCase))
+            {
+                var level = root.TryGetProperty("level", out var levelNode) ? levelNode.GetString() : "INFO";
+                var message = root.TryGetProperty("message", out var messageNode) ? messageNode.GetString() : "Web log";
+                var details = root.TryGetProperty("details", out var detailsNode) ? detailsNode.ToString() : null;
+                if (string.Equals(level, "ERROR", StringComparison.OrdinalIgnoreCase))
+                    AppLogger.Error("WEB: " + (message ?? "Web error"), details: details);
+                else if (string.Equals(level, "WARN", StringComparison.OrdinalIgnoreCase))
+                    AppLogger.Warn("WEB: " + (message ?? "Web warning"), details);
+                else
+                    AppLogger.Info("WEB: " + (message ?? "Web info"), details);
+                return;
+            }
+
+            AppLogger.Info("WebView2: получено действие.", "form=" + Text + "; action=" + (action ?? "<none>"));
+        }
+        catch (Exception ex)
+        {
+            AppLogger.Error("WebView2: ошибка разбора web message.", ex);
+        }
+
+        OnWebMessage(e.WebMessageAsJson);
+    }
+
+    protected void PostJson(string json)
+    {
+        if (IsDisposed || Browser.CoreWebView2 is null)
+        {
+            return;
+        }
+
+        Browser.CoreWebView2.PostWebMessageAsJson(json);
+    }
+
+    private static string GetWebViewUserDataFolder()
+    {
+        var localAppData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+        if (string.IsNullOrWhiteSpace(localAppData))
+        {
+            localAppData = AppContext.BaseDirectory;
+        }
+
+        return Path.Combine(localAppData, "AssistQuestEditor", "WebView2");
+    }
+
+    private void ShowWebViewError(Exception ex)
+    {
+        Browser.Visible = false;
+        var panel = new Panel
+        {
+            Dock = DockStyle.Fill,
+            BackColor = Color.FromArgb(10, 12, 16),
+            Padding = new Padding(32)
+        };
+
+        var label = new Label
+        {
+            AutoSize = false,
+            Dock = DockStyle.Fill,
+            TextAlign = ContentAlignment.MiddleCenter,
+            ForeColor = Color.FromArgb(231, 237, 244),
+            Font = new Font("Segoe UI", 12f),
+            Text = "Не удалось открыть Web-интерфейс.\r\n\r\n" +
+                   ex.Message + "\r\n\r\n" +
+                   "Проверьте содержимое папки Web в опубликованном приложении."
+        };
+
+        panel.Controls.Add(label);
+        Controls.Add(panel);
+        panel.BringToFront();
+    }
+}
