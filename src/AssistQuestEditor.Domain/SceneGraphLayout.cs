@@ -1,101 +1,121 @@
 namespace AssistQuestEditor.Domain;
 
+/// <summary>
+/// Иерархическая (слоевая) раскладка Scene Graph.
+///
+/// Ноды выстраиваются по слоям слева направо в направлении связей, внутри слоя —
+/// сверху вниз с вертикальными отступами. Порядок внутри слоя подбирается
+/// эвристикой барицентра, чтобы уменьшить пересечения связей.
+///
+/// Раскладка детерминирована и не зависит от текущих X/Y, поэтому её можно
+/// применять к графу, ноды которого были созданы без координат (например,
+/// агентом «вслепую»): после неё ноды не накладываются друг на друга.
+///
+/// Связные компоненты раскладываются независимо и размещаются друг под другом,
+/// поэтому одинокие ноды и «оторванные» ветки не пересекаются с основной линией.
+/// </summary>
 public static class SceneGraphLayout
 {
-    public const double NodeWidth = 280;
-    public const double HorizontalGap = 150;
-    public const double VerticalGap = 45;
-    public const double ComponentGap = 140;
+    /// <summary>Ширина ноды. Дублирует <c>GRAPH_NODE_WIDTH</c> из editor.js.</summary>
+    public const double NodeWidth = 260;
+
+    /// <summary>Горизонтальный отступ между слоями.</summary>
+    public const double HorizontalGap = 140;
+
+    /// <summary>Вертикальный отступ между нодами одного слоя.</summary>
+    public const double VerticalGap = 40;
+
+    /// <summary>Отступ между независимыми связными компонентами.</summary>
+    public const double ComponentGap = 120;
+
+    /// <summary>Количество проходов барицентра при упорядочивании слоёв.</summary>
+    private const int BarycenterPasses = 4;
 
     public sealed record NodePosition(double X, double Y);
 
+    /// <summary>
+    /// Высота ноды по количеству сокетов.
+    /// Дублирует <c>graphNodeHeight</c> из editor.js, чтобы ряды не пересекались.
+    /// </summary>
     public static double NodeHeight(SceneNode node)
     {
         ArgumentNullException.ThrowIfNull(node);
         var inputs = node.Sockets.Count(socket => socket.Direction == SocketDirection.Input);
         var outputs = node.Sockets.Count(socket => socket.Direction == SocketDirection.Output);
-        return Math.Max(116, 78 + Math.Max(inputs, outputs) * 24);
+        return Math.Max(110, 78 + Math.Max(inputs, outputs) * 22);
     }
 
+    /// <summary>
+    /// Вычисляет новые координаты для всех нод графа.
+    /// Возвращает словарь «NodeId → позиция» без изменения исходного графа.
+    /// </summary>
     public static IReadOnlyDictionary<string, NodePosition> Compute(SceneGraph graph)
     {
         ArgumentNullException.ThrowIfNull(graph);
 
-        var nodes = graph.Nodes
-            .Where(node => !string.IsNullOrWhiteSpace(node.NodeId))
-            .GroupBy(node => node.NodeId, StringComparer.OrdinalIgnoreCase)
-            .Select(group => group.First())
-            .ToArray();
-
         var positions = new Dictionary<string, NodePosition>(StringComparer.OrdinalIgnoreCase);
-        if (nodes.Length == 0) return positions;
-
-        var ids = nodes.Select(node => node.NodeId).ToArray();
-        var nodeById = nodes.ToDictionary(node => node.NodeId, StringComparer.OrdinalIgnoreCase);
-        var outgoing = ids.ToDictionary(id => id, _ => new List<string>(), StringComparer.OrdinalIgnoreCase);
-        var incoming = ids.ToDictionary(id => id, _ => new List<string>(), StringComparer.OrdinalIgnoreCase);
-
-        foreach (var edge in graph.Connections)
+        if (graph.Nodes.Count == 0)
         {
-            if (!outgoing.ContainsKey(edge.FromNodeId) ||
-                !incoming.ContainsKey(edge.ToNodeId) ||
-                edge.FromNodeId.Equals(edge.ToNodeId, StringComparison.OrdinalIgnoreCase) ||
-                outgoing[edge.FromNodeId].Contains(edge.ToNodeId, StringComparer.OrdinalIgnoreCase))
-                continue;
-
-            outgoing[edge.FromNodeId].Add(edge.ToNodeId);
-            incoming[edge.ToNodeId].Add(edge.FromNodeId);
+            return positions;
         }
 
-        var components = FindComponents(ids, outgoing, incoming);
-        var yCursor = 0d;
+        var nodeIds = new List<string>();
+        var heights = new Dictionary<string, double>(StringComparer.OrdinalIgnoreCase);
+        var indexOfNode = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        var outgoing = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);
+        var incoming = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);
 
+        foreach (var node in graph.Nodes)
+        {
+            // Малформированный граф может содержать повторяющиеся id: тогда
+            // сохраняем первую версию ноды и не падаем.
+            if (heights.ContainsKey(node.NodeId))
+            {
+                continue;
+            }
+
+            indexOfNode[node.NodeId] = nodeIds.Count;
+            nodeIds.Add(node.NodeId);
+            heights[node.NodeId] = NodeHeight(node);
+            outgoing[node.NodeId] = new List<string>();
+            incoming[node.NodeId] = new List<string>();
+        }
+
+        foreach (var connection in graph.Connections)
+        {
+            if (!outgoing.ContainsKey(connection.FromNodeId) ||
+                !outgoing.ContainsKey(connection.ToNodeId))
+            {
+                continue;
+            }
+
+            if (string.Equals(connection.FromNodeId, connection.ToNodeId, StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            if (outgoing[connection.FromNodeId].Contains(connection.ToNodeId, StringComparer.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            outgoing[connection.FromNodeId].Add(connection.ToNodeId);
+            incoming[connection.ToNodeId].Add(connection.FromNodeId);
+        }
+
+        var components = FindComponents(nodeIds, outgoing, incoming, indexOfNode);
+
+        var yCursor = 0d;
         foreach (var component in components)
         {
-            var backEdges = FindBackEdges(component, outgoing);
-            var order = TopologicalOrder(component, outgoing, backEdges);
-            var layerOf = component.ToDictionary(id => id, _ => 0, StringComparer.OrdinalIgnoreCase);
-
-            foreach (var id in order)
+            var local = LayoutComponent(component, outgoing, incoming, heights);
+            if (local.Count == 0)
             {
-                foreach (var child in outgoing[id])
-                {
-                    if (backEdges.Contains((id, child))) continue;
-                    layerOf[child] = Math.Max(layerOf[child], layerOf[id] + 1);
-                }
+                continue;
             }
-
-            var layers = layerOf
-                .GroupBy(pair => pair.Value)
-                .OrderBy(group => group.Key)
-                .Select(group => group.Select(pair => pair.Key).OrderBy(id => id, StringComparer.OrdinalIgnoreCase).ToList())
-                .ToList();
-
-            // Слои компонента центрируются по вертикали вокруг его собственного
-            // центра (как в QuestGraphLayout), поэтому раскладка не зависит от
-            // исходных координат нод и ни одна нода не попадает в начало координат
-            // «случайно». Независимые компоненты ставятся друг под другом.
-            var local = new Dictionary<string, NodePosition>(StringComparer.OrdinalIgnoreCase);
-            for (var layerIndex = 0; layerIndex < layers.Count; layerIndex++)
-            {
-                var layer = layers[layerIndex];
-                var totalHeight = layer.Sum(id => NodeHeight(nodeById[id])) +
-                    Math.Max(0, layer.Count - 1) * VerticalGap;
-                var y = -totalHeight / 2;
-
-                foreach (var id in layer)
-                {
-                    local[id] = new NodePosition(
-                        layerIndex * (NodeWidth + HorizontalGap),
-                        y);
-                    y += NodeHeight(nodeById[id]) + VerticalGap;
-                }
-            }
-
-            if (local.Count == 0) continue;
 
             var minY = local.Values.Min(position => position.Y);
-            var bottom = local.Max(pair => pair.Value.Y + NodeHeight(nodeById[pair.Key]));
+            var maxY = local.Values.Max(position => position.Y);
             var shift = yCursor - minY;
 
             foreach (var (nodeId, position) in local)
@@ -103,128 +123,293 @@ public static class SceneGraphLayout
                 positions[nodeId] = new NodePosition(position.X, position.Y + shift);
             }
 
-            yCursor = bottom + shift + ComponentGap;
+            yCursor = maxY + shift + ComponentGap;
         }
 
         return positions;
     }
 
-    private static HashSet<(string From, string To)> FindBackEdges(
+    private static Dictionary<string, NodePosition> LayoutComponent(
+        IReadOnlyList<string> component,
+        Dictionary<string, List<string>> outgoing,
+        Dictionary<string, List<string>> incoming,
+        Dictionary<string, double> heights)
+    {
+        var (topologicalOrder, backEdges) = TopologicalOrder(component, outgoing);
+
+        // Рёбра «назад» (замыкающие цикл) исключаются из слоёв и из барицентра:
+        // иначе цикл бесконечно увеличивал бы номер слоя.
+        var forwardOutgoing = ExcludeBackEdges(outgoing, backEdges, component, true);
+        var forwardIncoming = ExcludeBackEdges(incoming, backEdges, component, false);
+
+        var layers = AssignLayers(component, topologicalOrder, forwardOutgoing, heights);
+        OrderLayers(layers, forwardOutgoing, forwardIncoming);
+
+        var positions = new Dictionary<string, NodePosition>(StringComparer.OrdinalIgnoreCase);
+        for (var layerIndex = 0; layerIndex < layers.Count; layerIndex++)
+        {
+            var layer = layers[layerIndex];
+            var totalHeight = layer.Sum(nodeId => heights[nodeId]) +
+                Math.Max(0, layer.Count - 1) * VerticalGap;
+            var y = -totalHeight / 2;
+            var x = layerIndex * (NodeWidth + HorizontalGap);
+
+            foreach (var nodeId in layer)
+            {
+                positions[nodeId] = new NodePosition(x, y);
+                y += heights[nodeId] + VerticalGap;
+            }
+        }
+
+        return positions;
+    }
+
+    /// <summary>
+    /// Обход в глубину с поиском рёбер «назад» и построением топологического
+    /// порядка. Обход итеративный, чтобы не переполнять стек на больших графах.
+    /// </summary>
+    private static (List<string> Order, HashSet<(string From, string To)> BackEdges) TopologicalOrder(
         IReadOnlyList<string> component,
         Dictionary<string, List<string>> outgoing)
     {
+        const int Unvisited = 0;
+        const int Visiting = 1;
+        const int Visited = 2;
+
         var state = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        var postOrder = new List<string>();
         var backEdges = new HashSet<(string From, string To)>();
 
         foreach (var root in component)
         {
-            if (state.ContainsKey(root)) continue;
+            if (state.TryGetValue(root, out var rootState) && rootState == Visited)
+            {
+                continue;
+            }
 
-            var stack = new List<(string NodeId, int Index)> { (root, 0) };
-            state[root] = 1;
+            var stack = new List<(string NodeId, int ChildIndex)> { (root, 0) };
+            state[root] = Visiting;
 
             while (stack.Count > 0)
             {
-                var current = stack[^1];
-                var children = outgoing[current.NodeId];
+                var (nodeId, childIndex) = stack[^1];
+                var children = outgoing[nodeId];
 
-                if (current.Index < children.Count)
+                if (childIndex < children.Count)
                 {
-                    var child = children[current.Index];
-                    stack[^1] = (current.NodeId, current.Index + 1);
+                    stack[^1] = (nodeId, childIndex + 1);
+                    var child = children[childIndex];
+                    var childState = state.TryGetValue(child, out var value) ? value : Unvisited;
 
-                    if (!state.TryGetValue(child, out var childState))
+                    if (childState == Visiting)
                     {
-                        state[child] = 1;
+                        backEdges.Add((nodeId, child));
+                    }
+                    else if (childState == Unvisited)
+                    {
+                        state[child] = Visiting;
                         stack.Add((child, 0));
                     }
-                    else if (childState == 1)
-                    {
-                        backEdges.Add((current.NodeId, child));
-                    }
                 }
                 else
                 {
-                    state[current.NodeId] = 2;
+                    state[nodeId] = Visited;
+                    postOrder.Add(nodeId);
                     stack.RemoveAt(stack.Count - 1);
                 }
             }
         }
 
-        return backEdges;
-    }
-
-    private static List<string> TopologicalOrder(
-        IReadOnlyList<string> component,
-        Dictionary<string, List<string>> outgoing,
-        HashSet<(string From, string To)> backEdges)
-    {
-        var visited = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        var postOrder = new List<string>();
-
-        foreach (var root in component)
-        {
-            if (!visited.Add(root)) continue;
-            var stack = new List<(string NodeId, int Index)> { (root, 0) };
-
-            while (stack.Count > 0)
-            {
-                var current = stack[^1];
-                var children = outgoing[current.NodeId];
-
-                if (current.Index < children.Count)
-                {
-                    var child = children[current.Index];
-                    stack[^1] = (current.NodeId, current.Index + 1);
-
-                    if (backEdges.Contains((current.NodeId, child)) || visited.Contains(child))
-                        continue;
-
-                    visited.Add(child);
-                    stack.Add((child, 0));
-                }
-                else
-                {
-                    postOrder.Add(current.NodeId);
-                    stack.RemoveAt(stack.Count - 1);
-                }
-            }
-        }
-
+        // Обратный postorder — топологический порядок: все предшественники
+        // обрабатываются раньше своих потомков.
         postOrder.Reverse();
-        return postOrder;
+        return (postOrder, backEdges);
     }
 
-    private static List<List<string>> FindComponents(
-        IReadOnlyList<string> ids,
-        Dictionary<string, List<string>> outgoing,
-        Dictionary<string, List<string>> incoming)
+    private static Dictionary<string, List<string>> ExcludeBackEdges(
+        Dictionary<string, List<string>> adjacency,
+        HashSet<(string From, string To)> backEdges,
+        IReadOnlyList<string> component,
+        bool fromIsSource)
     {
-        var result = new List<List<string>>();
-        var visited = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var result = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);
 
-        foreach (var root in ids)
+        foreach (var nodeId in component)
         {
-            if (!visited.Add(root)) continue;
-
-            var component = new List<string>();
-            var queue = new Queue<string>();
-            queue.Enqueue(root);
-
-            while (queue.Count > 0)
+            var kept = new List<string>();
+            foreach (var neighbour in adjacency[nodeId])
             {
-                var id = queue.Dequeue();
-                component.Add(id);
-
-                foreach (var next in outgoing[id].Concat(incoming[id]))
+                var edge = fromIsSource ? (nodeId, neighbour) : (neighbour, nodeId);
+                if (backEdges.Contains(edge))
                 {
-                    if (visited.Add(next)) queue.Enqueue(next);
+                    continue;
                 }
+
+                kept.Add(neighbour);
             }
 
-            result.Add(component);
+            result[nodeId] = kept;
         }
 
         return result;
+    }
+
+    private static List<List<string>> AssignLayers(
+        IReadOnlyList<string> component,
+        IReadOnlyList<string> topologicalOrder,
+        Dictionary<string, List<string>> forwardOutgoing,
+        Dictionary<string, double> heights)
+    {
+        var layerOf = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        foreach (var nodeId in component)
+        {
+            layerOf[nodeId] = 0;
+        }
+
+        // Длиннейший путь от корней: нода оказывается правее всех своих
+        // предшественников, даже если до неё есть короткий путь.
+        foreach (var nodeId in topologicalOrder)
+        {
+            foreach (var child in forwardOutgoing[nodeId])
+            {
+                if (!layerOf.ContainsKey(child))
+                {
+                    continue;
+                }
+
+                var candidate = layerOf[nodeId] + 1;
+                if (layerOf[child] < candidate)
+                {
+                    layerOf[child] = candidate;
+                }
+            }
+        }
+
+        var layerCount = layerOf.Values.DefaultIfEmpty(0).Max() + 1;
+        var layers = new List<List<string>>();
+        for (var index = 0; index < layerCount; index++)
+        {
+            layers.Add(new List<string>());
+        }
+
+        // Исходный порядок нод сохраняется внутри слоя до упорядочивания.
+        foreach (var nodeId in component)
+        {
+            layers[layerOf[nodeId]].Add(nodeId);
+        }
+
+        return layers;
+    }
+
+    private static void OrderLayers(
+        List<List<string>> layers,
+        Dictionary<string, List<string>> forwardOutgoing,
+        Dictionary<string, List<string>> forwardIncoming)
+    {
+        for (var pass = 0; pass < BarycenterPasses; pass++)
+        {
+            var downward = pass % 2 == 0;
+
+            if (downward)
+            {
+                for (var index = 1; index < layers.Count; index++)
+                {
+                    RefineLayerOrder(layers[index], forwardIncoming, layers[index - 1]);
+                }
+            }
+            else
+            {
+                for (var index = layers.Count - 2; index >= 0; index--)
+                {
+                    RefineLayerOrder(layers[index], forwardOutgoing, layers[index + 1]);
+                }
+            }
+        }
+    }
+
+    /// <summary>
+    /// Переупорядочивает слой по среднему индексу соседей в соседнем слое.
+    /// Ноды без связей в соседнем слое сохраняют текущий порядок.
+    /// </summary>
+    private static void RefineLayerOrder(
+        List<string> layer,
+        Dictionary<string, List<string>> neighbours,
+        List<string> referenceLayer)
+    {
+        var referenceIndex = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        for (var index = 0; index < referenceLayer.Count; index++)
+        {
+            referenceIndex[referenceLayer[index]] = index;
+        }
+
+        var keys = new Dictionary<string, double>(StringComparer.OrdinalIgnoreCase);
+        for (var index = 0; index < layer.Count; index++)
+        {
+            var nodeId = layer[index];
+            var neighbourIndexes = new List<int>();
+
+            foreach (var neighbour in neighbours[nodeId])
+            {
+                if (referenceIndex.TryGetValue(neighbour, out var neighbourIndex))
+                {
+                    neighbourIndexes.Add(neighbourIndex);
+                }
+            }
+
+            keys[nodeId] = neighbourIndexes.Count > 0 ? neighbourIndexes.Average() : index;
+        }
+
+        // OrderBy в LINQ стабилен, а Index добивает равенство — результат
+        // детерминирован при одинаковых входных данных.
+        var ordered = layer
+            .Select((nodeId, index) => (NodeId: nodeId, Index: index, Key: keys[nodeId]))
+            .OrderBy(item => item.Key)
+            .ThenBy(item => item.Index)
+            .Select(item => item.NodeId)
+            .ToList();
+
+        layer.Clear();
+        layer.AddRange(ordered);
+    }
+
+    private static List<List<string>> FindComponents(
+        IReadOnlyList<string> nodeIds,
+        Dictionary<string, List<string>> outgoing,
+        Dictionary<string, List<string>> incoming,
+        Dictionary<string, int> indexOfNode)
+    {
+        var visited = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var components = new List<List<string>>();
+
+        foreach (var start in nodeIds)
+        {
+            if (!visited.Add(start))
+            {
+                continue;
+            }
+
+            var component = new List<string>();
+            var queue = new Queue<string>();
+            queue.Enqueue(start);
+
+            while (queue.Count > 0)
+            {
+                var nodeId = queue.Dequeue();
+                component.Add(nodeId);
+
+                foreach (var neighbour in outgoing[nodeId].Concat(incoming[nodeId]))
+                {
+                    if (visited.Add(neighbour))
+                    {
+                        queue.Enqueue(neighbour);
+                    }
+                }
+            }
+
+            component.Sort((left, right) => indexOfNode[left].CompareTo(indexOfNode[right]));
+            components.Add(component);
+        }
+
+        return components;
     }
 }
