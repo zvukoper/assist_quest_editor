@@ -289,10 +289,24 @@ try {
   // corresponding to the screen cursor.
   const endX = svgBox.x + svgBox.width * 0.82;
   const endY = svgBox.y + svgBox.height * 0.27;
-  await page.mouse.click(
-    startOutputBox.x + startOutputBox.width / 2,
-    startOutputBox.y + startOutputBox.height / 2
-  );
+  await page.evaluate(({ x, y }) => {
+    const socket = document.querySelector(
+      "[data-node-id='start'] .socketGroup[data-socket-direction='Output']"
+    );
+    if (!socket) {
+      throw new Error("Start Output socket не найден для проверки preview.");
+    }
+    socket.dispatchEvent(new MouseEvent("click", {
+      bubbles: true,
+      cancelable: true,
+      clientX: x,
+      clientY: y,
+      button: 0
+    }));
+  }, {
+    x: startOutputBox.x + startOutputBox.width / 2,
+    y: startOutputBox.y + startOutputBox.height / 2
+  });
 
   await page.evaluate(({ x, y }) => {
     const svg = document.getElementById("questGraphSvg");
