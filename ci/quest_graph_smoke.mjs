@@ -217,7 +217,11 @@ try {
     throw new Error("Команда «Сохранить» из меню ноды не отправила graph_save.");
   }
 
-  await page.mouse.click(choiceBox.x + 20, choiceBox.y + 20, { button: "right" });
+  await page.mouse.click(
+    choiceBox.x + choiceBox.width / 2,
+    choiceBox.y + choiceBox.height / 2,
+    { button: "right" }
+  );
   await page.getByText("Нода", { exact: true }).waitFor();
   await page.getByRole("button", { name: "Удалить", exact: true }).waitFor();
   await page.keyboard.press("Escape");
