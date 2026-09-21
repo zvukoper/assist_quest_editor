@@ -20,7 +20,9 @@ public static class QuestLogger
             var directory = Path.GetDirectoryName(AppLogger.LogPath);
             if (string.IsNullOrWhiteSpace(directory))
             {
-                directory = Path.Combine(AppContext.BaseDirectory, "MemoryAI", "LOGS");
+                directory = !string.IsNullOrWhiteSpace(BuildInfo.RepositoryRoot)
+                    ? Path.Combine(BuildInfo.RepositoryRoot, "MemoryAI", "LOGS")
+                    : Path.Combine(AppContext.BaseDirectory, "MemoryAI", "LOGS");
                 Directory.CreateDirectory(directory);
             }
 

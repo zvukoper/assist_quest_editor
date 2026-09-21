@@ -252,6 +252,7 @@ Reference последовательно использовать перед и�
 - диагностический лог `MemoryAI/LOGS/assist_quest_editor.log`;
 - version cache-busting WebView2;
 - CI с Node/Chromium/Playwright/.NET/single-file publish.
+- При compile.ps1 контекст исходного Git-репозитория (root, remote, branch, commit) вшивается в assembly metadata; опубликованный EXE использует этот root для записи MemoryAI/LOGS и команды push.
 
 ### Quest Graph
 

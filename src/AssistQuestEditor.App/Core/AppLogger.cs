@@ -52,11 +52,11 @@ public static class AppLogger
 
     private static string ResolveLogPath()
     {
-        var roots = new[] { AppContext.BaseDirectory, Environment.CurrentDirectory }
+        var roots = new[] { BuildInfo.RepositoryRoot, AppContext.BaseDirectory, Environment.CurrentDirectory }
             .Where(x => !string.IsNullOrWhiteSpace(x))
             .Distinct(StringComparer.OrdinalIgnoreCase);
 
-        foreach (var root in roots)
+        foreach (var root in roots.Where(path => !string.IsNullOrWhiteSpace(path)))
         {
             var current = Path.GetFullPath(root);
             while (!string.IsNullOrWhiteSpace(current))

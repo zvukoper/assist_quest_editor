@@ -22,6 +22,36 @@ if (-not (Test-Path -LiteralPath $project)) {
     exit 1
 }
 
+if (-not (Test-Path -LiteralPath (Join-Path $PSScriptRoot '.git'))) {
+    Write-Host "Корень Git-репозитория не найден: $PSScriptRoot" -ForegroundColor Red
+    exit 1
+}
+
+function Get-GitValue([string[]] $Arguments) {
+    $value = (& git -C $PSScriptRoot @Arguments 2>$null)
+    if ($LASTEXITCODE -ne 0) { return '' }
+    return ($value | Out-String).Trim()
+}
+
+$repositoryRoot = Get-GitValue @('rev-parse', '--show-toplevel')
+$repositoryUrl = Get-GitValue @('remote', 'get-url', 'origin')
+if (-not [string]::IsNullOrWhiteSpace($repositoryUrl)) {
+    $repositoryUrl = $repositoryUrl -replace '^(https?://)([^/@]+@)', '$1'
+}
+$repositoryBranch = Get-GitValue @('rev-parse', '--abbrev-ref', 'HEAD')
+$repositoryCommit = Get-GitValue @('rev-parse', 'HEAD')
+
+if ([string]::IsNullOrWhiteSpace($repositoryRoot) -or [string]::IsNullOrWhiteSpace($repositoryCommit)) {
+    Write-Host "Не удалось определить контекст Git-сборки." -ForegroundColor Red
+    exit 1
+}
+
+Write-Host "Git repository: $repositoryRoot" -ForegroundColor DarkGray
+Write-Host "Git remote: $repositoryUrl" -ForegroundColor DarkGray
+Write-Host "Git branch: $repositoryBranch" -ForegroundColor DarkGray
+Write-Host "Git commit: $repositoryCommit" -ForegroundColor DarkGray
+
+
 # Закрываем запущенный экземпляр перед публикацией.
 $running = @(Get-Process -Name 'AssistQuestEditor' -ErrorAction SilentlyContinue)
 if ($running.Count -gt 0) {
@@ -68,6 +98,10 @@ Write-Host "=== Публикация одного EXE ===" -ForegroundColor Cyan
     -p:PublishTrimmed=false `
     -p:DebugType=None `
     -p:DebugSymbols=false `
+    -p:AssistQuestRepositoryRoot="$repositoryRoot" `
+    -p:AssistQuestRepositoryUrl="$repositoryUrl" `
+    -p:AssistQuestRepositoryBranch="$repositoryBranch" `
+    -p:AssistQuestRepositoryCommit="$repositoryCommit" `
     -o $publishDir
 
 if ($LASTEXITCODE -ne 0) {

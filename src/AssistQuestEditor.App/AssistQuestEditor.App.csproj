@@ -11,10 +11,10 @@
     <Prefer32Bit>false</Prefer32Bit>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
 
-    <Version>1.0.40.119</Version>
-    <AssemblyVersion>1.0.40.119</AssemblyVersion>
-    <FileVersion>1.0.40.119</FileVersion>
-    <AssemblyInformationalVersion>1.0.40.119-QUEST-GRAPH-AUTHORING-R1</AssemblyInformationalVersion>
+    <Version>1.0.40.120</Version>
+    <AssemblyVersion>1.0.40.120</AssemblyVersion>
+    <FileVersion>1.0.40.120</FileVersion>
+    <AssemblyInformationalVersion>1.0.40.120-QUEST-GRAPH-AUTHORING-R1</AssemblyInformationalVersion>
     <PublishSingleFile>true</PublishSingleFile>
     <SelfContained>true</SelfContained>
     <RuntimeIdentifier>win-x64</RuntimeIdentifier>
@@ -22,11 +22,19 @@
     <IncludeAllContentForSelfExtract>true</IncludeAllContentForSelfExtract>
     <EnableCompressionInSingleFile>true</EnableCompressionInSingleFile>
     <PublishTrimmed>false</PublishTrimmed>
+    <AssistQuestRepositoryRoot Condition="'$(AssistQuestRepositoryRoot)' == ''"></AssistQuestRepositoryRoot>
+    <AssistQuestRepositoryUrl Condition="'$(AssistQuestRepositoryUrl)' == ''"></AssistQuestRepositoryUrl>
+    <AssistQuestRepositoryBranch Condition="'$(AssistQuestRepositoryBranch)' == ''">unknown</AssistQuestRepositoryBranch>
+    <AssistQuestRepositoryCommit Condition="'$(AssistQuestRepositoryCommit)' == ''">unknown</AssistQuestRepositoryCommit>
     <DebugType>None</DebugType>
     <DebugSymbols>false</DebugSymbols>
   </PropertyGroup>
 
   <ItemGroup>
+    <AssemblyMetadata Include="AssistQuestRepositoryRoot" Value="$(AssistQuestRepositoryRoot)" />
+    <AssemblyMetadata Include="AssistQuestRepositoryUrl" Value="$(AssistQuestRepositoryUrl)" />
+    <AssemblyMetadata Include="AssistQuestRepositoryBranch" Value="$(AssistQuestRepositoryBranch)" />
+    <AssemblyMetadata Include="AssistQuestRepositoryCommit" Value="$(AssistQuestRepositoryCommit)" />
     <ProjectReference Include="../AssistQuestEditor.Domain/AssistQuestEditor.Domain.csproj" />
     <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.4191.47" />
     <None Update="Web/**/*">

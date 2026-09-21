@@ -11,7 +11,18 @@ public static class GitLogPublisher
     {
         var repoRoot = FindRepositoryRoot();
         if (repoRoot is null)
-            return new(false, "Не найден корень Git-репозитория.", "В каталоге приложения и его родителях отсутствует .git.");
+        {
+            var context = string.IsNullOrWhiteSpace(BuildInfo.RepositoryRoot)
+                ? "В сборке не сохранён путь репозитория."
+                : $"Сохранённый путь сборки: {BuildInfo.RepositoryRoot}";
+            var identity = string.Join("; ", new[]
+            {
+                $"URL: {BuildInfo.RepositoryUrl}",
+                $"ветка: {BuildInfo.RepositoryBranch}",
+                $"commit: {BuildInfo.RepositoryCommit}"
+            }.Where(value => !value.EndsWith(": unknown", StringComparison.OrdinalIgnoreCase)));
+            return new(false, "Не найден корень Git-репозитория.", context + (string.IsNullOrWhiteSpace(identity) ? string.Empty : " " + identity));
+        }
 
         var logsPath = Path.Combine(repoRoot, "MemoryAI", "LOGS");
         if (!Directory.Exists(logsPath))
@@ -74,16 +85,25 @@ public static class GitLogPublisher
 
     private static string? FindRepositoryRoot()
     {
+        if (!string.IsNullOrWhiteSpace(BuildInfo.RepositoryRoot) && IsGitRepository(BuildInfo.RepositoryRoot))
+            return BuildInfo.RepositoryRoot;
+
         var current = new DirectoryInfo(AppContext.BaseDirectory);
         while (current is not null)
         {
-            var git = Path.Combine(current.FullName, ".git");
-            if (Directory.Exists(git) || File.Exists(git))
+            if (IsGitRepository(current.FullName))
                 return current.FullName;
             current = current.Parent;
         }
 
         return null;
+    }
+
+    private static bool IsGitRepository(string path)
+    {
+        if (string.IsNullOrWhiteSpace(path)) return false;
+        var fullPath = Path.GetFullPath(path);
+        return Directory.Exists(Path.Combine(fullPath, ".git")) || File.Exists(Path.Combine(fullPath, ".git"));
     }
 
     private static GitCommandResult RunGit(string workingDirectory, params string[] args)
