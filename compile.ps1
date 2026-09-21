@@ -149,14 +149,12 @@ Write-Host "WebView2 cache очищен: $webViewUserDataDir"
 Write-Host "Web-ресурсы включены в single-file через IncludeAllContentForSelfExtract." -ForegroundColor Green
 Write-Host "Проверка: опубликован ровно один файл." -ForegroundColor Green
 
-# После успешной публикации временные диагностические логи можно удалить.
-# CI_errors.md сохраняется: он описывает прогон проверок, который разрешил эту
-# сборку, и очищается только следующим прогоном ci/run_local.ps1.
+# После успешной публикации временные диагностические логи удаляются: если
+# сборка прошла, они не нужны. При неудачной сборке логи сохраняются для разбора.
 $logsDir = Join-Path $PSScriptRoot 'MemoryAI\LOGS'
-$preservedLogs = @('README.md', 'CI_errors.md')
 if (Test-Path -LiteralPath $logsDir) {
     Get-ChildItem -LiteralPath $logsDir -File -Force -ErrorAction SilentlyContinue |
-        Where-Object { $preservedLogs -notcontains $_.Name } |
+        Where-Object { $_.Name -ne 'README.md' } |
         Remove-Item -Force -ErrorAction Stop
 
     Get-ChildItem -LiteralPath $logsDir -Directory -Force -ErrorAction SilentlyContinue |

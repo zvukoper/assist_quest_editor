@@ -53,17 +53,50 @@ if ($LASTEXITCODE -ne 0) {
     exit $LASTEXITCODE
 }
 
-# Подключаем помощник уведомлений. Его отсутствие не должно ломать сборку.
+# Подключаем помощники: уведомление и проверку активности расширения CI Monitor.
+# Отсутствие файла не должно ломать сборку, поэтому это только отметка в выводе.
 $script:NotifyEnabled = $false
-if (-not $NoNotify) {
-    $toastHelper = Join-Path $PSScriptRoot 'ci\WindowsToast.ps1'
-    if (Test-Path -LiteralPath $toastHelper) {
-        . $toastHelper
-        if (Get-Command -Name 'Show-AssistQuestToast' -CommandType Function -ErrorAction SilentlyContinue) {
-            $script:NotifyEnabled = $true
-        }
-    } else {
-        Write-Host "Уведомления Windows недоступны: не найден $toastHelper" -ForegroundColor DarkGray
+$script:EditorMonitorActive = $false
+$toastHelper = Join-Path $PSScriptRoot 'ci\WindowsToast.ps1'
+
+if (Test-Path -LiteralPath $toastHelper) {
+    . $toastHelper
+
+    if (Get-Command -Name 'Show-AssistQuestToast' -CommandType Function -ErrorAction SilentlyContinue) {
+        $script:NotifyEnabled = -not $NoNotify
+    }
+
+    if (Get-Command -Name 'Test-AssistQuestEditorMonitorActive' -CommandType Function -ErrorAction SilentlyContinue) {
+        $script:EditorMonitorActive = Test-AssistQuestEditorMonitorActive -RepositoryRoot $PSScriptRoot
+    }
+} elseif (-not $NoNotify) {
+    Write-Host "Уведомления Windows недоступны: не найден $toastHelper" -ForegroundColor DarkGray
+}
+
+function Show-CheckNotification {
+    <#
+        Одно уведомление на прогон с учётом активности расширения CI Monitor.
+
+        Требование: при локальном прогоне уведомляет расширение, поэтому штатное
+        уведомление скрипта подавляется. Признак активности проверяется в момент
+        показа, а не только на старте: редактор мог быть открыт во время прогона.
+    #>
+    param(
+        [string]$Title,
+        [string]$Body
+    )
+
+    if ($NoNotify) { return }
+
+    if (Test-AssistQuestEditorMonitorActive -RepositoryRoot $PSScriptRoot) {
+        Write-Host 'Уведомление покажет расширение CI Monitor.' -ForegroundColor DarkGray
+        return
+    }
+
+    if (-not $script:NotifyEnabled) { return }
+
+    if (Show-AssistQuestToast -Title $Title -Body $Body) {
+        Write-Host 'Показано уведомление Windows.' -ForegroundColor DarkGray
     }
 }
 
@@ -82,20 +115,17 @@ if ($SkipChecks) {
     Write-Host '=== Проверки перед сборкой ===' -ForegroundColor Cyan
 
     # run_local.ps1 сам печатает итоговую таблицу и называет упавшие проверки.
-    # -NoNotify: уведомление показывает pull.ps1, чтобы не было двух уведомлений.
+    # -NoNotify: уведомление показывает pull.ps1, чтобы оно было только одно и
+    # учитывало активность расширения CI Monitor.
     & powershell -NoProfile -NonInteractive -ExecutionPolicy Bypass -File $runner -NoNotify
 
     if ($LASTEXITCODE -ne 0) {
         Write-Host ''
         Write-Host 'Проверки не пройдены. Сборка отменена.' -ForegroundColor Red
 
-        if ($script:NotifyEnabled) {
-            $null = Show-AssistQuestToast `
-                -Title 'Проверки не пройдены' `
-                -Body "Проверки перед сборкой не прошли.`nСборка Assist Quest Editor отменена."
-
-            Write-Host 'Показано уведомление Windows.' -ForegroundColor DarkGray
-        }
+        Show-CheckNotification `
+            -Title 'Локальные проверки не пройдены' `
+            -Body ("Проверки перед сборкой не прошли.`nСборка Assist Quest Editor отменена.")
 
         exit 1
     }

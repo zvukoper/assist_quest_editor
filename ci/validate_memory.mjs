@@ -47,10 +47,14 @@ if (!currentTask.includes("1.0.40.101-QUEST-EDITOR-DUAL-WINDOW-R1")) {
 
 const logDir = path.join(root, "MemoryAI/LOGS");
 const entries = fs.readdirSync(logDir);
-const unexpected = entries.filter(name =>
-  name !== "README.md" &&
-  name !== "CI_errors.md" &&
-  !name.toLowerCase().endsWith(".log")
+
+// В каталоге логов допустимы только диагностические файлы. Состояние локального
+// прогона и признак активности редактора лежат в `.ci-state`, потому что папка
+// логов очищается после успешной публикации.
+const allowedFiles = new Set(["README.md", "CI_errors.md"]);
+
+const unexpected = entries.filter(
+  (name) => !allowedFiles.has(name) && !name.toLowerCase().endsWith(".log")
 );
 
 if (unexpected.length) {

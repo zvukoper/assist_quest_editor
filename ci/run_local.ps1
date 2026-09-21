@@ -58,24 +58,124 @@ try {
 # должен быть зафиксирован, иначе нельзя отличить «всё хорошо» от «прогон не делали».
 $script:CiReportPath = Join-Path $root 'MemoryAI\LOGS\CI_errors.md'
 
-# Подключаем помощник уведомлений. Он необязателен: его отсутствие не должно
-# ломать проверки, поэтому недоступность только отмечается в выводе.
+# Состояние локального прогона читает расширение CI Monitor: оно показывает
+# номер проверки, статус и процент выполнения. Файл — единственный канал данных,
+# поэтому расширению не важно, откуда запущен скрипт.
+#
+# Файл лежит ВНЕ MemoryAI/LOGS намеренно: папка логов очищается после успешной
+# публикации, а здесь хранится номер последней проверки. Иначе после каждой
+# успешной сборки нумерация начиналась бы заново с #1.
+$script:StateDir = Join-Path $root '.ci-state'
+$script:LocalStatePath = Join-Path $script:StateDir 'local-run.json'
+
+# Признак активности редактора. Расширение обновляет его каждую секунду.
+# Нужен, чтобы не было двух уведомлений об одном прогоне: если редактор открыт,
+# уведомляет расширение, а штатное уведомление скрипта подавляется.
+$script:HeartbeatPath = Join-Path $script:StateDir 'monitor.heartbeat'
+
+# Общее число проверок в прогоне — нужно для процента выполнения.
+# Значение фиксировано: publish присутствует всегда (как «пропущено»), поэтому
+# число не зависит от -IncludePublish.
+$script:TotalChecks = 11
+
+# Подавление уведомления скрипта. Вызывающий скрипт может взять уведомление на
+# себя: pull.ps1 показывает одно уведомление с учётом признака активности
+# редактора, поэтому run_local.ps1 в этом случае не уведомляет вообще.
+$script:SuppressNotify = $NoNotify
+
+# Номер локального прогона. Продолжает нумерацию прошлого прогона, поэтому
+# каждый запуск получает собственный номер, как проверка в GitHub.
+$script:LocalRunNumber = 0
+$script:LocalRunStartedAt = $null
+$script:LocalChecksCompleted = 0
+$script:LocalFailedNames = New-Object System.Collections.Generic.List[string]
+
+# Подключаем помощник уведомлений и проверки активности редактора. Он
+# необязателен: его отсутствие не должно ломать проверки, поэтому недоступность
+# только отмечается в выводе и отключает уведомления.
 $script:NotifyEnabled = $false
-if (-not $NoNotify) {
-    $toastHelper = Join-Path $PSScriptRoot 'WindowsToast.ps1'
-    if (Test-Path -LiteralPath $toastHelper) {
-        . $toastHelper
-        if (Get-Command -Name 'Show-AssistQuestToast' -CommandType Function -ErrorAction SilentlyContinue) {
-            $script:NotifyEnabled = $true
-        } else {
-            Write-Host 'Уведомления Windows недоступны: помощник не загрузился.' -ForegroundColor DarkGray
-        }
-    } else {
-        Write-Host "Уведомления Windows недоступны: не найден $toastHelper" -ForegroundColor DarkGray
+$script:HelperEnabled = $false
+$toastHelper = Join-Path $PSScriptRoot 'WindowsToast.ps1'
+if (Test-Path -LiteralPath $toastHelper) {
+    . $toastHelper
+    if (Get-Command -Name 'Test-AssistQuestEditorMonitorActive' -CommandType Function -ErrorAction SilentlyContinue) {
+        $script:HelperEnabled = $true
     }
+    if (-not $NoNotify -and (Get-Command -Name 'Show-AssistQuestToast' -CommandType Function -ErrorAction SilentlyContinue)) {
+        $script:NotifyEnabled = $true
+    } elseif (-not $NoNotify) {
+        Write-Host 'Уведомления Windows недоступны: помощник не загрузился.' -ForegroundColor DarkGray
+    }
+} elseif (-not $NoNotify) {
+    Write-Host "Уведомления Windows недоступны: не найден $toastHelper" -ForegroundColor DarkGray
 }
 
 $results = New-Object System.Collections.Generic.List[object]
+
+function Write-LocalRunState {
+    <#
+        Публикация состояния локального прогона для расширения CI Monitor.
+
+        Формат совпадает с сериализацией в расширении, поэтому плашка показывает
+        локальный прогон теми же средствами, что и проверку GitHub.
+
+        Файл пишется атомарно (временный файл + Move-Item): расширение читает его
+        параллельно, и частично записанный JSON оно разобрать не сможет.
+    #>
+    param(
+        [string]$Status,
+        [string]$CurrentCheck = '',
+        [string]$ReportPath = '',
+        [string]$Branch = '',
+        [string]$Commit = '',
+        [string]$Title = ''
+    )
+
+    $payload = [ordered]@{
+        runNumber       = $script:LocalRunNumber
+        status          = $Status
+        totalChecks     = $script:TotalChecks
+        completedChecks = $script:LocalChecksCompleted
+        updatedAt       = (Get-Date).ToUniversalTime().ToString('o')
+    }
+
+    if (-not [string]::IsNullOrWhiteSpace($CurrentCheck)) { $payload.currentCheck = $CurrentCheck }
+    if ($script:LocalFailedNames.Count -gt 0) { $payload.failedChecks = @($script:LocalFailedNames) }
+    if ($script:LocalRunStartedAt) { $payload.startedAt = $script:LocalRunStartedAt }
+    if ($Status -in @('success', 'failure', 'cancelled')) {
+        $payload.finishedAt = (Get-Date).ToUniversalTime().ToString('o')
+    }
+    if (-not [string]::IsNullOrWhiteSpace($Branch)) { $payload.branch = $Branch }
+    if (-not [string]::IsNullOrWhiteSpace($Commit)) { $payload.commit = $Commit }
+    if (-not [string]::IsNullOrWhiteSpace($Title)) { $payload.title = $Title }
+    if (-not [string]::IsNullOrWhiteSpace($ReportPath)) { $payload.reportPath = $ReportPath }
+
+    $directory = Split-Path -Parent $script:LocalStatePath
+    if (-not (Test-Path -LiteralPath $directory)) {
+        New-Item -ItemType Directory -Path $directory -Force | Out-Null
+    }
+
+    $json = $payload | ConvertTo-Json -Depth 4
+    $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
+    $temp = "$($script:LocalStatePath).tmp"
+
+    try {
+        [System.IO.File]::WriteAllText($temp, $json, $utf8NoBom)
+        Move-Item -LiteralPath $temp -Destination $script:LocalStatePath -Force
+    } catch {
+        # Диагностический канал не должен ломать проверки.
+        Write-Host "Не удалось записать состояние локального прогона: $($_.Exception.Message)" -ForegroundColor DarkGray
+    }
+}
+
+function Test-EditorMonitorActive {
+    <#
+        Проверка, что расширение CI Monitor активно и сейчас обновляет признак
+        активности. Реализация вынесена в ci/WindowsToast.ps1, чтобы pull.ps1 и
+        этот скрипт не дублировали одну и ту же логику.
+    #>
+    return (Test-AssistQuestEditorMonitorActive -RepositoryRoot $root)
+}
 
 function Add-Result {
     param(
@@ -104,6 +204,11 @@ function Invoke-Check {
     Write-Host ''
     Write-Host "=== $Name ===" -ForegroundColor Cyan
     $started = Get-Date
+
+    # Сообщаем расширению, что началась следующая проверка: плашка показывает
+    # имя текущей проверки и уже достигнутый процент.
+    Write-LocalRunState -Status 'in_progress' -CurrentCheck $Name `
+        -Branch $script:GitBranch -Commit $script:GitCommit -Title $script:RunTitle
 
     # Сбрасываем код выхода, иначе проверка без внешнего процесса унаследует
     # значение от предыдущей команды и может ложно упасть или ложно пройти.
@@ -183,11 +288,19 @@ function Invoke-Check {
     $seconds = [Math]::Round(((Get-Date) - $started).TotalSeconds, 1)
     Add-Result -Name $Name -Ok $ok -Seconds $seconds -Detail $detail -Output $captured
 
+    # Прогресс считается по завершённым проверкам: неуспешная проверка тоже
+    # завершена, поэтому она увеличивает счётчик, но попадает в список ошибок.
+    $script:LocalChecksCompleted++
+
     if ($ok) {
         Write-Host "$Name : успех ($seconds s)" -ForegroundColor Green
     } else {
         Write-Host "$Name : ОШИБКА ($seconds s) — $detail" -ForegroundColor Red
+        $null = $script:LocalFailedNames.Add($Name)
     }
+
+    Write-LocalRunState -Status 'in_progress' -Branch $script:GitBranch `
+        -Commit $script:GitCommit -Title $script:RunTitle
 }
 
 function Write-CiReport {
@@ -285,10 +398,43 @@ Write-Host "Node.js: $(& node --version 2>$null)"
 Write-Host "PowerShell: $($PSVersionTable.PSVersion)"
 
 $global:LASTEXITCODE = 0
-$gitBranch = (& git rev-parse --abbrev-ref HEAD 2>$null | Out-String).Trim()
-$gitCommit = (& git rev-parse --short HEAD 2>$null | Out-String).Trim()
-if (-not [string]::IsNullOrWhiteSpace($gitBranch)) { Write-Host "Ветка: $gitBranch" }
-if (-not [string]::IsNullOrWhiteSpace($gitCommit)) { Write-Host "Commit: $gitCommit" }
+$script:GitBranch = (& git rev-parse --abbrev-ref HEAD 2>$null | Out-String).Trim()
+$script:GitCommit = (& git rev-parse --short HEAD 2>$null | Out-String).Trim()
+if (-not [string]::IsNullOrWhiteSpace($script:GitBranch)) { Write-Host "Ветка: $script:GitBranch" }
+if (-not [string]::IsNullOrWhiteSpace($script:GitCommit)) { Write-Host "Commit: $script:GitCommit" }
+
+# Заголовок прогона: имя ветки и коммит. Так плашка локального режима
+# отличается от предыдущего прогона, и в уведомлении видно, что проверялось.
+# Join-String доступен только в PowerShell 7, поэтому используем -join.
+$titleParts = @($script:GitBranch, $script:GitCommit) |
+    Where-Object { -not [string]::IsNullOrWhiteSpace($_) }
+$script:RunTitle = $titleParts -join ' · '
+if ([string]::IsNullOrWhiteSpace($script:RunTitle)) { $script:RunTitle = 'Локальный прогон' }
+
+# Номер прогона продолжает нумерацию прошлого запуска. Это позволяет расширению
+# уведомлять один раз на прогон, как оно делает для проверок GitHub.
+try {
+    if (Test-Path -LiteralPath $script:LocalStatePath) {
+        $previous = Get-Content -LiteralPath $script:LocalStatePath -Raw | ConvertFrom-Json
+        $previousNumber = [int]$previous.runNumber
+        if ($previousNumber -gt 0) { $script:LocalRunNumber = $previousNumber }
+    }
+} catch {
+    Write-Host "Не удалось прочитать прошлое состояние прогона: $($_.Exception.Message)" -ForegroundColor DarkGray
+}
+
+$script:LocalRunNumber++
+$script:LocalRunStartedAt = (Get-Date).ToUniversalTime().ToString('o')
+Write-Host "Локальная проверка #$($script:LocalRunNumber)" -ForegroundColor DarkGray
+
+Write-LocalRunState -Status 'in_progress' -Branch $script:GitBranch -Commit $script:GitCommit -Title $script:RunTitle
+
+# Признак активности редактора нужен и на старте: если расширение работает,
+# уведомление о падении покажет оно, а не скрипт.
+$script:EditorMonitorActive = Test-EditorMonitorActive
+if ($script:EditorMonitorActive) {
+    Write-Host 'Расширение CI Monitor активно: уведомление покажет оно.' -ForegroundColor DarkGray
+}
 
 if (-not $IncludePublish) {
     Write-Host 'Шаг single-file publish пропускается: он останавливает запущенный AssistQuestEditor и удаляет bin/obj/publish.' -ForegroundColor Yellow
@@ -442,6 +588,11 @@ if ($IncludePublish) {
     }
 } else {
     Add-Result -Name 'Single-file publish' -Ok $null -Seconds 0 -Detail 'пропущено' -Output @('Шаг пропущен: нужен -IncludePublish.')
+
+    # Пропущенный шаг тоже завершён: он есть в отчёте отдельной строкой.
+    # Без этого успешный прогон показывал бы 10 из 11 (91%) вместо 100%.
+    $script:LocalChecksCompleted++
+
     Write-Host ''
     Write-Host 'Single-file publish : пропущено (нужен -IncludePublish)' -ForegroundColor Yellow
 }
@@ -476,11 +627,22 @@ if ($failed.Count -gt 0) {
     Write-Host ''
     Write-Host ('Локальный CI завершён с ошибками: ' + $failedNames) -ForegroundColor Red
 
-    if ($script:NotifyEnabled) {
-        # Уведомление может не дойти (отключены уведомления в системе и т.п.);
-        # это не влияет на код возврата.
+    $reportPath = Write-CiReport -Status 'ОШИБКА' -FailedNames $failedNames `
+        -Commit $script:GitCommit -Branch $script:GitBranch
+    Write-Host "Отчёт об ошибках: $reportPath" -ForegroundColor Yellow
+
+    # Финальное состояние пишется до уведомления: расширение должно увидеть
+    # результат, даже если показ уведомления не удался.
+    Write-LocalRunState -Status 'failure' -ReportPath $reportPath `
+        -Branch $script:GitBranch -Commit $script:GitCommit -Title $script:RunTitle
+
+    # Уведомление показывает расширение, если оно активно. Признак проверяется
+    # повторно: редактор мог быть открыт уже во время прогона.
+    if (Test-EditorMonitorActive) {
+        Write-Host 'Уведомление покажет расширение CI Monitor.' -ForegroundColor DarkGray
+    } elseif ($script:NotifyEnabled) {
         $sent = Show-AssistQuestToast `
-            -Title 'Проверки не пройдены' `
+            -Title "Проверка #$($script:LocalRunNumber) не пройдена" `
             -Body ("Локальный CI: " + $failedNames + "`nСборка отменена.")
 
         if ($sent) {
@@ -488,17 +650,21 @@ if ($failed.Count -gt 0) {
         }
     }
 
-    $reportPath = Write-CiReport -Status 'ОШИБКА' -FailedNames $failedNames `
-        -Commit $gitCommit -Branch $gitBranch
-    Write-Host "Отчёт об ошибках: $reportPath" -ForegroundColor Yellow
-
     exit 1
 }
 
 Write-Host ''
 Write-Host 'Локальный CI: все обязательные проверки успешны.' -ForegroundColor Green
 
-$reportPath = Write-CiReport -Status 'успех' -Commit $gitCommit -Branch $gitBranch
+$reportPath = Write-CiReport -Status 'успех' -Commit $script:GitCommit -Branch $script:GitBranch
 Write-Host "Отчёт о проверках: $reportPath" -ForegroundColor DarkGray
+
+Write-LocalRunState -Status 'success' -ReportPath $reportPath `
+    -Branch $script:GitBranch -Commit $script:GitCommit -Title $script:RunTitle
+
+# Уведомление при успехе не показывается намеренно: проверки пройдены, значит
+# приложение соберётся и запустится — этого достаточно. Уведомляем только о
+# проблемах (ветка ошибки выше), поэтому отвлекающих сообщений не будет.
+Write-Host 'Проверки пройдены: уведомление не требуется.' -ForegroundColor DarkGray
 
 exit 0

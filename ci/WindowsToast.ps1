@@ -112,3 +112,66 @@ $toast = [Windows.UI.Notifications.ToastNotification]::new($doc)
         $env:AQE_TOAST_TITLE_ID = $previousTitleId
     }
 }
+
+<#
+.SYNOPSIS
+    Проверяет, что расширение CI Monitor запущено и сейчас обновляет признак активности.
+
+.DESCRIPTION
+    Требование: при локальном прогоне уведомляет расширение, а штатное
+    уведомление скрипта не вызывается. Скрипт не может напрямую узнать о
+    запущенном редакторе, поэтому расширение раз в секунду пишет в
+    `.ci-state/monitor.heartbeat` текущее время в миллисекундах.
+
+    Файл лежит вне `MemoryAI/LOGS`: та папка очищается после успешной сборки,
+    а признак активности должен переживать сборку, иначе уведомление о
+    следующем прогоне показал бы скрипт.
+
+    Функция читает этот файл и считает признак свежим, если он обновлялся не
+    позднее `MaxAgeSeconds` назад. Свежий признак означает «уведомит расширение»,
+    устаревший или отсутствующий — «уведомляет скрипт».
+
+    Вынесено сюда, а не в вызывающий скрипт, чтобы `pull.ps1` и
+    `ci/run_local.ps1` не дублировали одну и ту же проверку.
+
+.EXAMPLE
+    if (Test-AssistQuestEditorMonitorActive) { 'уведомит расширение' }
+#>
+function Test-AssistQuestEditorMonitorActive {
+    [CmdletBinding()]
+    param(
+        # Максимальный возраст признака активности в секундах.
+        [Parameter(Mandatory = $false)]
+        [int]$MaxAgeSeconds = 15,
+
+        # Корень репозитория. По умолчанию — каталог выше этого скрипта.
+        [Parameter(Mandatory = $false)]
+        [string]$RepositoryRoot = ''
+    )
+
+    if ([string]::IsNullOrWhiteSpace($RepositoryRoot)) {
+        $RepositoryRoot = Split-Path -Parent $PSScriptRoot
+    }
+
+    $heartbeatPath = Join-Path $RepositoryRoot '.ci-state\monitor.heartbeat'
+    if (-not (Test-Path -LiteralPath $heartbeatPath)) {
+        return $false
+    }
+
+    try {
+        $raw = ([System.IO.File]::ReadAllText($heartbeatPath)).Trim()
+        if ([string]::IsNullOrWhiteSpace($raw)) {
+            return $false
+        }
+
+        $stamp = [int64]0
+        if (-not [int64]::TryParse($raw, [ref]$stamp)) {
+            return $false
+        }
+
+        $age = [DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds() - $stamp
+        return $age -ge 0 -and $age -le ($MaxAgeSeconds * 1000)
+    } catch {
+        return $false
+    }
+}

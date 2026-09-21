@@ -1,0 +1,228 @@
+{
+  "name": "ci-monitor",
+  "displayName": "CI Monitor",
+  "description": "Плашка статуса проверок рядом с Ollama Usage: GitHub-режим читает страницу Actions, локальный режим показывает прогон ci/run_local.ps1 с процентом прогресса. Уведомляет только о проблемах.",
+  "version": "0.3.0",
+  "publisher": "assist-quest-editor",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/zvukoper/assist_quest_editor.git"
+  },
+  "bugs": {
+    "url": "https://github.com/zvukoper/assist_quest_editor/issues"
+  },
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "ciMonitor.open",
+        "title": "CI Monitor: Open Actions Page",
+        "category": "CI Monitor"
+      },
+      {
+        "command": "ciMonitor.openRun",
+        "title": "CI Monitor: Open Latest Run",
+        "category": "CI Monitor"
+      },
+      {
+        "command": "ciMonitor.refresh",
+        "title": "CI Monitor: Refresh Now",
+        "category": "CI Monitor"
+      },
+      {
+        "command": "ciMonitor.openSettings",
+        "title": "CI Monitor: Open Settings",
+        "category": "CI Monitor"
+      },
+      {
+        "command": "ciMonitor.log",
+        "title": "CI Monitor: Show Log",
+        "category": "CI Monitor"
+      },
+      {
+        "command": "ciMonitor.testNotification",
+        "title": "CI Monitor: Test Windows Notification",
+        "category": "CI Monitor"
+      },
+      {
+        "command": "ciMonitor.modeAuto",
+        "title": "CI Monitor: Режим Auto (локальный, затем GitHub)",
+        "category": "CI Monitor"
+      },
+      {
+        "command": "ciMonitor.modeGithub",
+        "title": "CI Monitor: Режим GitHub",
+        "category": "CI Monitor"
+      },
+      {
+        "command": "ciMonitor.modeLocal",
+        "title": "CI Monitor: Режим локальный",
+        "category": "CI Monitor"
+      },
+      {
+        "command": "ciMonitor.setLocalRun",
+        "title": "CI Monitor: Задать локальную проверку (номер и статус)",
+        "category": "CI Monitor"
+      },
+      {
+        "command": "ciMonitor.openReport",
+        "title": "CI Monitor: Открыть отчёт проверок",
+        "category": "CI Monitor"
+      },
+      {
+        "command": "ciMonitor.copyStatePath",
+        "title": "CI Monitor: Скопировать путь к файлу состояния",
+        "category": "CI Monitor"
+      }
+    ],
+    "configuration": {
+      "title": "CI Monitor",
+      "properties": {
+        "ciMonitor.mode": {
+          "type": "string",
+          "enum": [
+            "auto",
+            "github",
+            "local"
+          ],
+          "default": "auto",
+          "enumDescriptions": [
+            "Автоматически: показывать локальный прогон, пока он идёт, и ещё немного после завершения, затем вернуться к GitHub.",
+            "Всегда показывать проверки GitHub со страницы Actions.",
+            "Всегда показывать локальный прогон ci/run_local.ps1 из файла состояния."
+          ],
+          "description": "Источник данных плашки: страница GitHub Actions или локальный прогон ci/run_local.ps1."
+        },
+        "ciMonitor.localHoldSeconds": {
+          "type": "number",
+          "default": 20,
+          "minimum": 0,
+          "description": "Сколько секунд держать завершённый локальный прогон в режиме auto, прежде чем вернуться к GitHub (0 — переключаться сразу)."
+        },
+        "ciMonitor.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Показывать плашку статуса CI в строке состояния."
+        },
+        "ciMonitor.repository": {
+          "type": "string",
+          "default": "",
+          "description": "Репозиторий GitHub в виде \"владелец/имя\" (например, zvukoper/assist_quest_editor). Если пусто — берётся из git remote текущего открытого проекта."
+        },
+        "ciMonitor.branch": {
+          "type": "string",
+          "default": "",
+          "description": "Ветка, за которой следит плашка. Пусто — определяется автоматически: текущая git-ветка, иначе ветка по умолчанию."
+        },
+        "ciMonitor.refreshInterval": {
+          "type": "number",
+          "default": 10,
+          "minimum": 5,
+          "description": "Интервал опроса страницы Actions в секундах (минимум 5)."
+        },
+        "ciMonitor.showIdle": {
+          "type": "boolean",
+          "default": true,
+          "description": "Показывать плашку, когда подходящих проверок на странице нет."
+        },
+        "ciMonitor.showRepository": {
+          "type": "boolean",
+          "default": false,
+          "description": "Добавлять имя репозитория в подсказку плашки."
+        },
+        "ciMonitor.badgeStyle": {
+          "type": "string",
+          "enum": [
+            "square",
+            "theme"
+          ],
+          "default": "square",
+          "enumDescriptions": [
+            "Цветной квадрат-подложка: ⬛ с оранжевым значком (идёт проверка), 🟥 с крестиком (ошибка), 🟩 с галочкой (успех).",
+            "Фон из темы там, где он поддерживается: красный для ошибки, жёлтый для прочих исключений. Произвольные цвета платформа не поддерживает."
+          ],
+          "description": "Оформление плашки. Статус-бар VS Code допускает только красный и жёлтый фон из темы, поэтому цветные состояния по умолчанию показаны квадратом-подложкой."
+        },
+        "ciMonitor.notifications": {
+          "type": "string",
+          "enum": [
+            "off",
+            "windows",
+            "vscode",
+            "both"
+          ],
+          "default": "windows",
+          "enumDescriptions": [
+            "Не показывать уведомления.",
+            "Всплывающее уведомление Windows (видно и когда редактор свёрнут).",
+            "Уведомление внутри редактора с кнопкой «Открыть запуск».",
+            "И уведомление Windows, и уведомление редактора."
+          ],
+          "description": "Куда доставлять уведомление при смене состояния проверки."
+        },
+        "ciMonitor.notifyOnStatuses": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "failure",
+              "success"
+            ]
+          },
+          "default": [
+            "failure",
+            "success"
+          ],
+          "description": "Состояния, о которых уведомлять: failure (проверка не прошла) и success (проверка прошла). Пустой список отключает уведомления."
+        },
+        "ciMonitor.notifyOnStartup": {
+          "type": "boolean",
+          "default": false,
+          "description": "Уведомлять о состоянии последней проверки сразу после запуска редактора. По умолчанию выключено, чтобы уведомление приходило только при реальной смене состояния."
+        },
+        "ciMonitor.requestTimeout": {
+          "type": "number",
+          "default": 15000,
+          "minimum": 3000,
+          "description": "Таймаут одного запроса страницы Actions в миллисекундах."
+        },
+        "ciMonitor.logLevel": {
+          "type": "string",
+          "enum": [
+            "silent",
+            "error",
+            "info",
+            "debug"
+          ],
+          "default": "info",
+          "description": "Подробность журнала расширения (панель «Вывод» → CI Monitor)."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "test": "node --test out/test/*.test.js",
+    "smoke": "node tests/extension-smoke.mjs",
+    "live": "node tests/live-check.mjs",
+    "package": "vsce package",
+    "vscode:prepublish": "npm run compile"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "@types/vscode": "^1.85.0",
+    "@vscode/vsce": "^4.0.0",
+    "typescript": "^5.4.0"
+  }
+}

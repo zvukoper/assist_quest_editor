@@ -27,6 +27,10 @@ appsettings.local.json
 MemoryAI/LOGS/*
 !MemoryAI/LOGS/README.md
 
+# Состояние CI Monitor: номер локального прогона и признак активности редактора.
+# Лежит вне MemoryAI/LOGS, потому что та папка очищается после успешной сборки.
+.ci-state/
+
 # Generated / temporary
 *.tmp
 *.bak
