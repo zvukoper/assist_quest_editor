@@ -170,6 +170,7 @@ public sealed class QuestRuntime
                 LastEvent = value.EventType
             };
             MoveThroughOutput(node!, output.SocketId);
+            Advance();
         }
     }
 
