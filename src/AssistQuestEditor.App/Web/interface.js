@@ -2,6 +2,7 @@
   const layer = document.getElementById("interfaceLayer");
   const send = payload => window.chrome?.webview?.postMessage(payload);
   let dialog = null;
+  let renderedDialogKey = "";
 
   const escapeHtml = value => String(value ?? "").replace(/[&<>"']/g, char => ({
     "&": "&amp;",
@@ -11,8 +12,26 @@
     "'": "&#39;"
   }[char]));
 
+  function dialogKey(value) {
+    if (!value) return "";
+    return JSON.stringify({
+      requestId: value.requestId || "",
+      title: value.title || "",
+      speaker: value.speaker || "",
+      text: value.text || "",
+      options: (value.options || []).map(option => ({
+        id: option.id || "",
+        text: option.text || ""
+      }))
+    });
+  }
+
   function render() {
     if (!layer) return;
+
+    const key = dialogKey(dialog);
+    if (key === renderedDialogKey) return;
+    renderedDialogKey = key;
 
     if (!dialog) {
       layer.innerHTML = "";
@@ -46,7 +65,6 @@
     layer.querySelectorAll("[data-interface-choice]").forEach(button => {
       button.addEventListener("click", () => {
         if (!dialog) return;
-
         layer.querySelectorAll(".interfaceChoice").forEach(item => item.disabled = true);
 
         const index = Number(button.dataset.interfaceChoice);
@@ -67,14 +85,15 @@
 
   function receive(message) {
     if (!message || message.type !== "snapshot") return;
-    dialog = message.snapshot?.interfaces?.activeDialog || null;
+
+    const nextDialog = message.snapshot?.interfaces?.activeDialog || null;
+    const nextKey = dialogKey(nextDialog);
+    dialog = nextDialog;
 
     window.assistQuestLog?.("INFO", "Интерфейс Choice: состояние обновлено.", {
       active: !!dialog,
       requestId: dialog?.requestId || null,
-      title: dialog?.title || null,
-      speaker: dialog?.speaker || null,
-      options: dialog?.options?.length || 0
+      changed: nextKey !== renderedDialogKey
     });
 
     render();
