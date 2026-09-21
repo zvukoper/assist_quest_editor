@@ -211,7 +211,7 @@
       "<line class='nodeConnectorSeparator' x1='" + GRAPH_NODE_INPUT_ZONE + "' y1='6' x2='" + GRAPH_NODE_INPUT_ZONE + "' y2='" + (nodeHeight - 6) + "'></line>" +
       "<line class='nodeConnectorSeparator' x1='" + (GRAPH_NODE_WIDTH - GRAPH_NODE_OUTPUT_ZONE) + "' y1='6' x2='" + (GRAPH_NODE_WIDTH - GRAPH_NODE_OUTPUT_ZONE) + "' y2='" + (nodeHeight - 6) + "'></line>" +
       "<text class='nodeTitle' x='" + (GRAPH_NODE_INPUT_ZONE + centerWidth / 2) + "' y='27' text-anchor='middle'>" + escapeHtml(nodeType) + "</text>" +
-      "<text class='nodeExecutedMark' x='" + (GRAPH_NODE_WIDTH / 2) + "' y='" + (nodeHeight - 13) + "' text-anchor='middle'>✓</text>" +
+      "<text class='nodeExecutedMark' x='" + (GRAPH_NODE_WIDTH - GRAPH_NODE_OUTPUT_ZONE - 10) + "' y='27' text-anchor='middle'>✓</text>" +
       "<text class='nodeLabel' x='" + (GRAPH_NODE_INPUT_ZONE + centerWidth / 2) + "' y='49' text-anchor='middle'>" + escapeHtml(title) + "</text>" +
       "<text class='nodeId' x='" + (GRAPH_NODE_INPUT_ZONE + centerWidth / 2) + "' y='" + (nodeHeight - 13) + "' text-anchor='middle'>" + escapeHtml(nodeId) + "</text>" +
       inputs.map((socket, index) =>
