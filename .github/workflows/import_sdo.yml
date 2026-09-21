@@ -46,4 +46,7 @@ jobs:
 
           git commit -m "Импортировать базу СДО из ETS2 Assist"
           git push origin HEAD:main
+
+          # Автозапуск ci.yml по push отключён, поэтому проверки после импорта
+          # СДО запускаются явно. Работает через workflow_dispatch.
           gh workflow run "ci.yml" --ref main

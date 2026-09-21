@@ -44,6 +44,10 @@ HTML/CSS/JavaScript включаются в single-file публикацию. П
 
 Скрипт повторяет шаги `ci.yml` (Playwright, Chromium, smoke, контракт, синтаксис JS, .NET build, domain tests) и печатает итоговую таблицу. При падении он завершается кодом 1 и называет упавшие проверки — как это делает `final_gate` в CI.
 
+**Это основной барьер перед сборкой:** `pull.ps1` вызывает его автоматически и запускает `compile.ps1` только при успехе.
+
+Автозапуск GitHub Actions по push отключён. Workflow `Проверки` запускается вручную (`workflow_dispatch`) и нужен для того, чего локально получить нельзя: чистой среды `windows-latest` без локальных кешей и untracked-файлов и зафиксированного Node.js 22 вместо версии с текущей машины.
+
 Шаг публикации single-file в локальный прогон не входит: он останавливает запущенный AssistQuestEditor и удаляет `bin`, `obj`, `publish` и профиль WebView2. Чтобы выполнить полный цикл:
 
     powershell -ExecutionPolicy Bypass -File .\ci\run_local.ps1 -IncludePublish
