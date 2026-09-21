@@ -574,6 +574,7 @@
         ["Running", "Waiting"].includes(runtimeStatusName(runtimeState.status))
       );
       node.classList.toggle("connection-source", pendingOutput?.nodeId === id);
+      node.classList.toggle("dirty", graphDirtyNodeIds.has(id));
     });
 
     svg.querySelectorAll(".socketGroup").forEach(socket => {
