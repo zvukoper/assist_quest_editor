@@ -382,7 +382,7 @@ public sealed class EditorForm : WebViewForm
                 Multiselect = false
             };
 
-            if (dialog.ShowDialog(this) != DialogResult.OK) return false;
+            if (dialog.ShowDialog(this) != DialogResult.OK) return;
             path = dialog.FileName;
         }
 
