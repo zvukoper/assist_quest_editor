@@ -205,9 +205,9 @@ try {
   await page.keyboard.press("Escape");
 
   // Right-click on a node opens node actions.
-  const choiceBox = await page.locator("[data-node-id='choice']").boundingBox();
-  if (!choiceBox) throw new Error("Не удалось получить границы Choice node.");
-  await page.locator("[data-node-id='choice']").click({ button: "right" });
+  const choiceNode = page.locator("[data-node-id='choice']");
+  await choiceNode.waitFor();
+  await choiceNode.click({ button: "right" });
 
   const nodeMenu = page.locator(".graphContextMenu[data-menu-kind='node']");
   await nodeMenu.waitFor();
@@ -217,13 +217,11 @@ try {
     throw new Error("Команда «Сохранить» из меню ноды не отправила graph_save.");
   }
 
-  await page.mouse.click(
-    choiceBox.x + choiceBox.width / 2,
-    choiceBox.y + choiceBox.height / 2,
-    { button: "right" }
-  );
-  await page.getByText("Нода", { exact: true }).waitFor();
-  await page.getByRole("button", { name: "Удалить", exact: true }).waitFor();
+  await choiceNode.click({ button: "right" });
+  const reopenedNodeMenu = page.locator(".graphContextMenu[data-menu-kind='node']");
+  await reopenedNodeMenu.waitFor();
+  await reopenedNodeMenu.getByText("Нода", { exact: true }).waitFor();
+  await reopenedNodeMenu.getByRole("button", { name: "Удалить", exact: true }).waitFor();
   await page.keyboard.press("Escape");
 
   // Delete key must require confirmation and issue graph_remove_node after confirmation.
