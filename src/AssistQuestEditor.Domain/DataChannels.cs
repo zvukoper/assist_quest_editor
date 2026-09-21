@@ -237,7 +237,7 @@ public sealed class SimulatorDataChannelHub : IDataChannelHub
     public EventChannel<SimulatorEvent> Events { get; } = new();
     IEventChannel<SimulatorEvent> IDataChannelHub.Events => Events;
 
-    IDataChannel<T> IDataChannelHub.Get<T>(string key)
+    public IDataChannel<T> Get<T>(string key)
     {
         if (!_channels.TryGetValue(key, out var channel) || channel is not IDataChannel<T> typed)
         {

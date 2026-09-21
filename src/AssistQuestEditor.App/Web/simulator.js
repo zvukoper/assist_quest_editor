@@ -780,9 +780,9 @@
     drawPlayer(ctx, temp);
   }
 
-  document.getElementById("runtimeStart").addEventListener("click", () => send({ action: "runtime_start" }));
-  document.getElementById("runtimeStop").addEventListener("click", () => send({ action: "runtime_stop" }));
-  document.getElementById("reset").addEventListener("click", () => send({ action: "reset" }));
+  document.getElementById("runtimeStart")?.addEventListener("click", () => send({ action: "runtime_start" }));
+  document.getElementById("runtimeStop")?.addEventListener("click", () => send({ action: "runtime_stop" }));
+  document.getElementById("reset")?.addEventListener("click", () => send({ action: "reset" }));
   window.addEventListener("resize", () => {
     drawMap();
   });

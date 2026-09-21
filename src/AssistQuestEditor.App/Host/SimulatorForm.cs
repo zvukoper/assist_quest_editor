@@ -7,7 +7,7 @@ public sealed class SimulatorForm : WebViewForm
 {
     private readonly IDataChannelHub _hub;
     private readonly QuestRuntime _runtime;
-    private readonly Timer _runtimeTimer;
+    private readonly System.Windows.Forms.Timer _runtimeTimer;
 
     public SimulatorForm(IDataChannelHub hub, QuestRuntime runtime)
         : base(
@@ -18,7 +18,7 @@ public sealed class SimulatorForm : WebViewForm
         _hub = hub;
         _runtime = runtime ?? throw new ArgumentNullException(nameof(runtime));
         _runtime.Published += Runtime_Published;
-        _runtimeTimer = new Timer { Interval = 250 };
+        _runtimeTimer = new System.Windows.Forms.Timer { Interval = 250 };
         _runtimeTimer.Tick += (_, _) => _runtime.Tick();
         _runtimeTimer.Start();
 
