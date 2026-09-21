@@ -8,6 +8,15 @@ const source = fs.readFileSync(
   "utf8"
 );
 
+// Harness must load the real stylesheet: the context menu relies on
+// position:fixed, max-height and box-sizing from theme.css. Without it the
+// menu is an unstyled static block and any viewport-geometry assertion is
+// meaningless.
+const theme = fs.readFileSync(
+  path.join(root, "src", "AssistQuestEditor.App", "Web", "theme.css"),
+  "utf8"
+);
+
 const browser = await chromium.launch({ headless: true });
 try {
   const page = await browser.newPage();
@@ -31,6 +40,7 @@ try {
     window.__assistSend = payload => window.__messages.push(payload);
   });
 
+  await page.addStyleTag({ content: theme });
   await page.addScriptTag({ content: source });
 
   const graph = {
@@ -194,6 +204,13 @@ try {
   // viewport clamp and wheel scrolling behavior.
   await page.setViewportSize({ width: 1280, height: 420 });
 
+  // The canvas box changes with the viewport, so re-measure it before any
+  // pointer-based interaction that relies on it (pan and wheel zoom).
+  const resizedSvgBox = await page.locator("#questGraphSvg").boundingBox();
+  if (!resizedSvgBox) {
+    throw new Error("Не удалось получить границы Quest Graph canvas после смены viewport.");
+  }
+
   // Right-click on a connector must open the connection menu, not Add.
   const choiceInput = page.locator("[data-node-id='choice'] .socketGroup[data-socket-direction='Input'] .socket");
   await choiceInput.waitFor();
@@ -219,6 +236,27 @@ try {
   await nodeMenu.getByRole("button", { name: "Сохранить", exact: true }).click();
   if (!await page.evaluate(() => window.__messages.some(message => message.action === "graph_save"))) {
     throw new Error("Команда «Сохранить» из меню ноды не отправила graph_save.");
+  }
+
+  // Regression: Host clears documentDirty after a successful save. The UI must
+  // drop its per-node dirty markers, otherwise the star stays forever.
+  if (!await page.locator("[data-node-id='start'].dirty").count()) {
+    throw new Error("Перед проверкой сброса dirty нода start должна быть помечена.");
+  }
+  await page.evaluate(graphValue => {
+    window.dispatchEvent(new MessageEvent("message", {
+      data: JSON.stringify({
+        type: "quest_graph",
+        graph: graphValue,
+        canUndo: true,
+        canRedo: true,
+        documentDirty: false
+      })
+    }));
+  }, graph);
+  await page.waitForTimeout(20);
+  if (await page.locator("#questGraphSvg .node.dirty").count()) {
+    throw new Error("После сохранения метки изменённых нод не сброшены.");
   }
 
   await choiceNode.click({ button: "right" });
@@ -433,8 +471,11 @@ try {
   }
 
   const viewBoxBeforePan = await page.locator("#questGraphSvg").getAttribute("viewBox");
-  const panStartX = svgBox.x + svgBox.width / 2;
-  const panStartY = svgBox.y + svgBox.height / 2;
+  const panStartY = Math.min(
+    resizedSvgBox.y + resizedSvgBox.height / 2,
+    (await page.evaluate(() => window.innerHeight)) - 8
+  );
+  const panStartX = resizedSvgBox.x + resizedSvgBox.width / 2;
   const panEndX = panStartX + 120;
   const panEndY = panStartY + 80;
 
@@ -499,7 +540,22 @@ try {
     throw new Error("UI не отправил graph_new.");
   }
 
-  await page.mouse.move(svgBox.x + svgBox.width / 2, svgBox.y + svgBox.height / 2);
+  // The canvas is taller than the compact viewport, so its center can fall
+  // below the window. Aim at a point that is guaranteed to be visible.
+  const zoomX = resizedSvgBox.x + resizedSvgBox.width / 2;
+  const zoomY = Math.min(
+    resizedSvgBox.y + resizedSvgBox.height / 2,
+    (await page.evaluate(() => window.innerHeight)) - 8
+  );
+  const zoomHitsCanvas = await page.evaluate(({ x, y }) => {
+    const target = document.elementFromPoint(x, y);
+    return Boolean(target && target.closest("#questGraphSvg"));
+  }, { x: zoomX, y: zoomY });
+  if (!zoomHitsCanvas) {
+    throw new Error("Точка для проверки зума не попадает в Quest Graph canvas.");
+  }
+
+  await page.mouse.move(zoomX, zoomY);
   const viewBoxBeforeZoom = await page.locator("#questGraphSvg").getAttribute("viewBox");
   await page.mouse.wheel(0, -500);
   await page.waitForTimeout(20);

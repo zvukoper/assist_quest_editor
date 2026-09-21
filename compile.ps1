@@ -150,10 +150,13 @@ Write-Host "Web-ресурсы включены в single-file через Includ
 Write-Host "Проверка: опубликован ровно один файл." -ForegroundColor Green
 
 # После успешной публикации временные диагностические логи можно удалить.
+# CI_errors.md сохраняется: он описывает прогон проверок, который разрешил эту
+# сборку, и очищается только следующим прогоном ci/run_local.ps1.
 $logsDir = Join-Path $PSScriptRoot 'MemoryAI\LOGS'
+$preservedLogs = @('README.md', 'CI_errors.md')
 if (Test-Path -LiteralPath $logsDir) {
     Get-ChildItem -LiteralPath $logsDir -File -Force -ErrorAction SilentlyContinue |
-        Where-Object { $_.Name -ne 'README.md' } |
+        Where-Object { $preservedLogs -notcontains $_.Name } |
         Remove-Item -Force -ErrorAction Stop
 
     Get-ChildItem -LiteralPath $logsDir -Directory -Force -ErrorAction SilentlyContinue |
@@ -161,7 +164,7 @@ if (Test-Path -LiteralPath $logsDir) {
 }
 
 $remainingLogs = @(Get-ChildItem -LiteralPath $logsDir -Force -ErrorAction SilentlyContinue |
-    Where-Object { $_.Name -ne 'README.md' })
+    Where-Object { $preservedLogs -notcontains $_.Name })
 if ($remainingLogs.Count -ne 0) {
     throw "Не удалось очистить MemoryAI/LOGS после успешной публикации."
 }

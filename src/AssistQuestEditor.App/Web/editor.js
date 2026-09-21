@@ -22,7 +22,6 @@
   let graphViewport = { x: 0, y: 0, width: 1200, height: 720 };
   let graphDocument = { path: "", dirty: false };
   let graphDirtyNodeIds = new Set();
-  let pendingDirtySelection = false;
   let graphSpaceDown = false;
   let pendingConnectionPoint = null;
   let runtimeState = { status: "Stopped", currentNodeId: null };
@@ -139,7 +138,6 @@
     ws.querySelector("#addGraphNode").addEventListener("click", () => {
       const type = ws.querySelector("#graphNodeType").value;
       const nodeTitle = ws.querySelector("#graphNodeTitle").value.trim() || type;
-      pendingDirtySelection = true;
       send({ action: "graph_add_node", nodeType: type, title: nodeTitle, x: 420, y: 120 });
     });
     ws.querySelector("#fitGraph").addEventListener("click", fitGraph);
@@ -1113,7 +1111,6 @@
         if (pendingOutput) {
           queueDirtyNodes(pendingOutput.nodeId);
         }
-        pendingDirtySelection = true;
 
         send({
           action: "graph_add_node",
@@ -1311,6 +1308,11 @@
         canRedo: Boolean(data.canRedo)
       };
       graphValidation = Array.isArray(data.validation) ? data.validation : [];
+      // Host снимает dirty после save/new/open, поэтому маркеры изменённых
+      // нод нужно очищать здесь: иначе звёздочки остаются навсегда и Set растёт.
+      if (!graphDocument.dirty) {
+        graphDirtyNodeIds.clear();
+      }
       if (data.selectedNodeId) selectedGraphNodeId = data.selectedNodeId;
       if (selectedGraphNodeId && !questGraph.nodes.some(node => node.nodeId === selectedGraphNodeId)) {
         selectedGraphNodeId = questGraph.nodes[0]?.nodeId || null;

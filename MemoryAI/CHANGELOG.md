@@ -1,5 +1,45 @@
 # Журнал изменений памяти и архитектуры
 
+## 2026-09-21 — 1.0.40.122 Отчёт о проверках в MemoryAI/LOGS
+
+- `ci/run_local.ps1` теперь пишет `MemoryAI/LOGS/CI_errors.md`: сводка по всем проверкам, причина каждой ошибки и полный вывод упавших проверок;
+- отчёт формируется и при успехе (с явной отметкой «Ошибок нет»), и при ошибке: иначе нельзя отличить «всё хорошо» от «прогон не делали»;
+- для каждой ошибки сохраняется точная позиция (`file:line` из node) и полный стек;
+- вывод внешних процессов читается в UTF-8 (`[Console]::OutputEncoding`), иначе русский текст в отчёте превращался в мусор;
+- из отчёта убраны служебные обёртки PowerShell: строки stderr приходят как `RemoteException`, и `ToString()` добавлял многострочный блок со `строка/знак/CategoryInfo`;
+- при перехвате вывода сохранена подсветка консоли (`InformationRecord` → `HostInformationMessage`);
+- `ErrorActionPreference = 'Continue'` внутри проверки: при `*>&1` строки stderr становятся `ErrorRecord`, и со `Stop` первая же строка стека обрывала сбор вывода;
+- `compile.ps1` больше не удаляет `CI_errors.md` при очистке `MemoryAI/LOGS`: отчёт сохраняется вместе с `README.md`;
+- `ci/validate_memory.mjs` расширен на `CI_errors.md`.
+
+## 2026-09-21 — 1.0.40.122 Локальный прогон CI перед сборкой
+
+- добавлен `ci/run_local.ps1`: повторяет все шаги `ci.yml` без GitHub, печатает итоговую таблицу и завершается кодом 1 с именами упавших проверок (как `final_gate`);
+- `pull.ps1` теперь выполняет `git pull --ff-only`, затем локальные проверки и запускает `compile.ps1` только при их успехе;
+- при неудачных проверках сборка не выполняется, выводится список упавших проверок и показывается уведомление Windows;
+- добавлен переиспользуемый `ci/WindowsToast.ps1` на WinRT `Windows.UI.Notifications` — без сторонних модулей и прав администратора;
+- уведомление отправляется отдельным процессом `powershell.exe` с `-EncodedCommand`, поэтому доступно и из PowerShell 7;
+- добавлены флаги `-SkipChecks`, `-NoLaunch`, `-NoNotify` в `pull.ps1` и `-IncludePublish`, `-SkipInstall`, `-NoNotify` в `run_local.ps1`;
+- шаг single-file publish в локальный прогон не входит по умолчанию: он останавливает запущенный редактор и удаляет bin, obj, publish и профиль WebView2;
+- `ci-results/` добавлен в `.gitignore`;
+- зафиксировано, что `.ps1` с кириллицей требует UTF-8 с BOM: без BOM PowerShell 5.1 читает файл как ANSI и парсер падает;
+- проверены оба пути: при сломанном `editor.js` сборка не запускается и приходит уведомление, при исправном — выполняется полный цикл публикации.
+
+## 2026-09-21 — 1.0.40.122 Quest Graph menu + CI smoke harness fix
+
+- найдена настоящая причина серии красных CI (запуски 184–207): `ci/quest_graph_smoke.mjs` загружал `editor.js`, но не `theme.css`;
+- без реального stylesheet `.graphContextMenu` не получал `position:fixed`, и все проверки геометрии меню по viewport были бессмысленны;
+- harness теперь загружает реальный `theme.css` через `addStyleTag`, поэтому контекстное меню проверяется в том виде, в котором оно существует в production;
+- исправлена вторая ошибка harness: после `setViewportSize` использовался устаревший `svgBox`; канвас выше компактного viewport, и его центр оказывался за пределами окна, из-за чего колесо и pan не попадали в SVG;
+- pan и zoom теперь нацелены на точку, гарантированно видимую в окне, с проверкой через `elementFromPoint`;
+- исправлена реальная ошибка UI: `graphDirtyNodeIds` никогда не очищался, поэтому оранжевые звёздочки изменённых нод оставались навсегда после сохранения; набор очищается, когда Host сообщает `documentDirty = false`;
+- удалён мёртвый флаг `pendingDirtySelection`, который записывался, но нигде не читался;
+- добавлена regression-проверка сброса dirty-меток после сохранения (подтверждено, что без исправления она падает);
+- устранён version drift: `simulator.html` использовал `?v=1.0.40.118`, из-за чего WebView2 мог отдавать устаревшие `theme.css` и `simulator.js`; footer `main.html` не совпадал с `VersionInfo`;
+- все версии синхронизированы на 1.0.40.122-QUEST-GRAPH-MENU-R1 (VersionInfo, `.csproj`, три HTML);
+- `final_gate` в CI теперь пишет таблицу результатов по каждой проверке в `GITHUB_STEP_SUMMARY`, чтобы падение называло шаг, а не только «exit code 1»;
+- локально подтверждены: Playwright smoke, contract smoke, Quest Graph smoke (3 прогона), `node --check` ×3, `validate_memory`, `dotnet build`, 26/26 domain tests.
+
 ## 2026-09-21 — 1.0.40.111 Quest Runtime + CI diagnostics
 
 - завершено подключение canonical Quest Runtime к Simulator через Data Channel Hub;

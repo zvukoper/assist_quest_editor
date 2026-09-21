@@ -88,7 +88,7 @@ Web-ресурсы src/AssistQuestEditor.App/Web и data/world/sdo_points.json �
 
 Причина пустого Simulator найдена: C# snapshot сериализовался с PascalCase, тогда как Web UI ожидает camelCase.
 
-Текущая рабочая версия: 1.0.40.111-QUEST-RUNTIME-R1.
+Текущая рабочая версия: 1.0.40.122-QUEST-GRAPH-MENU-R1.
 
 Последние рабочие вехи:
 - 1.0.40.106 — исправлена camelCase сериализация Simulator snapshot;
@@ -97,6 +97,7 @@ Web-ресурсы src/AssistQuestEditor.App/Web и data/world/sdo_points.json �
 - 1.0.40.109 — добавлены drag нод, wheel zoom и regression smoke для canvas interaction;
 - 1.0.40.110 — добавлены pan canvas, canonical параметры нод, динамические sockets и JSON Save/Open/New.
 - 1.0.40.111 — добавлен Quest Runtime, интеграция Simulator → Runtime, пробуждение Runtime по ChannelChanged, корректное продолжение после Choice и матрица из семи автоматических сценариев.
+- 1.0.40.122 — найдена причина серии красных CI: smoke-тест не загружал `theme.css`, поэтому проверки геометрии контекстного меню были бессмысленны. Harness приведён к production-условиям, исправлен устаревший `svgBox` после смены viewport, сброс dirty-меток нод после сохранения, version drift и читаемость `final_gate` в CI. Добавлен локальный прогон `ci/run_local.ps1`, `pull.ps1` собирает только при успешных проверках, ошибки пишутся в `MemoryAI/LOGS/CI_errors.md`.
 
 Перед физическим тестированием пользователя версия обязательно увеличивается.
 
@@ -144,4 +145,4 @@ Quest Graph smoke проверяет реальный `editor.js`: загруз�
 - 7 Save/Load
 
 Последний физически тестируемый выпуск: `1.0.40.109-QUEST-EDITOR-INTERACTION-R1`.
-Следующий физический тест выполняется после зелёного CI на версии `1.0.40.112`.
+Следующий физический тест выполняется после зелёного CI на версии `1.0.40.122`.

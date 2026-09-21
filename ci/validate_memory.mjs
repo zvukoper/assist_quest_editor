@@ -47,10 +47,14 @@ if (!currentTask.includes("1.0.40.101-QUEST-EDITOR-DUAL-WINDOW-R1")) {
 
 const logDir = path.join(root, "MemoryAI/LOGS");
 const entries = fs.readdirSync(logDir);
-const unexpected = entries.filter(name => name !== "README.md" && !name.toLowerCase().endsWith(".log"));
+const unexpected = entries.filter(name =>
+  name !== "README.md" &&
+  name !== "CI_errors.md" &&
+  !name.toLowerCase().endsWith(".log")
+);
 
 if (unexpected.length) {
-  console.error("MemoryAI/LOGS может содержать только README.md и временные .log:");
+  console.error("MemoryAI/LOGS может содержать только README.md, CI_errors.md и временные .log:");
   for (const name of unexpected) console.error("- " + name);
   process.exit(1);
 }
