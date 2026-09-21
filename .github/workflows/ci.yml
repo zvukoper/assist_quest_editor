@@ -282,7 +282,6 @@ jobs:
           DOTNET_SDK_OUTCOME: ${{ steps.dotnet_sdk.outcome }}
           DOTNET_BUILD_OUTCOME: ${{ steps.dotnet_build.outcome }}
           DOTNET_TESTS_OUTCOME: ${{ steps.dotnet_tests.outcome }}
-          QUEST_SCENARIOS_OUTCOME: ${{ steps.quest_scenarios.outcome }}
           PUBLISH_OUTCOME: ${{ steps.publish.outcome }}
           AUTOMATED_REPORT_OUTCOME: ${{ steps.automated_report.outcome }}
           LOG_STRUCTURE_OUTCOME: ${{ steps.log_structure.outcome }}
