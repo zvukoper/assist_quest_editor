@@ -994,8 +994,6 @@
     };
   }
 
-  let activeSceneContextMenu = null;
-
   function queueSceneDirtyNode(nodeId) {
     if (nodeId) sceneDirtyNodeIds.add(nodeId);
   }
