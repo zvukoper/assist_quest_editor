@@ -221,6 +221,12 @@ jobs:
                 default { [string]$match[0].outcome }
               }
               $details = [string]$match[0].testName
+              if ($status -eq 'FAIL') {
+                $errorMessage = [string]$match[0].Output.ErrorInfo.Message
+                if (-not [string]::IsNullOrWhiteSpace($errorMessage)) {
+                  $details = $errorMessage.Replace([Environment]::NewLine, ' ')
+                }
+              }
             }
             $lines += ($pair.Value + ' — ' + $status + ' | ' + $details)
           }
@@ -280,6 +286,7 @@ jobs:
           PUBLISH_OUTCOME: ${{ steps.publish.outcome }}
           AUTOMATED_REPORT_OUTCOME: ${{ steps.automated_report.outcome }}
           LOG_STRUCTURE_OUTCOME: ${{ steps.log_structure.outcome }}
+          UPLOAD_DIAGNOSTICS_OUTCOME: ${{ steps.upload_diagnostics.outcome }}
         run: |
           $failed = @()
           $checks = @(
@@ -296,7 +303,8 @@ jobs:
             @{ Name = 'Quest scenario matrix'; Outcome = $env:QUEST_SCENARIOS_OUTCOME },
             @{ Name = 'Single-file publish'; Outcome = $env:PUBLISH_OUTCOME },
             @{ Name = 'Automated report'; Outcome = $env:AUTOMATED_REPORT_OUTCOME },
-            @{ Name = 'Log structure'; Outcome = $env:LOG_STRUCTURE_OUTCOME }
+            @{ Name = 'Log structure'; Outcome = $env:LOG_STRUCTURE_OUTCOME },
+            @{ Name = 'Diagnostic artifact upload'; Outcome = $env:UPLOAD_DIAGNOSTICS_OUTCOME }
           )
           foreach ($check in $checks) {
             if ($check.Outcome -eq 'failure') { $failed += $check.Name }
