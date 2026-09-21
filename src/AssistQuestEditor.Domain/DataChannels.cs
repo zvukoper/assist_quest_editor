@@ -166,14 +166,44 @@ public sealed class SimulatorDataChannelHub : IDataChannelHub
                 null,
                 null));
 
+        PlayerVitals = new DataChannel<PlayerVitalsState>(
+            "player-vitals",
+            "Потребности игрока",
+            new PlayerVitalsState(100, 100, 100, 100, 100, 100, 0, 100));
+
+        PlayerProgress = new DataChannel<PlayerProgressState>(
+            "player-progress",
+            "Деньги и опыт",
+            new PlayerProgressState(1500, 0, 0));
+
+        Character = new DataChannel<CharacterState>(
+            "character",
+            "Персонаж",
+            new CharacterState(
+                new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase)
+                {
+                    ["strength"] = 5,
+                    ["perception"] = 5,
+                    ["endurance"] = 5,
+                    ["charisma"] = 5,
+                    ["intelligence"] = 5,
+                    ["agility"] = 5,
+                    ["luck"] = 5
+                },
+                new[]
+                {
+                    new CharacterSkillState("ce-driver", "Автошкольник", "Получил права категории CE.", true, "CE"),
+                    new CharacterSkillState("field-repair", "Очумелые ручки", "Навыки полевого ремонта базового уровня.", true, "Базовый")
+                },
+                Array.Empty<string>(),
+                Array.Empty<string>()));
+
         Inventory = new DataChannel<InventoryState>(
             "inventory",
             "Инвентарь",
             new InventoryState(new Dictionary<string, int>
             {
-                ["money"] = 1500,
-                ["special_marinade_meat"] = 0,
-                ["legendary_shashlik"] = 0
+                ["ruslan.raw_meat"] = 0
             }));
 
         Reputation = new DataChannel<ReputationState>(
@@ -209,6 +239,9 @@ public sealed class SimulatorDataChannelHub : IDataChannelHub
         _channels = new Dictionary<string, IDataChannel>(StringComparer.OrdinalIgnoreCase)
         {
             [Player.Key] = Player,
+            [PlayerVitals.Key] = PlayerVitals,
+            [PlayerProgress.Key] = PlayerProgress,
+            [Character.Key] = Character,
             [World.Key] = World,
             [Selection.Key] = Selection,
             [Facts.Key] = Facts,
@@ -229,6 +262,9 @@ public sealed class SimulatorDataChannelHub : IDataChannelHub
     }
 
     public DataChannel<PlayerState> Player { get; }
+    public DataChannel<PlayerVitalsState> PlayerVitals { get; }
+    public DataChannel<PlayerProgressState> PlayerProgress { get; }
+    public DataChannel<CharacterState> Character { get; }
     public DataChannel<WorldState> World { get; }
     public DataChannel<WorldSelectionState> Selection { get; }
     public DataChannel<FactState> Facts { get; }
@@ -282,11 +318,31 @@ public sealed class SimulatorDataChannelHub : IDataChannelHub
             },
             null,
             null), "Сброс симулятора");
+        PlayerVitals.Set(new PlayerVitalsState(100, 100, 100, 100, 100, 100, 0, 100), "Сброс симулятора");
+        PlayerProgress.Set(new PlayerProgressState(1500, 0, 0), "Сброс симулятора");
+        Character.Set(
+            new CharacterState(
+                new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase)
+                {
+                    ["strength"] = 5,
+                    ["perception"] = 5,
+                    ["endurance"] = 5,
+                    ["charisma"] = 5,
+                    ["intelligence"] = 5,
+                    ["agility"] = 5,
+                    ["luck"] = 5
+                },
+                new[]
+                {
+                    new CharacterSkillState("ce-driver", "Автошкольник", "Получил права категории CE.", true, "CE"),
+                    new CharacterSkillState("field-repair", "Очумелые ручки", "Навыки полевого ремонта базового уровня.", true, "Базовый")
+                },
+                Array.Empty<string>(),
+                Array.Empty<string>()),
+            "Сброс симулятора");
         Inventory.Set(new InventoryState(new Dictionary<string, int>
         {
-            ["money"] = 1500,
-            ["special_marinade_meat"] = 0,
-            ["legendary_shashlik"] = 0
+            ["ruslan.raw_meat"] = 0
         }), "Сброс симулятора");
         Reputation.Set(new ReputationState(new Dictionary<string, int>
         {
@@ -312,6 +368,9 @@ public sealed class SimulatorDataChannelHub : IDataChannelHub
     public SimulatorSnapshot GetSnapshot() =>
         new(
             Player.Value,
+            PlayerVitals.Value,
+            PlayerProgress.Value,
+            Character.Value,
             World.Value,
             Selection.Value,
             Facts.Value,
@@ -348,7 +407,23 @@ public sealed class SimulatorDataChannelHub : IDataChannelHub
         }
         else if (channel is DataChannel<InventoryState> inventory)
         {
-            inventory.Changed += (_, args) => PublishTransition("inventory", args.Source, "Изменён инвентарь");
+            inventory.Changed += (_, args) =>
+            {
+                PublishTransition("inventory", args.Source, "Изменён инвентарь");
+                PublishInventoryChanges(args.PreviousValue, args.CurrentValue, args.Source);
+            };
+        }
+        else if (channel is DataChannel<PlayerVitalsState> vitals)
+        {
+            vitals.Changed += (_, args) => PublishTransition("player-vitals", args.Source, "Изменены потребности игрока");
+        }
+        else if (channel is DataChannel<PlayerProgressState> progress)
+        {
+            progress.Changed += (_, args) => PublishTransition("player-progress", args.Source, "Изменены деньги/опыт");
+        }
+        else if (channel is DataChannel<CharacterState> character)
+        {
+            character.Changed += (_, args) => PublishTransition("character", args.Source, "Изменены данные персонажа");
         }
         else if (channel is DataChannel<ReputationState> reputation)
         {
@@ -381,6 +456,36 @@ public sealed class SimulatorDataChannelHub : IDataChannelHub
                 args.CurrentValue.ActiveDialog is null
                     ? "Интерфейсный запрос закрыт"
                     : $"Открыт диалог выбора {args.CurrentValue.ActiveDialog.RequestId}");
+        }
+    }
+
+    private void PublishInventoryChanges(InventoryState previous, InventoryState current, string source)
+    {
+        var ids = previous.Items.Keys
+            .Concat(current.Items.Keys)
+            .Distinct(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var itemId in ids)
+        {
+            previous.Items.TryGetValue(itemId, out var before);
+            current.Items.TryGetValue(itemId, out var after);
+            var delta = after - before;
+            if (delta == 0)
+            {
+                continue;
+            }
+
+            Events.Publish(new SimulatorEvent(
+                "InventoryChanged",
+                DateTimeOffset.UtcNow,
+                source,
+                new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+                {
+                    ["itemId"] = itemId,
+                    ["previousCount"] = before.ToString(System.Globalization.CultureInfo.InvariantCulture),
+                    ["currentCount"] = after.ToString(System.Globalization.CultureInfo.InvariantCulture),
+                    ["delta"] = delta.ToString(System.Globalization.CultureInfo.InvariantCulture)
+                }));
         }
     }
 
