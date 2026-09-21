@@ -2,6 +2,11 @@
   const map = document.getElementById("mapCanvas");
   const side = document.getElementById("side");
   const hud = document.getElementById("hud");
+  const runtimeMonitor = document.getElementById("runtimeMonitor");
+  const runtimeState = document.getElementById("runtimeState");
+  const runtimeNode = document.getElementById("runtimeNode");
+  const runtimeWait = document.getElementById("runtimeWait");
+  const runtimeEvent = document.getElementById("runtimeEvent");
   const send = payload => window.chrome?.webview?.postMessage(payload);
 
   let snapshot = null;
@@ -12,6 +17,7 @@
   let selectedPointId = null;
   let camera = { cx: 0, cz: 0, mpp: 50 };
   let eventHistory = [];
+  const DISTANCE_RINGS = [25, 50, 100, 250, 500, 1000, 1500, 2000];
 
   function formatPosition(position) {
     if (!position) return "—";
@@ -103,6 +109,7 @@
     ctx.fillStyle = "#0d1014";
     ctx.fillRect(0, 0, width, height);
     drawGrid(ctx, width, height);
+    drawDistanceRings(ctx, width, height);
 
     const points = snapshot.world?.points || [];
     const showAllLabels = camera.mpp < 24;
@@ -142,6 +149,7 @@
 
     drawPlayer(ctx, snapshot.player);
     drawCategoryLegend(ctx, width, height, points);
+    drawScaleBar(ctx, width, height);
     drawHud();
   }
 
@@ -155,23 +163,112 @@
     const bottom = camera.cz + height * camera.mpp / 2;
 
     ctx.save();
-    ctx.strokeStyle = "rgba(255,255,255,.055)";
+    ctx.font = "9px Open Sans, Arial, sans-serif";
+    ctx.textBaseline = "top";
     ctx.lineWidth = 1;
 
     for (let x = Math.floor(left / step) * step; x <= right; x += step) {
       const sx = worldToScreen(x, camera.cz).x;
+      const major = Math.abs(x) < 0.001 || Math.abs(x / step) % 5 < 0.001;
+      ctx.strokeStyle = major ? "rgba(255,255,255,.105)" : "rgba(255,255,255,.055)";
       ctx.beginPath();
       ctx.moveTo(sx, 0);
       ctx.lineTo(sx, height);
       ctx.stroke();
+
+      if (sx >= 0 && sx <= width && major) {
+        ctx.fillStyle = "rgba(210,220,232,.68)";
+        ctx.fillText("X " + Math.round(x) + " м", Math.min(width - 60, sx + 4), 5);
+      }
     }
+
     for (let z = Math.floor(top / step) * step; z <= bottom; z += step) {
       const sy = worldToScreen(camera.cx, z).y;
+      const major = Math.abs(z) < 0.001 || Math.abs(z / step) % 5 < 0.001;
+      ctx.strokeStyle = major ? "rgba(255,255,255,.105)" : "rgba(255,255,255,.055)";
       ctx.beginPath();
       ctx.moveTo(0, sy);
       ctx.lineTo(width, sy);
       ctx.stroke();
+
+      if (sy >= 0 && sy <= height - 14 && major) {
+        ctx.fillStyle = "rgba(210,220,232,.68)";
+        ctx.fillText("Z " + Math.round(z) + " м", 5, sy + 3);
+      }
     }
+
+    ctx.restore();
+  }
+
+  function drawDistanceRings(ctx, width, height) {
+    const p = snapshot?.player?.position;
+    if (!p) return;
+
+    const center = worldToScreen(p.x, p.z);
+    ctx.save();
+    ctx.textBaseline = "middle";
+    ctx.font = "600 10px Open Sans, Arial, sans-serif";
+
+    for (const distanceMeters of DISTANCE_RINGS) {
+      const radiusPx = distanceMeters / camera.mpp;
+      if (radiusPx < 3) continue;
+
+      ctx.beginPath();
+      ctx.arc(center.x, center.y, radiusPx, 0, Math.PI * 2);
+      ctx.lineWidth = distanceMeters <= 100 ? 1.5 : 1;
+      ctx.setLineDash(distanceMeters <= 100 ? [] : [5, 5]);
+      ctx.strokeStyle = distanceMeters <= 100
+        ? "rgba(255,255,255,.36)"
+        : "rgba(157,181,205,.24)";
+      ctx.stroke();
+
+      const angle = -Math.PI / 4;
+      const labelX = center.x + Math.cos(angle) * radiusPx;
+      const labelY = center.y + Math.sin(angle) * radiusPx;
+      const label = distanceMeters.toLocaleString("ru-RU") + " м";
+      const widthLabel = Math.max(30, ctx.measureText(label).width + 8);
+      const x = Math.max(4, Math.min(width - widthLabel - 4, labelX + 4));
+      const y = Math.max(12, Math.min(height - 12, labelY));
+
+      ctx.fillStyle = "rgba(10,12,16,.86)";
+      ctx.fillRect(x - 2, y - 8, widthLabel, 16);
+      ctx.fillStyle = "#d9e2ec";
+      ctx.fillText(label, x + 2, y);
+    }
+
+    ctx.setLineDash([]);
+    ctx.restore();
+  }
+
+  function niceDistance(value) {
+    const raw = Math.max(1, value);
+    const power = Math.pow(10, Math.floor(Math.log10(raw)));
+    for (const mult of [1, 2, 5, 10]) {
+      if (mult * power >= raw) return mult * power;
+    }
+    return 10 * power;
+  }
+
+  function drawScaleBar(ctx, width, height) {
+    const distance = niceDistance(camera.mpp * Math.min(180, width * 0.2));
+    const pixelWidth = distance / camera.mpp;
+    const x = 16;
+    const y = height - 24;
+
+    ctx.save();
+    ctx.lineWidth = 3;
+    ctx.strokeStyle = "rgba(255,255,255,.85)";
+    ctx.beginPath();
+    ctx.moveTo(x, y);
+    ctx.lineTo(x + pixelWidth, y);
+    ctx.stroke();
+
+    ctx.fillStyle = "rgba(10,12,16,.86)";
+    ctx.fillRect(x - 3, y - 21, pixelWidth + 6, 17);
+    ctx.fillStyle = "#d9e2ec";
+    ctx.font = "600 10px Open Sans, Arial, sans-serif";
+    ctx.textBaseline = "middle";
+    ctx.fillText(distance.toLocaleString("ru-RU") + " м", x + 4, y - 12);
     ctx.restore();
   }
 
@@ -331,6 +428,27 @@
     ctx.restore();
   }
 
+  function runtimeStatusLabel(status) {
+    return ({
+      Running: "Выполняется",
+      Waiting: "Ожидает",
+      Completed: "Завершён",
+      Failed: "Ошибка",
+      Stopped: "Остановлен"
+    })[status] || status || "Остановлен";
+  }
+
+  function renderRuntimeMonitor() {
+    if (!runtimeMonitor) return;
+
+    const status = runtime?.status || (snapshot?.system?.runtimeRunning ? "Running" : "Stopped");
+    runtimeState.dataset.status = String(status).toLowerCase();
+    runtimeState.innerHTML = "<span class='statusDot'></span>" + escapeHtml(runtimeStatusLabel(status));
+    runtimeNode.textContent = "Нода: " + (runtime?.currentNodeId || "—");
+    runtimeWait.textContent = "Ожидание: " + (runtime?.waitingFor || "—");
+    runtimeEvent.textContent = "Событие: " + (runtime?.lastEvent || snapshot?.system?.lastEvent || "—");
+  }
+
   function drawHud() {
     const p = snapshot.player.position;
     const selected = snapshot.selection?.point;
@@ -342,6 +460,7 @@
       "<span class='badge blue'>Z " + Math.round(p.z) + "</span>",
       "<span class='badge accent'>" + (selected ? "Выбрана: " + escapeHtml(selected.name || selected.category) : "Точка не выбрана") + "</span>"
     ].join("");
+    renderRuntimeMonitor();
   }
 
     function renderSide() {
@@ -782,6 +901,9 @@
 
   document.getElementById("runtimeStart")?.addEventListener("click", () => send({ action: "runtime_start" }));
   document.getElementById("runtimeStop")?.addEventListener("click", () => send({ action: "runtime_stop" }));
+  document.getElementById("hornEventTop")?.addEventListener("click", () => {
+    send({ action: "emit_event", eventType: "HornPressed", source: "Simulator", payload: {} });
+  });
   document.getElementById("reset")?.addEventListener("click", () => send({ action: "reset" }));
   window.addEventListener("resize", () => {
     drawMap();
