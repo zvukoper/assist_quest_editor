@@ -43,6 +43,21 @@ public sealed record PlayerState(
     bool Paused,
     bool InCab);
 
+public sealed record PlayerVitalsState(
+    double Health,
+    double MaxHealth,
+    double Energy,
+    double MaxEnergy,
+    double Hydration,
+    double MaxHydration,
+    double Fatigue,
+    double MaxFatigue);
+
+public sealed record PlayerProgressState(
+    int Money,
+    int Experience,
+    int Reserve);
+
 public sealed record WorldState(
     string CoordinateSystem,
     IReadOnlyList<WorldPoint> Points,
@@ -83,8 +98,39 @@ public sealed record InterfaceChoiceDialog(
 public sealed record InterfaceState(
     InterfaceChoiceDialog? ActiveDialog);
 
-public sealed record InventoryState(
-    IReadOnlyDictionary<string, int> Items);
+public sealed record InventoryState
+{
+    public IReadOnlyDictionary<string, int> Items { get; }
+    public IReadOnlyCollection<string> NewItemIds { get; }
+
+    public InventoryState(
+        IReadOnlyDictionary<string, int> items,
+        IReadOnlyCollection<string>? newItemIds = null)
+    {
+        Items = items;
+        NewItemIds = newItemIds ?? Array.Empty<string>();
+    }
+}
+
+public sealed record ItemDefinition(
+    string Id,
+    string Name,
+    string Description,
+    string Category,
+    string Color);
+
+public sealed record CharacterSkillState(
+    string Id,
+    string Name,
+    string Description,
+    bool Unlocked,
+    string LevelLabel);
+
+public sealed record CharacterState(
+    IReadOnlyDictionary<string, int> Stats,
+    IReadOnlyList<CharacterSkillState> Skills,
+    IReadOnlyList<string> Buffs,
+    IReadOnlyList<string> Debuffs);
 
 public sealed record ReputationState(
     IReadOnlyDictionary<string, int> Values);
@@ -172,6 +218,9 @@ public sealed record DataChannelDescriptor(
 
 public sealed record SimulatorSnapshot(
     PlayerState Player,
+    PlayerVitalsState PlayerVitals,
+    PlayerProgressState PlayerProgress,
+    CharacterState Character,
     WorldState World,
     WorldSelectionState Selection,
     FactState Facts,
