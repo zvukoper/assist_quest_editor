@@ -11,6 +11,7 @@
   let panning = false;
   let panStart = null;
   let selectedPointId = null;
+  let hoveredPointId = null;
   let questGraph = null;
   let camera = { cx: 0, cz: 0, mpp: 50 };
   let eventHistory = [];
@@ -152,14 +153,24 @@
       if (q.x < -18 || q.y < -18 || q.x > width + 18 || q.y > height + 18) continue;
 
       const selected = point.id === selectedPointId;
-      const radius = selected ? 5.5 : (camera.mpp > 250 ? 3.8 : 4.2);
+      const hovered = point.id === hoveredPointId;
+      const isCity = point.isCity === true;
+      const radius = isCity
+        ? (hovered ? 5.2 : 3.4)
+        : (selected ? 5.5 : (hovered ? 5.2 : (camera.mpp > 250 ? 3.8 : 4.2)));
 
       ctx.save();
       ctx.beginPath();
       ctx.arc(q.x, q.y, radius, 0, Math.PI * 2);
       ctx.fillStyle = point.color || "#78c8f0";
-      ctx.shadowColor = selected ? "rgba(250,176,3,.95)" : "rgba(0,0,0,.55)";
-      ctx.shadowBlur = selected ? 14 : 2;
+      ctx.shadowColor = selected
+        ? "rgba(250,176,3,.95)"
+        : hovered
+          ? "rgba(255,255,255,.9)"
+          : "rgba(0,0,0,.78)";
+      ctx.shadowBlur = selected ? 14 : (hovered ? 10 : 5);
+      ctx.shadowOffsetX = 0;
+      ctx.shadowOffsetY = 1.5;
       ctx.fill();
 
       if (selected) {
@@ -170,11 +181,20 @@
         ctx.shadowColor = "rgba(250,176,3,.9)";
         ctx.shadowBlur = 16;
         ctx.stroke();
+      } else if (hovered) {
+        ctx.beginPath();
+        ctx.arc(q.x, q.y, radius + 3.5, 0, Math.PI * 2);
+        ctx.lineWidth = isCity ? 2 : 2.5;
+        ctx.strokeStyle = "#ffffff";
+        ctx.shadowColor = "rgba(255,255,255,.75)";
+        ctx.shadowBlur = 9;
+        ctx.stroke();
       }
       ctx.restore();
 
-      if (selected || shouldLabel(q, showAllLabels, labelLimit, occupied, point)) {
-        drawPointLabel(ctx, point, q, selected);
+      if (selected || hovered || (isCity && camera.mpp < 220) ||
+          shouldLabel(q, showAllLabels, labelLimit, occupied, point)) {
+        drawPointLabel(ctx, point, q, selected, isCity);
       }
     }
 
@@ -362,17 +382,20 @@
     return true;
   }
 
-  function drawPointLabel(ctx, point, q, selected) {
+  function drawPointLabel(ctx, point, q, selected, isCity = point.isCity === true) {
     const text = point.name || point.category || "СДО";
+    const offset = isCity ? 9 : 10;
     ctx.save();
-    ctx.font = selected ? "700 12px Open Sans, Arial, sans-serif" : "600 10px Open Sans, Arial, sans-serif";
+    ctx.font = isCity
+      ? "600 11px Open Sans, Arial, sans-serif"
+      : (selected ? "700 12px Open Sans, Arial, sans-serif" : "600 10px Open Sans, Arial, sans-serif");
     ctx.textAlign = "left";
     ctx.textBaseline = "middle";
-    ctx.lineWidth = selected ? 4 : 3;
-    ctx.strokeStyle = "rgba(0,0,0,.95)";
-    ctx.strokeText(text, q.x + 10, q.y - 10);
-    ctx.fillStyle = point.color || "#78c8f0";
-    ctx.fillText(text, q.x + 10, q.y - 10);
+    ctx.lineWidth = selected ? 4 : (isCity ? 3.5 : 3);
+    ctx.strokeStyle = "rgba(0,0,0,.98)";
+    ctx.strokeText(text, q.x + 10, q.y - offset);
+    ctx.fillStyle = isCity ? "#e2c85f" : (point.color || "#78c8f0");
+    ctx.fillText(text, q.x + 10, q.y - offset);
     ctx.restore();
   }
 
@@ -382,32 +405,23 @@
     const q = worldToScreen(p.x, p.z);
     if (q.x < -50 || q.y < -50 || q.x > visibleSize().width + 50 || q.y > visibleSize().height + 50) return;
 
-    const shape = [[0, -18], [-10, 14], [0, 9], [10, 14]];
+    const radius = 7.5;
     ctx.save();
-    ctx.translate(q.x, q.y);
-    const headingDeg = Number(player.heading || 0);
-    ctx.rotate(-headingDeg * Math.PI / 180);
+    ctx.beginPath();
+    ctx.arc(q.x, q.y, radius, 0, Math.PI * 2);
+    ctx.fillStyle = "#f59e0b";
     ctx.shadowColor = "rgba(0,0,0,.92)";
     ctx.shadowBlur = 9;
     ctx.shadowOffsetX = 0;
-    ctx.shadowOffsetY = 3;
-    ctx.beginPath();
-    ctx.moveTo(shape[0][0], shape[0][1]);
-    for (let i = 1; i < shape.length; i++) ctx.lineTo(shape[i][0], shape[i][1]);
-    ctx.closePath();
-    ctx.fillStyle = "#ff4d4d";
+    ctx.shadowOffsetY = 2.5;
     ctx.fill();
+
     ctx.shadowColor = "rgba(0,0,0,0)";
     ctx.shadowBlur = 0;
     ctx.shadowOffsetY = 0;
-    ctx.lineWidth = 3.5;
-    ctx.strokeStyle = "#ffffff";
+    ctx.lineWidth = 3;
+    ctx.strokeStyle = "#d83a3a";
     ctx.stroke();
-
-    ctx.beginPath();
-    ctx.arc(0, 1, 2.5, 0, Math.PI * 2);
-    ctx.fillStyle = "#ff4d4d";
-    ctx.fill();
     ctx.restore();
   }
 
@@ -1284,9 +1298,9 @@
       }
 
       const point = hitPoint(pos.x, pos.y);
-      if (point) {
+      if (point && !point.isCity) {
         send({ action: "select_point", id: point.id });
-      } else if (snapshot?.selection?.point) {
+      } else if (!point && snapshot?.selection?.point) {
         send({ action: "clear_selection" });
       }
       return;
@@ -1302,6 +1316,16 @@
 
   map.addEventListener("pointermove", event => {
     const pos = pointerPosition(event);
+
+    if (!draggingPlayer && !panning && snapshot) {
+      const hovered = hitPoint(pos.x, pos.y);
+      const nextHoveredPointId = hovered?.id || null;
+      if (nextHoveredPointId !== hoveredPointId) {
+        hoveredPointId = nextHoveredPointId;
+        map.style.cursor = hovered ? (hovered.isCity ? "default" : "pointer") : "default";
+        drawMap();
+      }
+    }
 
     if (draggingPlayer && snapshot) {
       const world = screenToWorld(pos.x, pos.y);
@@ -1350,6 +1374,12 @@
   });
 
   map.addEventListener("pointerleave", event => {
+    if (hoveredPointId !== null) {
+      hoveredPointId = null;
+      map.style.cursor = "default";
+      drawMap();
+    }
+
     if (draggingPlayer && snapshot) {
       const pos = pointerPosition(event);
       const world = screenToWorld(pos.x, pos.y);
