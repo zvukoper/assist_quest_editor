@@ -130,6 +130,10 @@ try {
   await page.getByRole("button", { name: "Сохранить свойства" }).click();
 
   await page.waitForTimeout(20);
+  if (!await page.locator("[data-node-id='start'].dirty").count()) {
+    throw new Error("Изменённая нода не помечена оранжевой звёздочкой.");
+  }
+
   await page.getByRole("button", { name: "Проверить" }).click();
 
   await page.waitForTimeout(20);
@@ -184,6 +188,43 @@ try {
   const svgBox = await page.locator("#questGraphSvg").boundingBox();
   if (!svgBox) {
     throw new Error("Не удалось получить границы Quest Graph canvas.");
+  }
+
+  // Right-click on a connector must open the connection menu, not Add.
+  const choiceInput = page.locator("[data-node-id='choice'] .socketGroup[data-socket-direction='Input']");
+  const choiceInputBox = await choiceInput.boundingBox();
+  if (!choiceInputBox) throw new Error("Не удалось получить границы Choice Input socket.");
+  await page.mouse.click(choiceInputBox.x + 3, choiceInputBox.y + 3, { button: "right" });
+  await page.getByText("Коннектор", { exact: true }).waitFor();
+  if (await page.locator(".graphContextMenuItem[data-node-type]").count()) {
+    throw new Error("ПКМ по коннектору открыл меню создания ноды.");
+  }
+  await page.getByText("Разорвать соединение:", { exact: false }).first().waitFor();
+  await page.keyboard.press("Escape");
+
+  // Right-click on a node opens node actions.
+  const choiceBox = await page.locator("[data-node-id='choice']").boundingBox();
+  if (!choiceBox) throw new Error("Не удалось получить границы Choice node.");
+  await page.mouse.click(choiceBox.x + 20, choiceBox.y + 20, { button: "right" });
+  await page.getByText("Нода", { exact: true }).waitFor();
+  await page.getByRole("button", { name: "Сохранить", exact: true }).waitFor();
+  await page.getByRole("button", { name: "Удалить", exact: true }).waitFor();
+  await page.keyboard.press("Escape");
+
+  // Delete key must require confirmation and issue graph_remove_node after confirmation.
+  await page.locator("[data-node-id='choice']").click();
+  await page.evaluate(() => { window.confirm = () => false; });
+  await page.keyboard.press("Delete");
+  if (await page.evaluate(() => window.__messages.some(message => message.action === "graph_remove_node"))) {
+    throw new Error("Delete отправил удаление без подтверждения.");
+  }
+  await page.evaluate(() => { window.confirm = () => true; });
+  await page.keyboard.press("Delete");
+  await page.waitForTimeout(20);
+  if (!await page.evaluate(() => window.__messages.some(message =>
+    message.action === "graph_remove_node" && message.nodeId === "choice"
+  ))) {
+    throw new Error("Delete после подтверждения не отправил graph_remove_node.");
   }
 
   // Right-click Add menu and Choice availability.
