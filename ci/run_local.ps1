@@ -488,9 +488,24 @@ Invoke-Check -Name 'Контракт simulator <-> editor' -Body {
     node ci/selection_context_smoke.mjs
 }
 
+# Шаг 4.1: горячие клавиши Simulator не должны зависеть от раскладки.
+Invoke-Check -Name 'Горячие клавиши Simulator' -Body {
+    node ci/hotkey_probe.mjs
+}
+
+# Шаг 4.2: маркер игрока (обводки, тень, перекрест) на canvas карты.
+Invoke-Check -Name 'Маркер игрока Simulator' -Body {
+    node ci/player_marker_smoke.mjs
+}
+
 # Шаг 5: smoke реального editor.js, включая контекстные меню Quest Graph.
 Invoke-Check -Name 'Quest Graph Playwright smoke' -Body {
     node ci/quest_graph_smoke.mjs
+}
+
+# Шаг 5.1: кнопка «Перестроить» в нодовом редакторе.
+Invoke-Check -Name 'Перестроение нод Quest Graph' -Body {
+    node ci/graph_layout_smoke.mjs
 }
 
 # Шаг 6: синтаксис web JavaScript.

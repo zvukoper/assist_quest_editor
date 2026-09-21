@@ -415,25 +415,64 @@
     const p = player?.position;
     if (!p) return;
     const q = worldToScreen(p.x, p.z);
-    if (q.x < -50 || q.y < -50 || q.x > visibleSize().width + 50 || q.y > visibleSize().height + 50) return;
+    const canvasSize = visibleSize();
+    if (q.x < -50 || q.y < -50 || q.x > canvasSize.width + 50 || q.y > canvasSize.height + 50) return;
 
     const radius = 7.5;
+
+    // Оранжевый «перекрест» через всю карту: вертикальная и горизонтальная
+    // линии всегда проходят через игрока, поэтому его позицию видно сразу,
+    // даже когда маркер теряется среди СДО. Рисуется под маркером и почти
+    // прозрачный, чтобы не мешать чтению карты.
     ctx.save();
+    ctx.beginPath();
+    ctx.moveTo(q.x, 0);
+    ctx.lineTo(q.x, canvasSize.height);
+    ctx.moveTo(0, q.y);
+    ctx.lineTo(canvasSize.width, q.y);
+    ctx.lineWidth = 1;
+    ctx.strokeStyle = "rgba(245,158,11,.24)";
+    ctx.stroke();
+    ctx.restore();
+
+    ctx.save();
+
+    // Тень под маркером: мягкое радиальное затемнение со смещением вниз.
+    // Затемнение выходит за чёрную обводку, поэтому маркер «приподнят» над
+    // картой и читается поверх светлых элементов (сетка, кольца, подписи).
+    const shadowOffsetY = 4;
+    const shadowRadius = radius * 3;
+    const shadowGradient = ctx.createRadialGradient(
+      q.x, q.y + shadowOffsetY, radius * 0.3,
+      q.x, q.y + shadowOffsetY, shadowRadius
+    );
+    shadowGradient.addColorStop(0, "rgba(0,0,0,.96)");
+    shadowGradient.addColorStop(0.42, "rgba(0,0,0,.62)");
+    shadowGradient.addColorStop(1, "rgba(0,0,0,0)");
+    ctx.beginPath();
+    ctx.arc(q.x, q.y + shadowOffsetY, shadowRadius, 0, Math.PI * 2);
+    ctx.fillStyle = shadowGradient;
+    ctx.fill();
+
+    // Заливка маркера.
     ctx.beginPath();
     ctx.arc(q.x, q.y, radius, 0, Math.PI * 2);
     ctx.fillStyle = "#f59e0b";
-    ctx.shadowColor = "rgba(0,0,0,.92)";
-    ctx.shadowBlur = 9;
-    ctx.shadowOffsetX = 0;
-    ctx.shadowOffsetY = 2.5;
     ctx.fill();
 
-    ctx.shadowColor = "rgba(0,0,0,0)";
-    ctx.shadowBlur = 0;
-    ctx.shadowOffsetY = 0;
+    // Красная обводка.
     ctx.lineWidth = 3;
     ctx.strokeStyle = "#d83a3a";
     ctx.stroke();
+
+    // Чёрная обводка снаружи красной: отделяет маркер от светлых элементов
+    // карты и от линий перекреста, сохраняя ту же толщину, что и красная.
+    ctx.beginPath();
+    ctx.arc(q.x, q.y, radius + 3, 0, Math.PI * 2);
+    ctx.lineWidth = 3;
+    ctx.strokeStyle = "rgba(0,0,0,.95)";
+    ctx.stroke();
+
     ctx.restore();
   }
 
@@ -1696,11 +1735,22 @@
 
   backpackButton?.addEventListener("click", () => toggleGameplayInventory());
 
+  // Горячая клавиша инвентаря не должна зависеть от языка ввода.
+  // `event.key` содержит символ текущей раскладки: в русской ЙЦУКЕН та же
+  // физическая клавиша отдаёт «ш», поэтому проверка по «i» не срабатывала.
+  // `event.code` привязан к позиции клавиши и одинаков во всех раскладках.
+  const INVENTORY_HOTKEY_CODES = new Set(["KeyI"]);
+  const INVENTORY_HOTKEY_KEYS = new Set(["i", "ш"]);
+
+  const isInventoryHotkey = event =>
+    INVENTORY_HOTKEY_CODES.has(event.code) ||
+    INVENTORY_HOTKEY_KEYS.has(String(event.key || "").toLowerCase());
+
   document.addEventListener("keydown", event => {
     if (event.repeat) return;
     const tag = event.target?.tagName;
     if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" || event.target?.isContentEditable) return;
-    if (event.key.toLowerCase() === "i") {
+    if (isInventoryHotkey(event)) {
       event.preventDefault();
       toggleGameplayInventory();
     }

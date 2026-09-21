@@ -108,6 +108,49 @@ public sealed class QuestGraphStore
         return true;
     }
 
+    /// <summary>
+    /// Перестраивает координаты всех нод иерархической раскладкой.
+    /// Изменение применяется одной операцией, поэтому Undo возвращает прежнюю
+    /// раскладку целиком, а не по ноде.
+    /// </summary>
+    /// <returns>Количество нод, у которых координаты изменились.</returns>
+    public int ApplyLayout()
+    {
+        var positions = QuestGraphLayout.Compute(_value);
+        if (positions.Count == 0)
+        {
+            return 0;
+        }
+
+        var changed = 0;
+        var nodes = _value.Nodes
+            .Select(node =>
+            {
+                if (!positions.TryGetValue(node.NodeId, out var position))
+                {
+                    return node;
+                }
+
+                if (Math.Abs(node.X - position.X) < 0.001 &&
+                    Math.Abs(node.Y - position.Y) < 0.001)
+                {
+                    return node;
+                }
+
+                changed++;
+                return node with { X = position.X, Y = position.Y };
+            })
+            .ToArray();
+
+        if (changed == 0)
+        {
+            return 0;
+        }
+
+        Apply(_value with { Nodes = nodes });
+        return changed;
+    }
+
     public GraphConnectionResult Connect(string fromNodeId, string fromSocketId, string toNodeId, string toSocketId)
     {
         var fromNode = FindNode(fromNodeId);

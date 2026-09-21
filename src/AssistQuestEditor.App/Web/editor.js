@@ -26,6 +26,7 @@
   let pendingConnectionPoint = null;
   let runtimeState = { status: "Stopped", currentNodeId: null };
   let executedNodeIds = new Set();
+  let pendingGraphFit = false;
 
   const GRAPH_NODE_TYPES = [
     ["Start", "Начало"], ["End", "Завершение"], ["Phase", "Фаза"],
@@ -113,6 +114,7 @@
         "</select>" +
         "<input id='graphNodeTitle' class='toolButton' style='width:190px' placeholder='Название новой ноды'>" +
         "<button class='toolButton primary' id='addGraphNode'>Добавить ноду</button>" +
+        "<button class='toolButton' id='layoutGraph' title='Выстроить ноды по слоям без наложений'>Перестроить</button>" +
         "<button class='toolButton' id='fitGraph'>По размеру</button>" +
         "<button class='toolButton' id='undoGraph' " + (graphHistory.canUndo ? "" : "disabled") + ">↶ Отменить</button>" +
         "<button class='toolButton' id='redoGraph' " + (graphHistory.canRedo ? "" : "disabled") + ">↷ Повторить</button>" +
@@ -141,6 +143,16 @@
       send({ action: "graph_add_node", nodeType: type, title: nodeTitle, x: 420, y: 120 });
     });
     ws.querySelector("#fitGraph").addEventListener("click", fitGraph);
+    ws.querySelector("#layoutGraph").addEventListener("click", () => {
+      if (!questGraph?.nodes?.length) return;
+
+      // Раскладку считает Host на canonical QuestGraph, поэтому UI не дублирует
+      // алгоритм. Пока приходит обновлённый граф, сбрасываем локальный preview:
+      // иначе отброшенные drag-позиции перекроют новые координаты.
+      pendingGraphFit = true;
+      graphPreviewPositions.clear();
+      send({ action: "graph_layout" });
+    });
     ws.querySelector("#undoGraph").addEventListener("click", () => send({ action: "graph_undo" }));
     ws.querySelector("#redoGraph").addEventListener("click", () => send({ action: "graph_redo" }));
     ws.querySelector("#validateGraph").addEventListener("click", () => send({ action: "graph_validate" }));
@@ -1528,6 +1540,13 @@
       }
       if (!selectedGraphNodeId && questGraph.nodes.length) selectedGraphNodeId = questGraph.nodes[0].nodeId;
       if (currentId() === "graph") render();
+
+      // После перестроения сразу показываем граф целиком: иначе новая раскладка
+      // может оказаться за пределами текущего viewBox.
+      if (pendingGraphFit) {
+        pendingGraphFit = false;
+        fitGraph();
+      }
       return;
     }
 
@@ -1619,14 +1638,20 @@
     }
 
     if (currentId() !== "graph" || !(event.ctrlKey || event.metaKey)) return;
+    // Undo/redo не должны зависеть от раскладки: `event.key` отдаёт символ
+    // текущего языка (в русской ЙЦУКЕН Ctrl+Z даёт «я», Ctrl+Y — «н»),
+    // поэтому опираемся на `event.code` физической клавиши.
+    const code = event.code;
     const key = event.key.toLowerCase();
-    if (key === "z" && !event.shiftKey) {
+    const isUndo = code === "KeyZ" || (!code && key === "z");
+    const isRedo = code === "KeyY" || (!code && key === "y");
+    if (isUndo && !event.shiftKey) {
       event.preventDefault();
       if (graphHistory.canUndo) send({ action: "graph_undo" });
-    } else if (key === "z" && event.shiftKey) {
+    } else if (isUndo && event.shiftKey) {
       event.preventDefault();
       if (graphHistory.canRedo) send({ action: "graph_redo" });
-    } else if (key === "y") {
+    } else if (isRedo) {
       event.preventDefault();
       if (graphHistory.canRedo) send({ action: "graph_redo" });
     }

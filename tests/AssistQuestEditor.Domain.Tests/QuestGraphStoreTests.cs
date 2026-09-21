@@ -176,6 +176,192 @@ public sealed class QuestGraphStoreTests
     }
 
     [Fact]
+    public void ApplyLayoutSeparatesNodesThatOverlapWhenCreatedBlind()
+    {
+        // Агент может создать все ноды в одной точке: раскладка обязана развести их.
+        var store = new QuestGraphStore(QuestGraphFactory.CreateStarter());
+        foreach (var node in store.Value.Nodes)
+        {
+            store.UpdateNode(node.NodeId, x: 0, y: 0);
+        }
+
+        var moved = store.ApplyLayout();
+
+        Assert.Equal(store.Value.Nodes.Count, moved);
+        AssertNoOverlaps(store.Value);
+    }
+
+    [Fact]
+    public void ApplyLayoutOrdersLayersAlongConnections()
+    {
+        var store = new QuestGraphStore(QuestGraphFactory.CreateStarter());
+
+        store.ApplyLayout();
+
+        var start = store.FindNode("start")!;
+        var condition = store.FindNode("condition")!;
+        var dialogue = store.FindNode("dialogue")!;
+        var end = store.FindNode("end")!;
+
+        // Слои идут слева направо вдоль связей, с одинаковым шагом.
+        Assert.True(start.X < condition.X);
+        Assert.True(condition.X < dialogue.X);
+        Assert.True(dialogue.X < end.X);
+
+        var step = condition.X - start.X;
+        Assert.Equal(step, dialogue.X - condition.X, 3);
+        Assert.Equal(step, end.X - dialogue.X, 3);
+    }
+
+    [Fact]
+    public void ApplyLayoutIsIdempotent()
+    {
+        var store = new QuestGraphStore(QuestGraphFactory.CreateStarter());
+
+        store.ApplyLayout();
+        var first = store.Value.Nodes.ToDictionary(node => node.NodeId, node => (node.X, node.Y));
+
+        // Второй прогон не должен ничего двигать: иначе кнопка «Перестроить»
+        // каждый раз помечала бы документ изменённым.
+        Assert.Equal(0, store.ApplyLayout());
+
+        foreach (var node in store.Value.Nodes)
+        {
+            Assert.Equal(first[node.NodeId].X, node.X, 3);
+            Assert.Equal(first[node.NodeId].Y, node.Y, 3);
+        }
+    }
+
+    [Fact]
+    public void ApplyLayoutKeepsDisconnectedNodesApart()
+    {
+        var store = new QuestGraphStore(QuestGraphFactory.CreateStarter());
+        var loose = store.AddNode("Phase", "Оторванная нода", 500, 500);
+
+        store.ApplyLayout();
+
+        AssertNoOverlaps(store.Value);
+        Assert.Contains(store.Value.Nodes, node => node.NodeId == loose.NodeId);
+    }
+
+    [Fact]
+    public void ApplyLayoutIsOneUndoStep()
+    {
+        var store = new QuestGraphStore(QuestGraphFactory.CreateStarter());
+        var before = store.Value.Nodes.ToDictionary(node => node.NodeId, node => (node.X, node.Y));
+
+        store.ApplyLayout();
+
+        // Вся раскладка откатывается одним Undo, а не по ноде.
+        Assert.True(store.Undo());
+        foreach (var node in store.Value.Nodes)
+        {
+            Assert.Equal(before[node.NodeId].X, node.X, 3);
+            Assert.Equal(before[node.NodeId].Y, node.Y, 3);
+        }
+    }
+
+    [Fact]
+    public void ApplyLayoutHandlesCycleWithoutHanging()
+    {
+        var graph = new QuestGraph(
+            "cyclic",
+            "Циклический граф",
+            new[]
+            {
+                Node("a", "Phase", 500, 500),
+                Node("b", "Phase", 500, 500),
+                Node("c", "Phase", 500, 500)
+            },
+            new[]
+            {
+                new QuestConnection("a", "a.out", "b", "b.in"),
+                new QuestConnection("b", "b.out", "c", "c.in"),
+                new QuestConnection("c", "c.out", "a", "a.in")
+            });
+
+        var store = new QuestGraphStore(graph);
+        var moved = store.ApplyLayout();
+
+        Assert.Equal(3, moved);
+        AssertNoOverlaps(store.Value);
+    }
+
+    [Fact]
+    public void ApplyLayoutHandlesSelfLoop()
+    {
+        var graph = new QuestGraph(
+            "self",
+            "Самосвязь",
+            new[] { Node("a", "Phase", 500, 500) },
+            new[] { new QuestConnection("a", "a.out", "a", "a.in") });
+
+        var store = new QuestGraphStore(graph);
+
+        Assert.Equal(1, store.ApplyLayout());
+        AssertNoOverlaps(store.Value);
+    }
+
+    [Fact]
+    public void ApplyLayoutHandlesEmptyGraph()
+    {
+        var store = new QuestGraphStore(new QuestGraph(
+            "empty",
+            "Пустой квест",
+            Array.Empty<QuestNode>(),
+            Array.Empty<QuestConnection>()));
+
+        Assert.Equal(0, store.ApplyLayout());
+    }
+
+    private static QuestNode Node(string nodeId, string nodeType, double x, double y)
+    {
+        var parameters = QuestNodeCatalog.CreateDefaultParameters(nodeType);
+        return new QuestNode(
+            nodeId,
+            nodeType,
+            nodeType,
+            x,
+            y,
+            QuestNodeCatalog.CreateSockets(nodeType, nodeId, parameters))
+        {
+            Parameters = parameters
+        };
+    }
+
+    /// <summary>
+    /// Ноды не должны пересекаться: проверяем прямоугольники с учётом реальной
+    /// высоты ноды по количеству сокетов.
+    /// </summary>
+    private static void AssertNoOverlaps(QuestGraph graph)
+    {
+        for (var left = 0; left < graph.Nodes.Count; left++)
+        {
+            for (var right = left + 1; right < graph.Nodes.Count; right++)
+            {
+                var a = graph.Nodes[left];
+                var b = graph.Nodes[right];
+
+                var aRight = a.X + QuestGraphLayout.NodeWidth;
+                var aBottom = a.Y + QuestGraphLayout.NodeHeight(a);
+                var bRight = b.X + QuestGraphLayout.NodeWidth;
+                var bBottom = b.Y + QuestGraphLayout.NodeHeight(b);
+
+                var separated =
+                    aRight <= b.X + 0.001 ||
+                    bRight <= a.X + 0.001 ||
+                    aBottom <= b.Y + 0.001 ||
+                    bBottom <= a.Y + 0.001;
+
+                Assert.True(
+                    separated,
+                    $"Ноды «{a.NodeId}» и «{b.NodeId}» пересекаются: " +
+                    $"({a.X},{a.Y}) и ({b.X},{b.Y}).");
+            }
+        }
+    }
+
+    [Fact]
     public void NewChangeAfterUndoClearsRedoHistory()
     {
         var store = new QuestGraphStore(QuestGraphFactory.CreateStarter());

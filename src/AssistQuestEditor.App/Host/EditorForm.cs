@@ -324,6 +324,21 @@ public sealed class EditorForm : WebViewForm
                 break;
             }
 
+            case "graph_layout":
+            {
+                if (_questGraph.Value.Nodes.Count == 0)
+                {
+                    throw new InvalidOperationException("В графе нет нод для перестроения.");
+                }
+
+                var moved = _questGraph.ApplyLayout();
+                AppLogger.Info(
+                    "Quest Graph: выполнено перестроение раскладки.",
+                    $"nodes={_questGraph.Value.Nodes.Count}; moved={moved}");
+                PostQuestGraph();
+                break;
+            }
+
             case "graph_undo":
             {
                 if (!_questGraph.Undo())
