@@ -391,6 +391,65 @@ public sealed class QuestRuntimeTests
     }
 
     [Fact]
+    public void QuestItemEffectMarksNewAndPublishesInventoryChanged()
+    {
+        var hub = new SimulatorDataSourceAdapter(Array.Empty<WorldPoint>()).Channels;
+        var events = new List<SimulatorEvent>();
+        hub.Events.Published += value => events.Add(value);
+
+        var start = Node("start", "Start");
+        var give = Node("give", "GiveItem", ("itemId", "ruslan.raw_meat"), ("count", "1"));
+        var end = Node("end", "End");
+
+        var graph = Graph(
+            new[] { start, give, end },
+            new[]
+            {
+                C("start", start, "out", give, "in"),
+                C("give", give, "out", end, "in")
+            });
+
+        new QuestRuntime(new QuestGraphStore(graph), hub).Start();
+
+        var inventory = hub.Get<InventoryState>("inventory").Value;
+        Assert.Equal(1, inventory.Items["ruslan.raw_meat"]);
+        Assert.Contains("ruslan.raw_meat", inventory.NewItemIds);
+        var change = events.Last(x => x.EventType == "InventoryChanged");
+        Assert.Equal("QuestRuntime", change.Source);
+        Assert.Equal("1", change.Payload["delta"]);
+    }
+
+    [Fact]
+    public void PlayerStateNodesChangeVitalsAndProgress()
+    {
+        var hub = new SimulatorDataSourceAdapter(Array.Empty<WorldPoint>()).Channels;
+        var start = Node("start", "Start");
+        var health = Node("health", "SetHealth", ("value", "72"));
+        var fatigue = Node("fatigue", "SetFatigue", ("value", "18"));
+        var xp = Node("xp", "AddExperience", ("amount", "25"));
+        var money = Node("money", "AddMoney", ("amount", "350"));
+        var end = Node("end", "End");
+
+        var graph = Graph(
+            new[] { start, health, fatigue, xp, money, end },
+            new[]
+            {
+                C("start", start, "out", health, "in"),
+                C("health", health, "out", fatigue, "in"),
+                C("fatigue", fatigue, "out", xp, "in"),
+                C("xp", xp, "out", money, "in"),
+                C("money", money, "out", end, "in")
+            });
+
+        new QuestRuntime(new QuestGraphStore(graph), hub).Start();
+
+        Assert.Equal(72, hub.Get<PlayerVitalsState>("player-vitals").Value.Health);
+        Assert.Equal(18, hub.Get<PlayerVitalsState>("player-vitals").Value.Fatigue);
+        Assert.Equal(25, hub.Get<PlayerProgressState>("player-progress").Value.Experience);
+        Assert.Equal(1850, hub.Get<PlayerProgressState>("player-progress").Value.Money);
+    }
+
+    [Fact]
     public void VariableEqualsConditionReadsRuntimeState()
     {
         var hub = new SimulatorDataSourceAdapter(Array.Empty<WorldPoint>()).Channels;
