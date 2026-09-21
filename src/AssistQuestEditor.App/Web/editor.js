@@ -1020,38 +1020,42 @@
       const maxHeight = Math.max(100, viewportHeight - 12);
 
       menu.style.maxHeight = maxHeight + "px";
-      menu.style.height = "auto";
       menu.style.overflowY = "auto";
       menu.style.animation = "none";
 
+      // Use an explicit border-box height. max-height alone can still leave
+      // the browser's computed box affected by content/padding during layout.
+      const contentHeight = menu.scrollHeight;
+      const menuHeight = Math.min(Math.max(1, contentHeight), maxHeight);
+      menu.style.height = menuHeight + "px";
+
       const rect = menu.getBoundingClientRect();
-      menu.style.left = clamp(
+      const left = clamp(
         clientX,
         6,
         Math.max(6, viewportWidth - rect.width - 6)
-      ) + "px";
-      menu.style.top = clamp(
+      );
+      const top = clamp(
         clientY,
         6,
         Math.max(6, viewportHeight - rect.height - 6)
-      ) + "px";
-
-      // One more pass after the coordinates are applied. This uses the real
-      // border-box size, so borders/padding cannot push the menu past the edge.
-      const placedRect = menu.getBoundingClientRect();
-      const left = clamp(
-        placedRect.left,
-        6,
-        Math.max(6, viewportWidth - placedRect.width - 6)
-      );
-      const top = clamp(
-        placedRect.top,
-        6,
-        Math.max(6, viewportHeight - placedRect.height - 6)
       );
 
       menu.style.left = left + "px";
       menu.style.top = top + "px";
+
+      // Clamp once more using the final rendered rectangle.
+      const placedRect = menu.getBoundingClientRect();
+      menu.style.left = clamp(
+        placedRect.left,
+        6,
+        Math.max(6, viewportWidth - placedRect.width - 6)
+      ) + "px";
+      menu.style.top = clamp(
+        placedRect.top,
+        6,
+        Math.max(6, viewportHeight - placedRect.height - 6)
+      ) + "px";
     };
 
     clampToViewport();
