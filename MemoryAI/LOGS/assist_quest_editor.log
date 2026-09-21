@@ -279,3 +279,5 @@
 2026-09-21 16:21:56.456 [INFO] [PID 27864] [TID 2] WEB: Simulator получил snapshot. | {"points":5192,"selectedPointId":null,"player":{"x":142832,"y":89.5193,"z":-72059.49705882353},"version":"1.0.40.125-QUEST-RUNTIME-WAIT-FIX-R1"}
 2026-09-21 16:21:56.458 [INFO] [PID 27864] [TID 2] WEB: Simulator получил snapshot. | {"points":5192,"selectedPointId":null,"player":{"x":142832,"y":89.5193,"z":-72059.49705882353},"version":"1.0.40.125-QUEST-RUNTIME-WAIT-FIX-R1"}
 2026-09-21 16:21:59.013 [INFO] [PID 27864] [TID 2] WebView2: получено действие. | form=Assist Quest Editor — Редактор; action=push_logs
+2026-09-21 16:22:02.156 [INFO] [PID 27864] [TID 5] GitHub: загрузка LOGS завершена. | Логи успешно отправлены в GitHub.
+2026-09-21 16:22:16.575 [INFO] [PID 27864] [TID 2] WebView2: получено действие. | form=Assist Quest Editor — Редактор; action=push_logs
