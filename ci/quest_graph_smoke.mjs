@@ -219,7 +219,13 @@ try {
   );
 
   const beforeConnectMessages = await page.evaluate(() => window.__messages.length);
-  await page.mouse.click(svgBox.x + 520, svgBox.y + 360, { button: "right" });
+  const connectContextX = svgBox.x + svgBox.width * 0.72;
+  const connectContextY = svgBox.y + svgBox.height * 0.72;
+  if (connectContextX <= svgBox.x || connectContextX >= svgBox.x + svgBox.width ||
+      connectContextY <= svgBox.y || connectContextY >= svgBox.y + svgBox.height) {
+    throw new Error("Точка контекстного меню должна находиться внутри Quest Graph canvas.");
+  }
+  await page.mouse.click(connectContextX, connectContextY, { button: "right" });
   const phaseMenuItem = page.locator(".graphContextMenuItem[data-node-type=\"Phase\"]");
   await phaseMenuItem.waitFor({ state: "attached" });
   if (await phaseMenuItem.count() !== 1) {
