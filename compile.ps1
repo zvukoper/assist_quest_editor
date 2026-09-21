@@ -125,7 +125,7 @@ foreach ($file in $requiredWebFiles) {
     }
 }
 
-$assetSourceDir = Join-Path $PSScriptRoot 'src\\AssistQuestEditor.App\\Assets'
+$assetSourceDir = Join-Path $PSScriptRoot 'src\AssistQuestEditor.App\Assets'
 foreach ($file in $requiredAssetFiles) {
     $sourceFile = Join-Path $assetSourceDir $file
     if (-not (Test-Path -LiteralPath $sourceFile)) {

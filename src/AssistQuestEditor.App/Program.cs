@@ -40,7 +40,7 @@ internal static class Program
                 Opacity = 0
             };
 
-            mainForm.BrowserReady += (_, _) =>
+            void RevealMainWindow(string reason)
             {
                 if (mainForm.IsDisposed)
                 {
@@ -64,9 +64,12 @@ internal static class Program
                         splash = null;
                     }
 
-                    AppLogger.Info("Splash: завершён.", "Основной WebView2 готов.");
+                    AppLogger.Info("Splash: завершён.", reason);
                 });
-            };
+            }
+
+            mainForm.BrowserReady += (_, _) => RevealMainWindow("Основной WebView2 готов.");
+            mainForm.BrowserFailed += (_, _) => RevealMainWindow("Основной WebView2 не загрузился; показана страница ошибки.");
 
             AppLogger.Info("MainForm создан. Запуск Application.Run().");
             Application.Run(mainForm);

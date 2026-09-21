@@ -10,6 +10,7 @@ public abstract class WebViewForm : Form
     private bool _browserReadyRaised;
 
     public event EventHandler? BrowserReady;
+    public event EventHandler? BrowserFailed;
     protected readonly WebView2 Browser;
 
     protected WebViewForm(string title, string page, Size initialSize, string? windowKey = null)
@@ -211,6 +212,7 @@ public abstract class WebViewForm : Form
 
     private void ShowWebViewError(Exception ex)
     {
+        BrowserFailed?.Invoke(this, EventArgs.Empty);
         Browser.Visible = false;
         var panel = new Panel
         {
