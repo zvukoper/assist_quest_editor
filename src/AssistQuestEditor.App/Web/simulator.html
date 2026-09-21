@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Симулятор</title>
-<link rel="stylesheet" href="theme.css?v=1.0.40.126">
+<link rel="stylesheet" href="theme.css?v=1.0.40.129">
 <style>
   .mapSurface { position:relative; overflow:hidden; }
   #mapCanvas { display:block; width:100%; height:100%; cursor:default; touch-action:none; background:#0d1014; }
@@ -30,13 +30,29 @@
         СДО — статические точки ETS2 Assist · города — отдельный ориентир · дорог нет<br>
         ЛКМ: выбрать СДО · тянуть оранжевую точку: игрок · колесо: масштаб · СКМ/ПКМ: панорама
       </div>
+      <button class="backpackButton" id="backpackButton" type="button"
+              aria-controls="playerOverlay" aria-expanded="false"
+              data-game-tooltip="Инвентарь — клавиша I">
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M7.5 8.5V7a4.5 4.5 0 0 1 9 0v1.5"/>
+          <rect x="4" y="7.5" width="16" height="13" rx="3"/>
+          <path d="M4 11.5h16"/>
+          <path d="M9.5 11.5v2h5v-2"/>
+        </svg>
+        <span class="backpackNewDot" id="backpackNewDot"></span>
+      </button>
+      <div class="playerOverlay" id="playerOverlay" aria-hidden="true">
+        <section class="gamePanel inventoryPanel" id="inventoryPanel"></section>
+        <section class="gamePanel characterPanel" id="characterPanel"></section>
+      </div>
+      <div class="inventoryNotifications" id="inventoryNotifications" aria-live="polite"></div>
     </section>
     <aside class="simSide" id="side"></aside>
   </div>
   <div id="interfaceLayer" class="interfaceLayer" aria-live="polite"></div>
 </div>
-<script src="web_log.js?v=1.0.40.126"></script>
-<script src="simulator.js?v=1.0.40.126"></script>
-<script src="interface.js?v=1.0.40.126"></script>
+<script src="web_log.js?v=1.0.40.129"></script>
+<script src="simulator.js?v=1.0.40.129"></script>
+<script src="interface.js?v=1.0.40.129"></script>
 </body>
 </html>
