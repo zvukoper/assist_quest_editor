@@ -257,7 +257,11 @@
       if (wantsPan) {
         panState = { pointerId: event.pointerId, lastX: event.clientX, lastY: event.clientY };
         svg.classList.add("panActive");
-        svg.setPointerCapture?.(event.pointerId);
+        try {
+          svg.setPointerCapture?.(event.pointerId);
+        } catch {
+          // Synthetic or already-released pointers may not be capturable.
+        }
         event.preventDefault();
         return;
       }
