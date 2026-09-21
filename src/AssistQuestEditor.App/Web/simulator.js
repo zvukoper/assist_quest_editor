@@ -15,6 +15,8 @@
   let camera = { cx: 0, cz: 0, mpp: 50 };
   let eventHistory = [];
   let runtimeTargetKey = "";
+  let dragPlayerPosition = null;
+  let journalDetached = false;
   const DISTANCE_RINGS = [25, 50, 100, 250, 500, 1000, 1500, 2000];
 
   function formatPosition(position) {
@@ -107,8 +109,6 @@
     ctx.fillStyle = "#0d1014";
     ctx.fillRect(0, 0, width, height);
     drawGrid(ctx, width, height);
-    drawDistanceRings(ctx, width, height);
-    drawRuntimeTarget(ctx);
 
     const points = snapshot.world?.points || [];
     const showAllLabels = camera.mpp < 24;
@@ -146,7 +146,10 @@
       }
     }
 
-    drawPlayer(ctx, snapshot.player);
+    const playerForDraw = currentPlayerForDraw();
+    drawDistanceRings(ctx, width, height, playerForDraw?.position);
+    drawRuntimeTarget(ctx, playerForDraw?.position);
+    drawPlayer(ctx, playerForDraw);
     drawCategoryLegend(ctx, width, height, points);
     drawScaleBar(ctx, width, height);
     drawHud();
@@ -199,8 +202,8 @@
     ctx.restore();
   }
 
-  function drawDistanceRings(ctx, width, height) {
-    const p = snapshot?.player?.position;
+  function drawDistanceRings(ctx, width, height, playerPosition = null) {
+    const p = playerPosition || snapshot?.player?.position;
     if (!p) return;
 
     const center = worldToScreen(p.x, p.z);
@@ -336,6 +339,20 @@
     ctx.fillStyle = "#ff4d4d";
     ctx.fill();
     ctx.restore();
+  }
+
+  function currentPlayerForDraw() {
+    if (!snapshot?.player) return null;
+    if (!dragPlayerPosition) return snapshot.player;
+
+    return {
+      ...snapshot.player,
+      position: {
+        ...snapshot.player.position,
+        x: dragPlayerPosition.x,
+        z: dragPlayerPosition.z
+      }
+    };
   }
 
   function hitPlayer(px, py) {
@@ -639,12 +656,12 @@
     return parsed.toLocaleTimeString("ru-RU");
   }
 
-  function drawRuntimeTarget(ctx) {
+  function drawRuntimeTarget(ctx, playerPosition = null) {
     if (!snapshot || runtime?.status !== "Waiting" || !questGraph) return;
     const info = runtimeTargetInfo();
     if (!info.point) return;
 
-    const player = snapshot.player?.position;
+    const player = playerPosition || snapshot.player?.position;
     const target = worldToScreen(info.point.position.x, info.point.position.z);
     const playerScreen = player ? worldToScreen(player.x, player.z) : null;
 
@@ -663,6 +680,13 @@
     }
 
     ctx.save();
+    const pulse = 12 + Math.sin(Date.now() / 180) * 2;
+    ctx.beginPath();
+    ctx.arc(target.x, target.y, pulse + 5, 0, Math.PI * 2);
+    ctx.lineWidth = 2;
+    ctx.strokeStyle = "rgba(250,176,3,.48)";
+    ctx.stroke();
+
     ctx.beginPath();
     ctx.arc(target.x, target.y, 10, 0, Math.PI * 2);
     ctx.lineWidth = 3;
@@ -737,17 +761,22 @@
         "<div class='kv'><span>Ожидание</span><span>" + escapeHtml(runtime?.waitingFor || "—") + "</span></div>" +
       "</section>" +
       "<section class='runtimeBlock'>" +
-        "<div class='miniLabel'>События теста</div>" +
+        "<div class='runtimeBlockHeader'><div class='miniLabel'>События теста</div>" +
+          (!journalDetached ? "<button class='microButton' id='detachJournal'>Отделить</button>" : "") +
+        "</div>" +
         (expectedEvent
           ? "<div class='notice'><strong>Runtime ждёт:</strong> " + escapeHtml(expectedEvent.eventType) + "</div>" +
             "<button class='smallButton primary eventTool' id='emitExpectedEventSide' style='margin-top:6px'>Отправить ожидаемое</button>"
           : "<div class='notice'>Runtime сейчас не ждёт события.</div>") +
         "<button class='smallButton eventTool' id='hornEventSide' style='margin-top:6px'>HornPressed</button>" +
-        "<div class='eventList runtimeEventList'>" +
-          eventHistory.map(renderEvent).join("") +
-        "</div>" +
+        (journalDetached
+          ? "<div class='notice journalDetachedNotice' style='margin-top:6px'>Журнал вынесен в отдельное окно.</div>" +
+            "<button class='smallButton' id='openJournal' style='margin-top:5px'>Открыть журнал</button>"
+          : "<div class='eventList runtimeEventList'>" + eventHistory.map(renderEvent).join("") + "</div>") +
       "</section>";
 
+    runtimeSide.querySelector("#detachJournal")?.addEventListener("click", () => send({ action: "detach_journal" }));
+    runtimeSide.querySelector("#openJournal")?.addEventListener("click", () => send({ action: "open_journal" }));
     runtimeSide.querySelector("#runtimeStartSide")?.addEventListener("click", () => send({ action: "runtime_start" }));
     runtimeSide.querySelector("#runtimeStopSide")?.addEventListener("click", () => send({ action: "runtime_stop" }));
     runtimeSide.querySelector("#fitWorldSide")?.addEventListener("click", () => {
@@ -1063,6 +1092,7 @@
       snapshot = message.snapshot;
       runtime = message.runtime || null;
       questGraph = message.questGraph || questGraph;
+      journalDetached = !!message.journalDetached;
       selectedPointId = snapshot.selection?.point?.id || null;
       focusRuntimeTarget();
       window.assistWebLog?.("INFO", "Simulator получил snapshot.", {
@@ -1132,6 +1162,7 @@
     if (event.button === 0) {
       if (hitPlayer(pos.x, pos.y)) {
         draggingPlayer = true;
+        dragPlayerPosition = { x: snapshot.player.position.x, z: snapshot.player.position.z };
         map.setPointerCapture?.(event.pointerId);
         event.preventDefault();
         return;
@@ -1159,8 +1190,8 @@
 
     if (draggingPlayer && snapshot) {
       const world = screenToWorld(pos.x, pos.y);
+      dragPlayerPosition = { x: world.x, z: world.z };
       drawMap();
-      drawPlayerPreview(world);
       return;
     }
 
@@ -1183,6 +1214,7 @@
         z: world.z
       });
       draggingPlayer = false;
+      dragPlayerPosition = null;
       map.releasePointerCapture?.(event.pointerId);
       map.style.cursor = "default";
       return;
@@ -1207,6 +1239,7 @@
         z: world.z
       });
       draggingPlayer = false;
+      dragPlayerPosition = null;
     }
   });
 
@@ -1222,18 +1255,6 @@
   }, { passive: false });
 
   map.addEventListener("contextmenu", event => event.preventDefault());
-
-  function drawPlayerPreview(world) {
-    if (!snapshot) return;
-    const dpr = window.devicePixelRatio || 1;
-    const ctx = map.getContext("2d");
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    const temp = {
-      ...snapshot.player,
-      position: { ...snapshot.player.position, x: world.x, z: world.z }
-    };
-    drawPlayer(ctx, temp);
-  }
 
   document.getElementById("reset")?.addEventListener("click", () => send({ action: "reset" }));
   window.addEventListener("resize", () => {

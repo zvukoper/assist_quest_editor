@@ -9,6 +9,9 @@ public sealed class SimulatorForm : WebViewForm
     private readonly QuestRuntime _runtime;
     private readonly QuestGraphStore _questGraph;
     private readonly System.Windows.Forms.Timer _runtimeTimer;
+    private readonly List<SimulatorJournalEntry> _journalEntries = new();
+    private JournalForm? _journalForm;
+    private bool _journalDetached;
 
     public SimulatorForm(IDataChannelHub hub, QuestRuntime runtime, QuestGraphStore questGraph)
         : base(
@@ -19,6 +22,7 @@ public sealed class SimulatorForm : WebViewForm
         _hub = hub;
         _runtime = runtime ?? throw new ArgumentNullException(nameof(runtime));
         _questGraph = questGraph ?? throw new ArgumentNullException(nameof(questGraph));
+        _journalDetached = AppUiPreferencesStore.Load().JournalDetached;
         _questGraph.Changed += QuestGraph_Changed;
         _runtime.Published += Runtime_Published;
         _runtimeTimer = new System.Windows.Forms.Timer { Interval = 250 };
@@ -32,6 +36,8 @@ public sealed class SimulatorForm : WebViewForm
 
         FormClosed += (_, _) =>
         {
+            _journalForm?.Close();
+            _journalForm = null;
             _runtimeTimer.Stop();
             _runtimeTimer.Dispose();
             _runtime.Published -= Runtime_Published;
@@ -47,6 +53,10 @@ public sealed class SimulatorForm : WebViewForm
     {
         AppLogger.Info("SimulatorForm: browser ready, отправляю snapshot.");
         PushSnapshot();
+        if (_journalDetached)
+        {
+            BeginInvoke((Action)OpenJournalWindow);
+        }
     }
 
     public void PushSnapshot()
@@ -67,7 +77,8 @@ public sealed class SimulatorForm : WebViewForm
             version = VersionInfo.InformationalVersion,
             snapshot,
             runtime = _runtime.State,
-            questGraph = _questGraph.Value
+            questGraph = _questGraph.Value,
+            journalDetached = _journalDetached
         }, new JsonSerializerOptions
         {
             PropertyNamingPolicy = JsonNamingPolicy.CamelCase
@@ -136,6 +147,18 @@ public sealed class SimulatorForm : WebViewForm
 
                 case "emit_event":
                     EmitEvent(root);
+                    break;
+
+                case "detach_journal":
+                    DetachJournal();
+                    break;
+
+                case "open_journal":
+                    OpenJournalWindow();
+                    break;
+
+                case "return_journal_to_sidebar":
+                    ReturnJournalToSidebar();
                     break;
 
                 case "runtime_start":
@@ -330,6 +353,69 @@ public sealed class SimulatorForm : WebViewForm
             payload));
     }
 
+    private void DetachJournal()
+    {
+        _journalDetached = true;
+        AppUiPreferencesStore.Save(new AppUiPreferences(_journalDetached));
+        OpenJournalWindow();
+        PushSnapshot();
+    }
+
+    private void ReturnJournalToSidebar()
+    {
+        _journalDetached = false;
+        AppUiPreferencesStore.Save(new AppUiPreferences(_journalDetached));
+
+        if (_journalForm is not null)
+        {
+            _journalForm.ReturnToSidebarRequested -= JournalForm_ReturnToSidebarRequested;
+            _journalForm.Close();
+            _journalForm = null;
+        }
+
+        PushSnapshot();
+    }
+
+    private void OpenJournalWindow()
+    {
+        if (_journalForm is not null && !_journalForm.IsDisposed)
+        {
+            _journalForm.WindowState = FormWindowState.Normal;
+            _journalForm.BringToFront();
+            _journalForm.Activate();
+            _journalForm.SetEntries(_journalEntries);
+            return;
+        }
+
+        _journalForm = new JournalForm();
+        _journalForm.SetEntries(_journalEntries);
+        _journalForm.ReturnToSidebarRequested += JournalForm_ReturnToSidebarRequested;
+        _journalForm.FormClosed += (_, _) => _journalForm = null;
+        _journalForm.Show(this);
+    }
+
+    private void JournalForm_ReturnToSidebarRequested(object? sender, EventArgs e)
+    {
+        if (InvokeRequired)
+        {
+            BeginInvoke((Action)ReturnJournalToSidebar);
+            return;
+        }
+
+        ReturnJournalToSidebar();
+    }
+
+    private void AppendJournal(string eventType, DateTimeOffset timestamp, string source, string message)
+    {
+        _journalEntries.Insert(0, new SimulatorJournalEntry(eventType, timestamp, source, message));
+        if (_journalEntries.Count > 250)
+        {
+            _journalEntries.RemoveRange(250, _journalEntries.Count - 250);
+        }
+
+        _journalForm?.SetEntries(_journalEntries);
+    }
+
     private void QuestGraph_Changed(object? sender, EventArgs e)
     {
         AppLogger.Info("SimulatorForm: Quest Graph изменён.", $"nodes={_questGraph.Value.Nodes.Count}; connections={_questGraph.Value.Connections.Count}");
@@ -350,6 +436,8 @@ public sealed class SimulatorForm : WebViewForm
 
     private void Runtime_Published(object? sender, QuestRuntimeEvent e)
     {
+        AppendJournal(e.EventType, e.Timestamp, e.Source, e.Message);
+
         AppLogger.Info(
             "Quest Runtime: событие.",
             $"event={e.EventType}; source={e.Source}; node={e.NodeId ?? "<none>"}; status={_runtime.State.Status}; waiting={_runtime.State.WaitingFor ?? "<none>"}; transition={_runtime.State.LastTransition}; message={e.Message}");
@@ -382,6 +470,12 @@ public sealed class SimulatorForm : WebViewForm
 
     private void Events_Published(SimulatorEvent e)
     {
+        AppendJournal(
+            e.EventType,
+            e.Timestamp,
+            e.Source,
+            e.Payload.Count == 0 ? string.Empty : JsonSerializer.Serialize(e.Payload));
+
         AppLogger.Info(
             "Simulator: событие опубликовано.",
             $"event={e.EventType}; source={e.Source}; payload={JsonSerializer.Serialize(e.Payload)}");
