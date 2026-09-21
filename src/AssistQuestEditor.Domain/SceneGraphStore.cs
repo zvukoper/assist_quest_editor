@@ -58,7 +58,7 @@ public sealed class SceneGraphStore
 
         var current = nodes[index];
         var nextParameters = parameters is null ? current.Parameters : NormalizeParameters(parameters);
-        var nextSockets = parameters is null
+        var nextSockets = parameters is null || HasContentDefinedSockets(current, nextParameters)
             ? current.Sockets
             : SceneNodeCatalog.CreateSockets(current.NodeType, current.NodeId, nextParameters);
 
@@ -135,13 +135,9 @@ public sealed class SceneGraphStore
         if (fromSocket.Direction != SocketDirection.Output || toSocket.Direction != SocketDirection.Input)
             return SceneGraphConnectionResult.Failure("Связь должна идти из Output в Input.");
 
-        if (_value.Graph.Connections.Any(connection =>
-            connection.FromNodeId.Equals(fromNodeId, StringComparison.OrdinalIgnoreCase) &&
-            connection.FromSocketId.Equals(fromSocketId, StringComparison.OrdinalIgnoreCase) &&
-            connection.ToNodeId.Equals(toNodeId, StringComparison.OrdinalIgnoreCase) &&
-            connection.ToSocketId.Equals(toSocketId, StringComparison.OrdinalIgnoreCase)))
-            return SceneGraphConnectionResult.Failure("Такая связь уже существует.");
-
+        // Входной socket принимает ровно одну связь (SCENE_CONN005), поэтому
+        // повторная попытка подключить занятый Input отклоняется именно по этой
+        // причине: она информативнее проверки полного дубликата и покрывает её.
         if (_value.Graph.Connections.Any(connection =>
             connection.ToNodeId.Equals(toNodeId, StringComparison.OrdinalIgnoreCase) &&
             connection.ToSocketId.Equals(toSocketId, StringComparison.OrdinalIgnoreCase)))
@@ -219,6 +215,28 @@ public sealed class SceneGraphStore
         _value = _redo.Pop();
         Changed?.Invoke(this, EventArgs.Empty);
         return true;
+    }
+
+    /// <summary>
+    /// Choice-нода, привязанная к существующему SceneChoice ресурсу, получает Output
+    /// sockets из самого ресурса: каждый <c>SceneChoiceOption.OutputSocketId</c> — это
+    /// стабильный canonical контент сцены, а не порядковый <c>optionN</c>.
+    /// Пересборка таких sockets по схеме каталога потеряла бы стабильные option ID и
+    /// оборвала бы уже настроенные связи, поэтому правка параметров их не трогает.
+    /// </summary>
+    private bool HasContentDefinedSockets(
+        SceneNode node,
+        IReadOnlyDictionary<string, string> parameters)
+    {
+        if (!node.NodeType.Equals("Choice", StringComparison.OrdinalIgnoreCase))
+            return false;
+
+        if (!parameters.TryGetValue("choiceId", out var choiceId) ||
+            string.IsNullOrWhiteSpace(choiceId))
+            return false;
+
+        return _value.Choices.Any(choice =>
+            choice.Id.Equals(choiceId, StringComparison.OrdinalIgnoreCase));
     }
 
     private static IReadOnlyDictionary<string, string> NormalizeParameters(

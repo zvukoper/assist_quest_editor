@@ -48,7 +48,7 @@ public static class SceneGraphLayout
         }
 
         var components = FindComponents(ids, outgoing, incoming);
-        var componentY = 0d;
+        var yCursor = 0d;
 
         foreach (var component in components)
         {
@@ -71,26 +71,39 @@ public static class SceneGraphLayout
                 .Select(group => group.Select(pair => pair.Key).OrderBy(id => id, StringComparer.OrdinalIgnoreCase).ToList())
                 .ToList();
 
-            var componentBottom = componentY;
+            // Слои компонента центрируются по вертикали вокруг его собственного
+            // центра (как в QuestGraphLayout), поэтому раскладка не зависит от
+            // исходных координат нод и ни одна нода не попадает в начало координат
+            // «случайно». Независимые компоненты ставятся друг под другом.
+            var local = new Dictionary<string, NodePosition>(StringComparer.OrdinalIgnoreCase);
             for (var layerIndex = 0; layerIndex < layers.Count; layerIndex++)
             {
                 var layer = layers[layerIndex];
                 var totalHeight = layer.Sum(id => NodeHeight(nodeById[id])) +
                     Math.Max(0, layer.Count - 1) * VerticalGap;
-                var y = componentY;
+                var y = -totalHeight / 2;
 
                 foreach (var id in layer)
                 {
-                    positions[id] = new NodePosition(
+                    local[id] = new NodePosition(
                         layerIndex * (NodeWidth + HorizontalGap),
                         y);
                     y += NodeHeight(nodeById[id]) + VerticalGap;
                 }
-
-                componentBottom = Math.Max(componentBottom, y);
             }
 
-            componentY = componentBottom + ComponentGap;
+            if (local.Count == 0) continue;
+
+            var minY = local.Values.Min(position => position.Y);
+            var bottom = local.Max(pair => pair.Value.Y + NodeHeight(nodeById[pair.Key]));
+            var shift = yCursor - minY;
+
+            foreach (var (nodeId, position) in local)
+            {
+                positions[nodeId] = new NodePosition(position.X, position.Y + shift);
+            }
+
+            yCursor = bottom + shift + ComponentGap;
         }
 
         return positions;

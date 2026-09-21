@@ -842,7 +842,7 @@ public sealed class EditorForm : WebViewForm
 
         try
         {
-            BeginInvoke((Action)PostSceneGraph);
+            BeginInvoke((Action)(() => PostSceneGraph()));
         }
         catch (InvalidOperationException)
         {

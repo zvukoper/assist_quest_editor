@@ -107,7 +107,9 @@ public sealed class SceneGraphStoreTests
 
         Assert.NotNull(updated);
         Assert.Equal(originalSockets, updated!.Sockets);
-        Assert.Empty(SceneGraphValidator.Validate(store.Value).Where(item => item.Severity == GraphDiagnosticSeverity.Error));
+        Assert.DoesNotContain(
+            SceneGraphValidator.Validate(store.Value),
+            item => item.Severity == GraphDiagnosticSeverity.Error);
     }
 
     private static void AssertNoOverlaps(SceneGraph graph)
