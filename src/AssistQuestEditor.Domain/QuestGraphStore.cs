@@ -298,6 +298,7 @@ public static class QuestNodeCatalog
             "addexperience" => Parameters(("amount", "1")),
             "addmoney" => Parameters(("amount", "1")),
             "removemoney" => Parameters(("amount", "1")),
+            "setreserve" => Parameters(("value", "0")),
             "setcharacterstat" => Parameters(("stat", "strength"), ("value", "5")),
             "addreputation" => Parameters(("faction", ""), ("amount", "1")),
             "removereputation" => Parameters(("faction", ""), ("amount", "1")),
