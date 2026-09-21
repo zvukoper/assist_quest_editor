@@ -251,8 +251,13 @@
     };
 
     svg.addEventListener("contextmenu", event => {
-      const socket = event.target.closest?.(".socketGroup");
-      const node = event.target.closest?.(".node");
+      const path = typeof event.composedPath === "function" ? event.composedPath() : [];
+      const socket = path.find(item =>
+        item instanceof Element && item.classList?.contains("socketGroup")
+      ) || event.target.closest?.(".socketGroup");
+      const node = path.find(item =>
+        item instanceof Element && item.classList?.contains("node")
+      ) || event.target.closest?.(".node");
 
       // Connector/node menus are bound directly below. Keep the canvas handler
       // reserved for the empty graph background.
@@ -452,11 +457,14 @@
 
     svg.querySelectorAll(".node").forEach(node => {
       node.addEventListener("contextmenu", event => {
+        const path = typeof event.composedPath === "function" ? event.composedPath() : [];
+        const socket = path.find(item =>
+          item instanceof Element && item.classList?.contains("socketGroup")
+        ) || event.target.closest?.(".socketGroup");
+        if (socket) return;
+
         event.preventDefault();
         event.stopPropagation();
-
-        const socket = event.target.closest?.(".socketGroup");
-        if (socket) return;
 
         const nodeId = node.dataset.nodeId;
         selectedGraphNodeId = nodeId;
@@ -481,7 +489,7 @@
     });
 
     svg.querySelectorAll(".socketGroup").forEach(socket => {
-      socket.addEventListener("contextmenu", event => {
+      const openConnectionMenu = event => {
         event.preventDefault();
         event.stopPropagation();
 
@@ -495,6 +503,11 @@
           node.dataset.nodeId,
           socket.dataset.socketId
         );
+      };
+
+      socket.addEventListener("contextmenu", openConnectionMenu);
+      socket.querySelectorAll(".socket").forEach(socketShape => {
+        socketShape.addEventListener("contextmenu", openConnectionMenu);
       });
 
       socket.addEventListener("click", event => {
@@ -1035,6 +1048,7 @@
 
     const menu = document.createElement("div");
     menu.className = "graphContextMenu";
+    menu.dataset.menuKind = "add";
 
     const heading = document.createElement("div");
     heading.className = "graphContextMenuTitle";
@@ -1091,6 +1105,7 @@
 
     const menu = document.createElement("div");
     menu.className = "graphContextMenu";
+    menu.dataset.menuKind = "node";
 
     const heading = document.createElement("div");
     heading.className = "graphContextMenuTitle";
@@ -1129,6 +1144,7 @@
 
     const menu = document.createElement("div");
     menu.className = "graphContextMenu";
+    menu.dataset.menuKind = "connection";
 
     const heading = document.createElement("div");
     heading.className = "graphContextMenuTitle";
