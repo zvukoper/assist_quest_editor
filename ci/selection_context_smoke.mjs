@@ -140,6 +140,24 @@ try {
     sideText.includes("X 100") && sideText.includes("Y 20") && sideText.includes("Z 200"),
     "Правая панель симулятора должна показывать координаты выбранной СДО."
   );
+  await page.evaluate(() => {
+    window.chrome.webview.listeners.get("message")({
+      data: JSON.stringify({
+        type: "event",
+        event: {
+          eventType: "CustomEvent",
+          timestamp: null,
+          source: "Test"
+        }
+      })
+    });
+  });
+
+  const eventText = await page.locator("#side").innerText();
+  check(
+    eventText.includes("время неизвестно"),
+    "Журнал событий должен безопасно обрабатывать отсутствующий timestamp."
+  );
   check(
     pageErrors.length === 0,
     "Симулятор не должен выбрасывать pageerror при отображении выбранной СДО: " + pageErrors.join(" | ")

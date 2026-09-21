@@ -14,6 +14,7 @@
   let questGraph = null;
   let camera = { cx: 0, cz: 0, mpp: 50 };
   let eventHistory = [];
+  let runtimeTargetKey = "";
   const DISTANCE_RINGS = [25, 50, 100, 250, 500, 1000, 1500, 2000];
 
   function formatPosition(position) {
@@ -119,7 +120,7 @@
       if (q.x < -18 || q.y < -18 || q.x > width + 18 || q.y > height + 18) continue;
 
       const selected = point.id === selectedPointId;
-      const radius = selected ? 5.5 : (camera.mpp > 250 ? 2.8 : 3.6);
+      const radius = selected ? 5.5 : (camera.mpp > 250 ? 3.8 : 4.2);
 
       ctx.save();
       ctx.beginPath();
@@ -579,6 +580,65 @@
     return { kind: "none", point: null, radius: null, html: "<div class='notice'>Для этой ноды специальная цель ожидания не требуется.</div>" };
   }
 
+  function runtimeExpectedEvent() {
+    const node = getRuntimeNode();
+    if (!node || runtime?.status !== "Waiting") return null;
+
+    const type = String(node.nodeType || "").toLowerCase();
+    if (type === "waitforevent") {
+      const eventType = nodeParameter(node, "eventType", "");
+      if (!eventType) return null;
+      return { eventType, source: "Simulator", payload: {} };
+    }
+
+    if (type === "choice") {
+      return { eventType: "ChoiceSelected", source: "Simulator", payload: { index: "1" } };
+    }
+
+    return null;
+  }
+
+  function focusRuntimeTarget() {
+    if (runtime?.status !== "Waiting") {
+      runtimeTargetKey = "";
+      return;
+    }
+
+    const info = runtimeTargetInfo();
+    if (info.kind !== "point" || !info.point) {
+      runtimeTargetKey = "";
+      return;
+    }
+
+    const key = String(runtime.currentNodeId || "") + "|" + String(info.point.id || "");
+    if (key === runtimeTargetKey) return;
+
+    runtimeTargetKey = key;
+    camera.cx = Number(info.point.position.x);
+    camera.cz = Number(info.point.position.z);
+
+    const radius = Number.isFinite(info.radius) && info.radius > 0 ? info.radius : 100;
+    camera.mpp = Math.max(0.25, Math.min(25, Math.max(radius / 90, 0.5)));
+  }
+
+  function formatEventTimestamp(timestamp) {
+    if (timestamp === null || timestamp === undefined || timestamp === "") {
+      return "время неизвестно";
+    }
+
+    const parsed = timestamp instanceof Date
+      ? timestamp
+      : new Date(typeof timestamp === "number" && timestamp < 100000000000
+        ? timestamp * 1000
+        : timestamp);
+
+    if (!Number.isFinite(parsed.getTime())) {
+      return "время неизвестно";
+    }
+
+    return parsed.toLocaleTimeString("ru-RU");
+  }
+
   function drawRuntimeTarget(ctx) {
     if (!snapshot || runtime?.status !== "Waiting" || !questGraph) return;
     const info = runtimeTargetInfo();
@@ -637,6 +697,8 @@
     const status = runtime?.status || (snapshot?.system?.runtimeRunning ? "Running" : "Stopped");
     const node = getRuntimeNode();
     const info = runtimeTargetInfo();
+    const expectedEvent = runtimeExpectedEvent();
+    const pointCount = snapshot.world?.points?.length || 0;
 
     runtimeSide.innerHTML =
       "<div class='runtimeSideHeader'>" +
@@ -648,7 +710,9 @@
       "<div class='runtimeControls'>" +
         "<button class='smallButton primary' id='runtimeStartSide'>Запустить квест</button>" +
         "<button class='smallButton' id='runtimeStopSide'>Остановить</button>" +
+        "<button class='smallButton' id='fitWorldSide'>Все СДО</button>" +
       "</div>" +
+      "<div class='miniLabel' style='margin-top:8px'>СДО на карте: " + pointCount.toLocaleString("ru-RU") + "</div>" +
       "<div class='runtimeStatusCard' data-status='" + escapeHtml(String(status).toLowerCase()) + "'>" +
         "<span class='statusDot'></span><strong>" + escapeHtml(runtimeStatusLabel(status)) + "</strong>" +
       "</div>" +
@@ -674,7 +738,11 @@
       "</section>" +
       "<section class='runtimeBlock'>" +
         "<div class='miniLabel'>События теста</div>" +
-        "<button class='smallButton eventTool' id='hornEventSide'>HornPressed</button>" +
+        (expectedEvent
+          ? "<div class='notice'><strong>Runtime ждёт:</strong> " + escapeHtml(expectedEvent.eventType) + "</div>" +
+            "<button class='smallButton primary eventTool' id='emitExpectedEventSide' style='margin-top:6px'>Отправить ожидаемое</button>"
+          : "<div class='notice'>Runtime сейчас не ждёт события.</div>") +
+        "<button class='smallButton eventTool' id='hornEventSide' style='margin-top:6px'>HornPressed</button>" +
         "<div class='eventList runtimeEventList'>" +
           eventHistory.map(renderEvent).join("") +
         "</div>" +
@@ -682,6 +750,14 @@
 
     runtimeSide.querySelector("#runtimeStartSide")?.addEventListener("click", () => send({ action: "runtime_start" }));
     runtimeSide.querySelector("#runtimeStopSide")?.addEventListener("click", () => send({ action: "runtime_stop" }));
+    runtimeSide.querySelector("#fitWorldSide")?.addEventListener("click", () => {
+      fitWorld();
+      drawMap();
+    });
+    runtimeSide.querySelector("#emitExpectedEventSide")?.addEventListener("click", () => {
+      const expected = runtimeExpectedEvent();
+      if (expected) send({ action: "emit_event", ...expected });
+    });
     runtimeSide.querySelector("#hornEventSide")?.addEventListener("click", () => {
       send({ action: "emit_event", eventType: "HornPressed", source: "Simulator", payload: {} });
     });
@@ -817,10 +893,20 @@
     }
 
     if (id === "events") {
+      const expectedEvent = runtimeExpectedEvent();
+      const defaultType = expectedEvent?.eventType || "CustomEvent";
+      const defaultPayload = expectedEvent ? JSON.stringify(expectedEvent.payload) : "{\"quest\":\"special_marinated_shashlik\"}";
+      const expectedMarkup = expectedEvent
+        ? "<div class='notice' style='margin-bottom:8px'><strong>Runtime ждёт:</strong> " + escapeHtml(expectedEvent.eventType) +
+          "<br>Payload: <code>" + escapeHtml(JSON.stringify(expectedEvent.payload)) + "</code></div>" +
+          "<button class='smallButton primary' id='emitExpectedEvent' style='margin-bottom:8px'>Отправить ожидаемое событие</button>"
+        : "<div class='notice' style='margin-bottom:8px'>Runtime сейчас не ждёт конкретного события.</div>";
+
       return [
-        "<div class='field'><label>Тип события</label><input id='eventType' value='CustomEvent'></div>",
+        expectedMarkup,
+        "<div class='field'><label>Тип события</label><input id='eventType' value='" + escapeHtml(defaultType) + "'></div>",
         "<div class='field' style='margin-top:6px'><label>Источник</label><input id='eventSource' value='Simulator'></div>",
-        "<div class='field' style='margin-top:6px'><label>Payload JSON</label><textarea id='eventPayload'>{\"quest\":\"special_marinated_shashlik\"}</textarea></div>",
+        "<div class='field' style='margin-top:6px'><label>Payload JSON</label><textarea id='eventPayload'>" + escapeHtml(defaultPayload) + "</textarea></div>",
         "<button class='smallButton primary' id='emitEvent'>Отправить событие</button>",
         "<div class='miniLabel' style='margin:12px 0 5px'>Последние события</div>",
         "<div class='eventList' id='eventList'></div>"
@@ -938,6 +1024,11 @@
     side.querySelector("#runtimeStartSide")?.addEventListener("click", () => send({ action: "runtime_start" }));
     side.querySelector("#runtimeStopSide")?.addEventListener("click", () => send({ action: "runtime_stop" }));
 
+    side.querySelector("#emitExpectedEvent")?.addEventListener("click", () => {
+      const expected = runtimeExpectedEvent();
+      if (expected) send({ action: "emit_event", ...expected });
+    });
+
     side.querySelector("#emitEvent")?.addEventListener("click", () => {
       let payload = {};
       try {
@@ -957,8 +1048,8 @@
 
   function renderEvent(event) {
     if (!event) return "";
-    return "<div class='eventRow'><strong>" + escapeHtml(event.eventType) + "</strong>" +
-      new Date(event.timestamp).toLocaleTimeString("ru-RU") + " · " + escapeHtml(event.source) + "</div>";
+    return "<div class='eventRow'><strong>" + escapeHtml(event.eventType || "Событие") + "</strong>" +
+      formatEventTimestamp(event.timestamp) + " · " + escapeHtml(event.source || "Источник неизвестен") + "</div>";
   }
 
   function receive(message) {
@@ -973,6 +1064,7 @@
       runtime = message.runtime || null;
       questGraph = message.questGraph || questGraph;
       selectedPointId = snapshot.selection?.point?.id || null;
+      focusRuntimeTarget();
       window.assistWebLog?.("INFO", "Simulator получил snapshot.", {
         points: snapshot.world?.points?.length ?? 0,
         selectedPointId,
@@ -988,6 +1080,7 @@
 
     if (message.type === "runtime_event") {
       runtime = message.runtime || runtime;
+      focusRuntimeTarget();
       if (message["@event"] || message.event) {
         eventHistory.unshift({
           eventType: (message["@event"] || message.event).eventType,
@@ -1004,6 +1097,7 @@
     }
 
     if (message.type === "event") {
+      focusRuntimeTarget();
       eventHistory.unshift(message["@event"] || message.event);
       eventHistory.splice(12);
       const list = side.querySelector("#eventList");

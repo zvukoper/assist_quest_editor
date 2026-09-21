@@ -41,6 +41,13 @@ jobs:
         shell: pwsh
         run: npm install --no-save playwright@1.57.0
 
+      - name: Кэш браузера Playwright
+        id: playwright_cache
+        uses: actions/cache@v4
+        with:
+          path: ~\AppData\Local\ms-playwright
+          key: ${{ runner.os }}-playwright-chromium-1.57.0
+
       - name: Установить Chromium для Playwright
         id: chromium_install
         continue-on-error: true
@@ -112,30 +119,17 @@ jobs:
             exit 1
           }
 
+          $resultDir = Join-Path $env:GITHUB_WORKSPACE 'ci-results\\domain-tests'
+          New-Item -ItemType Directory -Path $resultDir -Force | Out-Null
+
           foreach ($test in $tests) {
             dotnet restore $test.FullName
             if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
-            dotnet test $test.FullName --configuration Release --no-restore
+            $trxName = $test.BaseName + '.trx'
+            dotnet test $test.FullName --configuration Release --no-restore --logger "trx;LogFileName=$trxName" --results-directory $resultDir
             if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           }
-
-      - name: Матрица из семи сценариев Quest Editor
-        id: quest_scenarios
-        if: always()
-        continue-on-error: true
-        shell: pwsh
-        run: |
-          $tests = @(Get-ChildItem -Path tests -Recurse -File -Filter *.csproj)
-          if ($tests.Count -eq 0) { Write-Error "В tests нет C# тестовых проектов."; exit 1 }
-          $resultDir = Join-Path $env:GITHUB_WORKSPACE 'ci-results\\quest-scenarios'
-          New-Item -ItemType Directory -Path $resultDir -Force | Out-Null
-          $failed = $false
-          foreach ($test in $tests) {
-            dotnet test $test.FullName --configuration Release --no-restore --no-build --filter "FullyQualifiedName~AssistQuestEditor.Domain.Tests.QuestRuntimeTests.Scenario" --logger "trx;LogFileName=quest-scenarios.trx" --results-directory $resultDir
-            if ($LASTEXITCODE -ne 0) { $failed = $true }
-          }
-          if ($failed) { exit 1 }
 
       - name: Проверить compile.ps1 как single-file публикацию
         id: publish
@@ -170,7 +164,6 @@ jobs:
           DOTNET_SDK_OUTCOME: ${{ steps.dotnet_sdk.outcome }}
           DOTNET_BUILD_OUTCOME: ${{ steps.dotnet_build.outcome }}
           DOTNET_TESTS_OUTCOME: ${{ steps.dotnet_tests.outcome }}
-          QUEST_SCENARIOS_OUTCOME: ${{ steps.quest_scenarios.outcome }}
           PUBLISH_OUTCOME: ${{ steps.publish.outcome }}
         run: |
           $ErrorActionPreference = 'Stop'
@@ -194,7 +187,7 @@ jobs:
             ('.NET SDK — ' + $env:DOTNET_SDK_OUTCOME),
             ('.NET build — ' + $env:DOTNET_BUILD_OUTCOME),
             ('.NET domain tests — ' + $env:DOTNET_TESTS_OUTCOME),
-            ('Quest scenario matrix step — ' + $env:QUEST_SCENARIOS_OUTCOME),
+            'Quest scenario tests — включены в .NET domain tests',
             ('Single-file publish — ' + $env:PUBLISH_OUTCOME),
             '',
             '=== QUEST SCENARIO MATRIX ==='
@@ -208,11 +201,12 @@ jobs:
             'Scenario06_Choice' = '6 Choice'
             'Scenario07_SaveLoad' = '7 Save/Load'
           }
-          $trxPath = Join-Path $env:GITHUB_WORKSPACE 'ci-results\\quest-scenarios\\quest-scenarios.trx'
+          $trxDir = Join-Path $env:GITHUB_WORKSPACE 'ci-results\\domain-tests'
+          $trxPaths = @(Get-ChildItem -LiteralPath $trxDir -Filter '*.trx' -File -ErrorAction SilentlyContinue)
           $results = @()
-          if (Test-Path -LiteralPath $trxPath) {
-            [xml]$trx = Get-Content -LiteralPath $trxPath -Raw
-            $results = @($trx.SelectNodes("//*[local-name()='UnitTestResult']"))
+          foreach ($trxPath in $trxPaths) {
+            [xml]$trx = Get-Content -LiteralPath $trxPath.FullName -Raw
+            $results += @($trx.SelectNodes("//*[local-name()='UnitTestResult']"))
           }
           foreach ($pair in $scenarioNames.GetEnumerator()) {
             $match = @($results | Where-Object { $_.testName -like ('*' + $pair.Key + '*') } | Select-Object -First 1)
@@ -270,7 +264,7 @@ jobs:
           name: assist-quest-editor-ci-diagnostics
           path: |
             MemoryAI/LOGS/assist_quest_editor.log
-            ci-results/**/*.trx
+            ci-results/domain-tests/**/*.trx
           if-no-files-found: warn
 
       - name: Финальная проверка CI
@@ -306,7 +300,6 @@ jobs:
             @{ Name = '.NET SDK'; Outcome = $env:DOTNET_SDK_OUTCOME },
             @{ Name = '.NET build'; Outcome = $env:DOTNET_BUILD_OUTCOME },
             @{ Name = '.NET domain tests'; Outcome = $env:DOTNET_TESTS_OUTCOME },
-            @{ Name = 'Quest scenario matrix'; Outcome = $env:QUEST_SCENARIOS_OUTCOME },
             @{ Name = 'Single-file publish'; Outcome = $env:PUBLISH_OUTCOME },
             @{ Name = 'Automated report'; Outcome = $env:AUTOMATED_REPORT_OUTCOME },
             @{ Name = 'Log structure'; Outcome = $env:LOG_STRUCTURE_OUTCOME },
