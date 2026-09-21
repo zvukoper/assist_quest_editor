@@ -87,6 +87,7 @@ await page.locator(".outputSocket").first().click();
 await page.locator(".inputSocket").last().click();
 if (!actions.some(action => action.action === "scene_connect")) throw new Error("Output → Input не отправил scene_connect");
 
+await page.locator(".node[data-node-id='dialogue']").click();
 await page.locator("#sceneEditTitle").fill("Dialogue 2");
 await page.locator("#saveSceneNode").click();
 if (!actions.some(action => action.action === "scene_update_node" && action.title === "Dialogue 2"))
@@ -97,6 +98,15 @@ await page.locator("#sceneGraphSvg").hover();
 await page.mouse.wheel(0, -500);
 const after = await page.evaluate(() => window.__assistSceneEditor.getState().viewport.width);
 if (!(after < before)) throw new Error("Wheel zoom не изменил viewport");
+
+const beforePan = await page.evaluate(() => window.__assistSceneEditor.getState().viewport.x);
+await page.locator("#sceneGraphSvg").hover();
+await page.mouse.move(500, 400);
+await page.mouse.down({ button: "middle" });
+await page.mouse.move(560, 440);
+await page.mouse.up({ button: "middle" });
+const afterPan = await page.evaluate(() => window.__assistSceneEditor.getState().viewport.x);
+if (afterPan === beforePan) throw new Error("Pan не изменил viewport");
 
 await page.evaluate(() => { window.confirm = () => false; });
 await page.locator(".node[data-node-id='dialogue']").click();
