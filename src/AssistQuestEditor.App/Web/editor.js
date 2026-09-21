@@ -1152,6 +1152,7 @@
   render();
   window.__assistQuestGraphRuntime = {
     getState: () => runtimeState,
-    getExecuted: () => [...executedNodeIds]
+    getExecuted: () => [...executedNodeIds],
+    getPendingOutput: () => pendingOutput ? { ...pendingOutput } : null
   };
 })();
