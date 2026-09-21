@@ -42,6 +42,8 @@ jobs:
         run: npx playwright install chromium
 
       - name: Playwright + Chromium smoke
+        id: playwright_smoke
+        continue-on-error: true
         shell: pwsh
         run: node ci/playwright_smoke.mjs
 
@@ -152,18 +154,18 @@ jobs:
         continue-on-error: true
         shell: pwsh
         env:
-          MEMORY_OUTCOME: ${{  steps.memory.outcome }}
-          PLAYWRIGHT_INSTALL_OUTCOME: ${{  steps.playwright_install.outcome }}
-          CHROMIUM_INSTALL_OUTCOME: ${{  steps.chromium_install.outcome }}
-          PLAYWRIGHT_SMOKE_OUTCOME: ${{  steps.playwright_smoke.outcome }}
-          SELECTION_SMOKE_OUTCOME: ${{  steps.selection_smoke.outcome }}
-          QUEST_GRAPH_SMOKE_OUTCOME: ${{  steps.quest_graph_smoke.outcome }}
-          WEB_SYNTAX_OUTCOME: ${{  steps.web_syntax.outcome }}
-          DOTNET_SDK_OUTCOME: ${{  steps.dotnet_sdk.outcome }}
-          DOTNET_BUILD_OUTCOME: ${{  steps.dotnet_build.outcome }}
-          DOTNET_TESTS_OUTCOME: ${{  steps.dotnet_tests.outcome }}
-          QUEST_SCENARIOS_OUTCOME: ${{  steps.quest_scenarios.outcome }}
-          PUBLISH_OUTCOME: ${{  steps.publish.outcome }}
+          MEMORY_OUTCOME: ${{ steps.memory.outcome }}
+          PLAYWRIGHT_INSTALL_OUTCOME: ${{ steps.playwright_install.outcome }}
+          CHROMIUM_INSTALL_OUTCOME: ${{ steps.chromium_install.outcome }}
+          PLAYWRIGHT_SMOKE_OUTCOME: ${{ steps.playwright_smoke.outcome }}
+          SELECTION_SMOKE_OUTCOME: ${{ steps.selection_smoke.outcome }}
+          QUEST_GRAPH_SMOKE_OUTCOME: ${{ steps.quest_graph_smoke.outcome }}
+          WEB_SYNTAX_OUTCOME: ${{ steps.web_syntax.outcome }}
+          DOTNET_SDK_OUTCOME: ${{ steps.dotnet_sdk.outcome }}
+          DOTNET_BUILD_OUTCOME: ${{ steps.dotnet_build.outcome }}
+          DOTNET_TESTS_OUTCOME: ${{ steps.dotnet_tests.outcome }}
+          QUEST_SCENARIOS_OUTCOME: ${{ steps.quest_scenarios.outcome }}
+          PUBLISH_OUTCOME: ${{ steps.publish.outcome }}
         run: |
           $ErrorActionPreference = 'Stop'
           $logPath = Join-Path $env:GITHUB_WORKSPACE 'MemoryAI\\LOGS\\assist_quest_editor.log'
@@ -264,20 +266,20 @@ jobs:
         if: always()
         shell: pwsh
         env:
-          MEMORY_OUTCOME: ${{  steps.memory.outcome }}
-          PLAYWRIGHT_INSTALL_OUTCOME: ${{  steps.playwright_install.outcome }}
-          CHROMIUM_INSTALL_OUTCOME: ${{  steps.chromium_install.outcome }}
-          PLAYWRIGHT_SMOKE_OUTCOME: ${{  steps.playwright_smoke.outcome }}
-          SELECTION_SMOKE_OUTCOME: ${{  steps.selection_smoke.outcome }}
-          QUEST_GRAPH_SMOKE_OUTCOME: ${{  steps.quest_graph_smoke.outcome }}
-          WEB_SYNTAX_OUTCOME: ${{  steps.web_syntax.outcome }}
-          DOTNET_SDK_OUTCOME: ${{  steps.dotnet_sdk.outcome }}
-          DOTNET_BUILD_OUTCOME: ${{  steps.dotnet_build.outcome }}
-          DOTNET_TESTS_OUTCOME: ${{  steps.dotnet_tests.outcome }}
-          QUEST_SCENARIOS_OUTCOME: ${{  steps.quest_scenarios.outcome }}
-          PUBLISH_OUTCOME: ${{  steps.publish.outcome }}
-          AUTOMATED_REPORT_OUTCOME: ${{  steps.automated_report.outcome }}
-          LOG_STRUCTURE_OUTCOME: ${{  steps.log_structure.outcome }}
+          MEMORY_OUTCOME: ${{ steps.memory.outcome }}
+          PLAYWRIGHT_INSTALL_OUTCOME: ${{ steps.playwright_install.outcome }}
+          CHROMIUM_INSTALL_OUTCOME: ${{ steps.chromium_install.outcome }}
+          PLAYWRIGHT_SMOKE_OUTCOME: ${{ steps.playwright_smoke.outcome }}
+          SELECTION_SMOKE_OUTCOME: ${{ steps.selection_smoke.outcome }}
+          QUEST_GRAPH_SMOKE_OUTCOME: ${{ steps.quest_graph_smoke.outcome }}
+          WEB_SYNTAX_OUTCOME: ${{ steps.web_syntax.outcome }}
+          DOTNET_SDK_OUTCOME: ${{ steps.dotnet_sdk.outcome }}
+          DOTNET_BUILD_OUTCOME: ${{ steps.dotnet_build.outcome }}
+          DOTNET_TESTS_OUTCOME: ${{ steps.dotnet_tests.outcome }}
+          QUEST_SCENARIOS_OUTCOME: ${{ steps.quest_scenarios.outcome }}
+          PUBLISH_OUTCOME: ${{ steps.publish.outcome }}
+          AUTOMATED_REPORT_OUTCOME: ${{ steps.automated_report.outcome }}
+          LOG_STRUCTURE_OUTCOME: ${{ steps.log_structure.outcome }}
         run: |
           $failed = @()
           $checks = @(
