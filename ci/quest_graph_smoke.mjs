@@ -219,19 +219,38 @@ try {
   );
 
   const beforeConnectMessages = await page.evaluate(() => window.__messages.length);
+  const outputState = await page.locator("[data-node-id='start'].connection-source").count();
+  if (outputState !== 1) {
+    throw new Error("После выбора Start Output нода не отмечена как источник соединения.");
+  }
+
   const connectContextX = svgBox.x + svgBox.width * 0.72;
   const connectContextY = svgBox.y + svgBox.height * 0.72;
   if (connectContextX <= svgBox.x || connectContextX >= svgBox.x + svgBox.width ||
       connectContextY <= svgBox.y || connectContextY >= svgBox.y + svgBox.height) {
     throw new Error("Точка контекстного меню должна находиться внутри Quest Graph canvas.");
   }
-  await page.mouse.click(connectContextX, connectContextY, { button: "right" });
+
+  await page.evaluate(({ x, y }) => {
+    const svg = document.getElementById("questGraphSvg");
+    svg.dispatchEvent(new MouseEvent("contextmenu", {
+      bubbles: true,
+      cancelable: true,
+      clientX: x,
+      clientY: y,
+      button: 2,
+      buttons: 0
+    }));
+  }, { x: connectContextX, y: connectContextY });
+
   const phaseMenuItem = page.locator(".graphContextMenuItem[data-node-type=\"Phase\"]");
   await phaseMenuItem.waitFor({ state: "attached" });
   if (await phaseMenuItem.count() !== 1) {
-    throw new Error("Контекстное меню должно содержать ровно один пункт Phase.");
+    const menuItems = await page.locator(".graphContextMenuItem").evaluateAll(nodes =>
+      nodes.map(node => node.getAttribute("data-node-type"))
+    );
+    throw new Error("Контекстное меню должно содержать ровно один пункт Phase. Найдены: " + menuItems.join(", "));
   }
-  await phaseMenuItem.scrollIntoViewIfNeeded();
   await phaseMenuItem.click({ force: true });
   await page.waitForTimeout(20);
 
