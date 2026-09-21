@@ -281,3 +281,6 @@
 2026-09-21 16:21:59.013 [INFO] [PID 27864] [TID 2] WebView2: получено действие. | form=Assist Quest Editor — Редактор; action=push_logs
 2026-09-21 16:22:02.156 [INFO] [PID 27864] [TID 5] GitHub: загрузка LOGS завершена. | Логи успешно отправлены в GitHub.
 2026-09-21 16:22:16.575 [INFO] [PID 27864] [TID 2] WebView2: получено действие. | form=Assist Quest Editor — Редактор; action=push_logs
+2026-09-21 16:22:19.997 [INFO] [PID 27864] [TID 5] GitHub: загрузка LOGS завершена. | Логи успешно отправлены в GitHub.
+2026-09-21 16:23:37.071 [INFO] [PID 27864] [TID 2] Application.Run завершён.
+2026-09-21 16:23:37.071 [INFO] [PID 27864] [TID 2] === Assist Quest Editor END ===
