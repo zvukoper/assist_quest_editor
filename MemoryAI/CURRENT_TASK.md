@@ -88,7 +88,7 @@ Web-ресурсы src/AssistQuestEditor.App/Web и data/world/sdo_points.json �
 
 Причина пустого Simulator найдена: C# snapshot сериализовался с PascalCase, тогда как Web UI ожидает camelCase.
 
-Текущая рабочая версия: 1.0.40.122-QUEST-GRAPH-MENU-R1.
+Текущая рабочая версия: 1.0.40.123-QUEST-GRAPH-DRAG-CONNECT-R1.
 
 Последние рабочие вехи:
 - 1.0.40.106 — исправлена camelCase сериализация Simulator snapshot;

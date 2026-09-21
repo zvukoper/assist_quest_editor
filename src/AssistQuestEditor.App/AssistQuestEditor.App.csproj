@@ -11,10 +11,10 @@
     <Prefer32Bit>false</Prefer32Bit>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
 
-    <Version>1.0.40.122</Version>
-    <AssemblyVersion>1.0.40.122</AssemblyVersion>
-    <FileVersion>1.0.40.122</FileVersion>
-    <AssemblyInformationalVersion>1.0.40.122-QUEST-GRAPH-MENU-R1</AssemblyInformationalVersion>
+    <Version>1.0.40.123</Version>
+    <AssemblyVersion>1.0.40.123</AssemblyVersion>
+    <FileVersion>1.0.40.123</FileVersion>
+    <AssemblyInformationalVersion>1.0.40.123-QUEST-GRAPH-DRAG-CONNECT-R1</AssemblyInformationalVersion>
     <PublishSingleFile>true</PublishSingleFile>
     <SelfContained>true</SelfContained>
     <RuntimeIdentifier>win-x64</RuntimeIdentifier>

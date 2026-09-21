@@ -246,6 +246,107 @@
     let dragState = null;
     let panState = null;
 
+    /**
+     * Поиск сокета под указателем по геометрии, а не по hit-тесту DOM.
+     *
+     * Причина: круг сокета лежит на границе ноды, и если другая нода перекрывает
+     * её край, прямоугольник верхней ноды перехватывает нажатие. Тогда клик по
+     * сокету попадает в ноду, связь не создаётся, а курсор мигает между
+     * «палец» (сокет) и «рука» (нода).
+     *
+     * Здесь перебираются все сокеты и выбирается ближайший к указателю в
+     * пределах радиуса. Радиус чуть больше видимого круга, поэтому попасть
+     * в сокет легко, но соседние сокеты не перепутываются.
+     */
+    const socketAtPointer = (clientX, clientY, radiusPx = 14) => {
+      const nodeElements = svg.querySelectorAll(".node");
+      let best = null;
+      let bestDistance = Number.POSITIVE_INFINITY;
+
+      nodeElements.forEach(nodeElement => {
+        nodeElement.querySelectorAll(".socketGroup").forEach(group => {
+          const shape = group.querySelector(".socket");
+          if (!shape) return;
+
+          const box = shape.getBoundingClientRect();
+          if (box.width === 0 && box.height === 0) return;
+
+          const centerX = box.x + box.width / 2;
+          const centerY = box.y + box.height / 2;
+          const distance = Math.hypot(clientX - centerX, clientY - centerY);
+
+          if (distance <= radiusPx && distance < bestDistance) {
+            bestDistance = distance;
+            best = { nodeElement, group, distance };
+          }
+        });
+      });
+
+      if (!best) return null;
+
+      return {
+        nodeId: best.nodeElement.dataset.nodeId,
+        socketId: best.group.dataset.socketId,
+        direction: best.group.dataset.socketDirection
+      };
+    };
+
+    /**
+     * Сокет под курсором в последнем pointermove.
+     * Нужен, чтобы завершить соединение с учётом снапа и подсветки.
+     */
+    let hoveredSocket = null;
+
+    /** Радиус снапа: в этих пределах сокет считается целью. */
+    const SOCKET_SNAP_RADIUS = 22;
+
+    /**
+     * Подсветка сокета под курсором и подсказка о результате соединения.
+     *
+     * Правила классов:
+     *   hovered      — указатель на сокете (толстая белая обводка);
+     *   compatible   — Input, который примет выбранный Output (зелёная обводка);
+     *   incompatible — Input, который соединение не примет (красная обводка).
+     *
+     * Подсветка снимается со всех сокетов каждый раз: иначе при движении
+     * оставались бы «залипшие» обводки на ранее наведённых сокетах.
+     */
+    const updateSocketHover = (clientX, clientY) => {
+      const target = socketAtPointer(clientX, clientY);
+      hoveredSocket = target;
+
+      svg.querySelectorAll(".socketGroup").forEach(group => {
+        const nodeElement = group.closest(".node");
+        const nodeId = nodeElement?.dataset.nodeId;
+        const socketId = group.dataset.socketId;
+        const direction = group.dataset.socketDirection;
+        const isHovered = Boolean(target) &&
+          target.nodeId === nodeId &&
+          target.socketId === socketId;
+
+        group.classList.toggle("hovered", isHovered);
+        group.classList.toggle(
+          "compatible",
+          isHovered && direction === "Input" && isCompatibleInput(nodeId, socketId)
+        );
+        group.classList.toggle(
+          "incompatible",
+          isHovered && Boolean(pendingOutput) && direction === "Input" &&
+            !isCompatibleInput(nodeId, socketId)
+        );
+      });
+    };
+
+    /** Снять подсветку со всех сокетов. */
+    const clearSocketHover = () => {
+      hoveredSocket = null;
+      svg.querySelectorAll(".socketGroup").forEach(group => {
+        group.classList.remove("hovered", "incompatible");
+        // Класс compatible также выставляется в updateGraphVisuals по общему
+        // правилу совместимости, поэтому здесь его не трогаем.
+      });
+    };
+
     const setViewBox = () => {
       svg.setAttribute("viewBox", graphViewport.x + " " + graphViewport.y + " " + graphViewport.width + " " + graphViewport.height);
     };
@@ -285,15 +386,51 @@
 
       if (event.button !== 0) return;
 
-      if (pendingOutput && !event.target.closest(".socketGroup")) {
+      // Сокет ищется по геометрии, а не через event.target: если край ноды
+      // перекрыт другой нодой, прямоугольник верхней ноды перехватывает нажатие,
+      // и клик по сокету достаётся ноде. Это же было причиной мигания курсора.
+      const hitSocket = socketAtPointer(event.clientX, event.clientY);
+
+      if (pendingOutput && !hitSocket) {
         pendingOutput = null;
         pendingConnectionPoint = null;
         refreshGraphEdges(svg);
         updateGraphVisuals();
       }
 
-      const socket = event.target.closest(".socketGroup");
-      if (socket) return;
+      // Нажатие на Output начинает протяжку кабеля.
+      //
+      // Только `click` недостаточно: если нажать на Output, протянуть мышь и
+      // отпустить над Input, браузер присылает click общему предку точки
+      // нажатия и отпускания, а не сокетам, поэтому связь не создавалась.
+      if (hitSocket && hitSocket.direction === "Output") {
+        pendingOutput = { nodeId: hitSocket.nodeId, socketId: hitSocket.socketId };
+        pendingConnectionPoint = clientToGraph(svg, event.clientX, event.clientY);
+        selectedGraphNodeId = hitSocket.nodeId;
+
+        // Захват указателя: иначе pointerup потеряется, если отпустить за
+        // пределами канваса, и кабель останется висеть незавершённым.
+        try {
+          svg.setPointerCapture?.(event.pointerId);
+        } catch {
+          // Синтетические указатели могут не захватываться.
+        }
+
+        updateGraphVisuals();
+        refreshGraphEdges(svg);
+        updateGraphInspector(document.getElementById("inspector"));
+        event.preventDefault();
+        return;
+      }
+
+      // Нажатие на Input завершает соединение, если источник уже выбран.
+      // Это второй путь (первый — отпускание над Input в finishDrag).
+      if (hitSocket && hitSocket.direction === "Input") {
+        if (completeConnectionAt(event.clientX, event.clientY, event.pointerId)) {
+          event.preventDefault();
+        }
+        return;
+      }
 
       const node = event.target.closest(".node");
       if (!node) return;
@@ -343,10 +480,27 @@
       }
 
       if (pendingOutput) {
-        pendingConnectionPoint = clientToGraph(svg, event.clientX, event.clientY);
+        // Снап: конец кабеля притягивается к сокету под курсором.
+        // Так видно, что именно этот сокет станет целью соединения.
+        const snapped = socketAtPointer(event.clientX, event.clientY, SOCKET_SNAP_RADIUS);
+        if (snapped && snapped.direction === "Input") {
+          const point = graphSocketPoint(snapped.nodeId, snapped.socketId);
+          if (point) {
+            pendingConnectionPoint = point;
+          } else {
+            pendingConnectionPoint = clientToGraph(svg, event.clientX, event.clientY);
+          }
+        } else {
+          pendingConnectionPoint = clientToGraph(svg, event.clientX, event.clientY);
+        }
+
         refreshGraphEdges(svg);
         updateGraphVisuals();
       }
+
+      // Подсветка сокета под курсором — работает и без выбранного Output,
+      // чтобы цель была видна заранее.
+      updateSocketHover(event.clientX, event.clientY);
 
       if (!dragState || event.pointerId !== dragState.pointerId) return;
 
@@ -387,6 +541,14 @@
         return;
       }
 
+      // Завершение протяжки кабеля проверяется ДО раннего выхода по dragState.
+      // При протяжке от сокета нода не перетаскивается, поэтому dragState пуст,
+      // и прежний `return` ниже не давал соединению завершиться.
+      if (pendingOutput && (!dragState || event.pointerId === dragState.pointerId)) {
+        completeConnectionAt(event.clientX, event.clientY, event.pointerId);
+        dragState = null;
+        return;
+      }
       if (!dragState || event.pointerId !== dragState.pointerId) return;
 
       const finished = dragState;
@@ -417,6 +579,53 @@
         }
       }
     };
+
+    /**
+     * Завершение соединения в точке отпускания.
+     *
+     * Сокет ищется с радиусом снапа (`SOCKET_SNAP_RADIUS`, а не `radiusPx` по
+     * умолчанию): пользователь ведёт кабель к подсвеченной цели, и небольшой
+     * промах на несколько пикселей не должен отменять соединение.
+     *
+     * Возвращает `true`, если связь была создана.
+     */
+    const completeConnectionAt = (clientX, clientY, pointerId) => {
+      if (!pendingOutput) return false;
+
+      const target = socketAtPointer(clientX, clientY, SOCKET_SNAP_RADIUS);
+      if (!target) return false;
+
+      const { nodeId, socketId, direction } = target;
+
+      if (direction !== "Input" || !isCompatibleInput(nodeId, socketId)) return false;
+
+      queueDirtyNodes(pendingOutput.nodeId, nodeId);
+      send({
+        action: "graph_connect",
+        fromNodeId: pendingOutput.nodeId,
+        fromSocketId: pendingOutput.socketId,
+        toNodeId: nodeId,
+        toSocketId: socketId
+      });
+
+      pendingOutput = null;
+      pendingConnectionPoint = null;
+
+      try {
+        svg.releasePointerCapture?.(pointerId);
+      } catch {
+        // Захват мог быть уже снят браузером.
+      }
+
+      clearSocketHover();
+      refreshGraphEdges(svg);
+      updateGraphVisuals();
+      return true;
+    };
+
+    // Уход указателя с канваса снимает подсветку: иначе последний наведённый
+    // сокет остался бы обведённым.
+    svg.addEventListener("pointerleave", () => clearSocketHover());
 
     svg.addEventListener("pointerup", finishDrag);
     svg.addEventListener("pointercancel", finishDrag);

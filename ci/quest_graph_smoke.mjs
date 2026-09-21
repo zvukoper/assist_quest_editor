@@ -97,6 +97,169 @@ try {
   await page.locator("#questGraphSvg .nodeTitle", { hasText: "Start" }).waitFor();
   await page.locator("#inspector input#graphEditTitle").waitFor();
 
+  // Regression: соединение протяжкой от Output к Input.
+  //
+  // Раньше соединение обрабатывалось только в обработчике `click`. Если нажать
+  // на Output, протянуть мышь и отпустить над Input, браузер присылает click
+  // общему предку точек нажатия и отпускания, а не сокетам — ни источник не
+  // выбирался, ни связь не создавалась. Проверяем реальными событиями мыши.
+  //
+  // Шаг выполняется до перемещений нод: иначе DOM-позиции уходят от исходных,
+  // и сокет может оказаться за границей компактного окна.
+  {
+    const outCircle = page.locator("[data-node-id='start'] .socketGroup[data-socket-direction='Output'] .socket");
+    const inCircle = page.locator("[data-node-id='end'] .socketGroup[data-socket-direction='Input'] .socket");
+
+    const fromBox = await outCircle.boundingBox();
+    const toBox = await inCircle.boundingBox();
+    if (!fromBox || !toBox) {
+      throw new Error("Не удалось получить границы сокетов для проверки протяжки.");
+    }
+
+    const fromX = fromBox.x + fromBox.width / 2;
+    const fromY = fromBox.y + fromBox.height / 2;
+    const toX = toBox.x + toBox.width / 2;
+    const toY = toBox.y + toBox.height / 2;
+
+    const beforeIndex = await page.evaluate(() => window.__messages.length);
+
+    await page.mouse.move(fromX, fromY);
+    await page.mouse.down();
+    await page.mouse.move((fromX + toX) / 2, (fromY + toY) / 2);
+    await page.mouse.move(toX, toY);
+    await page.mouse.up();
+    await page.waitForTimeout(30);
+
+    const dragConnect = await page.evaluate(index =>
+      window.__messages.slice(index).find(message => message.action === "graph_connect"),
+      beforeIndex
+    );
+
+    if (!dragConnect) {
+      throw new Error("Протяжка кабеля от Output к Input не создала соединение.");
+    }
+
+    if (dragConnect.fromNodeId !== "start" || dragConnect.fromSocketId !== "start.out") {
+      throw new Error("Протяжка началась не с start.out: " + JSON.stringify(dragConnect));
+    }
+
+    // Протяжка кабеля не должна двигать ноду: для неё не создаётся dragState.
+    const dragMoves = await page.evaluate(index =>
+      window.__messages.slice(index).filter(message => message.action === "graph_update_node").length,
+      beforeIndex
+    );
+    if (dragMoves !== 0) {
+      throw new Error("Протяжка кабеля сдвинула ноду (graph_update_node: " + dragMoves + ").");
+    }
+
+    if (await page.evaluate(() => window.__assistQuestGraphRuntime?.getPendingOutput?.())) {
+      throw new Error("После успешного соединения источник не сброшен.");
+    }
+  }
+
+  // Regression: подсветка сокета под курсором и снап кабеля.
+  //
+  // Сокет лежит на границе ноды, поэтому без подсветки непонятно, попал ли
+  // указатель в сокет. Проверяем обводку (класс hovered), подтверждение
+  // совместимости (compatible) и притягивание конца кабеля к центру сокета.
+  {
+    const outCircle = page.locator("[data-node-id='start'] .socketGroup[data-socket-direction='Output'] .socket");
+    const inCircle = page.locator("[data-node-id='end'] .socketGroup[data-socket-direction='Input'] .socket");
+
+    const fromBox = await outCircle.boundingBox();
+    const toBox = await inCircle.boundingBox();
+    if (!fromBox || !toBox) {
+      throw new Error("Не удалось получить границы сокетов для проверки подсветки.");
+    }
+
+    const fromX = fromBox.x + fromBox.width / 2;
+    const fromY = fromBox.y + fromBox.height / 2;
+    const toX = toBox.x + toBox.width / 2;
+    const toY = toBox.y + toBox.height / 2;
+
+    // 1. Наведение на Output: белая обводка и курсор crosshair.
+    await page.mouse.move(fromX, fromY);
+    await page.waitForTimeout(40);
+
+    const outputHover = await page.evaluate(() => {
+      const group = document.querySelector(
+        "[data-node-id='start'] .socketGroup[data-socket-direction='Output']"
+      );
+      return {
+        hovered: group?.classList.contains("hovered") ?? false,
+        cursor: group ? getComputedStyle(group).cursor : null
+      };
+    });
+
+    if (!outputHover.hovered) {
+      throw new Error("Сокет Output не подсвечен при наведении.");
+    }
+    if (outputHover.cursor !== "crosshair") {
+      throw new Error("Курсор над сокетом не crosshair: " + outputHover.cursor);
+    }
+
+    // 2. Выбираем Output и наводим на совместимый Input.
+    await page.mouse.down();
+    await page.mouse.up();
+    await page.waitForTimeout(30);
+    await page.mouse.move(toX, toY);
+    await page.waitForTimeout(50);
+
+    const inputHover = await page.evaluate(() => {
+      const group = document.querySelector(
+        "[data-node-id='end'] .socketGroup[data-socket-direction='Input']"
+      );
+      return {
+        hovered: group?.classList.contains("hovered") ?? false,
+        compatible: group?.classList.contains("compatible") ?? false,
+        cursor: group ? getComputedStyle(group).cursor : null
+      };
+    });
+
+    if (!inputHover.hovered || !inputHover.compatible) {
+      throw new Error(
+        "Совместимый Input не подсвечен как hovered+compatible: " + JSON.stringify(inputHover)
+      );
+    }
+    if (inputHover.cursor !== "copy") {
+      throw new Error("Курсор над совместимым Input не copy: " + inputHover.cursor);
+    }
+
+    // 3. Снап: конец кабеля совпадает с центром целевого сокета.
+    const snap = await page.evaluate(({ x, y }) => {
+      const path = document.querySelector("#questGraphConnectionPreview .pendingEdge");
+      if (!path) return null;
+      const match = path.getAttribute("d").match(/\s([-\d.]+)\s([-\d.]+)$/);
+      if (!match) return null;
+      const svg = document.getElementById("questGraphSvg");
+      const expected = new DOMPoint(x, y).matrixTransform(svg.getScreenCTM().inverse());
+      return { actualX: Number(match[1]), actualY: Number(match[2]),
+               expectedX: expected.x, expectedY: expected.y };
+    }, { x: toX, y: toY });
+
+    if (!snap) {
+      throw new Error("Не удалось получить конец preview-кабеля для проверки снапа.");
+    }
+    if (Math.abs(snap.actualX - snap.expectedX) > 0.5 ||
+        Math.abs(snap.actualY - snap.expectedY) > 0.5) {
+      throw new Error(
+        "Кабель не притянут к центру сокета: actual=(" +
+        snap.actualX + "," + snap.actualY + "), expected=(" +
+        snap.expectedX + "," + snap.expectedY + ")"
+      );
+    }
+
+    // 4. Уход указателя снимает подсветку.
+    await page.mouse.move(5, 5);
+    await page.waitForTimeout(40);
+    if (await page.locator("#questGraphSvg .socketGroup.hovered").count()) {
+      throw new Error("При уходе указателя подсветка сокета не снята.");
+    }
+
+    // Сбрасываем выбранный Output, чтобы не влиять на следующие шаги.
+    await page.keyboard.press("Escape");
+  }
+
   await page.locator("[data-node-id='choice']").click();
   const parameterKeys = page.locator("[data-param-key]");
   await parameterKeys.first().waitFor();

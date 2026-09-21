@@ -152,9 +152,13 @@ Write-Host "Проверка: опубликован ровно один фай�
 # После успешной публикации временные диагностические логи удаляются: если
 # сборка прошла, они не нужны. При неудачной сборке логи сохраняются для разбора.
 $logsDir = Join-Path $PSScriptRoot 'MemoryAI\LOGS'
+$preservedLogs = @('README.md')
+# Переменная выше — единый источник истины: тот же список используется и при
+# удалении, и при проверке результата. Если развести условия, проверка начнёт
+# считать сохранённый файл остатком и ложно сообщит об ошибке очистки.
 if (Test-Path -LiteralPath $logsDir) {
     Get-ChildItem -LiteralPath $logsDir -File -Force -ErrorAction SilentlyContinue |
-        Where-Object { $_.Name -ne 'README.md' } |
+        Where-Object { $preservedLogs -notcontains $_.Name } |
         Remove-Item -Force -ErrorAction Stop
 
     Get-ChildItem -LiteralPath $logsDir -Directory -Force -ErrorAction SilentlyContinue |
