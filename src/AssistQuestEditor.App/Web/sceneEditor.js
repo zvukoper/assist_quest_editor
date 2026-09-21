@@ -638,8 +638,10 @@
     fitGraph(document.getElementById("sceneGraphSvg"));
   }
 
-  window.addEventListener("message", event => {
-    const data = event.data;
+  const handleSceneHostMessage = event => {
+    const data = typeof event.data === "string"
+      ? JSON.parse(event.data)
+      : event.data;
     if (!data) return;
 
     if (data.type === "scene_catalog") {
@@ -663,7 +665,14 @@
         if (ws && ins) render(ws, ins);
       }
     }
-  });
+  };
+
+  window.addEventListener("message", handleSceneHostMessage);
+
+  const webview = window.chrome?.webview;
+  if (typeof webview?.addEventListener === "function") {
+    webview.addEventListener("message", handleSceneHostMessage);
+  }
 
   document.addEventListener("keydown", event => {
     if (location.hash.toLowerCase() !== "#scene") return;
