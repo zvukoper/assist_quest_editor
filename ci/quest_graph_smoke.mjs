@@ -245,9 +245,10 @@ try {
   }
 
   // Right-click Add menu: it must stay inside the viewport and scroll by mouse wheel.
-  const contextX = svgBox.x + 240;
-  const contextY = svgBox.y + 140;
-  await page.mouse.click(contextX, contextY, { button: "right" });
+  await page.locator("#questGraphSvg").click({
+    button: "right",
+    position: { x: 240, y: 140 }
+  });
   await page.getByText("Add", { exact: true }).waitFor();
 
   const addMenu = page.locator(".graphContextMenu");
