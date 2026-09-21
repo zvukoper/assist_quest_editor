@@ -111,7 +111,10 @@ public sealed class QuestGraphStoreTests
         var store = new QuestGraphStore(QuestGraphFactory.CreateStarter());
 
         var node = store.AddNode("Choice", "Выбор", 420, 120);
-        Assert.Equal(2, node.Sockets.Count(socket => socket.Direction == SocketDirection.Output));
+        Assert.Collection(
+            node.Sockets.Where(socket => socket.Direction == SocketDirection.Output),
+            _ => { },
+            _ => { });
 
         var parameters = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
         {
@@ -121,7 +124,12 @@ public sealed class QuestGraphStoreTests
         var updated = store.UpdateNode(node.NodeId, parameters: parameters);
 
         Assert.NotNull(updated);
-        Assert.Equal(4, updated!.Sockets.Count(socket => socket.Direction == SocketDirection.Output));
+        Assert.Collection(
+            updated!.Sockets.Where(socket => socket.Direction == SocketDirection.Output),
+            _ => { },
+            _ => { },
+            _ => { },
+            _ => { });
         Assert.Contains(updated.Sockets, socket => socket.SocketId == $"{node.NodeId}.choice4");
     }
 
