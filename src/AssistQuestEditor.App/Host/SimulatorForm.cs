@@ -327,6 +327,10 @@ public sealed class SimulatorForm : WebViewForm
 
     private void Runtime_Published(object? sender, QuestRuntimeEvent e)
     {
+        AppLogger.Info(
+            "Quest Runtime: событие.",
+            $"event={e.EventType}; source={e.Source}; node={e.NodeId ?? "<none>"}; status={_runtime.State.Status}; waiting={_runtime.State.WaitingFor ?? "<none>"}; transition={_runtime.State.LastTransition}; message={e.Message}");
+
         if (IsDisposed || !IsHandleCreated)
         {
             return;
@@ -355,6 +359,10 @@ public sealed class SimulatorForm : WebViewForm
 
     private void Events_Published(SimulatorEvent e)
     {
+        AppLogger.Info(
+            "Simulator: событие опубликовано.",
+            $"event={e.EventType}; source={e.Source}; payload={JsonSerializer.Serialize(e.Payload)}");
+
         if (IsDisposed || !IsHandleCreated)
         {
             return;
