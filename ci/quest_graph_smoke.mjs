@@ -230,11 +230,16 @@ try {
   });
 
   const beforeConnectMessages = await page.evaluate(() => window.__messages.length);
-  const outputState = await page.locator(
-    "[data-node-id='start'].connection-source"
-  ).count();
-  if (outputState !== 1) {
-    throw new Error("После выбора Start Output нода не отмечена как источник соединения.");
+  const pendingOutput = await page.evaluate(() =>
+    window.__assistQuestGraphRuntime?.getPendingOutput?.()
+  );
+  if (!pendingOutput ||
+      pendingOutput.nodeId !== "start" ||
+      pendingOutput.socketId !== "start.out") {
+    throw new Error(
+      "После выбора Start Output не установлен pendingOutput: " +
+      JSON.stringify(pendingOutput)
+    );
   }
 
   const connectContextX = svgBox.x + svgBox.width * 0.72;
