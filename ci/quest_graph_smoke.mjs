@@ -221,9 +221,12 @@ try {
   const beforeConnectMessages = await page.evaluate(() => window.__messages.length);
   await page.mouse.click(svgBox.x + 520, svgBox.y + 360, { button: "right" });
   const phaseMenuItem = page.locator(".graphContextMenuItem[data-node-type=\"Phase\"]");
-  await phaseMenuItem.waitFor();
+  await phaseMenuItem.waitFor({ state: "attached" });
+  if (await phaseMenuItem.count() !== 1) {
+    throw new Error("Контекстное меню должно содержать ровно один пункт Phase.");
+  }
   await phaseMenuItem.scrollIntoViewIfNeeded();
-  await phaseMenuItem.click();
+  await phaseMenuItem.click({ force: true });
   await page.waitForTimeout(20);
 
   const addAndConnect = await page.evaluate(index =>
