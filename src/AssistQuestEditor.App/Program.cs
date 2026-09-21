@@ -15,8 +15,10 @@ internal static class Program
             ApplicationConfiguration.Initialize();
 
             AppLogger.Info("Загрузка СДО world data.");
-            var worldPoints = SdoWorldDataLoader.Load();
-            AppLogger.Info("СДО world data загружены.", $"points={worldPoints.Count}");
+            var sdoPoints = SdoWorldDataLoader.Load();
+            var cityPoints = CityWorldDataLoader.Load();
+            var worldPoints = sdoPoints.Concat(cityPoints).ToArray();
+            AppLogger.Info("World data загружены.", $"sdo={sdoPoints.Count}; cities={cityPoints.Count}; total={worldPoints.Length}");
 
             var simulatorAdapter = new SimulatorDataSourceAdapter(worldPoints);
             var worldCount = simulatorAdapter.Channels.Get<WorldState>("world").Value.Points.Count;
