@@ -22,11 +22,15 @@ public sealed class JournalForm : Form
     public JournalForm()
     {
         Text = "Assist Quest Editor — Журнал событий";
-        StartPosition = FormStartPosition.CenterParent;
-        Size = new Size(620, 500);
+        StartPosition = FormStartPosition.Manual;
+        var workArea = Screen.PrimaryScreen?.WorkingArea ?? new Rectangle(0, 0, 1280, 800);
+        var defaultWidth = Math.Min(620, Math.Max(420, workArea.Width / 3));
+        Bounds = new Rectangle(workArea.Right - defaultWidth, workArea.Top, defaultWidth, workArea.Height);
         MinimumSize = new Size(420, 260);
         BackColor = Color.FromArgb(10, 12, 16);
         ForeColor = Color.FromArgb(231, 237, 244);
+
+        WindowGeometryStore.Attach(this, "journal");
 
         var toolbar = new Panel
         {

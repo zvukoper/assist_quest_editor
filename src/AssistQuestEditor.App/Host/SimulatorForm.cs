@@ -25,7 +25,8 @@ public sealed class SimulatorForm : WebViewForm
         : base(
             "Assist Quest Editor — Симулятор",
             "simulator.html",
-            new Size(1440, 900))
+            new Size(1440, 900),
+            "simulator")
     {
         _hub = hub;
         _runtime = runtime ?? throw new ArgumentNullException(nameof(runtime));
@@ -374,7 +375,8 @@ public sealed class SimulatorForm : WebViewForm
     {
         QuestLogger.Info("Journal: отделение журнала.");
         _journalDetached = true;
-        AppUiPreferencesStore.Save(new AppUiPreferences(_journalDetached));
+        var preferences = AppUiPreferencesStore.Load();
+        AppUiPreferencesStore.Save(preferences with { JournalDetached = _journalDetached });
         OpenJournalWindow();
         QuestLogger.Info("Journal: настройка сохранена.", QuestLogger.Json(new { journalDetached = _journalDetached }));
         PushSnapshot();
@@ -384,7 +386,8 @@ public sealed class SimulatorForm : WebViewForm
     {
         QuestLogger.Info("Journal: возврат журнала в сайдбар.");
         _journalDetached = false;
-        AppUiPreferencesStore.Save(new AppUiPreferences(_journalDetached));
+        var preferences = AppUiPreferencesStore.Load();
+        AppUiPreferencesStore.Save(preferences with { JournalDetached = _journalDetached });
 
         if (_journalForm is not null)
         {

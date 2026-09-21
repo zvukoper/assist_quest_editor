@@ -10,13 +10,20 @@ public sealed class MainForm : WebViewForm
     private readonly QuestRuntime _runtime;
     private readonly Dictionary<string, EditorForm> _editors = new(StringComparer.OrdinalIgnoreCase);
     private SimulatorForm? _simulator;
+    private SettingsForm? _settings;
 
     public MainForm(IDataChannelHub hub)
         : base(
             "Assist Quest Editor — Редактор",
             "main.html",
-            new Size(1280, 820))
+            new Size(1280, 820),
+            "main")
     {
+        if (!WindowGeometryStore.HasSaved("main"))
+        {
+            StartPosition = FormStartPosition.CenterScreen;
+        }
+
         _hub = hub;
         _questGraph = new QuestGraphStore(QuestGraphFactory.CreateStarter());
         _runtime = new QuestRuntime(_questGraph, _hub);
@@ -29,6 +36,7 @@ public sealed class MainForm : WebViewForm
             }
 
             _simulator?.Close();
+            _settings?.Close();
         };
     }
 
@@ -60,6 +68,10 @@ public sealed class MainForm : WebViewForm
 
                 case "push_logs":
                     StartLogPush();
+                    break;
+
+                case "open_settings":
+                    OpenSettings();
                     break;
             }
         }
@@ -123,6 +135,26 @@ public sealed class MainForm : WebViewForm
         }));
     }
 
+    private void OpenSettings()
+    {
+        if (_settings is not null && !_settings.IsDisposed)
+        {
+            _settings.BringToFront();
+            _settings.Activate();
+            return;
+        }
+
+        _settings = new SettingsForm();
+        _settings.ResetWindowSettingsRequested += Settings_ResetWindowSettingsRequested;
+        _settings.FormClosed += (_, _) => _settings = null;
+        _settings.Show(this);
+    }
+
+    private void Settings_ResetWindowSettingsRequested(object? sender, EventArgs e)
+    {
+        WindowGeometryStore.ClearSavedGeometry();
+    }
+
     private void OpenEditor(string editor)
     {
         var page = editor.ToLowerInvariant() switch
@@ -171,6 +203,11 @@ public sealed class MainForm : WebViewForm
 
     private void PlaceOnSecondaryScreen(Form form)
     {
+        if (WindowGeometryStore.HasSaved("simulator"))
+        {
+            return;
+        }
+
         var screens = Screen.AllScreens;
         var target = screens.Length > 1
             ? screens.FirstOrDefault(screen => !screen.Primary)
@@ -193,6 +230,11 @@ public sealed class MainForm : WebViewForm
 
     private void PlaceAuxiliaryWindow(Form form, int offset)
     {
+        if (form is EditorForm editorForm && WindowGeometryStore.HasSaved(editorForm.WindowKey))
+        {
+            return;
+        }
+
         var screens = Screen.AllScreens;
         var target = screens.FirstOrDefault(screen => screen.Primary) ?? Screen.PrimaryScreen;
         if (target is null)

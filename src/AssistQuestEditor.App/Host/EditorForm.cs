@@ -25,9 +25,12 @@ public sealed class EditorForm : WebViewForm
     private string? _lastDefinitionPath;
     private bool _documentDirty;
 
+    public string WindowKey { get; }
+
     public EditorForm(string title, string page, IDataChannelHub hub, QuestGraphStore questGraph, QuestRuntime runtime)
-        : base($"Assist Quest Editor — {title}", page, new Size(1380, 900))
+        : base($"Assist Quest Editor — {title}", page, new Size(1380, 900), "editor:" + page)
     {
+        WindowKey = "editor:" + page;
         _player = hub.Get<PlayerState>("player");
         _selection = hub.Get<WorldSelectionState>("world-selection");
         _questGraph = questGraph;

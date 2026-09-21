@@ -10,7 +10,7 @@ public abstract class WebViewForm : Form
     private bool _browserReadyRaised;
     protected readonly WebView2 Browser;
 
-    protected WebViewForm(string title, string page, Size initialSize)
+    protected WebViewForm(string title, string page, Size initialSize, string? windowKey = null)
     {
         Text = title;
         _page = page;
@@ -30,6 +30,7 @@ public abstract class WebViewForm : Form
         };
 
         Controls.Add(Browser);
+        WindowGeometryStore.Attach(this, windowKey ?? page);
         Browser.NavigationCompleted += Browser_NavigationCompleted;
         Load += HandleLoad;
     }

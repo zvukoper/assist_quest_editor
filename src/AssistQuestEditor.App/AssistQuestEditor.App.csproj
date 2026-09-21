@@ -11,10 +11,10 @@
     <Prefer32Bit>false</Prefer32Bit>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
 
-    <Version>1.0.40.120</Version>
-    <AssemblyVersion>1.0.40.120</AssemblyVersion>
-    <FileVersion>1.0.40.120</FileVersion>
-    <AssemblyInformationalVersion>1.0.40.120-QUEST-GRAPH-AUTHORING-R1</AssemblyInformationalVersion>
+    <Version>1.0.40.121</Version>
+    <AssemblyVersion>1.0.40.121</AssemblyVersion>
+    <FileVersion>1.0.40.121</FileVersion>
+    <AssemblyInformationalVersion>1.0.40.121-QUEST-WINDOW-LAYOUT-R1</AssemblyInformationalVersion>
     <PublishSingleFile>true</PublishSingleFile>
     <SelfContained>true</SelfContained>
     <RuntimeIdentifier>win-x64</RuntimeIdentifier>

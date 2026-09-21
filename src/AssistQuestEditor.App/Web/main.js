@@ -16,6 +16,9 @@
     button.addEventListener("click", () => send({ action: button.dataset.action }));
   });
 
+  const settings = document.getElementById("settings");
+  settings?.addEventListener("click", () => send({ action: "open_settings" }));
+
   const version = document.getElementById("version");
   const icon = version?.querySelector(".versionPushIcon");
 
