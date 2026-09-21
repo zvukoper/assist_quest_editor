@@ -733,7 +733,7 @@ public sealed class SimulatorForm : WebViewForm
         }));
     }
 
-    private void RequestSnapshot(string reason)
+    public void RequestSnapshot(string reason)
     {
         if (Browser.CoreWebView2 is null || IsDisposed || !IsHandleCreated ||
             _snapshotRequestScheduled)
