@@ -1,5 +1,18 @@
 # Журнал изменений памяти и архитектуры
 
+## 2026-09-21 — 1.0.40.111 Quest Runtime + CI diagnostics
+
+- завершено подключение canonical Quest Runtime к Simulator через Data Channel Hub;
+- Runtime пробуждается по `ChannelChanged` для ожидающих Condition/Interaction;
+- исправлено продолжение Runtime после выбора Choice;
+- добавлена матрица из семи автоматических сценариев: Graph, Parameters, Simple Runtime, Interaction, Event, Choice, Save/Load;
+- исправлены оставшиеся нарушения xUnit2013 в Graph Store tests;
+- CI продолжает остальные проверки после сбоя отдельного шага и формирует сводный `MemoryAI/LOGS/assist_quest_editor.log`;
+- CI сохраняет TRX и диагностический лог отдельным artifact;
+- Host логирует runtime transitions и Simulator events;
+- синхронизированы VersionInfo и `.csproj` на 1.0.40.111.
+
+
 ## 2026-09-20 — 1.0.40.110 Quest Graph authoring
 
 - добавлен pan canvas через среднюю кнопку мыши и Space + ЛКМ;
