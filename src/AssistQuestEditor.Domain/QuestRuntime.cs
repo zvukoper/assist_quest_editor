@@ -30,12 +30,14 @@ public sealed class QuestRuntime
 
     private readonly QuestGraphStore _graphStore;
     private readonly IDataChannelHub _hub;
+    private readonly SceneRuntime? _sceneRuntime;
     private DateTimeOffset? _waitUntil;
 
-    public QuestRuntime(QuestGraphStore graphStore, IDataChannelHub hub)
+    public QuestRuntime(QuestGraphStore graphStore, IDataChannelHub hub, SceneRuntime? sceneRuntime = null)
     {
         _graphStore = graphStore ?? throw new ArgumentNullException(nameof(graphStore));
         _hub = hub ?? throw new ArgumentNullException(nameof(hub));
+        _sceneRuntime = sceneRuntime;
         State = new QuestRuntimeState(
             graphStore.Value.Id,
             null,
@@ -46,6 +48,10 @@ public sealed class QuestRuntime
 
         _graphStore.Changed += GraphStore_Changed;
         _hub.Events.Published += Events_Published;
+        if (_sceneRuntime is not null)
+        {
+            _sceneRuntime.Published += SceneRuntime_Published;
+        }
 
         PublishSystem("Runtime создан");
     }
@@ -57,6 +63,7 @@ public sealed class QuestRuntime
     {
         ResetWaiting();
         ClearInterface();
+        _sceneRuntime?.Stop("Quest Runtime запускается заново.");
         State = State with
         {
             QuestId = _graphStore.Value.Id,
@@ -76,6 +83,7 @@ public sealed class QuestRuntime
     public void Stop(string reason = "Runtime остановлен")
     {
         ResetWaiting();
+        _sceneRuntime?.Stop(reason);
         ClearInterface();
         State = State with
         {
@@ -166,6 +174,11 @@ public sealed class QuestRuntime
             return;
         }
 
+        if (string.Equals(State.WaitingFor, "Scene", StringComparison.OrdinalIgnoreCase))
+        {
+            return;
+        }
+
         if (string.Equals(State.WaitingFor, "Choice", StringComparison.OrdinalIgnoreCase) &&
             value.EventType.Equals("ChoiceSelected", StringComparison.OrdinalIgnoreCase))
         {
@@ -220,6 +233,47 @@ public sealed class QuestRuntime
     }
 
     private void Events_Published(SimulatorEvent value) => HandleEvent(value);
+
+    private void SceneRuntime_Published(object? sender, SceneRuntimeEvent e)
+    {
+        if (!e.EventType.Equals("SceneCompleted", StringComparison.OrdinalIgnoreCase) ||
+            !string.Equals(State.WaitingFor, "Scene", StringComparison.OrdinalIgnoreCase))
+        {
+            return;
+        }
+
+        var node = FindCurrentNode();
+        if (node is null)
+        {
+            Fail("Scene завершилась, но DialogueScene node больше не существует.");
+            return;
+        }
+
+        var expectedSceneId = GetParameter(node, "sceneId");
+        if (!expectedSceneId.Equals(e.SceneId, StringComparison.OrdinalIgnoreCase))
+        {
+            return;
+        }
+
+        ResetWaiting();
+        ApplySceneChoice(e.SceneId, e.ChoiceId);
+        State = State with
+        {
+            Status = QuestRuntimeStatus.Running,
+            WaitingFor = null,
+            LastEvent = "SceneCompleted",
+            LastTransition = $"Scene «{e.SceneId}» завершена."
+        };
+
+        Publish(
+            "SceneCompleted",
+            "SceneRuntime",
+            node.NodeId,
+            $"Scene «{e.SceneId}» завершена, option={e.ChoiceId ?? "<none>"}.");
+
+        MoveToFirstOutput(node);
+        Advance();
+    }
 
     private void Advance()
     {
@@ -314,9 +368,40 @@ public sealed class QuestRuntime
                     break;
 
                 case "dialoguescene":
-                    ApplyDialogue(node);
-                    MoveToFirstOutput(node);
-                    break;
+                    if (_sceneRuntime is null)
+                    {
+                        ApplyDialogue(node);
+                        MoveToFirstOutput(node);
+                        break;
+                    }
+
+                    var sceneId = GetParameter(node, "sceneId");
+                    if (string.IsNullOrWhiteSpace(sceneId))
+                    {
+                        Fail($"DialogueScene «{node.NodeId}» не содержит sceneId.");
+                        return;
+                    }
+
+                    State = State with
+                    {
+                        Status = QuestRuntimeStatus.Waiting,
+                        WaitingFor = "Scene",
+                        LastEvent = "SceneRuntimeStarting",
+                        LastTransition = $"Запуск Scene «{sceneId}»."
+                    };
+
+                    Publish(
+                        "SceneRuntimeStarted",
+                        "QuestRuntime",
+                        node.NodeId,
+                        $"Запуск Scene «{sceneId}».");
+
+                    if (!_sceneRuntime.Start(sceneId))
+                    {
+                        Fail($"Не удалось запустить Scene «{sceneId}».");
+                    }
+
+                    return;
 
                 case "giveitem":
                     ApplyGiveItem(node, +1);
@@ -595,6 +680,11 @@ public sealed class QuestRuntime
     private void Complete()
     {
         ResetWaiting();
+        if (_sceneRuntime is not null &&
+            _sceneRuntime.State.Status is SceneRuntimeStatus.Running or SceneRuntimeStatus.Waiting)
+        {
+            _sceneRuntime.Stop("Quest завершён.");
+        }
         ClearInterface();
         SetQuestStatus(QuestStatus.Completed, GetQuestStep());
         State = State with
@@ -611,6 +701,11 @@ public sealed class QuestRuntime
     private void Fail(string message)
     {
         ResetWaiting();
+        if (_sceneRuntime is not null &&
+            _sceneRuntime.State.Status is SceneRuntimeStatus.Running or SceneRuntimeStatus.Waiting)
+        {
+            _sceneRuntime.Stop("Quest завершён с ошибкой.");
+        }
         ClearInterface();
         SetQuestStatus(QuestStatus.Failed, GetQuestStep());
         State = State with
@@ -689,6 +784,26 @@ public sealed class QuestRuntime
                 DialogueAnchor = node.NodeId
             },
             "QuestRuntime");
+    }
+
+    private void ApplySceneChoice(string sceneId, string? choiceId)
+    {
+        if (string.IsNullOrWhiteSpace(choiceId))
+        {
+            return;
+        }
+
+        var states = _hub.Get<RuntimeStatesState>("states").Value;
+        var variables = new Dictionary<string, string>(
+            states.Variables,
+            StringComparer.OrdinalIgnoreCase)
+        {
+            [$"scene.{sceneId}.lastChoiceId"] = choiceId
+        };
+
+        _hub.Get<RuntimeStatesState>("states").Set(
+            states with { Variables = variables },
+            "SceneRuntime");
     }
 
     private void ApplyGiveItem(QuestNode node, int sign)

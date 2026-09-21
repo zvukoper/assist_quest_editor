@@ -6,8 +6,13 @@ public static class AppLogger
 {
     private static readonly object Sync = new();
     private static string? _logPath;
+    private static int _writesSuppressed;
 
     public static string LogPath => _logPath ??= ResolveLogPath();
+    public static bool WritesSuppressed => Volatile.Read(ref _writesSuppressed) != 0;
+
+    public static void SuppressWrites() =>
+        Volatile.Write(ref _writesSuppressed, 1);
 
     public static void Info(string message, string? details = null) => Write("INFO", message, details);
     public static void Warn(string message, string? details = null) => Write("WARN", message, details);
@@ -24,6 +29,11 @@ public static class AppLogger
 
     private static void Write(string level, string message, string? details)
     {
+        if (WritesSuppressed)
+        {
+            return;
+        }
+
         try
         {
             var path = LogPath;

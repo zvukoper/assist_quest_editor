@@ -309,6 +309,88 @@ public sealed class QuestRuntimeTests
     }
 
     [Fact]
+    public void SceneRuntimeUsesCanonicalChoiceResource()
+    {
+        var hub = new SimulatorDataSourceAdapter(Array.Empty<WorldPoint>()).Channels;
+        var sceneRuntime = new SceneRuntime(SceneCatalogFactory.CreateStarter(), hub);
+
+        Assert.True(sceneRuntime.Start("ruslan_start"));
+        Assert.Equal(SceneRuntimeStatus.Waiting, sceneRuntime.State.Status);
+        Assert.Equal("Choice", sceneRuntime.State.WaitingFor);
+
+        var dialog = hub.Get<InterfaceState>("interfaces").Value.ActiveDialog;
+        Assert.NotNull(dialog);
+        Assert.Equal("Руслан", dialog!.Speaker);
+        Assert.Equal("Нужно найти особое мясо. Возьмёшься?", dialog.Text);
+        Assert.Equal(
+            new[] { "Да, берусь.", "Нет, сейчас не могу." },
+            dialog.Options.Select(option => option.Text).ToArray());
+
+        hub.Events.Publish(new SimulatorEvent(
+            "ChoiceSelected",
+            DateTimeOffset.UtcNow,
+            "Interface",
+            new Dictionary<string, string>
+            {
+                ["requestId"] = dialog.RequestId,
+                ["index"] = "1",
+                ["optionId"] = "ruslan.offer.accept"
+            }));
+
+        Assert.Equal(SceneRuntimeStatus.Completed, sceneRuntime.State.Status);
+        Assert.Equal("ruslan.offer.accept", sceneRuntime.State.LastChoiceId);
+        Assert.Equal("accept", sceneRuntime.State.CurrentNodeId);
+        Assert.Null(hub.Get<InterfaceState>("interfaces").Value.ActiveDialog);
+    }
+
+    [Fact]
+    public void DialogueSceneOrchestratesSceneRuntimeAndStoresChoice()
+    {
+        var start = Node("start", "Start");
+        var dialogue = Node("dialogue", "DialogueScene", ("sceneId", "ruslan_start"));
+        var end = Node("end", "End");
+
+        var graph = Graph(
+            new[] { start, dialogue, end },
+            new[]
+            {
+                C("start", start, "out", dialogue, "in"),
+                C("dialogue", dialogue, "out", end, "in")
+            });
+
+        var hub = new SimulatorDataSourceAdapter(Array.Empty<WorldPoint>()).Channels;
+        var sceneRuntime = new SceneRuntime(SceneCatalogFactory.CreateStarter(), hub);
+        var questRuntime = new QuestRuntime(
+            new QuestGraphStore(graph),
+            hub,
+            sceneRuntime);
+
+        questRuntime.Start();
+
+        Assert.Equal(QuestRuntimeStatus.Waiting, questRuntime.State.Status);
+        Assert.Equal("Scene", questRuntime.State.WaitingFor);
+
+        var dialogRequest = hub.Get<InterfaceState>("interfaces").Value.ActiveDialog;
+        Assert.NotNull(dialogRequest);
+        hub.Events.Publish(new SimulatorEvent(
+            "ChoiceSelected",
+            DateTimeOffset.UtcNow,
+            "Interface",
+            new Dictionary<string, string>
+            {
+                ["requestId"] = dialogRequest!.RequestId,
+                ["index"] = "2",
+                ["optionId"] = "ruslan.offer.decline"
+            }));
+
+        Assert.Equal(QuestRuntimeStatus.Completed, questRuntime.State.Status);
+        Assert.Equal("end", questRuntime.State.CurrentNodeId);
+        Assert.Equal(
+            "ruslan.offer.decline",
+            hub.Get<RuntimeStatesState>("states").Value.Variables["scene.ruslan_start.lastChoiceId"]);
+    }
+
+    [Fact]
     public void Scenario07_SaveLoad()
     {
         var graph = QuestGraphFactory.CreateStarter();

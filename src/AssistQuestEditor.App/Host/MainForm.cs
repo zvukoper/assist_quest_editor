@@ -7,6 +7,8 @@ public sealed class MainForm : WebViewForm
 {
     private readonly IDataChannelHub _hub;
     private readonly QuestGraphStore _questGraph;
+    private readonly SceneCatalog _sceneCatalog;
+    private readonly SceneRuntime _sceneRuntime;
     private readonly QuestRuntime _runtime;
     private readonly Dictionary<string, EditorForm> _editors = new(StringComparer.OrdinalIgnoreCase);
     private SimulatorForm? _simulator;
@@ -26,10 +28,15 @@ public sealed class MainForm : WebViewForm
 
         _hub = hub;
         _questGraph = new QuestGraphStore(QuestGraphFactory.CreateStarter());
-        _runtime = new QuestRuntime(_questGraph, _hub);
+        _sceneCatalog = SceneCatalogFactory.CreateStarter();
+        _sceneRuntime = new SceneRuntime(_sceneCatalog, _hub);
+        _runtime = new QuestRuntime(_questGraph, _hub, _sceneRuntime);
+        _sceneRuntime.Published += SceneRuntime_Published;
         Shown += (_, _) => OpenSimulator();
         FormClosed += (_, _) =>
         {
+            _sceneRuntime.Published -= SceneRuntime_Published;
+
             foreach (var editor in _editors.Values.ToArray())
             {
                 editor.Close();
@@ -101,7 +108,18 @@ public sealed class MainForm : WebViewForm
             {
                 result = GitLogPublisher.PublishLogs();
                 if (!result.Success)
-                    AppLogger.Error("GitHub: загрузка LOGS не выполнена.", details: result.Message + Environment.NewLine + result.Details);
+                {
+                    AppLogger.Error(
+                        "GitHub: загрузка LOGS не выполнена.",
+                        details: result.Message + Environment.NewLine + result.Details);
+                }
+                else
+                {
+                    // После успешного commit/push журнал уже находится в GitHub.
+                    // Все последующие события процесса до выхода должны оставаться
+                    // только визуальными, иначе они загрязнят опубликованный файл.
+                    AppLogger.SuppressWrites();
+                }
             }
             catch (Exception ex)
             {
@@ -131,6 +149,14 @@ public sealed class MainForm : WebViewForm
             state,
             message
         }));
+    }
+
+    private void SceneRuntime_Published(object? sender, SceneRuntimeEvent e)
+    {
+        AppLogger.Info(
+            "Scene Runtime: событие.",
+            $"event={e.EventType}; scene={e.SceneId}; node={e.NodeId ?? "<none>"}; " +
+            $"choice={e.ChoiceId ?? "<none>"}; message={e.Message}");
     }
 
     private void OpenSettings()

@@ -1,6 +1,6 @@
 # Матрица Quest Node Runtime
 
-Статус на 1.0.40.126. Разделяет наличие типа в canonical catalog/authoring и наличие реальной семантики в `QuestRuntime`.
+Статус на 1.0.40.127. Разделяет наличие типа в canonical catalog/authoring и наличие реальной семантики в `QuestRuntime`.
 
 | NodeType | Авторинг / sockets | Runtime | Текущая проверка |
 |---|---|---|---|
@@ -22,7 +22,7 @@
 | SetStep | ✅ | ✅ | demo |
 | SetFlag | ✅ | ✅ | demo |
 | SetVariable | ✅ | ✅ | demo |
-| DialogueScene | ✅ | ✅ переход/событие scene | demo |
+| DialogueScene | ✅ | ✅ запускает SceneRuntime и ждёт SceneCompleted | domain integration test + физический Scene test |
 | Reward | ✅ | ⚠️ pass-through, реального reward handler нет | demo |
 | GiveItem | ✅ | ✅ | demo |
 | RemoveItem | ✅ | ✅ | demo |
@@ -34,3 +34,13 @@
 Нода считается runtime-ready только после отдельного теста её поведения, а не потому, что она добавляется в Graph Editor и имеет sockets.
 
 Для ветвящих нод следующий этап должен проверять каждый output отдельно. Для WaitForCondition нужно ввести разрешение `conditionId` на canonical expression/definition. Для Reward нужен реальный контракт награды. Phase должен определять границы/подграф фазы, а Switch/Random — выбирать выход по своим правилам.
+
+
+## Scene Runtime
+
+| Scene primitive | Canonical model | Runtime | Проверка |
+|---|---|---|---|
+| SceneStart | ✅ | ✅ запуск потока | SceneRuntime test |
+| Dialogue | ✅ resource reference | ✅ разрешение dialogue resource + state update | SceneRuntime test |
+| Choice | ✅ resource + stable option IDs | ✅ интерфейсный запрос + requestId + branch | SceneRuntime test + физический test |
+| SceneEnd | ✅ | ✅ SceneCompleted | SceneRuntime test |

@@ -224,7 +224,15 @@ WolvenKit решает другую задачу: authoring и исследов�
 
 Нельзя использовать WolvenKit как абсолютную истину. Его контекст отличается от нашего. Но нельзя и игнорировать его при принятии решений, для которых он является нашим заявленным «прародительским» reference.
 
-## 6. Первичный набор источников для повторной сверки
+## 6. Повторная сверка 2026-09-21
+
+Перед введением SceneRuntime снова проверен актуальный upstream `main`. Relevant HEAD: `11720772f1e20581301b3dec88a59f7b5ee05675`.
+
+Подтверждено в исходниках `scnChoiceNode.cs`, `scnChoiceNodeOption.cs`, `RedGraph.Scene.cs`, `SceneGraphViewModel.cs` и `SceneEditingHelper.cs`: Choice является Scene Graph node; option имеет отдельный stable screenplay item ID; создание Choice в редакторе одновременно создаёт screenplay/localization records и ссылку node option на них; Dialogue выделен отдельной поверхностью Scene Editor.
+
+Следствие для Assist Quest Editor: canonical Scene resource должен быть самостоятельным от Quest Graph; interface adapter получает presentation request/result, а stable option IDs важнее порядкового индекса. Первый SceneRuntime сознательно упрощает screenplay/localization до game-agnostic SceneDialogue/SceneChoiceOption; полноценный localization store не смешивается с этим runtime срезом.
+
+## 7. Первичный набор источников для повторной сверки
 
 - Repository: https://github.com/WolvenKit/WolvenKit
 - Overview: https://wiki.redmodding.org/wolvenkit/features/overview

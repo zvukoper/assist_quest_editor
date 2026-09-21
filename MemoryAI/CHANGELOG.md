@@ -1,5 +1,17 @@
 # Журнал изменений памяти и архитектуры
 
+## 2026-09-21 — 1.0.40.127 Canonical Scene Graph + SceneRuntime
+
+- добавлены самостоятельные canonical ресурсы SceneDefinition, SceneGraph, SceneNode, SceneDialogue, SceneChoice и SceneChoiceOption;
+- SceneChoiceOption хранит стабильный option ID и явный OutputSocketId, поэтому связь content → branch не зависит от порядка массива;
+- добавлены ISceneCatalog, SceneCatalog и fixture ruslan_start;
+- SceneRuntime исполняет SceneStart → Dialogue → Choice → SceneEnd, открывая уже существующий интерфейсный канал;
+- DialogueScene Quest Runtime теперь оркестрирует SceneRuntime и после SceneCompleted сохраняет выбранный option ID в states;
+- существующий Quest Graph Choice не удалён: он остаётся совместимым regression seam, пока новый Scene path проходит физический тест;
+- после успешной публикации LOGS AppLogger необратимо подавляет новые записи до завершения процесса; визуальный статус push продолжает работать;
+- версия поднята до 1.0.40.127-QUEST-SCENE-R1 для физического тестирования canonical Scene path.
+
+
 ## 2026-09-21 — 1.0.40.126 Интерфейс Choice через Data Channel
 
 - добавлен канал `interfaces` как canonical канал запросов пользовательского интерфейса;

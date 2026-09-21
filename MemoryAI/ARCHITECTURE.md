@@ -456,3 +456,14 @@ Runtime не вызывает Web UI напрямую. Интерактивны�
 Ответ пользователя возвращается через существующий `IEventChannel<SimulatorEvent>` как `ChoiceSelected` с `requestId` и `index`. Runtime проверяет requestId и только затем меняет состояние графа.
 
 Такой contract позволяет Simulator использовать тот же интерфейсный поток, который позже сможет реализовать реальный игровой adapter, без ссылки Domain/Runtime на WinForms или WebView2.
+
+
+## Scene Graph и SceneRuntime
+
+Scene Graph является самостоятельной canonical моделью, а Quest Graph не хранит presentation text конкретного Choice. DialogueScene — оркестрационный узел Quest Graph: он запускает SceneRuntime по стабильному sceneId и ждёт SceneCompleted.
+
+Минимальный canonical Scene resource содержит SceneGraph, SceneDialogue, SceneChoice и SceneChoiceOption. Каждый SceneChoiceOption имеет стабильный ID и явный OutputSocketId. Интерфейсный канал получает из него только presentation request; Web UI не является источником истины.
+
+В актуальном WolvenKit scnChoiceNode является Scene Graph node, а scnChoiceNodeOption связывается с отдельным screenplay item через ScreenplayOptionId; текст разрешается через screenplay/localization storage. Наш SceneChoiceOption — упрощённый game-agnostic эквивалент этого принципа. Полноценный localization resource layer добавляется отдельно.
+
+Текущий Quest Graph Choice сознательно оставлен как compatibility/regression seam. После физической проверки DialogueScene → SceneRuntime → Choice его presentation-параметры можно выводить из canonical Scene модели и затем убрать прямую зависимость Choice от QuestNode.Parameters.
