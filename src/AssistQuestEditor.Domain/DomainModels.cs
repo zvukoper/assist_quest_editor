@@ -33,6 +33,7 @@ public sealed record WorldPoint(
 {
     public bool Editable { get; init; } = true;
     public string Color { get; init; } = "#78c8f0";
+    public bool IsCity { get; init; }
 }
 
 public sealed record PlayerState(
