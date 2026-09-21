@@ -11,6 +11,7 @@ public sealed class SceneRuntime
     {
         _catalog = catalog ?? throw new ArgumentNullException(nameof(catalog));
         _hub = hub ?? throw new ArgumentNullException(nameof(hub));
+        _hub.Events.Published += HandleEvent;
         State = new SceneRuntimeState(
             null,
             null,

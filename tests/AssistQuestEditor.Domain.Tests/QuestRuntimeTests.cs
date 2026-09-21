@@ -393,7 +393,7 @@ public sealed class QuestRuntimeTests
     [Fact]
     public void VariableEqualsConditionReadsRuntimeState()
     {
-        var hub = new SimulatorDataAdapter(Array.Empty<WorldPoint>()).Channels;
+        var hub = new SimulatorDataSourceAdapter(Array.Empty<WorldPoint>()).Channels;
         var start = Node("start", "Start");
         var condition = Node(
             "condition",
@@ -421,8 +421,8 @@ public sealed class QuestRuntimeTests
             new[]
             {
                 C("start", start, "out", condition, "in"),
-                C("condition", condition, "true", yes, "in"),
-                C("condition", condition, "false", no, "in")
+                C("condition", condition, "condition.true", yes, "in"),
+                C("condition", condition, "condition.false", no, "in")
             });
 
         var runtime = new QuestRuntime(new QuestGraphStore(graph), hub);
