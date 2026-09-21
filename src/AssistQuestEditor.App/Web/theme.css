@@ -133,4 +133,5 @@ input,select,textarea{padding:4px 5px;border-radius:4px;font-size:10px}textarea{
 #questGraphSvg .nodeId{fill:#68737f;font-size:8px;font-family:var(--font-ui)}
 #questGraphSvg .socketLabel{fill:#8f9baa;font-size:9px;font-family:var(--font-ui);pointer-events:none}
 #questGraphSvg .socketGroup{cursor:pointer}
+#questGraphSvg .socketHitArea{fill:transparent;stroke:none;pointer-events:all}
 #questGraphSvg .node .nodeTitle{font-size:11px}
