@@ -2,7 +2,7 @@ using System.Text.Json;
 
 namespace AssistQuestEditor.App;
 
-public sealed record AppUiPreferences(bool JournalDetached = false);
+public sealed record AppUiPreferences(bool JournalDetached = false, string? LastQuestDefinitionPath = null);
 
 public static class AppUiPreferencesStore
 {

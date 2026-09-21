@@ -168,7 +168,20 @@ public abstract class WebViewForm : Form
         if (element.ValueKind == JsonValueKind.String)
             return element.GetString() ?? string.Empty;
 
-        return element.GetRawText();
+        try
+        {
+            using var document = JsonDocument.Parse(element.GetRawText());
+            return JsonSerializer.Serialize(
+                document.RootElement,
+                new JsonSerializerOptions
+                {
+                    Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping
+                });
+        }
+        catch (JsonException)
+        {
+            return element.GetRawText();
+        }
     }
 
     protected void PostJson(string json)

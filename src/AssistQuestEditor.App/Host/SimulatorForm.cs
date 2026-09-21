@@ -540,7 +540,7 @@ public sealed class SimulatorForm : WebViewForm
             e.EventType,
             e.Timestamp,
             e.Source,
-            e.Payload.Count == 0 ? string.Empty : JsonSerializer.Serialize(e.Payload));
+            e.Payload.Count == 0 ? string.Empty : QuestLogger.Json(e.Payload));
 
         QuestLogger.Info("Simulator: событие опубликовано.", QuestLogger.Json(new
         {

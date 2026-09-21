@@ -84,3 +84,18 @@ input,select,textarea{padding:4px 5px;border-radius:4px;font-size:10px}textarea{
 .runtimeBlockHeader{display:flex;align-items:center;justify-content:space-between;gap:4px}.journalDetachedNotice{color:var(--muted)}
 #inspector h3{font-size:11px!important;margin:4px 0 3px!important}
 #inspector input,#inspector select,#inspector textarea{font-size:10px!important}
+
+@keyframes versionPushRotate{to{transform:rotate(360deg)}}
+@keyframes questRuntimeDash{to{stroke-dashoffset:-28}}
+.versionChip{cursor:pointer;white-space:nowrap}
+.versionChip:disabled{opacity:1;cursor:wait}
+.versionPushIcon{display:inline-block;width:13px;margin-left:3px;text-align:center;font-weight:900}
+.versionChip[data-state="running"] .versionPushIcon{color:var(--accent);animation:versionPushRotate .75s linear infinite}
+.versionChip[data-state="success"]{color:var(--lime);border-color:rgba(17,251,6,.3)}
+.versionChip[data-state="error"]{color:#ff7070;border-color:rgba(207,12,12,.38)}
+#questGraphSvg .node.runtime-active .nodeRect{stroke:var(--lime);stroke-width:6;stroke-dasharray:10 8;animation:questRuntimeDash .9s linear infinite;filter:drop-shadow(0 0 6px rgba(17,251,6,.35))}
+#questGraphSvg .node.executed .nodeExecutedMark{fill:var(--lime);opacity:1}
+#questGraphSvg .node .nodeExecutedMark{fill:transparent;opacity:0;font-size:18px;font-weight:900;font-family:Arial,sans-serif}
+#questGraphSvg .node.connection-source .nodeRect{stroke:#fff;stroke-width:5;filter:drop-shadow(0 0 5px rgba(255,255,255,.38))}
+#questGraphSvg .socketGroup.compatible .socket{fill:var(--lime);stroke:var(--lime);stroke-width:3;filter:drop-shadow(0 0 4px rgba(17,251,6,.5))}
+#questGraphSvg .pendingEdge{stroke:#fff;stroke-width:4;stroke-dasharray:10 7;animation:questRuntimeDash .6s linear infinite;opacity:1}

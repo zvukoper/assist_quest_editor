@@ -315,7 +315,7 @@
   function niceDistance(value) {
     const raw = Math.max(1, value);
     const power = Math.pow(10, Math.floor(Math.log10(raw)));
-    for (const mult of [1, 2, 5, 10]) {
+    for (const mult of [1, 2, 2.5, 5, 10]) {
       if (mult * power >= raw) return mult * power;
     }
     return 10 * power;
@@ -1367,7 +1367,7 @@
   map.addEventListener("wheel", event => {
     const pos = pointerPosition(event);
     const before = screenToWorld(pos.x, pos.y);
-    camera.mpp = Math.max(0.5, Math.min(50000, camera.mpp * (event.deltaY < 0 ? 0.8 : 1.25)));
+    camera.mpp = Math.max(0.1, Math.min(50000, camera.mpp * (event.deltaY < 0 ? 0.8 : 1.25)));
     const after = screenToWorld(pos.x, pos.y);
     camera.cx += before.x - after.x;
     camera.cz += before.z - after.z;

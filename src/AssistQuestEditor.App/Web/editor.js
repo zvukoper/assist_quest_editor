@@ -22,6 +22,9 @@
   let graphViewport = { x: 0, y: 0, width: 1200, height: 720 };
   let graphDocument = { path: "", dirty: false };
   let graphSpaceDown = false;
+  let pendingConnectionPoint = null;
+  let runtimeState = { status: "Stopped", currentNodeId: null };
+  let executedNodeIds = new Set();
 
   const configs = {
     graph: { title: "Нодовый редактор квестов", draw: renderGraph },
@@ -96,6 +99,7 @@
       "<div class='toolbar' style='margin-bottom:10px;flex-wrap:wrap'>" +
         "<button class='toolButton' id='newGraph'>Новый</button>" +
         "<button class='toolButton' id='openGraph'>Открыть</button>" +
+        "<button class='toolButton' id='openLastGraph' " + (graphDocument.lastPath ? "" : "disabled") + ">Последний JSON</button>" +
         "<button class='toolButton primary' id='saveGraph'>Сохранить</button>" +
         "<button class='toolButton' id='saveGraphAs'>Сохранить как…</button>" +
         "<span class='badge " + (graphDocument.dirty ? "accent" : "blue") + "'>" +
@@ -119,11 +123,13 @@
         "<svg id='questGraphSvg' viewBox='" + graphViewport.x + " " + graphViewport.y + " " + graphViewport.width + " " + graphViewport.height + "' xmlns='http://www.w3.org/2000/svg' style='width:100%;height:100%'>" +
           "<g id='questGraphEdges'>" + graphEdges() + "</g>" +
           "<g id='questGraphNodes'>" + questGraph.nodes.map(graphNodeMarkup).join("") + "</g>" +
+          "<g id='questGraphConnectionPreview'></g>" +
         "</svg>" +
       "</div>";
 
     ws.querySelector("#newGraph").addEventListener("click", () => send({ action: "graph_new" }));
     ws.querySelector("#openGraph").addEventListener("click", () => send({ action: "graph_open" }));
+    ws.querySelector("#openLastGraph")?.addEventListener("click", () => send({ action: "graph_open_last" }));
     ws.querySelector("#saveGraph").addEventListener("click", () => send({ action: "graph_save" }));
     ws.querySelector("#saveGraphAs").addEventListener("click", () => send({ action: "graph_save_as" }));
 
@@ -180,14 +186,19 @@
 
   function graphNodeMarkup(node) {
     const selected = node.nodeId === selectedGraphNodeId ? " selected" : "";
+    const executed = executedNodeIds.has(node.nodeId) ? " executed" : "";
+    const active = node.nodeId === runtimeState.currentNodeId &&
+      ["Running", "Waiting"].includes(runtimeStatusName(runtimeState.status)) ? " runtime-active" : "";
+    const source = pendingOutput?.nodeId === node.nodeId ? " connection-source" : "";
     const inputs = node.sockets.filter(socket => socket.direction === "Input");
     const outputs = node.sockets.filter(socket => socket.direction === "Output");
 
     const position = getGraphNodePosition(node);
     const nodeHeight = graphNodeHeight(node);
-    return "<g class='node" + selected + "' data-node-id='" + escapeHtml(node.nodeId) + "' transform='translate(" + position.x + " " + position.y + ")'>" +
+    return "<g class='node" + selected + executed + active + source + "' data-node-id='" + escapeHtml(node.nodeId) + "' transform='translate(" + position.x + " " + position.y + ")'>" +
       "<rect class='nodeRect' rx='8' width='" + GRAPH_NODE_WIDTH + "' height='" + nodeHeight + "'></rect>" +
       "<text class='nodeTitle' x='14' y='26'>" + escapeHtml(node.nodeType) + "</text>" +
+      "<text class='nodeExecutedMark' x='" + (GRAPH_NODE_WIDTH - 14) + "' y='25' text-anchor='middle'>✓</text>" +
       "<text x='14' y='49' fill='#a6a6a6' font-size='11'>" + escapeHtml(node.title) + "</text>" +
       "<text x='14' y='91' fill='#737f8b' font-size='9'>" + escapeHtml(node.nodeId) + "</text>" +
       inputs.map((socket, index) =>
@@ -226,6 +237,13 @@
       }
 
       if (event.button !== 0) return;
+
+      if (pendingOutput && !event.target.closest(".socketGroup")) {
+        pendingOutput = null;
+        pendingConnectionPoint = null;
+        refreshGraphEdges(svg);
+        updateGraphVisuals();
+      }
 
       const socket = event.target.closest(".socketGroup");
       if (socket) return;
@@ -275,6 +293,12 @@
         }
         event.preventDefault();
         return;
+      }
+
+      if (pendingOutput) {
+        pendingConnectionPoint = clientToGraph(svg, event.clientX, event.clientY);
+        refreshGraphEdges(svg);
+        updateGraphVisuals();
       }
 
       if (!dragState || event.pointerId !== dragState.pointerId) return;
@@ -403,33 +427,105 @@
 
         if (direction === "Output") {
           pendingOutput = { nodeId, socketId };
+          pendingConnectionPoint = clientToGraph(svg, event.clientX, event.clientY);
           selectedGraphNodeId = nodeId;
           updateGraphVisuals();
+          refreshGraphEdges(svg);
           updateGraphInspector(document.getElementById("inspector"));
           return;
         }
 
         if (direction === "Input" && pendingOutput) {
-          send({
-            action: "graph_connect",
-            fromNodeId: pendingOutput.nodeId,
-            fromSocketId: pendingOutput.socketId,
-            toNodeId: nodeId,
-            toSocketId: socketId
-          });
+          if (isCompatibleInput(nodeId, socketId)) {
+            send({
+              action: "graph_connect",
+              fromNodeId: pendingOutput.nodeId,
+              fromSocketId: pendingOutput.socketId,
+              toNodeId: nodeId,
+              toSocketId: socketId
+            });
+          }
           pendingOutput = null;
+          pendingConnectionPoint = null;
+          refreshGraphEdges(svg);
+          updateGraphVisuals();
         }
       });
     });
   }
 
+  function runtimeStatusName(status) {
+    if (typeof status === "string") return status;
+    const numeric = Number(status);
+    return Number.isInteger(numeric)
+      ? ([ "Stopped", "Running", "Waiting", "Completed", "Failed" ][numeric] || String(status))
+      : String(status ?? "");
+  }
+
+  function isCompatibleInput(nodeId, socketId) {
+    if (!pendingOutput || !questGraph || !nodeId || nodeId === pendingOutput.nodeId) return false;
+    const node = questGraph.nodes?.find(item => item.nodeId === nodeId);
+    return Boolean(node?.sockets?.some(socket =>
+      socket.socketId === socketId && socket.direction === "Input"
+    ));
+  }
+
+  function graphSocketPoint(nodeId, socketId) {
+    const node = questGraph?.nodes?.find(item => item.nodeId === nodeId);
+    if (!node) return null;
+    const socket = node.sockets?.find(item => item.socketId === socketId);
+    if (!socket) return null;
+
+    const sockets = node.sockets.filter(item => item.direction === socket.direction);
+    const index = Math.max(0, sockets.findIndex(item => item.socketId === socketId));
+    const position = getGraphNodePosition(node);
+    return {
+      x: position.x + (socket.direction === "Output" ? GRAPH_NODE_WIDTH : 0),
+      y: position.y + 22 + index * 22
+    };
+  }
+
+  function connectionPreviewMarkup() {
+    if (!pendingOutput || !pendingConnectionPoint) return "";
+    const start = graphSocketPoint(pendingOutput.nodeId, pendingOutput.socketId);
+    if (!start) return "";
+    const end = pendingConnectionPoint;
+    const bend = Math.max(70, Math.abs(end.x - start.x) * 0.45);
+    return "<path class='edge pendingEdge' d='M" + start.x + " " + start.y + " C" +
+      (start.x + bend) + " " + start.y + " " +
+      (end.x - bend) + " " + end.y + " " + end.x + " " + end.y + "'></path>";
+  }
+
   function updateGraphVisuals() {
     const svg = document.getElementById("questGraphSvg");
     if (!svg) return;
-    svg.querySelectorAll(".node").forEach(node =>
-      node.classList.toggle("selected", node.dataset.nodeId === selectedGraphNodeId));
-  }
 
+    svg.querySelectorAll(".node").forEach(node => {
+      const id = node.dataset.nodeId;
+      node.classList.toggle("selected", id === selectedGraphNodeId);
+      node.classList.toggle("executed", executedNodeIds.has(id));
+      node.classList.toggle(
+        "runtime-active",
+        id === runtimeState.currentNodeId &&
+        ["Running", "Waiting"].includes(runtimeStatusName(runtimeState.status))
+      );
+      node.classList.toggle("connection-source", pendingOutput?.nodeId === id);
+    });
+
+    svg.querySelectorAll(".socketGroup").forEach(socket => {
+      const nodeId = socket.closest(".node")?.dataset.nodeId;
+      const direction = socket.dataset.socketDirection;
+      socket.classList.toggle(
+        "compatible",
+        Boolean(pendingOutput) &&
+        direction === "Input" &&
+        isCompatibleInput(nodeId, socket.dataset.socketId)
+      );
+    });
+
+    const preview = svg.querySelector("#questGraphConnectionPreview");
+    if (preview) preview.innerHTML = connectionPreviewMarkup();
+  }
   const PARAMETER_LABELS = {
     worldPointId: "WorldPoint Id", triggerRadius: "Радиус триггера",
     operator: "Оператор", left: "Левый операнд", comparison: "Сравнение", right: "Правый операнд",
@@ -798,6 +894,7 @@
     if (edgeGroup) {
       edgeGroup.innerHTML = graphEdges();
     }
+    updateGraphVisuals();
   }
 
   function escapeCssAttribute(value) {
@@ -830,6 +927,7 @@
       questGraph = data.graph;
       graphDocument = {
         path: data.documentPath || "",
+        lastPath: data.lastDocumentPath || "",
         dirty: Boolean(data.documentDirty)
       };
       graphPreviewPositions.clear();
@@ -844,6 +942,13 @@
       }
       if (!selectedGraphNodeId && questGraph.nodes.length) selectedGraphNodeId = questGraph.nodes[0].nodeId;
       if (currentId() === "graph") render();
+      return;
+    }
+
+    if (data?.type === "runtime_state") {
+      runtimeState = data.runtime || { status: "Stopped", currentNodeId: null };
+      executedNodeIds = new Set(Array.isArray(data.executedNodeIds) ? data.executedNodeIds : []);
+      if (currentId() === "graph") updateGraphVisuals();
       return;
     }
 
@@ -888,6 +993,16 @@
   }
 
   document.addEventListener("keydown", event => {
+    if (event.key === "Escape" && pendingOutput) {
+      pendingOutput = null;
+      pendingConnectionPoint = null;
+      const svg = document.getElementById("questGraphSvg");
+      if (svg) refreshGraphEdges(svg);
+      event.preventDefault();
+      return;
+    }
+
+
     if (event.code === "Space") {
       graphSpaceDown = true;
       if (currentId() === "graph") event.preventDefault();
@@ -916,4 +1031,8 @@
 
   window.addEventListener("hashchange", render);
   render();
+  window.__assistQuestGraphRuntime = {
+    getState: () => runtimeState,
+    getExecuted: () => [...executedNodeIds]
+  };
 })();

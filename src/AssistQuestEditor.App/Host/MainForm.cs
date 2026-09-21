@@ -57,6 +57,10 @@ public sealed class MainForm : WebViewForm
                         _simulator?.PushSnapshot();
                     }
                     break;
+
+                case "push_logs":
+                    StartLogPush();
+                    break;
             }
         }
         catch (Exception ex)
@@ -67,6 +71,56 @@ public sealed class MainForm : WebViewForm
                 message = "Ошибка команды интерфейса: " + ex.Message
             }));
         }
+    }
+
+    private int _logPushInProgress;
+
+    private void StartLogPush()
+    {
+        if (Interlocked.Exchange(ref _logPushInProgress, 1) != 0)
+            return;
+
+        PostLogsPushState("running", "Выполняется загрузка LOGS в GitHub…");
+
+        _ = Task.Run(() =>
+        {
+            GitLogPushResult result;
+            try
+            {
+                result = GitLogPublisher.PublishLogs();
+                if (result.Success)
+                    AppLogger.Info("GitHub: загрузка LOGS завершена.", result.Message);
+                else
+                    AppLogger.Error("GitHub: загрузка LOGS не выполнена.", details: result.Message + Environment.NewLine + result.Details);
+            }
+            catch (Exception ex)
+            {
+                result = new(false, "Непредвиденная ошибка при загрузке LOGS.", ex.ToString());
+                AppLogger.Error("GitHub: непредвиденная ошибка загрузки LOGS.", ex);
+            }
+
+            Interlocked.Exchange(ref _logPushInProgress, 0);
+
+            try
+            {
+                BeginInvoke(() => PostLogsPushState(
+                    result.Success ? "success" : "error",
+                    result.Success ? result.Message : result.Message + " " + result.Details));
+            }
+            catch (InvalidOperationException)
+            {
+            }
+        });
+    }
+
+    private void PostLogsPushState(string state, string message)
+    {
+        PostJson(JsonSerializer.Serialize(new
+        {
+            type = "logs_push_state",
+            state,
+            message
+        }));
     }
 
     private void OpenEditor(string editor)
@@ -92,7 +146,7 @@ public sealed class MainForm : WebViewForm
             return;
         }
 
-        var form = new EditorForm(page.Item1, page.Item2, _hub, _questGraph);
+        var form = new EditorForm(page.Item1, page.Item2, _hub, _questGraph, _runtime);
         _editors[page.Item2] = form;
         form.FormClosed += (_, _) => _editors.Remove(page.Item2);
         PlaceAuxiliaryWindow(form, _editors.Count);

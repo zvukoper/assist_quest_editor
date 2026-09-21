@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.Encodings.Web;
 
 namespace AssistQuestEditor.App;
 
@@ -10,6 +11,11 @@ public sealed record SimulatorJournalEntry(
 
 public sealed class JournalForm : Form
 {
+    private static readonly JsonSerializerOptions MessageJsonOptions = new()
+    {
+        Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping
+    };
+
     private readonly RichTextBox _log;
     private readonly Button _returnButton;
 
@@ -87,7 +93,8 @@ public sealed class JournalForm : Form
         {
             var time = entry.Timestamp.ToLocalTime().ToString("HH:mm:ss");
             var source = string.IsNullOrWhiteSpace(entry.Source) ? "Источник" : entry.Source;
-            var detail = string.IsNullOrWhiteSpace(entry.Message) ? string.Empty : "  " + entry.Message;
+            var formattedMessage = FormatMessage(entry.Message);
+            var detail = string.IsNullOrWhiteSpace(formattedMessage) ? string.Empty : "  " + formattedMessage;
 
             _log.SelectionStart = _log.TextLength;
             _log.SelectionLength = 0;
@@ -123,5 +130,20 @@ public sealed class JournalForm : Form
             "hornpressed" => Color.FromArgb(255, 145, 190),
             _ => Color.FromArgb(205, 215, 225)
         };
+    }
+
+    private static string FormatMessage(string message)
+    {
+        if (string.IsNullOrWhiteSpace(message)) return string.Empty;
+
+        try
+        {
+            using var document = JsonDocument.Parse(message);
+            return JsonSerializer.Serialize(document.RootElement, MessageJsonOptions);
+        }
+        catch (JsonException)
+        {
+            return message;
+        }
     }
 }
