@@ -293,7 +293,23 @@ try {
     startOutputBox.x + startOutputBox.width / 2,
     startOutputBox.y + startOutputBox.height / 2
   );
-  await page.mouse.move(endX, endY);
+
+  await page.evaluate(({ x, y }) => {
+    const svg = document.getElementById("questGraphSvg");
+    if (!svg) {
+      throw new Error("Quest Graph SVG не найден для проверки preview."); 
+    }
+    svg.dispatchEvent(new PointerEvent("pointermove", {
+      bubbles: true,
+      cancelable: true,
+      pointerId: 1,
+      pointerType: "mouse",
+      isPrimary: true,
+      clientX: x,
+      clientY: y,
+      buttons: 0
+    }));
+  }, { x: endX, y: endY });
 
   const pendingPath = await page.locator("#questGraphConnectionPreview .pendingEdge").getAttribute("d");
   if (!pendingPath) {
