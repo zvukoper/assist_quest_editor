@@ -213,13 +213,26 @@ try {
     throw new Error("Не удалось получить границы Start Output socket.");
   }
 
-  await page.mouse.click(
-    startOutputBox.x + startOutputBox.width / 2,
-    startOutputBox.y + startOutputBox.height / 2
-  );
+  await page.evaluate(() => {
+    const socket = document.querySelector(
+      "[data-node-id='start'] .socketGroup[data-socket-direction='Output']"
+    );
+    if (!socket) {
+      throw new Error("Start Output socket не найден в DOM.");
+    }
+    socket.dispatchEvent(new MouseEvent("click", {
+      bubbles: true,
+      cancelable: true,
+      clientX: 0,
+      clientY: 0,
+      button: 0
+    }));
+  });
 
   const beforeConnectMessages = await page.evaluate(() => window.__messages.length);
-  const outputState = await page.locator("[data-node-id='start'].connection-source").count();
+  const outputState = await page.locator(
+    "[data-node-id='start'].connection-source"
+  ).count();
   if (outputState !== 1) {
     throw new Error("После выбора Start Output нода не отмечена как источник соединения.");
   }
