@@ -1624,6 +1624,11 @@
       sceneCatalog = Array.isArray(data.scenes) ? data.scenes : [];
       if (location.hash.toLowerCase() === "#scene") {
         renderScene(document.getElementById("workspace"), document.getElementById("inspector"));
+      } else if (location.hash.toLowerCase() === "#dialogue") {
+        window.__assistDialogueWorkspace?.refresh?.(
+          document.getElementById("workspace"),
+          document.getElementById("inspector")
+        );
       }
       return;
     }
@@ -1666,6 +1671,11 @@
 
       if (location.hash.toLowerCase() === "#scene") {
         renderScene(document.getElementById("workspace"), document.getElementById("inspector"));
+      } else if (location.hash.toLowerCase() === "#dialogue") {
+        window.__assistDialogueWorkspace?.refresh?.(
+          document.getElementById("workspace"),
+          document.getElementById("inspector")
+        );
       }
 
       if (pendingSceneFit) {
@@ -1677,6 +1687,12 @@
 
   window.__assistSceneEditor = {
     render: renderScene,
+    selectNode(nodeId) {
+      if (!nodeId || !sceneGraph?.nodes?.some(node => node.nodeId === nodeId)) return;
+      selectedSceneNodeId = nodeId;
+      updateSceneVisuals();
+      updateSceneInspector(document.getElementById("inspector"));
+    },
     getState: () => ({
       definition: window.__assistSceneEditorState?.definition || null,
       graph: sceneGraph,
