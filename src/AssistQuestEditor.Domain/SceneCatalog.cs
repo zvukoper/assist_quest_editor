@@ -18,6 +18,8 @@ public sealed class SceneCatalog : ISceneCatalog
             .ToDictionary(scene => scene.Id, StringComparer.OrdinalIgnoreCase);
     }
 
+    public event EventHandler? Changed;
+
     public IReadOnlyList<SceneDefinition> Scenes =>
         _scenes.Values
             .OrderBy(scene => scene.Title, StringComparer.OrdinalIgnoreCase)
@@ -34,6 +36,7 @@ public sealed class SceneCatalog : ISceneCatalog
             throw new ArgumentException("Scene Definition должен иметь Id.", nameof(scene));
 
         _scenes[scene.Id] = scene;
+        Changed?.Invoke(this, EventArgs.Empty);
     }
 }
 
