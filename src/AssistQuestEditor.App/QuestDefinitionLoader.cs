@@ -25,7 +25,7 @@ public static class QuestDefinitionLoader
             options.Converters.Add(new JsonStringEnumConverter());
             var document = JsonSerializer.Deserialize<QuestDefinitionDocument>(File.ReadAllText(path), options);
 
-            if (document?.Definition?.Graph is null || document.SchemaVersion != 1 || !document.Format.Equals("aqquest", StringComparison.OrdinalIgnoreCase))
+            if (document?.Definition?.Graph is null || document.SchemaVersion != 1 || !string.Equals(document.Format, "aqquest", StringComparison.OrdinalIgnoreCase))
             {
                 AppLogger.Warn("Учебный Quest Definition имеет неподдерживаемый формат.", $"path={path}; schema={document?.SchemaVersion}");
                 return QuestGraphFactory.CreateStarter();
