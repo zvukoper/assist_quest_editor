@@ -11,10 +11,10 @@
     <Prefer32Bit>false</Prefer32Bit>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
 
-    <Version>1.0.40.134</Version>
-    <AssemblyVersion>1.0.40.134</AssemblyVersion>
-    <FileVersion>1.0.40.134</FileVersion>
-    <AssemblyInformationalVersion>1.0.40.134-SCENE-DIALOGUE-R1</AssemblyInformationalVersion>
+    <Version>1.0.40.135</Version>
+    <AssemblyVersion>1.0.40.135</AssemblyVersion>
+    <FileVersion>1.0.40.135</FileVersion>
+    <AssemblyInformationalVersion>1.0.40.135-QUEST-SCENE-INTEGRATION-R1</AssemblyInformationalVersion>
     <PublishSingleFile>true</PublishSingleFile>
     <SelfContained>true</SelfContained>
     <RuntimeIdentifier>win-x64</RuntimeIdentifier>
