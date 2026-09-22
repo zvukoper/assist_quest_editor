@@ -11,10 +11,10 @@
     <Prefer32Bit>false</Prefer32Bit>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
 
-    <Version>1.0.40.150</Version>
-    <AssemblyVersion>1.0.40.150</AssemblyVersion>
-    <FileVersion>1.0.40.150</FileVersion>
-    <AssemblyInformationalVersion>1.0.40.150-CAMPAIGN-WINDOW-CITEST</AssemblyInformationalVersion>
+    <Version>1.0.40.151</Version>
+    <AssemblyVersion>1.0.40.151</AssemblyVersion>
+    <FileVersion>1.0.40.151</FileVersion>
+    <AssemblyInformationalVersion>1.0.40.151-CITEST-STARTUP-GUARD</AssemblyInformationalVersion>
     <PublishSingleFile>true</PublishSingleFile>
     <SelfContained>true</SelfContained>
     <RuntimeIdentifier>win-x64</RuntimeIdentifier>

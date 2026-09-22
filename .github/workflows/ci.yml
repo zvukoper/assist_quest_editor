@@ -197,12 +197,26 @@ jobs:
           powershell -NoProfile -NonInteractive -ExecutionPolicy Bypass -File .\compile.ps1 -NoLaunch
           $publish = Join-Path $env:GITHUB_WORKSPACE 'bin\Release\net10.0-windows\win-x64\publish'
           $files = @(Get-ChildItem -LiteralPath $publish -File -Force)
-          if ($files.Count -ne 1 -or $files[0].Extension -ne '.exe') {
+          $manifest = Join-Path $publish 'data\data-manifest.json'
+
+          # Рядом с EXE допускаются папка ресурсов и отчёт о её проверке: папка нужна
+          # потому, что содержимое single-file распаковывается в невидимый кэш,
+          # а отчёт пишет сама проверка целостности.
+          $exeFiles = @($files | Where-Object { $_.Extension -eq '.exe' })
+          $unexpected = @($files | Where-Object {
+            $_.Extension -ne '.exe' -and $_.Name -ne 'data-verify-report.txt'
+          })
+
+          if ($exeFiles.Count -ne 1 -or $unexpected.Count -gt 0) {
             Write-Error "compile.ps1 не создал ровно один EXE."
             $files | ForEach-Object { Write-Host $_.FullName }
             exit 1
           }
-          Write-Host "Single-file публикация CI: $($files[0].FullName)" -ForegroundColor Green
+          if (-not (Test-Path -LiteralPath $manifest)) {
+            Write-Error "Ресурсы публикации не опубликованы: не найден $manifest"
+            exit 1
+          }
+          Write-Host "Single-file публикация CI: $($exeFiles[0].FullName)" -ForegroundColor Green
 
       - name: Финальная проверка CI
         id: final_gate

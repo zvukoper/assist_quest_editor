@@ -61,8 +61,8 @@ try {
 $script:CiReportPath = Join-Path $root 'MemoryAI\LOGS\CI_errors.md'
 
 # Состояние локального прогона читает расширение CI Monitor: оно показывает
-# номер проверки, статус и процент выполнения. Файл — единственный канал данных,
-# поэтому расширению не важно, откуда запущен скрипт.
+# номер проверки, статус и число пройденных проверок. Файл — единственный канал
+# данных, поэтому расширению не важно, откуда запущен скрипт.
 #
 # Файл лежит ВНЕ MemoryAI/LOGS намеренно: папка логов очищается после успешной
 # публикации, а здесь хранится номер последней проверки. Иначе после каждой
@@ -75,7 +75,7 @@ $script:LocalStatePath = Join-Path $script:StateDir 'local-run.json'
 # уведомляет расширение, а штатное уведомление скрипта подавляется.
 $script:HeartbeatPath = Join-Path $script:StateDir 'monitor.heartbeat'
 
-# Общее число проверок в прогоне — нужно для процента выполнения.
+# Общее число проверок в прогоне — нужно для плашки расширения CI Monitor.
 # Значение фиксировано: publish присутствует всегда (как «пропущено»), поэтому
 # число не зависит от -IncludePublish.
 # Держать в актуальном состоянии при добавлении/удалении Invoke-Check.
@@ -209,7 +209,7 @@ function Invoke-Check {
     $started = Get-Date
 
     # Сообщаем расширению, что началась следующая проверка: плашка показывает
-    # имя текущей проверки и уже достигнутый процент.
+    # имя текущей проверки и уже достигнутый прогресс.
     Write-LocalRunState -Status 'in_progress' -CurrentCheck $Name `
         -Branch $script:GitBranch -Commit $script:GitCommit -Title $script:RunTitle
 
@@ -566,17 +566,6 @@ Invoke-Check -Name 'Портрет репутации загружается' -B
     node ci/reputation_avatar_smoke.mjs
 }
 
-# Шаг 5.4: единственный экземпляр приложения.
-# Проверяется на опубликованном exe: single instance — поведение процесса, а не
-# домена, поэтому ни юнит-тест, ни Playwright его не покрывают. Без publish
-# проверка сама сообщает «пропущено» и не считается упавшей.
-Invoke-Check -Name 'Single instance probe' -Body {
-    & powershell -NoProfile -ExecutionPolicy Bypass -File ci/single_instance_probe.ps1
-    if ($LASTEXITCODE -ne 0) {
-        throw "single instance probe не прошёл: код $LASTEXITCODE"
-    }
-}
-
 # Шаг 5.8: синхронизация ресурсов и проверка по манифесту.
 # Проверка нужна отдельно от сборки: она ловит именно потерянные, необновлённые и
 # оставшиеся от прошлых сборок ресурсы, а не ошибки компиляции. Прогон идёт в
@@ -712,9 +701,16 @@ if ($IncludePublish) {
         $dataDir = Join-Path $publish 'data'
         $manifest = Join-Path $dataDir 'data-manifest.json'
 
-        # Рядом с EXE допускается только папка ресурсов: иначе single-file перестал
-        # быть одним файлом, а лишние файлы легко принять за актуальные данные.
-        if ($files.Count -ne 1 -or $files[0].Extension -ne '.exe') {
+        # Рядом с EXE допускаются папка ресурсов и отчёт о её проверке. Папка нужна
+        # потому, что содержимое single-file распаковывается в невидимый кэш,
+        # а отчёт пишет сама проверка целостности. Любой другой файл — остаток
+        # прошлой сборки, который легко принять за актуальные данные.
+        $exeFiles = @($files | Where-Object { $_.Extension -eq '.exe' })
+        $unexpected = @($files | Where-Object {
+            $_.Extension -ne '.exe' -and $_.Name -ne 'data-verify-report.txt'
+        })
+
+        if ($exeFiles.Count -ne 1 -or $unexpected.Count -gt 0) {
             Write-Host 'В каталоге публикации находятся:' -ForegroundColor Red
             $files | ForEach-Object { Write-Host "  $($_.FullName)" -ForegroundColor Red }
             throw 'compile.ps1 не создал ровно один EXE.'
@@ -738,7 +734,7 @@ if ($IncludePublish) {
         }
 
         $resourceCount = @(Get-ChildItem -LiteralPath $dataDir -Recurse -File).Count
-        Write-Host "Single-file публикация: $($files[0].FullName)" -ForegroundColor Green
+        Write-Host "Single-file публикация: $($exeFiles[0].FullName)" -ForegroundColor Green
         Write-Host "Ресурсы рядом с EXE: файлов $resourceCount, манифест подтверждён." -ForegroundColor Green
     }
 } else {
@@ -750,6 +746,20 @@ if ($IncludePublish) {
 
     Write-Host ''
     Write-Host 'Single-file publish : пропущено (нужен -IncludePublish)' -ForegroundColor Yellow
+}
+
+# Шаг 11: единственный экземпляр приложения и режим проверок.
+# Проверка идёт после публикации: она запускает exe, и на файле прошлой сборки
+# результат был бы недостоверным. Старый exe не знает ключа -citest, принимает
+# его за путь к файлу и запускается как обычный пользовательский старт — вместе
+# с установочными сценариями. Поэтому проба сама сообщает «пропущено», если exe
+# отсутствует, собран из другого коммита или имеет другую версию.
+# Запускается с -citest: проверки не должны выполнять установочные сценарии.
+Invoke-Check -Name 'Single instance probe' -Body {
+    & powershell -NoProfile -ExecutionPolicy Bypass -File ci/single_instance_probe.ps1
+    if ($LASTEXITCODE -ne 0) {
+        throw "single instance probe не прошёл: код $LASTEXITCODE"
+    }
 }
 
 # Дополнительно: проверка памяти. В CI не входит, но полезна локально.

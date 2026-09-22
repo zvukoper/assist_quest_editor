@@ -1,10 +1,47 @@
 using AssistQuestEditor.Domain;
 namespace AssistQuestEditor.App;
 
-public sealed record CampaignActiveChangedEventArgs(string CampaignId, bool Active) : EventArgs;
-public sealed record QuestEnabledChangedEventArgs(string CampaignId, string QuestId, bool Enabled) : EventArgs;
-public sealed record QuestOpenRequestedEventArgs(string Path) : EventArgs;
-public sealed record CampaignFolderOpenRequestedEventArgs(string CampaignId) : EventArgs;
+// EventArgs — обычный класс, а запись наследуется только от записи или объекта,
+// поэтому события окна описаны классами, как и остальные EventArgs в проекте.
+public sealed class CampaignActiveChangedEventArgs : EventArgs
+{
+    public CampaignActiveChangedEventArgs(string campaignId, bool active)
+    {
+        CampaignId = campaignId;
+        Active = active;
+    }
+
+    public string CampaignId { get; }
+    public bool Active { get; }
+}
+
+public sealed class QuestEnabledChangedEventArgs : EventArgs
+{
+    public QuestEnabledChangedEventArgs(string campaignId, string questId, bool enabled)
+    {
+        CampaignId = campaignId;
+        QuestId = questId;
+        Enabled = enabled;
+    }
+
+    public string CampaignId { get; }
+    public string QuestId { get; }
+    public bool Enabled { get; }
+}
+
+public sealed class QuestOpenRequestedEventArgs : EventArgs
+{
+    public QuestOpenRequestedEventArgs(string path) => Path = path;
+
+    public string Path { get; }
+}
+
+public sealed class CampaignFolderOpenRequestedEventArgs : EventArgs
+{
+    public CampaignFolderOpenRequestedEventArgs(string campaignId) => CampaignId = campaignId;
+
+    public string CampaignId { get; }
+}
 
 /// <summary>Окно активации Campaign/Quest, отделённое от Simulator по тому же принципу, что Journal.</summary>
 public sealed class CampaignsForm : Form
@@ -73,7 +110,11 @@ public sealed class CampaignsForm : Form
         var check = new CheckBox { AutoSize = true, Checked = enabled, Margin = new Padding(0, 6, 5, 0) };
         check.CheckedChanged += (_, _) => QuestEnabledChanged?.Invoke(this, new QuestEnabledChangedEventArgs(campaign.Id, quest.QuestId, check.Checked));
         var activation = quest.Activation;
-        var details = activation is null ? $"v{quest.Version}" : activation.Mode.Equals("Proximity", StringComparison.OrdinalIgnoreCase) ? $"v{quest.Version} · Радиус {activation.Radius:0} м" : $"v{quest.Version} · {activation.Mode}";
+        var details = activation is null
+            ? $"v{quest.Version}"
+            : activation.Mode == QuestStartMode.Proximity
+                ? $"v{quest.Version} · Радиус {activation.Radius:0} м"
+                : $"v{quest.Version} · {activation.Mode}";
         var name = new Label { Dock = DockStyle.Fill, AutoEllipsis = true, Text = quest.Title + Environment.NewLine + details, ForeColor = Color.FromArgb(231, 237, 244), Font = new Font("Segoe UI", 8.5f), Margin = new Padding(0, 1, 5, 1) };
         var status = new Label { AutoSize = true, Text = enabled ? "Включён" : "Отключён", ForeColor = enabled ? Color.FromArgb(139, 216, 255) : Color.FromArgb(135, 145, 157), Font = new Font("Segoe UI", 8f), Margin = new Padding(0, 7, 7, 0) };
         var edit = CreateMicroButton("Ред.");

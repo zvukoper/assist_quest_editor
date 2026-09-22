@@ -30,6 +30,46 @@ if (-not (Test-Path -LiteralPath $ExePath)) {
     exit 0
 }
 
+# Проверка запускает exe с ключом -citest, но опубликованный файл мог остаться от
+# прошлой сборки и про этот ключ ничего не знать. Тогда он принимает его за путь к
+# файлу, ничего не находит и запускается как обычный пользовательский старт —
+# вместе с установочными сценариями. Проверка на таком файле бессмысленна и, что
+# хуже, ложно падает, поэтому устаревший exe честно помечается пропущенным.
+function Get-ExpectedNumericVersion {
+    $versionFile = Join-Path $RepositoryRoot 'src\AssistQuestEditor.App\Core\VersionInfo.cs'
+    if (-not (Test-Path -LiteralPath $versionFile)) { return $null }
+
+    $match = [regex]::Match(
+        [IO.File]::ReadAllText($versionFile),
+        'NumericVersion\s*=\s*"([^"]+)"')
+
+    if (-not $match.Success) { return $null }
+    return $match.Groups[1].Value
+}
+
+$exeVersion = [System.Diagnostics.FileVersionInfo]::GetVersionInfo($ExePath)
+$expectedVersion = Get-ExpectedNumericVersion
+
+if ($expectedVersion -and $exeVersion.FileVersion -ne $expectedVersion) {
+    Write-Host 'Single instance probe: пропущено, опубликованный exe устарел.' -ForegroundColor Yellow
+    Write-Host "  exe: $($exeVersion.FileVersion); ожидается: $expectedVersion" -ForegroundColor Yellow
+    Write-Host '  Соберите публикацию: .\compile.ps1 -NoLaunch' -ForegroundColor Yellow
+    exit 0
+}
+
+# Версия совпала, но publish мог быть собран из другого коммита: поведение тоже
+# не соответствует текущему коду, и ключ -citest мог появиться позже сборки.
+$expectedCommit = (& git -C $RepositoryRoot rev-parse HEAD 2>$null | Out-String).Trim()
+$product = [string]$exeVersion.ProductVersion
+$productCommit = if ($product -like '*+*') { $product.Substring($product.IndexOf('+') + 1) } else { '' }
+
+if ($expectedCommit -and $productCommit -and $productCommit -ne $expectedCommit) {
+    Write-Host 'Single instance probe: пропущено, publish собран из другого коммита.' -ForegroundColor Yellow
+    Write-Host "  publish: $($productCommit.Substring(0, [Math]::Min(12, $productCommit.Length)))" -ForegroundColor Yellow
+    Write-Host "  HEAD:    $($expectedCommit.Substring(0, 12))" -ForegroundColor Yellow
+    exit 0
+}
+
 $logPath = Join-Path $RepositoryRoot 'MemoryAI\LOGS\assist_quest_editor.log'
 $target = Join-Path $RepositoryRoot 'data\quests\tutorial_ruslan_shashlik.aqquest'
 
