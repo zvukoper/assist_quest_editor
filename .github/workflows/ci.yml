@@ -78,6 +78,12 @@ jobs:
         shell: pwsh
         run: node ci/scene_graph_smoke.mjs
 
+      - name: Dialogue Workspace Playwright smoke
+        id: dialogue_workspace_smoke
+        continue-on-error: true
+        shell: pwsh
+        run: node ci/dialogue_workspace_smoke.mjs
+
       - name: Scene interface Playwright smoke
         id: scene_interface_smoke
         continue-on-error: true
@@ -98,6 +104,7 @@ jobs:
           node --check .\src\AssistQuestEditor.App\Web\main.js
           node --check .\src\AssistQuestEditor.App\Web\editor.js
           node --check .\src\AssistQuestEditor.App\Web\sceneEditor.js
+          node --check .\src\AssistQuestEditor.App\Web\dialogueWorkspace.js
           node --check .\src\AssistQuestEditor.App\Web\simulator.js
 
 
@@ -178,6 +185,7 @@ jobs:
           SELECTION_SMOKE_OUTCOME: ${{ steps.selection_smoke.outcome }}
           QUEST_GRAPH_SMOKE_OUTCOME: ${{ steps.quest_graph_smoke.outcome }}
           SCENE_GRAPH_SMOKE_OUTCOME: ${{ steps.scene_graph_smoke.outcome }}
+          DIALOGUE_WORKSPACE_SMOKE_OUTCOME: ${{ steps.dialogue_workspace_smoke.outcome }}
           PAN_SMOKE_OUTCOME: ${{ steps.pan_smoke.outcome }}
           WEB_SYNTAX_OUTCOME: ${{ steps.web_syntax.outcome }}
           DOTNET_SDK_OUTCOME: ${{ steps.dotnet_sdk.outcome }}
@@ -193,6 +201,7 @@ jobs:
             @{ Name = 'Simulator ↔ Editor contract'; Outcome = $env:SELECTION_SMOKE_OUTCOME },
             @{ Name = 'Quest Graph UI smoke'; Outcome = $env:QUEST_GRAPH_SMOKE_OUTCOME },
             @{ Name = 'Scene Graph UI smoke'; Outcome = $env:SCENE_GRAPH_SMOKE_OUTCOME },
+            @{ Name = 'Dialogue Workspace UI smoke'; Outcome = $env:DIALOGUE_WORKSPACE_SMOKE_OUTCOME },
             @{ Name = 'Scene interface UI smoke'; Outcome = $env:SCENE_INTERFACE_SMOKE_OUTCOME },
             @{ Name = 'Pan follows cursor'; Outcome = $env:PAN_SMOKE_OUTCOME },
             @{ Name = 'Web JavaScript syntax'; Outcome = $env:WEB_SYNTAX_OUTCOME },
