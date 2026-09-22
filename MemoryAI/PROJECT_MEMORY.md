@@ -409,3 +409,14 @@ Schema revisions keep the same extension and change `schemaVersion`; JSON also c
 Windows file associations are per-user under HKCU\\Software\\Classes with versioned ProgIDs, OpenWithProgIds, DefaultIcon and open command. Registration does not overwrite an existing user-selected association. Resource-specific ICO files are generated into %LOCALAPPDATA%\\AssistQuestEditor\\FileIcons and Explorer is refreshed with SHChangeNotify.
 
 Current Quest and Scene editors are migrated from generic JSON to `.aqquest` and `.aqscene`, including data files, loaders, publish globs, Open/Save filters and double-click activation. Detailed contract: `MemoryAI/RESOURCE_FILE_FORMATS.md`.
+
+
+## 2026-09-22 — Scene Dialogue is now a real Runtime phase
+
+The canonical Scene pipeline is now fully interactive for dialogue:
+
+`Quest DialogueScene` references a canonical `.aqscene`; Scene Runtime executes `SceneStart → Dialogue → Choice → SceneEnd` with explicit waits.
+
+Dialogue uses `InterfaceDialogue` and a unique requestId. The Simulator interface renders the dialogue and sends `DialogueContinue`; Scene Runtime validates the requestId before advancing. Choice keeps the existing `InterfaceChoiceDialog / ChoiceSelected` contract.
+
+Do not reintroduce direct Quest-level dialogue presentation as the primary path. New conversation content belongs to Scene resources. The current sandbox keeps Dialogue/Choice resource collections inside SceneDefinition; `.aqdialogue` and `.aqchoice` are reserved resource file types for the later resource extraction layer, not required to break Scene ownership now.
