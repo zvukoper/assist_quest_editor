@@ -327,6 +327,12 @@ public sealed class SceneGraphStore
             return false;
         }
 
+        if (choice.Options.Count <= 1)
+        {
+            error = "Choice должен содержать хотя бы один вариант; последний вариант удалить нельзя.";
+            return false;
+        }
+
         var option = choice.Options.FirstOrDefault(item =>
             item.Id.Equals(optionId, StringComparison.OrdinalIgnoreCase));
         if (option is null)
@@ -605,7 +611,7 @@ public sealed class SceneGraphStore
             choice.Id.Equals(choiceId, StringComparison.OrdinalIgnoreCase));
     }
 
-    private static IReadOnlyDictionary<string, string> NormalizeParameters(
+    private static Dictionary<string, string> NormalizeParameters(
         IReadOnlyDictionary<string, string> parameters) =>
         new Dictionary<string, string>(
             parameters
