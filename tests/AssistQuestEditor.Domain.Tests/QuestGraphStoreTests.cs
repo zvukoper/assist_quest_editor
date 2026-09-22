@@ -9,14 +9,16 @@ public sealed class QuestGraphStoreTests
     public void AddsNodeWithStableIdAndRegistrySockets()
     {
         var store = new QuestGraphStore(QuestGraphFactory.CreateStarter());
+        var before = store.Value;
 
         var node = store.AddNode("SetStep", "Установить этап", 320, 220);
 
         Assert.False(string.IsNullOrWhiteSpace(node.NodeId));
         Assert.Equal("SetStep", node.NodeType);
         Assert.Equal("Установить этап", node.Title);
-        Assert.Equal(320, node.X);
-        Assert.Equal(220, node.Y);
+        AssertNoOverlaps(store.Value);
+        Assert.True(store.Undo());
+        Assert.Equal(before, store.Value);
         Assert.Contains(node.Sockets, socket =>
             socket.SocketId.EndsWith(".in", StringComparison.OrdinalIgnoreCase) &&
             socket.Direction == SocketDirection.Input);
