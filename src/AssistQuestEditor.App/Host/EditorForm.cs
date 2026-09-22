@@ -252,6 +252,99 @@ public sealed class EditorForm : WebViewForm
                 break;
             }
 
+
+            case "scene_create_dialogue_for_node":
+            {
+                var nodeId = Required(root, "nodeId");
+                var dialogue = _sceneGraph.CreateDialogueForNode(nodeId);
+                AppLogger.Info(
+                    "Scene Content: создан/привязан Dialogue.",
+                    "node=" + nodeId + "; dialogue=" + dialogue.Id);
+                PostSceneGraph(nodeId);
+                break;
+            }
+
+            case "scene_update_dialogue":
+            {
+                var dialogueId = Required(root, "dialogueId");
+                var updated = _sceneGraph.UpdateDialogue(
+                    dialogueId,
+                    String(root, "speaker", string.Empty),
+                    String(root, "text", string.Empty));
+
+                if (!updated)
+                    throw new InvalidOperationException("Dialogue resource не найден: " + dialogueId);
+
+                AppLogger.Info(
+                    "Scene Content: обновлён Dialogue.",
+                    "dialogue=" + dialogueId);
+                PostSceneGraph();
+                break;
+            }
+
+            case "scene_create_choice_for_node":
+            {
+                var nodeId = Required(root, "nodeId");
+                var choice = _sceneGraph.CreateChoiceForNode(nodeId);
+                AppLogger.Info(
+                    "Scene Content: создан/привязан Choice.",
+                    "node=" + nodeId + "; choice=" + choice.Id);
+                PostSceneGraph(nodeId);
+                break;
+            }
+
+            case "scene_update_choice":
+            {
+                var choiceId = Required(root, "choiceId");
+                var error = string.Empty;
+                var updated = _sceneGraph.UpdateChoice(
+                    choiceId,
+                    String(root, "title", string.Empty),
+                    String(root, "speaker", string.Empty),
+                    String(root, "text", string.Empty),
+                    ChoiceOptionTexts(root, "options"),
+                    out error);
+
+                if (!updated)
+                    throw new InvalidOperationException(error);
+
+                AppLogger.Info(
+                    "Scene Content: обновлён Choice.",
+                    "choice=" + choiceId);
+                PostSceneGraph();
+                break;
+            }
+
+            case "scene_add_choice_option":
+            {
+                var nodeId = Required(root, "nodeId");
+                var choiceId = Required(root, "choiceId");
+                var option = _sceneGraph.AddChoiceOption(nodeId, choiceId);
+                AppLogger.Info(
+                    "Scene Content: добавлен Choice option.",
+                    "node=" + nodeId + "; choice=" + choiceId + "; option=" + option.Id +
+                    "; socket=" + option.OutputSocketId);
+                PostSceneGraph(nodeId);
+                break;
+            }
+
+            case "scene_remove_choice_option":
+            {
+                var nodeId = Required(root, "nodeId");
+                var choiceId = Required(root, "choiceId");
+                var optionId = Required(root, "optionId");
+                var removed = _sceneGraph.RemoveChoiceOption(nodeId, choiceId, optionId, out var error);
+
+                if (!removed)
+                    throw new InvalidOperationException(error);
+
+                AppLogger.Info(
+                    "Scene Content: удалён Choice option.",
+                    "node=" + nodeId + "; choice=" + choiceId + "; option=" + optionId);
+                PostSceneGraph(nodeId);
+                break;
+            }
+
             case "scene_save":
                 SaveScene(saveAs: false);
                 break;
@@ -1066,6 +1159,37 @@ public sealed class EditorForm : WebViewForm
                element.ValueKind != JsonValueKind.Undefined
             ? element.ToString()
             : fallback ?? string.Empty;
+    }
+
+
+    private static IReadOnlyDictionary<string, string> ChoiceOptionTexts(JsonElement root, string name)
+    {
+        var result = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+
+        if (!root.TryGetProperty(name, out var element) ||
+            element.ValueKind != JsonValueKind.Array)
+            return result;
+
+        foreach (var item in element.EnumerateArray())
+        {
+            if (item.ValueKind != JsonValueKind.Object)
+                continue;
+
+            var id = item.TryGetProperty("id", out var idElement)
+                ? idElement.ToString()
+                : string.Empty;
+
+            if (string.IsNullOrWhiteSpace(id))
+                continue;
+
+            var text = item.TryGetProperty("text", out var textElement)
+                ? textElement.ToString()
+                : string.Empty;
+
+            result[id] = text;
+        }
+
+        return result;
     }
 
     private static IReadOnlyDictionary<string, string>? Parameters(JsonElement root, string name)
