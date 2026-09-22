@@ -17,6 +17,7 @@ public sealed class QuestRuntimeCoordinator : IQuestRuntimeController
 
     private QuestRuntime? _activeRuntime;
     private QuestRuntimeState _lastState;
+    private readonly Dictionary<string, bool> _activationReady = new(StringComparer.OrdinalIgnoreCase);
 
     public QuestRuntimeCoordinator(
         IDataChannelHub hub,
@@ -84,6 +85,7 @@ public sealed class QuestRuntimeCoordinator : IQuestRuntimeController
             _activeRuntime.Stop("Сброс Quest Runtime.");
 
         DisposeActiveRuntime();
+        _activationReady.Clear();
         RefreshQuestStatuses(forceAvailable: true);
 
         _lastState = _lastState with
@@ -145,27 +147,35 @@ public sealed class QuestRuntimeCoordinator : IQuestRuntimeController
 
     private void EvaluateAutomaticStart()
     {
-        if (_activeRuntime is not null &&
-            _activeRuntime.State.Status is QuestRuntimeStatus.Running or QuestRuntimeStatus.Waiting)
-            return;
+        var runtimeBusy = _activeRuntime is not null &&
+            _activeRuntime.State.Status is QuestRuntimeStatus.Running or QuestRuntimeStatus.Waiting;
 
         foreach (var definition in SafeLoadDefinitions())
         {
             var activation = definition.Activation;
-            if (activation is null ||
-                activation.Mode != QuestStartMode.Proximity ||
-                string.IsNullOrWhiteSpace(activation.WorldPointId))
+            var readyNow =
+                activation is not null &&
+                activation.Mode == QuestStartMode.Proximity &&
+                !string.IsNullOrWhiteSpace(activation.WorldPointId) &&
+                ActivationMatches(activation);
+
+            var wasReady = _activationReady.TryGetValue(definition.Id, out var ready) && ready;
+            _activationReady[definition.Id] = readyNow;
+
+            // Updating readiness while another Quest is running is important:
+            // leaving a repeatable quest area must arm its next activation edge.
+            if (runtimeBusy || !readyNow || wasReady)
                 continue;
 
             var status = GetQuestStatus(definition.Id);
             if (!CanAutoStart(definition, status))
                 continue;
 
-            if (!ActivationMatches(activation))
-                continue;
-
             if (StartQuest(definition.Id, ignoreLifecycle: false))
-                return;
+            {
+                runtimeBusy = true;
+                break;
+            }
         }
     }
 
