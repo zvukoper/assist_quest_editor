@@ -16,6 +16,8 @@ public sealed class QuestGraphStoreTests
         Assert.False(string.IsNullOrWhiteSpace(node.NodeId));
         Assert.Equal("SetStep", node.NodeType);
         Assert.Equal("Установить этап", node.Title);
+        // Нода должна быть найдена до Undo: после отката её в графе уже нет.
+        Assert.Equal(node.NodeId, store.FindNode(node.NodeId)!.NodeId);
         AssertNoOverlaps(store.Value);
         Assert.True(store.Undo());
         Assert.Equal(before, store.Value);
@@ -25,7 +27,6 @@ public sealed class QuestGraphStoreTests
         Assert.Contains(node.Sockets, socket =>
             socket.SocketId.EndsWith(".out", StringComparison.OrdinalIgnoreCase) &&
             socket.Direction == SocketDirection.Output);
-        Assert.Equal(node.NodeId, store.FindNode(node.NodeId)!.NodeId);
     }
 
     [Fact]
