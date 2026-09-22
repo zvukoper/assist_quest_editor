@@ -364,6 +364,7 @@
       "requiredReputationNpcId": "gosha",
       "requiredReputation": 350,
       "repeatable": true
-    }
+    },
+    "version": 2
   }
 }
