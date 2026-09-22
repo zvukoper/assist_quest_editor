@@ -164,6 +164,7 @@ public sealed class EditorForm : WebViewForm
         PostSimulatorContext();
         if (_isGraphEditor)
         {
+            PostSceneCatalog();
             PostQuestGraph();
             PostRuntimeState();
         }
@@ -961,6 +962,11 @@ public sealed class EditorForm : WebViewForm
             canUndo = _questGraph.CanUndo,
             canRedo = _questGraph.CanRedo,
             validation = QuestGraphValidator.Validate(_questGraph.Value),
+            sceneCatalog = _sceneCatalog.Scenes.Select(scene => new
+            {
+                id = scene.Id,
+                title = scene.Title
+            }).ToArray(),
             documentPath = _currentDefinitionPath ?? string.Empty,
             lastDocumentPath = _lastDefinitionPath ?? string.Empty,
             documentDirty = _documentDirty
