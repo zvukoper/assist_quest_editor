@@ -6,8 +6,6 @@ namespace AssistQuestEditor.App;
 
 public static class QuestLogger
 {
-    private static readonly object Sync = new();
-
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
         Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping
@@ -65,8 +63,8 @@ public static class QuestLogger
             if (!string.IsNullOrWhiteSpace(details))
                 line += " | " + details.Replace(Environment.NewLine, " \\n ");
 
-            lock (Sync)
-                File.AppendAllText(path, line + Environment.NewLine, new UTF8Encoding(false));
+            // Тот же случай, что и в AppLogger: писать могут сразу два процесса.
+            InterprocessLogWriter.Append(path, line + Environment.NewLine);
         }
         catch
         {

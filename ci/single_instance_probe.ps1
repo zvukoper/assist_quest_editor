@@ -33,18 +33,51 @@ if (-not (Test-Path -LiteralPath $ExePath)) {
 $logPath = Join-Path $RepositoryRoot 'MemoryAI\LOGS\assist_quest_editor.log'
 $target = Join-Path $RepositoryRoot 'data\quests\tutorial_ruslan_shashlik.aqquest'
 
-function Get-AppLogTail {
-    param([int]$Count = 400)
+# Читаются только строки, появившиеся после старта пробы. Иначе маркер от
+# прошлого прогона засчитался бы как успех текущего, и проверка молча перестала
+# бы что-либо проверять.
+$script:LogOffset = 0
+
+function Get-AppLogLength {
+    if (-not (Test-Path -LiteralPath $logPath)) { return 0 }
+    return (Get-Item -LiteralPath $logPath).Length
+}
+
+function Get-NewAppLogLines {
     if (-not (Test-Path -LiteralPath $logPath)) { return @() }
-    return @(Get-Content -LiteralPath $logPath -Tail $Count -Encoding utf8)
+
+    # Журнал в этот момент дописывается приложением, поэтому файл открывается с
+    # общим доступом на чтение и запись: обычное чтение упало бы на блокировке.
+    $stream = $null
+    try {
+        $stream = New-Object IO.FileStream(
+            $logPath,
+            [IO.FileMode]::Open,
+            [IO.FileAccess]::Read,
+            [IO.FileShare]::ReadWrite)
+    }
+    catch {
+        return @()
+    }
+
+    try {
+        if ($stream.Length -le $script:LogOffset) { return @() }
+        $stream.Seek($script:LogOffset, [IO.SeekOrigin]::Begin) | Out-Null
+        $buffer = New-Object byte[] ($stream.Length - $script:LogOffset)
+        $read = $stream.Read($buffer, 0, $buffer.Length)
+        $text = [Text.Encoding]::UTF8.GetString($buffer, 0, $read)
+        return @($text -split "`r?`n" | Where-Object { $_ })
+    }
+    finally {
+        $stream.Dispose()
+    }
 }
 
 function Wait-ForLogMarker {
     param([string]$Pattern, [int]$TimeoutMs = 30000)
     $deadline = (Get-Date).AddMilliseconds($TimeoutMs)
     while ((Get-Date) -lt $deadline) {
-        $tail = Get-AppLogTail
-        if ($tail | Select-String -Pattern $Pattern -Quiet) { return $true }
+        if (Get-NewAppLogLines | Select-String -Pattern $Pattern -Quiet) { return $true }
         Start-Sleep -Milliseconds 250
     }
     return $false
@@ -57,6 +90,10 @@ function Stop-ProbeApp {
 }
 
 Stop-ProbeApp
+
+# Отсчёт ведётся от текущего конца журнала: интересуют только строки этого
+# прогона.
+$script:LogOffset = Get-AppLogLength
 
 $failures = New-Object System.Collections.Generic.List[string]
 
@@ -88,7 +125,7 @@ try {
         $failures.Add('Первый экземпляр не получил запрос открытия по каналу.')
     }
 
-    $tail = Get-AppLogTail -Count 600
+    $tail = Get-NewAppLogLines
     if (-not ($tail | Select-String -Pattern 'Внешний запуск: обработка запроса' -Quiet)) {
         $failures.Add('Первый экземпляр не обработал внешний запуск.')
     }

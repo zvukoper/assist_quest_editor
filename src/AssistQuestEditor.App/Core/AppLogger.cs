@@ -4,7 +4,6 @@ namespace AssistQuestEditor.App;
 
 public static class AppLogger
 {
-    private static readonly object Sync = new();
     private static string? _logPath;
     private static int _writesSuppressed;
 
@@ -51,8 +50,10 @@ public static class AppLogger
             if (!string.IsNullOrWhiteSpace(details))
                 line += " | " + details.Replace(Environment.NewLine, " \\n ");
 
-            lock (Sync)
-                File.AppendAllText(path, line + Environment.NewLine, new UTF8Encoding(false));
+            // Запись может идти из двух процессов сразу: второй экземпляр пишет,
+            // что передал путь, пока первый пишет, что запрос получил. Обычный
+            // File.AppendAllText в этот момент падает, и строка теряется молча.
+            InterprocessLogWriter.Append(path, line + Environment.NewLine);
         }
         catch
         {

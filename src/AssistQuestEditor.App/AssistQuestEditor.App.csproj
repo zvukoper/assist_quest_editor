@@ -11,10 +11,10 @@
     <Prefer32Bit>false</Prefer32Bit>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
 
-    <Version>1.0.40.143</Version>
-    <AssemblyVersion>1.0.40.143</AssemblyVersion>
-    <FileVersion>1.0.40.143</FileVersion>
-    <AssemblyInformationalVersion>1.0.40.143-RESOURCE-SYNC-R1</AssemblyInformationalVersion>
+    <Version>1.0.40.144</Version>
+    <AssemblyVersion>1.0.40.144</AssemblyVersion>
+    <FileVersion>1.0.40.144</FileVersion>
+    <AssemblyInformationalVersion>1.0.40.144-LOG-RACE-FIX</AssemblyInformationalVersion>
     <PublishSingleFile>true</PublishSingleFile>
     <SelfContained>true</SelfContained>
     <RuntimeIdentifier>win-x64</RuntimeIdentifier>

@@ -1,0 +1,68 @@
+2026-09-22 14:45:31.098 [INFO] [PID 9420] [TID 2] === Assist Quest Editor START === | Version=1.0.40.144-LOG-RACE-FIX; BaseDirectory=C:\Users\Admin\AppData\Local\Temp\.net\AssistQuestEditor\OwK5S3xGn12D\; CurrentDirectory=F:\repo\assist_quest_editor; LogPath=F:\repo\assist_quest_editor\MemoryAI\LOGS\assist_quest_editor.log
+2026-09-22 14:45:31.118 [INFO] [PID 9420] [TID 2] Single instance: экземпляр первый. | mutex=Local\AssistQuestEditor.SingleInstance.1
+2026-09-22 14:45:31.118 [INFO] [PID 9420] [TID 2] Splash: подготовка. | path=C:\Users\Admin\AppData\Local\Temp\.net\AssistQuestEditor\OwK5S3xGn12D\Assets\SplashScreen.png; exists=True
+2026-09-22 14:45:31.261 [INFO] [PID 9420] [TID 2] Ресурсы при запуске проверены. | Ресурсы публикации совпадают с манифестом: файлов 10.
+2026-09-22 14:45:31.261 [INFO] [PID 9420] [TID 2] Загрузка СДО world data.
+2026-09-22 14:45:31.263 [INFO] [PID 9420] [TID 2] SdoWorldDataLoader.Load() | path=F:\repo\assist_quest_editor\bin\Release\net10.0-windows\win-x64\publish\data\world/sdo_points.json; exists=True
+2026-09-22 14:45:31.265 [INFO] [PID 9420] [TID 2] Файл СДО прочитан. | bytes=756275; chars=708222
+2026-09-22 14:45:31.287 [INFO] [PID 9420] [TID 2] Метаданные СДО разобраны. | schema=1; source=zvukoper/ets2_assist:data/editor_static_data; categoryCount=71; pointCount=5115; parsedPoints=5115
+2026-09-22 14:45:31.288 [INFO] [PID 9420] [TID 2] СДО-точки отфильтрованы. | input=5115; valid=5115; invalid=0
+2026-09-22 14:45:31.294 [INFO] [PID 9420] [TID 2] СДО world points готовы. | count=5115; X=[118733,199063]; Y=[-41,7734,220,812]; Z=[-110503,-43350,1]
+2026-09-22 14:45:31.294 [INFO] [PID 9420] [TID 2] CityWorldDataLoader.Load() | path=F:\repo\assist_quest_editor\bin\Release\net10.0-windows\win-x64\publish\data\world/cities.json; exists=True
+2026-09-22 14:45:31.297 [INFO] [PID 9420] [TID 2] Города world points готовы. | input=77; valid=77; invalid=0
+2026-09-22 14:45:31.298 [INFO] [PID 9420] [TID 2] World data загружены. | sdo=5115; cities=77; total=5192
+2026-09-22 14:45:31.304 [INFO] [PID 9420] [TID 2] Создан SimulatorDataSourceAdapter. | channels=15; points=5192
+2026-09-22 14:45:31.336 [INFO] [PID 9420] [TID 2] QuestDefinitionLoader.LoadDocumentOrFallback() | path=F:\repo\assist_quest_editor\bin\Release\net10.0-windows\win-x64\publish\data\quests/tutorial_ruslan_shashlik.aqquest; exists=True
+2026-09-22 14:45:31.363 [INFO] [PID 9420] [TID 2] Учебный Quest Definition загружен. | questId=tutorial_ruslan_shashlik; nodes=47; connections=50
+2026-09-22 14:45:31.365 [INFO] [PID 9420] [TID 2] SceneCatalogLoader.Load() | directory=F:\repo\assist_quest_editor\bin\Release\net10.0-windows\win-x64\publish\data\scenes; exists=True
+2026-09-22 14:45:31.373 [INFO] [PID 9420] [TID 2] Scene Definition загружена. | id=gosha_delivery; path=F:\repo\assist_quest_editor\bin\Release\net10.0-windows\win-x64\publish\data\scenes\gosha_delivery.aqscene
+2026-09-22 14:45:31.374 [INFO] [PID 9420] [TID 2] Scene Definition загружена. | id=gosha_meat; path=F:\repo\assist_quest_editor\bin\Release\net10.0-windows\win-x64\publish\data\scenes\gosha_meat.aqscene
+2026-09-22 14:45:31.375 [INFO] [PID 9420] [TID 2] Scene Definition загружена. | id=gosha_shop; path=F:\repo\assist_quest_editor\bin\Release\net10.0-windows\win-x64\publish\data\scenes\gosha_shop.aqscene
+2026-09-22 14:45:31.376 [INFO] [PID 9420] [TID 2] Scene Definition загружена. | id=ruslan_delivery; path=F:\repo\assist_quest_editor\bin\Release\net10.0-windows\win-x64\publish\data\scenes\ruslan_delivery.aqscene
+2026-09-22 14:45:31.377 [INFO] [PID 9420] [TID 2] Scene Definition загружена. | id=ruslan_finish; path=F:\repo\assist_quest_editor\bin\Release\net10.0-windows\win-x64\publish\data\scenes\ruslan_finish.aqscene
+2026-09-22 14:45:31.377 [INFO] [PID 9420] [TID 2] Scene Definition загружена. | id=ruslan_start; path=F:\repo\assist_quest_editor\bin\Release\net10.0-windows\win-x64\publish\data\scenes\ruslan_start.aqscene
+2026-09-22 14:45:31.377 [INFO] [PID 9420] [TID 2] Scene catalog готов. | sceneCount=6
+2026-09-22 14:45:31.386 [INFO] [PID 9420] [TID 2] MainForm создан. Запуск Application.Run().
+2026-09-22 14:45:31.401 [INFO] [PID 9420] [TID 2] WebView2: начало инициализации. | form=Assist Quest Editor — Редактор; page=main.html
+2026-09-22 14:45:31.397 [INFO] [PID 288] [TID 2] === Assist Quest Editor START === | Version=1.0.40.144-LOG-RACE-FIX; BaseDirectory=C:\Users\Admin\AppData\Local\Temp\.net\AssistQuestEditor\OwK5S3xGn12D\; CurrentDirectory=F:\repo\assist_quest_editor; LogPath=F:\repo\assist_quest_editor\MemoryAI\LOGS\assist_quest_editor.log
+2026-09-22 14:45:31.418 [INFO] [PID 288] [TID 2] Single instance: приложение уже запущено, передаю запрос. | mutex=Local\AssistQuestEditor.SingleInstance.1
+2026-09-22 14:45:31.420 [INFO] [PID 288] [TID 2] Single instance: запрос передан работающему экземпляру. | path=F:\repo\assist_quest_editor\data\quests\tutorial_ruslan_shashlik.aqquest
+2026-09-22 14:45:31.420 [INFO] [PID 288] [TID 2] Запуск отменён: приложение уже работает, запрос передан.
+2026-09-22 14:45:31.421 [INFO] [PID 9420] [TID 6] Single instance: получен запрос открытия. | path=F:\repo\assist_quest_editor\data\quests\tutorial_ruslan_shashlik.aqquest
+2026-09-22 14:45:31.421 [INFO] [PID 288] [TID 2] === Assist Quest Editor END ===
+2026-09-22 14:45:31.434 [INFO] [PID 9420] [TID 2] Внешний запуск: обработка запроса. | path=F:\repo\assist_quest_editor\data\quests\tutorial_ruslan_shashlik.aqquest
+2026-09-22 14:45:31.444 [INFO] [PID 9420] [TID 2] WebView2: начало инициализации. | form=Assist Quest Editor — Нодовый редактор — Новый документ; page=editor.html#graph
+2026-09-22 14:45:31.463 [INFO] [PID 9420] [TID 2] Quest Graph: документ открыт. | path=F:\repo\assist_quest_editor\data\quests\tutorial_ruslan_shashlik.aqquest; schema=1
+2026-09-22 14:45:31.684 [INFO] [PID 9420] [TID 2] WebView2: CoreWebView2 создан. | browser=153.0.4234.48
+2026-09-22 14:45:31.700 [INFO] [PID 9420] [TID 2] WebView2: Navigate. | form=Assist Quest Editor — Редактор; uri=file:///C:/Users/Admin/AppData/Local/Temp/.net/AssistQuestEditor/OwK5S3xGn12D/Web/main.html?v=1.0.40.144; sourceExists=True; sourceBytes=6468
+2026-09-22 14:45:31.710 [INFO] [PID 9420] [TID 2] WebView2: CoreWebView2 создан. | browser=153.0.4234.48
+2026-09-22 14:45:31.710 [INFO] [PID 9420] [TID 2] WebView2: Navigate. | form=Assist Quest Editor — Нодовый редактор — tutorial_ruslan_shashlik.aqquest; uri=file:///C:/Users/Admin/AppData/Local/Temp/.net/AssistQuestEditor/OwK5S3xGn12D/Web/editor.html?v=1.0.40.144#graph; sourceExists=True; sourceBytes=988
+2026-09-22 14:45:31.740 [INFO] [PID 9420] [TID 2] WEB: Web document load завершён. | {"title":"Assist Quest Editor","url":"file:///C:/Users/Admin/AppData/Local/Temp/.net/AssistQuestEditor/OwK5S3xGn12D/Web/main.html?v=1.0.40.144"}
+2026-09-22 14:45:31.741 [INFO] [PID 9420] [TID 2] WEB: Web document load завершён. | {"title":"Редактор","url":"file:///C:/Users/Admin/AppData/Local/Temp/.net/AssistQuestEditor/OwK5S3xGn12D/Web/editor.html?v=1.0.40.144#graph"}
+2026-09-22 14:45:31.749 [INFO] [PID 9420] [TID 2] WebView2: NavigationCompleted. | form=Assist Quest Editor — Нодовый редактор — tutorial_ruslan_shashlik.aqquest; success=True; error=Unknown
+2026-09-22 14:45:31.749 [INFO] [PID 9420] [TID 2] WebView2: browser ready. | form=Assist Quest Editor — Нодовый редактор — tutorial_ruslan_shashlik.aqquest; page=editor.html#graph
+2026-09-22 14:45:31.782 [INFO] [PID 9420] [TID 2] WebView2: NavigationCompleted. | form=Assist Quest Editor — Редактор; success=True; error=Unknown
+2026-09-22 14:45:31.783 [INFO] [PID 9420] [TID 2] WebView2: browser ready. | form=Assist Quest Editor — Редактор; page=main.html
+2026-09-22 14:45:31.809 [INFO] [PID 9420] [TID 2] WebView2: начало инициализации. | form=Assist Quest Editor — Симулятор; page=simulator.html
+2026-09-22 14:45:31.894 [INFO] [PID 9420] [TID 2] Splash: завершён. | Основной WebView2 готов.
+2026-09-22 14:45:31.898 [INFO] [PID 9420] [TID 2] WebView2: CoreWebView2 создан. | browser=153.0.4234.48
+2026-09-22 14:45:31.899 [INFO] [PID 9420] [TID 2] WebView2: Navigate. | form=Assist Quest Editor — Симулятор; uri=file:///C:/Users/Admin/AppData/Local/Temp/.net/AssistQuestEditor/OwK5S3xGn12D/Web/simulator.html?v=1.0.40.144; sourceExists=True; sourceBytes=3187
+2026-09-22 14:45:31.914 [INFO] [PID 9420] [TID 2] WEB: Simulator Web UI готов. | {"canvas":true,"side":true,"url":"file:///C:/Users/Admin/AppData/Local/Temp/.net/AssistQuestEditor/OwK5S3xGn12D/Web/simulator.html?v=1.0.40.144"}
+2026-09-22 14:45:31.916 [INFO] [PID 9420] [TID 2] WEB: Simulator interface layer готов. | {"layer":true,"supportsDialogue":true,"supportsChoice":true}
+2026-09-22 14:45:31.917 [INFO] [PID 9420] [TID 2] WEB: Web document load завершён. | {"title":"Симулятор","url":"file:///C:/Users/Admin/AppData/Local/Temp/.net/AssistQuestEditor/OwK5S3xGn12D/Web/simulator.html?v=1.0.40.144"}
+2026-09-22 14:45:31.924 [INFO] [PID 9420] [TID 2] WebView2: NavigationCompleted. | form=Assist Quest Editor — Симулятор; success=True; error=Unknown
+2026-09-22 14:45:31.924 [INFO] [PID 9420] [TID 2] WebView2: browser ready. | form=Assist Quest Editor — Симулятор; page=simulator.html
+2026-09-22 14:45:31.925 [INFO] [PID 9420] [TID 2] SimulatorForm: browser ready, отправляю snapshot.
+2026-09-22 14:45:31.927 [INFO] [PID 9420] [TID 2] SimulatorForm: формирование snapshot. | points=5192; selected=<none>; player=WorldCoordinate { X = 158898, Y = 89,5193, Z = -76926,55 }
+2026-09-22 14:45:31.982 [INFO] [PID 9420] [TID 2] SimulatorForm: отправляю snapshot в WebView2. | jsonChars=1323222; points=5192
+2026-09-22 14:45:32.063 [INFO] [PID 9420] [TID 2] WEB: Simulator получил snapshot. | {"points":5192,"selectedPointId":null,"player":{"x":158898,"y":89.5193,"z":-76926.55},"version":"1.0.40.144-LOG-RACE-FIX"}
+2026-09-22 14:45:36.764 [INFO] [PID 4672] [TID 2] === Assist Quest Editor START === | Version=1.0.40.144-LOG-RACE-FIX; BaseDirectory=F:\repo\assist_quest_editor\src\AssistQuestEditor.App\bin\Release\net10.0-windows\win-x64\; CurrentDirectory=F:\repo\assist_quest_editor\src\AssistQuestEditor.App\bin\Release\net10.0-windows\win-x64; LogPath=F:\repo\assist_quest_editor\MemoryAI\LOGS\assist_quest_editor.log
+2026-09-22 14:45:36.829 [INFO] [PID 4672] [TID 2] === Assist Quest Editor END ===
+2026-09-22 14:45:48.772 [INFO] [PID 10388] [TID 2] === Assist Quest Editor START === | Version=1.0.40.144-LOG-RACE-FIX; BaseDirectory=C:\Users\Admin\AppData\Local\Temp\.net\AssistQuestEditor\OwK5S3xGn12D\; CurrentDirectory=F:\repo\assist_quest_editor; LogPath=F:\repo\assist_quest_editor\MemoryAI\LOGS\assist_quest_editor.log
+2026-09-22 14:45:48.840 [INFO] [PID 10388] [TID 2] === Assist Quest Editor END ===
+2026-09-22 14:45:49.821 [INFO] [PID 10024] [TID 2] === Assist Quest Editor START === | Version=1.0.40.144-LOG-RACE-FIX; BaseDirectory=C:\Users\Admin\AppData\Local\Temp\.net\AssistQuestEditor\OwK5S3xGn12D\; CurrentDirectory=F:\repo\assist_quest_editor; LogPath=F:\repo\assist_quest_editor\MemoryAI\LOGS\assist_quest_editor.log
+2026-09-22 14:45:49.888 [INFO] [PID 10024] [TID 2] === Assist Quest Editor END ===
+2026-09-22 14:45:50.850 [INFO] [PID 4780] [TID 2] === Assist Quest Editor START === | Version=1.0.40.144-LOG-RACE-FIX; BaseDirectory=C:\Users\Admin\AppData\Local\Temp\.net\AssistQuestEditor\OwK5S3xGn12D\; CurrentDirectory=F:\repo\assist_quest_editor; LogPath=F:\repo\assist_quest_editor\MemoryAI\LOGS\assist_quest_editor.log
+2026-09-22 14:45:50.934 [INFO] [PID 4780] [TID 2] === Assist Quest Editor END ===
+2026-09-22 14:45:51.868 [INFO] [PID 5764] [TID 2] === Assist Quest Editor START === | Version=1.0.40.144-LOG-RACE-FIX; BaseDirectory=C:\Users\Admin\AppData\Local\Temp\.net\AssistQuestEditor\OwK5S3xGn12D\; CurrentDirectory=F:\repo\assist_quest_editor; LogPath=F:\repo\assist_quest_editor\MemoryAI\LOGS\assist_quest_editor.log
+2026-09-22 14:45:51.939 [INFO] [PID 5764] [TID 2] === Assist Quest Editor END ===
