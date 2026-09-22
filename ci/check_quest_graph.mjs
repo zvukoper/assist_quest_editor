@@ -33,14 +33,16 @@ function validate(filePath) {
   const definition = doc.definition;
   const graph = definition.graph;
   const problems = [];
-  const nodes = new Map(graph.nodes.map(node => [node.nodeId, node]));
+  const nodeId = node => node.nodeId ?? node.id;
+  const nodeType = node => node.nodeType ?? node.type;
+  const nodes = new Map(graph.nodes.map(node => [nodeId(node), node]));
   if (nodes.size !== graph.nodes.length) problems.push("duplicate nodeId");
 
   const socketMap = new Map();
   for (const node of graph.nodes) {
     const map = new Map(node.sockets.map(socket => [socket.socketId, socket]));
-    if (map.size !== node.sockets.length) problems.push("duplicate socket in " + node.nodeId);
-    socketMap.set(node.nodeId, map);
+    if (map.size !== node.sockets.length) problems.push("duplicate socket in " + nodeId(node));
+    socketMap.set(nodeId(node), map);
   }
 
   const incoming = new Map();
@@ -50,8 +52,8 @@ function validate(filePath) {
   for (const c of graph.connections) {
     const from = nodes.get(c.fromNodeId), to = nodes.get(c.toNodeId);
     if (!from || !to) { problems.push("unknown node in connection"); continue; }
-    const fsocket = socketMap.get(from.nodeId)?.get(c.fromSocketId);
-    const tsocket = socketMap.get(to.nodeId)?.get(c.toSocketId);
+    const fsocket = socketMap.get(nodeId(from))?.get(c.fromSocketId);
+    const tsocket = socketMap.get(nodeId(to))?.get(c.toSocketId);
     if (!fsocket || !tsocket) { problems.push("unknown socket in connection"); continue; }
     if (fsocket.direction !== "Output" || tsocket.direction !== "Input") problems.push("connection direction");
     const key = [c.fromNodeId,c.fromSocketId,c.toNodeId,c.toSocketId].join("\u001f");
@@ -61,29 +63,30 @@ function validate(filePath) {
     adjacency.get(from.nodeId).push(to.nodeId);
   }
 
-  const starts = graph.nodes.filter(n => n.nodeType === "Start");
-  const ends = graph.nodes.filter(n => n.nodeType === "End");
+  const starts = graph.nodes.filter(n => nodeType(n) === "Start");
+  const ends = graph.nodes.filter(n => nodeType(n) === "End");
   if (starts.length !== 1) problems.push("expected exactly one Start");
   if (!ends.length) problems.push("no End");
 
-  const reachable = new Set(), queue = starts.map(n => n.nodeId);
+  const reachable = new Set(), queue = starts.map(n => nodeId(n));
   while (queue.length) {
     const id = queue.shift();
     if (reachable.has(id)) continue;
     reachable.add(id);
     for (const next of adjacency.get(id) || []) queue.push(next);
   }
-  for (const node of graph.nodes) if (!reachable.has(node.nodeId)) problems.push("unreachable node " + node.nodeId);
+  for (const node of graph.nodes) if (!reachable.has(nodeId(node))) problems.push("unreachable node " + nodeId(node));
 
   for (const node of graph.nodes) {
+    const id = nodeId(node);
     const inputs = node.sockets.filter(s => s.direction === "Input");
-    if (inputs.length && !inputs.some(s => incoming.has(node.nodeId + "\u001f" + s.socketId)))
-      problems.push("unconnected Input on " + node.nodeId);
+    if (inputs.length && !inputs.some(s => incoming.has(id + "\u001f" + s.socketId)))
+      problems.push("unconnected Input on " + id);
   }
 
   const declaredScenes = new Set(definition.sceneIds || []);
   const usedScenes = new Set();
-  for (const node of graph.nodes.filter(n => n.nodeType === "DialogueScene")) {
+  for (const node of graph.nodes.filter(n => nodeType(n) === "DialogueScene")) {
     const sceneId = node.parameters?.sceneId;
     usedScenes.add(sceneId);
 
