@@ -404,6 +404,7 @@ public static class QuestNodeCatalog
             "setstep" => Parameters(("step", "")),
             "setflag" => Parameters(("key", ""), ("value", "true")),
             "setvariable" => Parameters(("key", ""), ("value", "")),
+            "notify" => Parameters(("message", "")),
             "dialoguescene" => Parameters(("sceneId", "")),
             "reward" => Parameters(("rewardId", "")),
             "giveitem" => Parameters(("itemId", ""), ("count", "1")),
