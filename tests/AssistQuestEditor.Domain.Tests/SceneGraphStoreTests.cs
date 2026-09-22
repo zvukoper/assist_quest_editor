@@ -24,9 +24,13 @@ public sealed class SceneGraphStoreTests
     public void AddsNodeWithRegistrySockets()
     {
         var store = new SceneGraphStore(SceneCatalogFactory.CreateStarter().Scenes.Single());
+        var before = store.Value;
         var node = store.AddNode("Dialogue", "Новый диалог", 320, 220);
 
         Assert.StartsWith("scene-node-", node.NodeId);
+        AssertNoOverlaps(store.Value.Graph);
+        Assert.True(store.Undo());
+        Assert.Equal(before, store.Value);
         Assert.Contains(node.Sockets, socket => socket.Direction == SocketDirection.Input);
         Assert.Contains(node.Sockets, socket => socket.Direction == SocketDirection.Output);
         Assert.Contains(node.Parameters, pair => pair.Key.Equals("dialogueId", StringComparison.OrdinalIgnoreCase));
