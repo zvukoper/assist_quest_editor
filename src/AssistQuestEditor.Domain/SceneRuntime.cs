@@ -376,7 +376,7 @@ public sealed class SceneRuntime
         if (dialogue is null)
         {
             Fail(scene.Id, $"Dialogue resource «{dialogueId}» не найден.");
-            return;
+            return false;
         }
 
         var states = _hub.Get<RuntimeStatesState>("states").Value;
