@@ -257,6 +257,29 @@ public sealed class EditorForm : WebViewForm
             }
 
 
+            case "scene_add_dialogue":
+            {
+                var dialogue = _sceneGraph.AddDialogue();
+                AppLogger.Info(
+                    "Scene Content: создан Dialogue resource.",
+                    "dialogue=" + dialogue.Id);
+                PostSceneGraph();
+                break;
+            }
+
+            case "scene_remove_dialogue":
+            {
+                var dialogueId = Required(root, "dialogueId");
+                if (!_sceneGraph.RemoveDialogue(dialogueId, out var error))
+                    throw new InvalidOperationException(error ?? "Не удалось удалить Dialogue resource.");
+
+                AppLogger.Info(
+                    "Scene Content: удалён Dialogue resource.",
+                    "dialogue=" + dialogueId);
+                PostSceneGraph();
+                break;
+            }
+
             case "scene_create_dialogue_for_node":
             {
                 var nodeId = Required(root, "nodeId");
