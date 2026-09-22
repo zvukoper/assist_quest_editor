@@ -65,8 +65,17 @@ public sealed class QuestGraphStore
             Parameters = parameters
         };
 
-        Apply(_value with { Nodes = _value.Nodes.Append(node).ToArray() });
-        return node;
+        var graph = _value with { Nodes = _value.Nodes.Append(node).ToArray() };
+        var positions = QuestGraphLayout.Compute(graph);
+        var nodes = graph.Nodes
+            .Select(item => positions.TryGetValue(item.NodeId, out var position)
+                ? item with { X = position.X, Y = position.Y }
+                : item)
+            .ToArray();
+
+        var laidOutNode = nodes.Single(item => item.NodeId.Equals(node.NodeId, StringComparison.OrdinalIgnoreCase));
+        Apply(graph with { Nodes = nodes });
+        return laidOutNode;
     }
 
     public QuestNode? UpdateNode(
