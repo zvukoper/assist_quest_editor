@@ -23,7 +23,7 @@ public static class SceneCatalogLoader
         options.Converters.Add(new JsonStringEnumConverter());
 
         var scenes = new List<SceneDefinition>();
-        foreach (var path in Directory.EnumerateFiles(directory, "*.json", SearchOption.TopDirectoryOnly).OrderBy(path => path))
+        foreach (var path in Directory.EnumerateFiles(directory, "*.aqscene", SearchOption.TopDirectoryOnly).OrderBy(path => path))
         {
             try
             {
@@ -33,7 +33,7 @@ public static class SceneCatalogLoader
                     AppLogger.Warn("Scene Definition пропущена: пустой документ.", $"path={path}");
                     continue;
                 }
-                if (document.SchemaVersion != 1)
+                if (document.SchemaVersion != 1 || !document.Format.Equals("aqscene", StringComparison.OrdinalIgnoreCase))
                 {
                     AppLogger.Warn("Scene Definition пропущена: неподдерживаемая schemaVersion.", $"path={path}; schema={document.SchemaVersion}");
                     continue;
