@@ -11,10 +11,10 @@
     <Prefer32Bit>false</Prefer32Bit>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
 
-    <Version>1.0.40.147</Version>
-    <AssemblyVersion>1.0.40.147</AssemblyVersion>
-    <FileVersion>1.0.40.147</FileVersion>
-    <AssemblyInformationalVersion>1.0.40.147-LOG-RACE-FIX</AssemblyInformationalVersion>
+    <Version>1.0.40.148</Version>
+    <AssemblyVersion>1.0.40.148</AssemblyVersion>
+    <FileVersion>1.0.40.148</FileVersion>
+    <AssemblyInformationalVersion>1.0.40.148-CAMPAIGN-SIMULATION</AssemblyInformationalVersion>
     <PublishSingleFile>true</PublishSingleFile>
     <SelfContained>true</SelfContained>
     <RuntimeIdentifier>win-x64</RuntimeIdentifier>
@@ -54,6 +54,10 @@
       <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
     </None>
     <None Include="../../data/quests/*.aqquest" LinkBase="data/quests">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+    </None>
+    <None Include="../../data/campaigns/**/*" LinkBase="data/campaigns">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
       <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
     </None>
