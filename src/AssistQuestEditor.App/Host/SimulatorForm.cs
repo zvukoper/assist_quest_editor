@@ -440,13 +440,29 @@ public sealed class SimulatorForm : WebViewForm
     private void CampaignsForm_CampaignActiveChanged(object? sender, CampaignActiveChangedEventArgs e)
     {
         SetCampaignActive(e.CampaignId, e.Active);
+        RefreshCampaignsWindow();
         RequestSnapshot("campaign window: campaign active changed");
     }
 
     private void CampaignsForm_QuestEnabledChanged(object? sender, QuestEnabledChangedEventArgs e)
     {
         SetQuestEnabled(e.CampaignId, e.QuestId, e.Enabled);
+        RefreshCampaignsWindow();
         RequestSnapshot("campaign window: quest enabled changed");
+    }
+
+    private void RefreshCampaignsWindow()
+    {
+        if (_campaignsForm is null || _campaignsForm.IsDisposed || !_campaignsForm.IsHandleCreated)
+            return;
+
+        _campaignsForm.BeginInvoke(() =>
+        {
+            if (_campaignsForm is null || _campaignsForm.IsDisposed)
+                return;
+
+            _campaignsForm.SetCatalog(_campaignStore.BuildSimulatorCatalog());
+        });
     }
 
     private void CampaignsForm_QuestOpenRequested(object? sender, QuestOpenRequestedEventArgs e)
