@@ -211,11 +211,7 @@ public sealed class SimulatorDataChannelHub : IDataChannelHub
         Reputation = new DataChannel<ReputationState>(
             "reputation",
             "Репутация",
-            new ReputationState(new Dictionary<string, int>
-            {
-                ["ruslan"] = 0,
-                ["gosha"] = 0
-            }));
+            ReputationState.ForNpcs(NpcCatalogFactory.CreateStarter()));
 
         Telemetry = new DataChannel<TelemetryState>(
             "telemetry",
@@ -346,11 +342,7 @@ public sealed class SimulatorDataChannelHub : IDataChannelHub
         {
             ["ruslan.raw_meat"] = 0
         }), "Сброс симулятора");
-        Reputation.Set(new ReputationState(new Dictionary<string, int>
-        {
-            ["ruslan"] = 0,
-            ["gosha"] = 0
-        }), "Сброс симулятора");
+        Reputation.Set(ReputationState.ForNpcs(NpcCatalogFactory.CreateStarter()), "Сброс симулятора");
         Telemetry.Set(new TelemetryState(0, 800, 0, 0, 0, 78, 82, 34, 0, 0, 0, 0, false), "Сброс симулятора");
         Environment.Set(new EnvironmentState("Ясно", 0, "12:30", 5000), "Сброс симулятора");
         System.Set(new SystemState(true, "Симулятор", "", "Симуляция сброшена"), "Сброс симулятора");

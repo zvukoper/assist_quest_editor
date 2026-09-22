@@ -43,7 +43,26 @@ public sealed record SceneDialogue(
 public sealed record SceneChoiceOption(
     string Id,
     string Text,
-    string OutputSocketId);
+    string OutputSocketId)
+{
+    /// <summary>
+    /// Требование к репутации для показа варианта. null — вариант виден всегда.
+    ///
+    /// Проверяется при построении интерфейсного запроса: недоступный вариант
+    /// вообще не попадает в список, а не показывается неактивным. Так требование
+    /// ТЗ «возможности просто не видно» выполняется буквально.
+    /// </summary>
+    public ReputationRequirement? Requirement { get; init; }
+}
+
+/// <summary>
+/// Порог репутации для показа варианта выбора или ноды.
+/// Сравнение идёт по модулю значения по умолчанию: «от 350 и более» — это
+/// значение больше либо равно порогу.
+/// </summary>
+public sealed record ReputationRequirement(
+    string NpcId,
+    int MinValue);
 
 public sealed record SceneChoice(
     string Id,

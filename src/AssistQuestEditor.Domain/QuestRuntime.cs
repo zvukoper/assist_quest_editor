@@ -304,6 +304,7 @@ public sealed class QuestRuntime
                     return;
 
                 case "condition":
+                case "reputationcompare":
                     EvaluateCondition(node);
                     break;
 
@@ -584,6 +585,10 @@ public sealed class QuestRuntime
                 GetParameter(parameters, "right"),
                 GetParameter(parameters, "comparison", "==")),
             "distancecompare" => EvaluateDistance(parameters),
+            "reputationcompare" => Compare(
+                GetReputation(GetParameter(parameters, "npcId")),
+                ParseInt(GetParameter(parameters, "right"), 0),
+                GetParameter(parameters, "comparison", ">=")),
             _ => false
         };
     }
@@ -947,23 +952,39 @@ public sealed class QuestRuntime
             "QuestRuntime");
     }
 
+    /// <summary>
+    /// Изменяет репутацию НПЦ.
+    ///
+    /// Ключ — <c>npcId</c> (стабильный Id НПЦ), а не произвольная «фракция»:
+    /// у каждого НПЦ своя шкала и портрет, и смешивать их в одну строку нельзя.
+    /// Изменение репутации автоматически засчитывает контакт с НПЦ.
+    /// </summary>
     private void ApplyReputation(QuestNode node, int sign)
     {
-        var faction = GetParameter(node, "faction");
-        if (string.IsNullOrWhiteSpace(faction))
+        var npcId = GetParameter(node, "npcId");
+        if (string.IsNullOrWhiteSpace(npcId))
         {
+            // Нода без npcId не может ничего изменить: тихо пропускать нельзя,
+            // иначе ошибка в графе выглядела бы как «репутация не работает».
+            Publish(
+                "ReputationSkipped",
+                "QuestRuntime",
+                node.NodeId,
+                "Нода " + node.NodeType + " без параметра npcId пропущена.");
             return;
         }
 
         var amount = ParseInt(GetParameter(node, "amount"), 1) * sign;
-        var state = _hub.Get<ReputationState>("reputation").Value;
-        var values = new Dictionary<string, int>(state.Values, StringComparer.OrdinalIgnoreCase)
-        {
-            [faction] = GetReputation(faction) + amount
-        };
-        _hub.Get<ReputationState>("reputation").Set(
-            new ReputationState(values),
-            "QuestRuntime");
+        var channel = _hub.Get<ReputationState>("reputation");
+        channel.Set(channel.Value.WithChange(npcId, amount), "QuestRuntime");
+
+        Publish(
+            "ReputationChanged",
+            "QuestRuntime",
+            node.NodeId,
+            "Репутация «" + npcId + "»: " + ReputationScale.FormatValue(amount) +
+            "; итог " + channel.Value.ValueOf(npcId) +
+            " (" + ReputationScale.Resolve(channel.Value.ValueOf(npcId)).Name + ").");
     }
 
     private void SetQuestStatus(QuestStatus status, string step)
@@ -1009,7 +1030,7 @@ public sealed class QuestRuntime
         _hub.Get<InventoryState>("inventory").Value.Items.TryGetValue(key, out var value) ? value : 0;
 
     private int GetReputation(string key) =>
-        _hub.Get<ReputationState>("reputation").Value.Values.TryGetValue(key, out var value) ? value : 0;
+        _hub.Get<ReputationState>("reputation").Value.ValueOf(key);
 
     private QuestNode? FindCurrentNode() =>
         State.CurrentNodeId is null ? null : _graphStore.FindNode(State.CurrentNodeId);

@@ -72,7 +72,9 @@ try {
     playerProgress: { money: 1500, experience: 0, reserve: 0 },
     character: { stats: { strength: 5 }, skills: [] },
     inventory: { items: {}, newItemIds: [] },
-    reputation: { values: {} },
+    reputation: { entries: { gosha: { npcId: "gosha", value: 400, contacted: true } } },
+    npcCatalog: [{ id: "gosha", name: "Гоша", avatar: "data/images/avatar_placeholder.png", speakerAliases: ["Гоша"] }],
+    reputationViews: { gosha: { value: 400, valueLabel: "+400", rangeName: "Неопасный", rangeColor: "#00a7bd", fillColor: "#44ff00", progressPercent: 4, tooltip: "Репутация: +400 из 10000 (Неопасный)" } },
     telemetry: {
       speedKmh: 0, engineRpm: 0, throttle: 0, brake: 0, steering: 0,
       fuelPercent: 100, engineTemperature: 90, cabinTemperature: 20,

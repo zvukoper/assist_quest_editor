@@ -11,10 +11,10 @@
     <Prefer32Bit>false</Prefer32Bit>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
 
-    <Version>1.0.40.140</Version>
-    <AssemblyVersion>1.0.40.140</AssemblyVersion>
-    <FileVersion>1.0.40.140</FileVersion>
-    <AssemblyInformationalVersion>1.0.40.140-WINDOWS-FILE-ASSOCIATIONS</AssemblyInformationalVersion>
+    <Version>1.0.40.141</Version>
+    <AssemblyVersion>1.0.40.141</AssemblyVersion>
+    <FileVersion>1.0.40.141</FileVersion>
+    <AssemblyInformationalVersion>1.0.40.141-QUEST-REPUTATION-R1</AssemblyInformationalVersion>
     <PublishSingleFile>true</PublishSingleFile>
     <SelfContained>true</SelfContained>
     <RuntimeIdentifier>win-x64</RuntimeIdentifier>
@@ -58,6 +58,12 @@
       <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
     </None>
     <None Include="../../data/scenes/*.aqscene" LinkBase="data/scenes">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+    </None>
+    <!-- Портреты НПЦ: UI репутации ссылается на них относительным путём
+         data/images/..., поэтому они должны попадать в output и publish. -->
+    <None Include="../../data/images/*.png" LinkBase="data/images">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
       <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
     </None>

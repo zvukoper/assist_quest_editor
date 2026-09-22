@@ -331,6 +331,40 @@ input,select,textarea{padding:4px 5px;border-radius:4px;font-size:10px}textarea{
 }
 .gamePanelTitle{font-size:12px;font-weight:800;color:#fff}
 .gamePanelSub{font-size:9px;color:var(--muted)}
+
+/* Табы правой панели: Персонаж / Репутация.
+   Панель — flex-колонка, поэтому тело таба получает высоту через min-height:0:
+   без этого список репутации не прокручивался бы, а растягивал оверлей. */
+.gamePanelTabs{display:flex;gap:4px;padding:6px 8px 0;border-bottom:1px solid var(--border)}
+.gamePanelTab{
+  flex:1;min-width:0;padding:6px 8px;border:1px solid transparent;border-bottom:none;
+  border-radius:7px 7px 0 0;background:transparent;color:var(--muted);
+  font-size:10px;font-weight:700;cursor:pointer;
+}
+.gamePanelTab:hover{color:#fff;background:rgba(255,255,255,.05)}
+.gamePanelTab.active{color:#fff;background:rgba(250,176,3,.14);border-color:rgba(250,176,3,.4)}
+.gamePanelTabBody{flex:1;min-height:0;display:flex;flex-direction:column;overflow:hidden}
+
+.reputationList{flex:1;min-height:0;overflow-y:auto;padding:8px;display:grid;gap:7px}
+.reputationEmpty{padding:12px}
+.reputationRow{
+  display:grid;grid-template-columns:44px minmax(0,1fr);gap:9px;align-items:center;
+  padding:7px;border:1px solid rgba(255,255,255,.09);border-radius:8px;background:rgba(255,255,255,.025);
+}
+.reputationAvatar{
+  width:44px;height:44px;border-radius:7px;object-fit:cover;
+  background:#1b1f26;border:1px solid rgba(255,255,255,.12);
+}
+.reputationBody{min-width:0;display:grid;gap:4px}
+.reputationTop{display:flex;align-items:baseline;justify-content:space-between;gap:8px}
+.reputationName{font-size:11px;font-weight:800;color:#fff;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.reputationValue{font-size:11px;font-weight:800;color:#fff;flex:0 0 auto}
+.reputationRange{font-size:9px;font-weight:700;letter-spacing:.03em;text-transform:uppercase}
+.reputationTrack{
+  height:8px;border-radius:5px;background:#0f1216;overflow:hidden;
+  border:1px solid rgba(255,255,255,.08);
+}
+.reputationFill{height:100%;width:0;transition:width 140ms ease}
 .gameVitals{padding:9px 10px 8px;border-bottom:1px solid rgba(255,255,255,.07);display:grid;gap:6px}
 .vitalRow{display:grid;grid-template-columns:64px minmax(0,1fr) 40px;gap:7px;align-items:center}
 .vitalLabel{font-size:9px;color:#dfe5ec}

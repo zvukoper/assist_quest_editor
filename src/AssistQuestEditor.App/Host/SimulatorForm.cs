@@ -91,6 +91,15 @@ public sealed class SimulatorForm : WebViewForm
             version = VersionInfo.InformationalVersion,
             snapshot,
             itemCatalog = ItemCatalogFactory.CreateStarter(),
+            // Каталог НПЦ нужен UI, чтобы показать имя и портрет рядом с числом
+            // репутации: сама репутация хранится только по стабильному Id.
+            npcCatalog = NpcCatalogFactory.CreateStarter(),
+            // Диапазон, цвет и процент считает домен: UI не должен дублировать
+            // таблицу порогов репутации.
+            reputationViews = snapshot.Reputation.Entries.ToDictionary(
+                pair => pair.Key,
+                pair => ReputationScale.Describe(pair.Value.Value),
+                StringComparer.OrdinalIgnoreCase),
             runtime = _runtime.State,
             questGraph = _questGraph.Value,
             journalDetached = _journalDetached
@@ -398,12 +407,8 @@ public sealed class SimulatorForm : WebViewForm
     {
         var key = Required(root, "key");
         var amount = (int)Number(root, "amount", 0);
-        var state = _hub.Get<ReputationState>("reputation").Value;
-        var values = new Dictionary<string, int>(state.Values, StringComparer.OrdinalIgnoreCase)
-        {
-            [key] = amount
-        };
-        _hub.Get<ReputationState>("reputation").Set(new ReputationState(values), "Редактор репутации");
+        var channel = _hub.Get<ReputationState>("reputation");
+        channel.Set(channel.Value.WithValue(key, amount), "Редактор репутации");
     }
 
     private void SetTelemetry(JsonElement root)

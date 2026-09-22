@@ -12,6 +12,7 @@ internal static class Program
 
         SplashForm? splash = null;
         MainForm? mainForm = null;
+        SingleInstanceGuard? singleInstance = null;
 
         try
         {
@@ -27,6 +28,16 @@ internal static class Program
             var startupFile = args.FirstOrDefault(arg =>
                 !arg.StartsWith("--", StringComparison.Ordinal) &&
                 File.Exists(arg));
+
+            // Единственный экземпляр. Если приложение уже запущено, второй процесс
+            // передаёт путь работающему окну и завершается, не создавая второго.
+            if (!SingleInstanceGuard.TryAcquire(startupFile, out var acquired))
+            {
+                AppLogger.Info("Запуск отменён: приложение уже работает, запрос передан.");
+                return;
+            }
+
+            singleInstance = acquired;
 
             if (startupFile is not null)
                 FileActivationRequest.Set(startupFile);
@@ -81,6 +92,17 @@ internal static class Program
             mainForm.BrowserReady += (_, _) => RevealMainWindow("Основной WebView2 готов.");
             mainForm.BrowserFailed += (_, _) => RevealMainWindow("Основной WebView2 не загрузился; показана страница ошибки.");
 
+            // Запросы от последующих запусков приходят в фоновом потоке канала,
+            // поэтому обработка переводится в UI-поток.
+            singleInstance.ActivationRequested += (_, path) =>
+            {
+                if (mainForm.IsDisposed)
+                    return;
+
+                mainForm.BeginInvoke(() => mainForm.HandleExternalActivation(path));
+            };
+            singleInstance.StartListening();
+
             AppLogger.Info("MainForm создан. Запуск Application.Run().");
             Application.Run(mainForm);
             AppLogger.Info("Application.Run завершён.");
@@ -105,6 +127,10 @@ internal static class Program
                 splash.Close();
                 splash.Dispose();
             }
+
+            // Освобождаем мьютекс и останавливаем слушатель канала: иначе
+            // следующий запуск решил бы, что приложение всё ещё работает.
+            singleInstance?.Dispose();
 
             AppLogger.Info("=== Assist Quest Editor END ===");
         }

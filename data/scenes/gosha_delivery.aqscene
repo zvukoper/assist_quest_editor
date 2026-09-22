@@ -1,0 +1,170 @@
+{
+  "schemaVersion": 1,
+  "format": "aqscene",
+  "definition": {
+    "id": "gosha_delivery",
+    "title": "Гоша принимает шашлык",
+    "description": "Финальная сцена доставки: Гоша забирает свежий шашлык, после чего начисляется репутация Руслану и Гоше.",
+    "graph": {
+      "id": "gosha_delivery",
+      "name": "Гоша принимает шашлык",
+      "nodes": [
+        {
+          "nodeId": "start",
+          "nodeType": "SceneStart",
+          "title": "Начало сцены",
+          "x": 80,
+          "y": 180,
+          "sockets": [
+            {
+              "socketId": "start.out",
+              "name": "Далее",
+              "direction": "Output",
+              "flowKind": "Normal"
+            }
+          ],
+          "parameters": {}
+        },
+        {
+          "nodeId": "dialogue",
+          "nodeType": "Dialogue",
+          "title": "Гоша принимает шашлык",
+          "x": 340,
+          "y": 180,
+          "sockets": [
+            {
+              "socketId": "dialogue.in",
+              "name": "Вход",
+              "direction": "Input",
+              "flowKind": "Normal"
+            },
+            {
+              "socketId": "dialogue.out",
+              "name": "Далее",
+              "direction": "Output",
+              "flowKind": "Normal"
+            }
+          ],
+          "parameters": {
+            "dialogueId": "gosha.delivery.greeting"
+          }
+        },
+        {
+          "nodeId": "choice",
+          "nodeType": "Choice",
+          "title": "Передать шашлык",
+          "x": 640,
+          "y": 180,
+          "sockets": [
+            {
+              "socketId": "choice.in",
+              "name": "Вход",
+              "direction": "Input",
+              "flowKind": "Normal"
+            },
+            {
+              "socketId": "choice.give",
+              "name": "Передать",
+              "direction": "Output",
+              "flowKind": "Normal"
+            },
+            {
+              "socketId": "choice.hold",
+              "name": "Придержать",
+              "direction": "Output",
+              "flowKind": "Normal"
+            }
+          ],
+          "parameters": {
+            "choiceId": "gosha.delivery"
+          }
+        },
+        {
+          "nodeId": "give",
+          "nodeType": "SceneEnd",
+          "title": "Сцена завершена: шашлык передан",
+          "x": 960,
+          "y": 120,
+          "sockets": [
+            {
+              "socketId": "give.in",
+              "name": "Вход",
+              "direction": "Input",
+              "flowKind": "Normal"
+            }
+          ],
+          "parameters": {}
+        },
+        {
+          "nodeId": "hold",
+          "nodeType": "SceneEnd",
+          "title": "Сцена завершена: не передан",
+          "x": 960,
+          "y": 250,
+          "sockets": [
+            {
+              "socketId": "hold.in",
+              "name": "Вход",
+              "direction": "Input",
+              "flowKind": "Normal"
+            }
+          ],
+          "parameters": {}
+        }
+      ],
+      "connections": [
+        {
+          "fromNodeId": "start",
+          "fromSocketId": "start.out",
+          "toNodeId": "dialogue",
+          "toSocketId": "dialogue.in"
+        },
+        {
+          "fromNodeId": "dialogue",
+          "fromSocketId": "dialogue.out",
+          "toNodeId": "choice",
+          "toSocketId": "choice.in"
+        },
+        {
+          "fromNodeId": "choice",
+          "fromSocketId": "choice.give",
+          "toNodeId": "give",
+          "toSocketId": "give.in"
+        },
+        {
+          "fromNodeId": "choice",
+          "fromSocketId": "choice.hold",
+          "toNodeId": "hold",
+          "toSocketId": "hold.in"
+        }
+      ]
+    },
+    "dialogues": [
+      {
+        "id": "gosha.delivery.greeting",
+        "speaker": "Гоша",
+        "text": "О, шашлык от Руслана! Вот это по-нашему. Давай сюда."
+      }
+    ],
+    "choices": [
+      {
+        "id": "gosha.delivery",
+        "title": "Шашлык для Гоши",
+        "speaker": "Гоша",
+        "text": "Отдашь шашлык?",
+        "options": [
+          {
+            "id": "gosha.delivery.give",
+            "text": "Держи, от Руслана.",
+            "outputSocketId": "choice.give"
+          },
+          {
+            "id": "gosha.delivery.hold",
+            "text": "Пока оставлю у себя.",
+            "outputSocketId": "choice.hold"
+          }
+        ]
+      }
+    ]
+  }
+}

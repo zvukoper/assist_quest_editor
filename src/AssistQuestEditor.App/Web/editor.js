@@ -29,6 +29,12 @@
   let executedNodeIds = new Set();
   let pendingGraphFit = false;
 
+  // История последних открытых квестов. Приходит от Host отдельным сообщением
+  // recent_files: он же владеет списком и сохраняет его в настройках.
+  let recentQuestFiles = [];
+  let recentQuestCurrentPath = "";
+  let activeRecentMenu = null;
+
   // Central UI registry of navigable resource references. Planned targets are
   // recorded here so each new editor can use the same open-and-return pattern.
   const GRAPH_REFERENCE_EDITORS = {
@@ -130,6 +136,8 @@
       "<div class='toolbar' style='margin-bottom:10px;flex-wrap:wrap'>" +
         "<button class='toolButton' id='newGraph'>Новый</button>" +
         "<button class='toolButton' id='openGraph'>Открыть</button>" +
+        "<button class='toolButton' id='openRecentGraph' " + (recentQuestFiles.length ? "" : "disabled") +
+          " title='Последние открытые квесты'>Последние ▾</button>" +
         "<button class='toolButton' id='openLastGraph' " + (graphDocument.lastPath ? "" : "disabled") + ">Последний JSON</button>" +
         "<button class='toolButton primary' id='saveGraph'>Сохранить</button>" +
         "<button class='toolButton' id='saveGraphAs'>Сохранить как…</button>" +
@@ -161,6 +169,9 @@
 
     ws.querySelector("#newGraph").addEventListener("click", () => send({ action: "graph_new" }));
     ws.querySelector("#openGraph").addEventListener("click", () => send({ action: "graph_open" }));
+    ws.querySelector("#openRecentGraph")?.addEventListener("click", event => {
+      openRecentFilesMenu(event.currentTarget, recentQuestFiles, recentQuestCurrentPath);
+    });
     ws.querySelector("#openLastGraph")?.addEventListener("click", () => send({ action: "graph_open_last" }));
     ws.querySelector("#saveGraph").addEventListener("click", () => send({ action: "graph_save" }));
     ws.querySelector("#saveGraphAs").addEventListener("click", () => send({ action: "graph_save_as" }));
@@ -1277,6 +1288,61 @@
 
   let activeGraphContextMenu = null;
 
+  /**
+   * Меню последних открытых файлов.
+   *
+   * Список отсортирован Host'ом (свежие сверху). Текущий файл помечается
+   * галочкой и остаётся кликабельным: повторное открытие уже открытого
+   * документа безопасно — Host не перезагружает его.
+   */
+  function openRecentFilesMenu(anchor, paths, currentPath) {
+    closeRecentFilesMenu();
+
+    if (!Array.isArray(paths) || !paths.length) return;
+
+    const menu = document.createElement("div");
+    menu.className = "graphContextMenu recentFilesMenu";
+
+    const heading = document.createElement("div");
+    heading.className = "graphContextMenuTitle";
+    heading.textContent = "Последние файлы";
+    menu.appendChild(heading);
+
+    paths.forEach(path => {
+      const isCurrent =
+        currentPath &&
+        path.toLowerCase() === String(currentPath).toLowerCase();
+
+      const button = graphContextMenuButton(
+        (isCurrent ? "● " : "") + recentFileLabel(path),
+        () => {
+          closeRecentFilesMenu();
+          if (isCurrent) return;
+          send({ action: "graph_open_recent", path });
+        }
+      );
+      button.title = path;
+      if (isCurrent) button.dataset.current = "true";
+      menu.appendChild(button);
+    });
+
+    const rect = anchor.getBoundingClientRect();
+    placeGraphContextMenu(menu, rect.left, rect.bottom + 4);
+    activeRecentMenu = menu;
+  }
+
+  /** Показывает только имя файла: полный путь виден в подсказке. */
+  function recentFileLabel(path) {
+    const normalized = String(path ?? "").replace(/\\/g, "/");
+    const name = normalized.slice(normalized.lastIndexOf("/") + 1);
+    return name || String(path ?? "");
+  }
+
+  function closeRecentFilesMenu() {
+    activeRecentMenu?.remove();
+    activeRecentMenu = null;
+  }
+
   function queueDirtyNode(nodeId) {
     if (nodeId) graphDirtyNodeIds.add(nodeId);
   }
@@ -1616,6 +1682,21 @@
       return;
     }
 
+    if (data?.type === "recent_files") {
+      if (data.kind !== "quest") return;
+      recentQuestFiles = Array.isArray(data.paths) ? data.paths : [];
+      recentQuestCurrentPath = data.currentPath || "";
+
+      // Список мог измениться уже после открытия меню — закрываем, чтобы
+      // пользователь не кликнул по устаревшему составу.
+      closeRecentFilesMenu();
+
+      // Кнопка становится доступной/недоступной вместе со списком.
+      const button = document.getElementById("openRecentGraph");
+      if (button) button.disabled = recentQuestFiles.length === 0;
+      return;
+    }
+
     if (data?.type === "host_error") {
       window.alert(data.message || "Ошибка редактора.");
       return;
@@ -1671,6 +1752,10 @@
   document.addEventListener("pointerdown", event => {
     if (activeGraphContextMenu && !activeGraphContextMenu.contains(event.target)) {
       closeGraphContextMenu();
+    }
+
+    if (activeRecentMenu && !activeRecentMenu.contains(event.target)) {
+      closeRecentFilesMenu();
     }
   });
 

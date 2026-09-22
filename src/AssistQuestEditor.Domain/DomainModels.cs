@@ -141,8 +141,8 @@ public sealed record CharacterState(
     IReadOnlyList<string> Buffs,
     IReadOnlyList<string> Debuffs);
 
-public sealed record ReputationState(
-    IReadOnlyDictionary<string, int> Values);
+// ReputationState живёт в NpcReputation.cs: репутация ведётся по НПЦ, а не по
+// фракциям, поэтому модель и шкала диапазонов лежат рядом.
 
 public sealed record TelemetryState(
     double SpeedKmh,

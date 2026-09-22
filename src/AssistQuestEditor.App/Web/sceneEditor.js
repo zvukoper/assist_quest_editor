@@ -33,6 +33,11 @@
   let pendingSceneFit = false;
   let activeSceneContextMenu = null;
 
+  // История последних открытых сцен. Приходит от Host сообщением recent_files.
+  let recentSceneFiles = [];
+  let recentSceneCurrentPath = "";
+  let activeRecentSceneMenu = null;
+
   const sceneDefinition = () => window.__assistSceneEditorState?.definition || null;
 
   function renderScene(ws, ins) {
@@ -49,7 +54,9 @@
       "<div class='toolbar' style='margin-bottom:10px;flex-wrap:wrap'>" +
         "<button class='toolButton' id='newScene'>Новая</button>" +
         "<button class='toolButton' id='openScene'>Открыть</button>" +
-        "<button class='toolButton' id='openLastScene' " + (sceneDocument.lastPath ? "" : "disabled") + ">Последняя JSON</button>" +
+        "<button class='toolButton' id='openRecentScene' " + (recentSceneFiles.length ? "" : "disabled") +
+          " title='Последние открытые сцены'>Последние ▾</button>" +
+        "<button class='toolButton' id='openLastScene' " + (sceneDocument.lastPath ? "" : "disabled") + ">Последняя сцена</button>" +
         (sceneNavigationBack
           ? "<button class='toolButton' id='sceneBackToQuest' title='Вернуться к исходной ноде Quest Graph'>↩ Вернуться в Quest Graph</button>"
           : "") +
@@ -95,6 +102,9 @@
 
     ws.querySelector("#newScene").addEventListener("click", () => send({ action: "scene_new" }));
     ws.querySelector("#openScene").addEventListener("click", () => send({ action: "scene_open" }));
+    ws.querySelector("#openRecentScene")?.addEventListener("click", event => {
+      openRecentSceneFilesMenu(event.currentTarget, recentSceneFiles, recentSceneCurrentPath);
+    });
     ws.querySelector("#openLastScene")?.addEventListener("click", () => send({ action: "scene_open_last" }));
     ws.querySelector("#sceneBackToQuest")?.addEventListener("click", () => {
       if (!sceneNavigationBack?.nodeId) return;
@@ -1344,6 +1354,58 @@
     activeSceneContextMenu = null;
   }
 
+  /**
+   * Меню последних открытых сцен. Состав и порядок задаёт Host (свежие сверху),
+   * текущая сцена помечается и повторно не перезагружается.
+   */
+  function openRecentSceneFilesMenu(anchor, paths, currentPath) {
+    closeRecentSceneFilesMenu();
+
+    if (!Array.isArray(paths) || !paths.length) return;
+
+    const menu = document.createElement("div");
+    menu.className = "graphContextMenu recentFilesMenu";
+
+    const heading = document.createElement("div");
+    heading.className = "graphContextMenuTitle";
+    heading.textContent = "Последние файлы";
+    menu.appendChild(heading);
+
+    paths.forEach(path => {
+      const isCurrent =
+        currentPath &&
+        path.toLowerCase() === String(currentPath).toLowerCase();
+
+      const button = sceneContextMenuButton(
+        (isCurrent ? "● " : "") + recentSceneFileLabel(path),
+        () => {
+          closeRecentSceneFilesMenu();
+          if (isCurrent) return;
+          send({ action: "scene_open_recent", path });
+        }
+      );
+      button.title = path;
+      if (isCurrent) button.dataset.current = "true";
+      menu.appendChild(button);
+    });
+
+    const rect = anchor.getBoundingClientRect();
+    placeSceneContextMenu(menu, rect.left, rect.bottom + 4);
+    activeRecentSceneMenu = menu;
+  }
+
+  /** Показывает только имя файла: полный путь виден в подсказке кнопки. */
+  function recentSceneFileLabel(path) {
+    const normalized = String(path ?? "").replace(/\\/g, "/");
+    const name = normalized.slice(normalized.lastIndexOf("/") + 1);
+    return name || String(path ?? "");
+  }
+
+  function closeRecentSceneFilesMenu() {
+    activeRecentSceneMenu?.remove();
+    activeRecentSceneMenu = null;
+  }
+
   function placeSceneContextMenu(menu, clientX, clientY) {
     document.body.appendChild(menu);
     activeSceneContextMenu = menu;
@@ -1641,6 +1703,17 @@
       return;
     }
 
+    if (data.type === "recent_files") {
+      if (data.kind !== "scene") return;
+      recentSceneFiles = Array.isArray(data.paths) ? data.paths : [];
+      recentSceneCurrentPath = data.currentPath || "";
+      closeRecentSceneFilesMenu();
+
+      const button = document.getElementById("openRecentScene");
+      if (button) button.disabled = recentSceneFiles.length === 0;
+      return;
+    }
+
     if (data.type === "scene_content_selected") {
       window.__assistDialogueWorkspace?.selectResource?.(data.kind, data.id);
       return;
@@ -1786,10 +1859,15 @@
     if (activeSceneContextMenu && !activeSceneContextMenu.contains(event.target)) {
       closeSceneContextMenu();
     }
+
+    if (activeRecentSceneMenu && !activeRecentSceneMenu.contains(event.target)) {
+      closeRecentSceneFilesMenu();
+    }
   });
 
   window.addEventListener("blur", () => {
     sceneSpaceDown = false;
     closeSceneContextMenu();
+    closeRecentSceneFilesMenu();
   });
 })();

@@ -13,7 +13,9 @@ public sealed record AppUiPreferences(
     bool JournalDetached = true,
     string? LastQuestDefinitionPath = null,
     string? LastSceneDefinitionPath = null,
-    Dictionary<string, WindowGeometry>? Windows = null);
+    Dictionary<string, WindowGeometry>? Windows = null,
+    List<string>? RecentQuestFiles = null,
+    List<string>? RecentSceneFiles = null);
 
 public static class AppUiPreferencesStore
 {
@@ -112,4 +114,42 @@ public static class AppUiPreferencesStore
             Windows = new Dictionary<string, WindowGeometry>(StringComparer.OrdinalIgnoreCase)
         });
     }
+
+    /// <summary>
+    /// Сохраняет список недавно открытых ресурсов указанного вида.
+    /// Ключ — <see cref="RecentFileKind"/>; неизвестный вид игнорируется,
+    /// чтобы настройки не обрастали произвольными ключами.
+    /// </summary>
+    public static void SaveRecentFiles(string kind, IReadOnlyList<string> paths)
+    {
+        var preferences = Load();
+        var stored = paths?.ToList() ?? new List<string>();
+
+        Save(kind switch
+        {
+            RecentFileKind.Quest => preferences with { RecentQuestFiles = stored },
+            RecentFileKind.Scene => preferences with { RecentSceneFiles = stored },
+            _ => preferences
+        });
+    }
+
+    /// <summary>Читает сохранённый список недавних ресурсов указанного вида.</summary>
+    public static IReadOnlyList<string> LoadRecentFiles(string kind)
+    {
+        var preferences = Load();
+
+        return kind switch
+        {
+            RecentFileKind.Quest => preferences.RecentQuestFiles ?? new List<string>(),
+            RecentFileKind.Scene => preferences.RecentSceneFiles ?? new List<string>(),
+            _ => new List<string>()
+        };
+    }
+}
+
+/// <summary>Виды ресурсов, для которых ведётся история последних открытий.</summary>
+public static class RecentFileKind
+{
+    public const string Quest = "quest";
+    public const string Scene = "scene";
 }

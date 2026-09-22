@@ -153,14 +153,31 @@ public sealed class SceneRuntime
                 item.Id.Equals(optionId, StringComparison.OrdinalIgnoreCase))
             : null;
 
-        if (option is null && index > 0 && index <= choice.Options.Count)
+        // Индекс приходит от UI и считается по показанному списку, а не по
+        // полному: недоступные по репутации варианты в интерфейс не попадают.
+        // Искать по choice.Options[index-1] нельзя — сместилось бы на количество
+        // скрытых вариантов.
+        var visibleOptions = VisibleOptions(choice);
+
+        if (option is null && index > 0 && index <= visibleOptions.Count)
         {
-            option = choice.Options[index - 1];
+            option = visibleOptions[index - 1];
         }
 
         if (option is null)
         {
             Fail(State.SceneId, $"Для Choice «{choice.Id}» не найден выбранный option.");
+            return;
+        }
+
+        // Скрытый вариант недоступен даже при прямом указании optionId: это
+        // защищает от обхода требования репутации через событие.
+        if (!visibleOptions.Any(item =>
+                item.Id.Equals(option.Id, StringComparison.OrdinalIgnoreCase)))
+        {
+            Fail(
+                State.SceneId,
+                $"Option «{option.Id}» недоступен: не выполняются требования репутации.");
             return;
         }
 
@@ -349,9 +366,13 @@ public sealed class SceneRuntime
             choice.Title,
             choice.Speaker,
             choice.Text,
-            choice.Options
+            VisibleOptions(choice)
                 .Select(option => new InterfaceChoiceOption(option.Id, option.Text))
                 .ToArray());
+
+        // Conversation content — единственное место, где видно, с кем игрок
+        // говорит. Выбор НПЦ тоже считается контактом: он озвучивает реплику.
+        NoteNpcContact(choice.Speaker);
 
         _hub.Get<InterfaceState>("interfaces").Set(
             new InterfaceState(dialogRequest),
@@ -394,6 +415,8 @@ public sealed class SceneRuntime
             dialogue.Speaker,
             dialogue.Text);
 
+        NoteNpcContact(dialogue.Speaker);
+
         _hub.Get<InterfaceState>("interfaces").Set(
             new InterfaceState(null, dialogRequest),
             "SceneRuntime");
@@ -406,6 +429,81 @@ public sealed class SceneRuntime
             $"Представлен dialogue «{dialogue.Id}».");
 
         return true;
+    }
+
+    /// <summary>
+    /// Фиксирует контакт с НПЦ по его Speaker.
+    ///
+    /// Speaker — отображаемое имя («Руслан»), а репутация ведётся по стабильному
+    /// Id («ruslan»), поэтому сопоставление идёт через каталог НПЦ. Неизвестный
+    /// Speaker молча игнорируется: он может быть служебной репликой рассказчика,
+    /// и такая реплика не должна создавать «НПЦ» в списке репутации.
+    /// </summary>
+    private void NoteNpcContact(string? speaker)
+    {
+        if (string.IsNullOrWhiteSpace(speaker))
+            return;
+
+        var npc = NpcCatalogFactory.CreateStarter()
+            .FirstOrDefault(item => item.MatchesSpeaker(speaker));
+
+        if (npc is null)
+            return;
+
+        var channel = _hub.Get<ReputationState>("reputation");
+        var next = channel.Value.WithContact(npc.Id);
+
+        if (ReferenceEquals(next, channel.Value))
+            return;
+
+        channel.Set(next, "SceneRuntime");
+        Publish(
+            "NpcContacted",
+            State.SceneId ?? string.Empty,
+            State.CurrentNodeId,
+            null,
+            "Состоялся контакт с «" + npc.Name + "».");
+    }
+
+    /// <summary>
+    /// Варианты выбора, доступные игроку при текущей репутации.
+    ///
+    /// Если после фильтрации не осталось ни одного варианта, возвращаются все:
+    /// Choice без вариантов сделал бы сцену непроходимой, а это хуже, чем
+    /// показать вариант вопреки требованию. Причина попадает в журнал.
+    /// </summary>
+    private IReadOnlyList<SceneChoiceOption> VisibleOptions(SceneChoice choice)
+    {
+        var visible = choice.Options
+            .Where(option => MeetsRequirement(option.Requirement))
+            .ToArray();
+
+        if (visible.Length > 0)
+            return visible;
+
+        Publish(
+            "SceneChoiceRequirementsUnsatisfied",
+            State.SceneId ?? string.Empty,
+            State.CurrentNodeId,
+            choice.Id,
+            $"Все варианты Choice «{choice.Id}» скрыты требованиями; показаны все, чтобы сцена осталась проходимой.");
+
+        return choice.Options;
+    }
+
+    /// <summary>
+    /// Проверяет требование репутации. Отсутствие требования означает «доступно».
+    /// </summary>
+    private bool MeetsRequirement(ReputationRequirement? requirement)
+    {
+        if (requirement is null)
+            return true;
+
+        if (string.IsNullOrWhiteSpace(requirement.NpcId))
+            return true;
+
+        var value = _hub.Get<ReputationState>("reputation").Value.ValueOf(requirement.NpcId);
+        return value >= requirement.MinValue;
     }
 
     private void Complete()

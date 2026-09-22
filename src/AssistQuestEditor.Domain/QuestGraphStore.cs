@@ -373,7 +373,8 @@ public static class QuestGraphFactory
 
 public static class QuestNodeCatalog
 {
-    private static readonly string[] FixedBranching = ["Condition", "And", "Or", "Not"];
+    private static readonly string[] FixedBranching =
+        ["Condition", "And", "Or", "Not", "ReputationCompare"];
     private static readonly string[] DynamicBranching = ["Switch", "Random", "Choice"];
 
     public static IReadOnlyDictionary<string, string> CreateDefaultParameters(string nodeType)
@@ -388,6 +389,11 @@ public static class QuestNodeCatalog
                 ("left", "step"),
                 ("comparison", "=="),
                 ("right", "return_to_ruslan")),
+            "reputationcompare" => Parameters(
+                ("operator", "ReputationCompare"),
+                ("npcId", ""),
+                ("comparison", ">="),
+                ("right", "0")),
             "wait" => Parameters(("seconds", "1")),
             "waitforcondition" => Parameters(("conditionId", "")),
             "waitforevent" => Parameters(("eventType", "")),
@@ -408,8 +414,8 @@ public static class QuestNodeCatalog
             "removemoney" => Parameters(("amount", "1")),
             "setreserve" => Parameters(("value", "0")),
             "setcharacterstat" => Parameters(("stat", "strength"), ("value", "5")),
-            "addreputation" => Parameters(("faction", ""), ("amount", "1")),
-            "removereputation" => Parameters(("faction", ""), ("amount", "1")),
+            "addreputation" => Parameters(("npcId", ""), ("amount", "1")),
+            "removereputation" => Parameters(("npcId", ""), ("amount", "1")),
             "switch" or "random" or "choice" => Parameters(("outputCount", "2")),
             _ => new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
         };

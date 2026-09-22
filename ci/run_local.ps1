@@ -79,7 +79,7 @@ $script:HeartbeatPath = Join-Path $script:StateDir 'monitor.heartbeat'
 # Значение фиксировано: publish присутствует всегда (как «пропущено»), поэтому
 # число не зависит от -IncludePublish.
 # Держать в актуальном состоянии при добавлении/удалении Invoke-Check.
-$script:TotalChecks = 18
+$script:TotalChecks = 22
 
 # Подавление уведомления скрипта. Вызывающий скрипт может взять уведомление на
 # себя: pull.ps1 показывает одно уведомление с учётом признака активности
@@ -541,6 +541,32 @@ Invoke-Check -Name 'Resource navigation smoke' -Body {
 # «разбегается», но viewBox всё равно меняется, и слабые ассерты это пропускают.
 Invoke-Check -Name 'Pan следует за курсором' -Body {
     node ci/pan_smoke.mjs
+}
+
+# Шаг 5.5: целостность игрового Quest Graph и сцен.
+# Граф собирается и кодом, и правкой JSON, поэтому его структура проверяется
+# отдельно: несвязанный Input или ссылка на несуществующую сцену не ломают
+# сборку, но Runtime молча зависает на такой ноде.
+Invoke-Check -Name 'Целостность Quest Graph и сцен' -Body {
+    node ci/check_quest_graph.mjs
+}
+
+# Шаг 5.6: правила репутации на реальном контенте.
+# Юнит-тесты собирают сцену кодом, а здесь проверяется сам .aqquest: повторная
+# покупка колбасы, цена 450 ₽, +25 репутации и доставка при репутации Гоши 400.
+Invoke-Check -Name 'Правила репутации в контенте' -Body {
+    node ci/reputation_flow.mjs
+}
+
+# Шаг 5.4: единственный экземпляр приложения.
+# Проверяется на опубликованном exe: single instance — поведение процесса, а не
+# домена, поэтому ни юнит-тест, ни Playwright его не покрывают. Без publish
+# проверка сама сообщает «пропущено» и не считается упавшей.
+Invoke-Check -Name 'Single instance probe' -Body {
+    & powershell -NoProfile -ExecutionPolicy Bypass -File ci/single_instance_probe.ps1
+    if ($LASTEXITCODE -ne 0) {
+        throw "single instance probe не прошёл: код $LASTEXITCODE"
+    }
 }
 
 # Шаг 6: синтаксис web JavaScript.

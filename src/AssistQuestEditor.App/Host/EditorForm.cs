@@ -35,7 +35,26 @@ public sealed class EditorForm : WebViewForm
     private string? _navigationBackQuestNodeId;
     private string? _navigationBackQuestNodeTitle;
 
+    /// <summary>
+    /// Последние открытые ресурсы «своего» вида (Quest для нодового редактора,
+    /// Scene для редактора сцен). Список приходит от Host, который владеет
+    /// историей и сохраняет её в настройках.
+    /// </summary>
+    private IReadOnlyList<string> _recentFiles = Array.Empty<string>();
+
     public event EventHandler<EditorNavigationRequestEventArgs>? NavigationRequested;
+
+    /// <summary>
+    /// Запрос на регистрацию открытого ресурса в истории. Аргумент — путь.
+    /// Событие, а не ссылка на MainForm: редактор не должен знать о владельце
+    /// истории, ему достаточно сообщить о факте открытия.
+    /// </summary>
+    public event EventHandler<string>? RecentFileOpened;
+
+    /// <summary>
+    /// Ресурс из истории больше недоступен: Host убирает его из списка.
+    /// </summary>
+    public event EventHandler<string>? RecentFileUnavailable;
 
     public string WindowKey { get; }
 
@@ -91,6 +110,23 @@ public sealed class EditorForm : WebViewForm
             PostSceneCatalog();
     }
 
+    /// <summary>Вид ресурса, историю которого ведёт этот редактор.</summary>
+    public string RecentFileKind => _isGraphEditor ? App.RecentFileKind.Quest : App.RecentFileKind.Scene;
+
+    /// <summary>
+    /// Принимает обновлённый список последних файлов от Host и перерисовывает
+    /// меню. Рассылка идёт всем редакторам: открытие файла в одном окне должно
+    /// сразу отражаться в другом.
+    /// </summary>
+    public void UpdateRecentFiles(string kind, IReadOnlyList<string> paths)
+    {
+        if (!string.Equals(kind, RecentFileKind, StringComparison.OrdinalIgnoreCase))
+            return;
+
+        _recentFiles = paths ?? Array.Empty<string>();
+        PostRecentFiles();
+    }
+
     public void FocusQuestNode(string nodeId)
     {
         if (!_isGraphEditor)
@@ -142,13 +178,16 @@ public sealed class EditorForm : WebViewForm
 
     private bool OpenGraphResource(string path)
     {
+        if (!ConfirmGraphSwitch(path))
+            return false;
+
         LoadGraphFromPath(path);
         return true;
     }
 
     private bool OpenSceneResource(string path)
     {
-        if (!ConfirmSceneSwitch())
+        if (!ConfirmSceneSwitch(path))
             return false;
 
         LoadSceneFromPath(path);
@@ -228,12 +267,37 @@ public sealed class EditorForm : WebViewForm
             PostSceneGraph();
         }
 
+        // История последних файлов нужна обеим вкладкам: у нодового редактора
+        // и у редактора сцен свой список.
+        PostRecentFiles();
+
         if (_isGraphEditor && !string.IsNullOrWhiteSpace(_pendingQuestNodeSelection))
         {
             var nodeId = _pendingQuestNodeSelection;
             _pendingQuestNodeSelection = null;
             PostQuestGraph(nodeId);
         }
+    }
+
+    /// <summary>
+    /// Отправляет список последних файлов в UI. Отдельным сообщением, а не
+    /// внутри payload'а графа: список меняется независимо от документа, и
+    /// перерисовывать граф ради него не нужно.
+    /// </summary>
+    private void PostRecentFiles()
+    {
+        if (Browser.CoreWebView2 is null)
+            return;
+
+        var paths = _recentFiles ?? Array.Empty<string>();
+
+        PostJson(JsonSerializer.Serialize(new
+        {
+            type = "recent_files",
+            kind = RecentFileKind,
+            paths,
+            currentPath = _isGraphEditor ? _currentDefinitionPath ?? string.Empty : _sceneDocument.CurrentPath ?? string.Empty
+        }, WebJsonOptions));
     }
 
     protected override void OnWebMessage(string json)
@@ -311,6 +375,30 @@ public sealed class EditorForm : WebViewForm
             case "scene_open_last":
                 OpenLastScene();
                 break;
+
+            case "scene_open_recent":
+            {
+                var recentScenePath = root.TryGetProperty("path", out var recentSceneNode)
+                    ? recentSceneNode.GetString()
+                    : null;
+
+                if (string.IsNullOrWhiteSpace(recentScenePath) || !File.Exists(recentScenePath))
+                {
+                    AppLogger.Warn("История файлов: сцена недоступна.", recentScenePath);
+                    MessageBox.Show(
+                        this,
+                        "Файл больше недоступен:\r\n\r\n" + recentScenePath,
+                        "Открытие ресурса",
+                        MessageBoxButtons.OK,
+                        MessageBoxIcon.Warning);
+
+                    RecentFileUnavailable?.Invoke(this, recentScenePath ?? string.Empty);
+                    break;
+                }
+
+                OpenSceneResource(recentScenePath);
+                break;
+            }
 
             case "scene_open_resource":
             {
@@ -783,6 +871,33 @@ public sealed class EditorForm : WebViewForm
                 OpenLastGraph();
                 break;
 
+            case "graph_open_recent":
+            {
+                // Клик по элементу истории: путь уже проверен Host'ом при
+                // формировании списка, но файл мог исчезнуть после этого.
+                var recentPath = root.TryGetProperty("path", out var recentPathNode)
+                    ? recentPathNode.GetString()
+                    : null;
+
+                if (string.IsNullOrWhiteSpace(recentPath) || !File.Exists(recentPath))
+                {
+                    AppLogger.Warn("История файлов: файл недоступен.", recentPath);
+                    MessageBox.Show(
+                        this,
+                        "Файл больше недоступен:\r\n\r\n" + recentPath,
+                        "Открытие ресурса",
+                        MessageBoxButtons.OK,
+                        MessageBoxIcon.Warning);
+
+                    // Убираем битую запись из истории, чтобы она не всплывала снова.
+                    RecentFileUnavailable?.Invoke(this, recentPath ?? string.Empty);
+                    break;
+                }
+
+                OpenGraphResource(recentPath);
+                break;
+            }
+
             case "graph_save":
                 SaveGraph(saveAs: false);
                 break;
@@ -901,6 +1016,7 @@ public sealed class EditorForm : WebViewForm
         _documentDirty = false;
         UpdateWindowTitle();
         PostQuestGraph();
+        RecentFileOpened?.Invoke(this, path);
 
         AppLogger.Info("Quest Graph: документ открыт.", $"path={path}; schema={document.SchemaVersion}");
     }
@@ -942,6 +1058,7 @@ public sealed class EditorForm : WebViewForm
         _documentDirty = false;
         UpdateWindowTitle();
         PostQuestGraph();
+        RecentFileOpened?.Invoke(this, path!);
 
         AppLogger.Info("Quest Graph: документ сохранён.",
             $"path={_currentDefinitionPath}; schema={DefinitionSchemaVersion}; bytes={output.Length}");
@@ -1056,6 +1173,7 @@ public sealed class EditorForm : WebViewForm
         UpdateWindowTitle();
         PostSceneCatalog();
         PostSceneGraph();
+        RecentFileOpened?.Invoke(this, path!);
         AppLogger.Info(
             "Scene Editor: документ сохранён.",
             "path=" + _sceneDocument.CurrentPath + "; scene=" + _sceneGraph.Value.Id + "; bytes=" + output.Length);
@@ -1077,8 +1195,50 @@ public sealed class EditorForm : WebViewForm
         return File.Exists(path) ? path : null;
     }
 
-    private bool ConfirmSceneSwitch()
+    /// <summary>
+    /// Подтверждение переключения на другой Quest-документ.
+    ///
+    /// Повторное открытие уже текущего файла не считается переключением: иначе
+    /// двойной клик по открытому квесту показывал бы диалог о несохранённых
+    /// изменениях и перезагружал документ, теряя выделение и позицию.
+    /// </summary>
+    private bool ConfirmGraphSwitch(string targetPath)
     {
+        if (IsSameDocument(_currentDefinitionPath, targetPath))
+            return false;
+
+        if (!_documentDirty)
+            return true;
+
+        var result = MessageBox.Show(
+            this,
+            "В текущем Quest Graph есть несохранённые изменения.\r\n\r\n" +
+            "Да — сохранить изменения в файл.\r\n" +
+            "Нет — отбросить изменения и открыть другой документ.\r\n" +
+            "Отмена — остаться в текущем документе.",
+            "Несохранённые изменения Quest Graph",
+            MessageBoxButtons.YesNoCancel,
+            MessageBoxIcon.Warning,
+            MessageBoxDefaultButton.Button1);
+
+        if (result == DialogResult.Cancel)
+            return false;
+
+        if (result == DialogResult.Yes)
+            return SaveGraph(saveAs: false);
+
+        return true;
+    }
+
+    /// <summary>
+    /// Подтверждение переключения на другую Scene.
+    /// Повторное открытие текущего файла не является переключением.
+    /// </summary>
+    private bool ConfirmSceneSwitch(string? targetPath = null)
+    {
+        if (targetPath is not null && IsSameDocument(_sceneDocument.CurrentPath, targetPath))
+            return false;
+
         if (!_sceneDocument.IsDirty)
             return true;
 
@@ -1101,6 +1261,21 @@ public sealed class EditorForm : WebViewForm
 
         _sceneDocument.DiscardChanges();
         return true;
+    }
+
+    /// <summary>
+    /// Сравнивает пути документов как файловую систему: Windows не различает
+    /// регистр, а «относительный» и «полный» путь указывают на один файл.
+    /// </summary>
+    private static bool IsSameDocument(string? currentPath, string targetPath)
+    {
+        if (string.IsNullOrWhiteSpace(currentPath) || string.IsNullOrWhiteSpace(targetPath))
+            return false;
+
+        return string.Equals(
+            Path.GetFullPath(currentPath),
+            Path.GetFullPath(targetPath),
+            StringComparison.OrdinalIgnoreCase);
     }
 
     private void PostSceneCatalog()

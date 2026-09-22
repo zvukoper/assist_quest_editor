@@ -13,6 +13,8 @@ public sealed class MainForm : WebViewForm
     private readonly SceneRuntime _sceneRuntime;
     private readonly QuestRuntime _runtime;
     private readonly Dictionary<string, EditorForm> _editors = new(StringComparer.OrdinalIgnoreCase);
+    private readonly RecentFileList _recentQuestFiles;
+    private readonly RecentFileList _recentSceneFiles;
     private SimulatorForm? _simulator;
     private SettingsForm? _settings;
 
@@ -44,12 +46,25 @@ public sealed class MainForm : WebViewForm
         _sceneRuntime = new SceneRuntime(_sceneCatalog, _hub);
         _runtime = new QuestRuntime(_questGraph, _hub, _sceneRuntime);
         _sceneRuntime.Published += SceneRuntime_Published;
+
+        // История последних открытых ресурсов: список читается здесь один раз и
+        // дальше живёт в памяти, чтобы клик по нему не ходил на диск.
+        _recentQuestFiles = RecentFileList.FromPaths(
+            AppUiPreferencesStore.LoadRecentFiles(RecentFileKind.Quest));
+        _recentSceneFiles = RecentFileList.FromPaths(
+            AppUiPreferencesStore.LoadRecentFiles(RecentFileKind.Scene));
+        PruneRecentFiles();
+        _recentQuestFiles.Changed += RecentQuestFiles_Changed;
+        _recentSceneFiles.Changed += RecentSceneFiles_Changed;
+
         BrowserReady += MainForm_BrowserReady;
         FormClosed += (_, _) =>
         {
             BrowserReady -= MainForm_BrowserReady;
             _sceneRuntime.Published -= SceneRuntime_Published;
             _sceneCatalog.Changed -= SceneCatalog_Changed;
+            _recentQuestFiles.Changed -= RecentQuestFiles_Changed;
+            _recentSceneFiles.Changed -= RecentSceneFiles_Changed;
 
             foreach (var editor in _editors.Values.ToArray())
             {
@@ -70,6 +85,52 @@ public sealed class MainForm : WebViewForm
         {
             BeginInvoke(() => OpenStartupResource(startupPath));
         }
+    }
+
+    /// <summary>
+    /// Обрабатывает запрос от повторного запуска приложения (двойной клик по
+    /// файлу при уже открытом редакторе).
+    ///
+    /// Пустой путь означает запуск без файла: окно просто показывается и
+    /// активируется. Непустой путь открывается в соответствующем редакторе;
+    /// если в нём есть несохранённые изменения, редактор сначала спросит, как
+    /// с ними поступить.
+    /// </summary>
+    public void HandleExternalActivation(string? path)
+    {
+        if (IsDisposed)
+            return;
+
+        AppLogger.Info("Внешний запуск: обработка запроса.", $"path={path ?? "<none>"}");
+
+        RevealAndActivate();
+
+        if (string.IsNullOrWhiteSpace(path))
+            return;
+
+        if (!File.Exists(path))
+        {
+            AppLogger.Warn("Внешний запуск: файл не найден.", path);
+            MessageBox.Show(
+                this,
+                "Файл не найден:\r\n\r\n" + path,
+                "Открытие ресурса",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Warning);
+            return;
+        }
+
+        OpenStartupResource(path);
+    }
+
+    private void RevealAndActivate()
+    {
+        if (WindowState == FormWindowState.Minimized)
+            WindowState = FormWindowState.Normal;
+
+        Show();
+        BringToFront();
+        Activate();
     }
 
     private void OpenStartupResource(string path)
@@ -232,6 +293,91 @@ public sealed class MainForm : WebViewForm
             $"choice={e.ChoiceId ?? "<none>"}; message={e.Message}");
     }
 
+    /// <summary>
+    /// Регистрирует открытый ресурс в истории последних файлов.
+    /// Вызывается редакторами при открытии и сохранении документа.
+    /// </summary>
+    public void NoteRecentFile(string kind, string? path)
+    {
+        if (string.IsNullOrWhiteSpace(path))
+            return;
+
+        var list = ResolveRecentList(kind);
+        if (list is null)
+            return;
+
+        if (list.Touch(path))
+            AppLogger.Info("История файлов: открыт ресурс.", $"kind={kind}; path={path}");
+    }
+
+    /// <summary>Список последних файлов указанного вида для отправки в UI.</summary>
+    public IReadOnlyList<string> GetRecentFiles(string kind) =>
+        ResolveRecentList(kind)?.Items ?? Array.Empty<string>();
+
+    /// <summary>
+    /// Убирает недоступный ресурс из истории: файл удалён или переименован.
+    /// </summary>
+    public void ForgetRecentFile(string kind, string? path)
+    {
+        if (string.IsNullOrWhiteSpace(path))
+            return;
+
+        var list = ResolveRecentList(kind);
+        if (list is null)
+            return;
+
+        if (list.Remove(path))
+            AppLogger.Info("История файлов: удалён недоступный ресурс.", $"kind={kind}; path={path}");
+    }
+
+    private RecentFileList? ResolveRecentList(string kind) =>
+        kind switch
+        {
+            RecentFileKind.Quest => _recentQuestFiles,
+            RecentFileKind.Scene => _recentSceneFiles,
+            _ => null
+        };
+
+    private void PruneRecentFiles()
+    {
+        // Битые пути (файл удалён или переименован) не должны висеть в списке.
+        if (_recentQuestFiles.PruneMissing(File.Exists))
+            AppLogger.Info("История файлов: удалены недоступные Quest-пути.");
+
+        if (_recentSceneFiles.PruneMissing(File.Exists))
+            AppLogger.Info("История файлов: удалены недоступные Scene-пути.");
+    }
+
+    private void RecentQuestFiles_Changed(object? sender, EventArgs e) =>
+        PersistRecentFiles(RecentFileKind.Quest, _recentQuestFiles);
+
+    private void RecentSceneFiles_Changed(object? sender, EventArgs e) =>
+        PersistRecentFiles(RecentFileKind.Scene, _recentSceneFiles);
+
+    private void PersistRecentFiles(string kind, RecentFileList list)
+    {
+        AppUiPreferencesStore.SaveRecentFiles(kind, list.Items);
+        PostRecentFiles(kind);
+    }
+
+    /// <summary>Рассылает обновлённый список во все открытые редакторы.</summary>
+    private void PostRecentFiles(string kind)
+    {
+        var paths = GetRecentFiles(kind);
+
+        foreach (var editor in _editors.Values.ToArray())
+        {
+            if (!editor.IsDisposed)
+                editor.UpdateRecentFiles(kind, paths);
+        }
+    }
+
+    private void PostAllRecentFiles()
+    {
+        PostRecentFiles(RecentFileKind.Quest);
+        PostRecentFiles(RecentFileKind.Scene);
+    }
+
     private void OpenSettings()
     {
         if (_settings is not null && !_settings.IsDisposed)
@@ -293,6 +439,8 @@ public sealed class MainForm : WebViewForm
             _runtime);
         _editors[page.Item2] = form;
         form.NavigationRequested += Editor_NavigationRequested;
+        form.RecentFileOpened += (_, path) => NoteRecentFile(form.RecentFileKind, path);
+        form.RecentFileUnavailable += (_, path) => ForgetRecentFile(form.RecentFileKind, path);
         form.FormClosed += (_, _) =>
         {
             form.NavigationRequested -= Editor_NavigationRequested;

@@ -8,6 +8,8 @@
   const backpackNewDot = document.getElementById("backpackNewDot");
   const inventoryPanel = document.getElementById("inventoryPanel");
   const characterPanel = document.getElementById("characterPanel");
+  const characterTabs = document.getElementById("characterTabs");
+  const characterTabBody = document.getElementById("characterTabBody");
   const inventoryNotifications = document.getElementById("inventoryNotifications");
   const send = payload => window.chrome?.webview?.postMessage(payload);
 
@@ -960,35 +962,160 @@
     });
   }
 
+  // Активный таб правой панели: "character" или "reputation".
+  let characterTab = "character";
+
+  /**
+   * Строки списка репутации.
+   *
+   * Показываются только НПЦ, с которыми контакт состоялся: иначе список
+   * заполнялся бы незнакомцами с нулевой репутацией. Порядок — по убыванию
+   * репутации, при равенстве по имени, чтобы важные НПЦ были сверху.
+   */
+  function reputationRows() {
+    const entries = Object.entries(snapshot?.reputation?.entries || {});
+    const catalog = snapshot?.npcCatalog || [];
+
+    return entries
+      .map(([npcId, entry]) => {
+        const npc = catalog.find(item => item.id === npcId) || {};
+        return {
+          npcId,
+          name: npc.name || npcId,
+          avatar: npc.avatar || "",
+          value: Number(entry?.value || 0),
+          contacted: Boolean(entry?.contacted)
+        };
+      })
+      .filter(entry => entry.contacted)
+      .sort((a, b) => b.value - a.value || a.name.localeCompare(b.name, "ru"));
+  }
+
+  function renderReputationPanel() {
+    const rows = reputationRows();
+
+    if (!rows.length) {
+      return (
+        "<div class='reputationEmpty'>" +
+          "<div class='gamePanelSub'>Пока нет НПЦ, с которыми состоялся контакт.</div>" +
+          "<div class='notice' style='margin-top:8px'>Репутация появляется после первой реплики или выбора в диалоге.</div>" +
+        "</div>"
+      );
+    }
+
+    return (
+      "<div class='reputationList'>" +
+        rows.map(row => {
+          const view = ReputationScaleView(row.npcId, row.value);
+          return (
+            "<article class='reputationRow' data-reputation-npc='" + escapeHtml(row.npcId) + "'>" +
+              "<img class='reputationAvatar' src='" + escapeHtml(row.avatar) + "' alt='' loading='lazy'>" +
+              "<div class='reputationBody'>" +
+                "<div class='reputationTop'>" +
+                  "<span class='reputationName'>" + escapeHtml(row.name) + "</span>" +
+                  "<span class='reputationValue'>" + escapeHtml(view.valueLabel) + "</span>" +
+                "</div>" +
+                "<div class='reputationRange' style='color:" + escapeHtml(view.rangeColor) + "'>" +
+                  escapeHtml(view.rangeName) +
+                "</div>" +
+                "<div class='reputationTrack' data-game-tooltip='" + escapeHtml(view.tooltip || row.name) + "'>" +
+                  "<div class='reputationFill' style=\"width:" + view.progressPercent + "%;background:" + escapeHtml(view.fillColor) + "\"></div>" +
+                "</div>" +
+              "</div>" +
+            "</article>"
+          );
+        }).join("") +
+      "</div>"
+    );
+  }
+
+  /**
+   * Представление репутации для UI.
+   *
+   * Пороги, цвета и проценты считает домен и присылает готовым в
+   * `reputationViews`, поэтому здесь нет таблицы диапазонов. Если данных нет
+   * (например, в тестовой фикстуре), используется нейтральное представление,
+   * а не падение.
+   */
+  function ReputationScaleView(npcId, value) {
+    const view = snapshot?.reputationViews?.[npcId];
+    if (view) return view;
+
+    return {
+      value,
+      valueLabel: value > 0 ? "+" + value : String(value),
+      rangeName: "Нейтральный",
+      rangeColor: "#c8ccd2",
+      fillColor: "#8f9baa",
+      progressPercent: Math.min(100, Math.abs(value) / 100),
+      tooltip: "Репутация: " + value
+    };
+  }
+
+  function renderCharacterTabs() {
+    if (!characterTabs) return;
+
+    const tabs = [
+      ["character", "Персонаж"],
+      ["reputation", "Репутация"]
+    ];
+
+    characterTabs.innerHTML = tabs.map(([id, label]) =>
+      "<button class='gamePanelTab" + (characterTab === id ? " active" : "") + "' " +
+        "type='button' role='tab' data-character-tab='" + id + "' " +
+        "aria-selected='" + (characterTab === id ? "true" : "false") + "'>" +
+        escapeHtml(label) +
+      "</button>"
+    ).join("");
+
+    characterTabs.querySelectorAll("[data-character-tab]").forEach(button => {
+      button.addEventListener("click", () => {
+        const next = button.dataset.characterTab;
+        if (!next || next === characterTab) return;
+        characterTab = next;
+        renderCharacterPanel();
+      });
+    });
+  }
+
   function renderCharacterPanel() {
     if (!characterPanel || !snapshot) return;
+
+    renderCharacterTabs();
+
+    if (characterTab === "reputation") {
+      if (characterTabBody) characterTabBody.innerHTML = renderReputationPanel();
+      return;
+    }
+
     const character = snapshot.character || {};
     const stats = Object.entries(character.stats || {});
     const skills = character.skills || [];
 
-    characterPanel.innerHTML =
-      "<div class='gamePanelHeader'><div><div class='gamePanelTitle'>Персонаж</div><div class='gamePanelSub'>S.P.E.C.I.A.L.-подобные параметры</div></div></div>" +
-      "<div class='characterBody'>" +
-        "<div class='characterSectionTitle'>Статы</div>" +
-        "<div class='characterStats'>" +
-          stats.map(([key, value]) =>
-            "<div class='characterStat' data-game-tooltip='" + escapeHtml((CHARACTER_STAT_LABELS[key] || key) + ": " + Number(value) + " из 10") + "'>" +
-              "<span class='characterStatName'>" + escapeHtml(CHARACTER_STAT_LABELS[key] || key) + "</span>" +
-              "<span class='characterStatValue'>" + Number(value) + "</span>" +
-            "</div>"
-          ).join("") +
-        "</div>" +
-        "<div class='characterSectionTitle' style='margin-top:12px'>Скиллы</div>" +
-        "<div class='characterSkills'>" +
-          skills.map(skill =>
-            "<div class='characterSkill' data-game-tooltip='" + escapeHtml(skill.description || skill.name) + "'>" +
-              "<span class='characterSkillName'>" + escapeHtml(skill.name) + "</span>" +
-              "<span class='characterSkillLevel'>" + escapeHtml(skill.levelLabel || (skill.unlocked ? "Получен" : "Не изучен")) + "</span>" +
-              "<div class='characterSkillDesc'>" + escapeHtml(skill.description || "") + "</div>" +
-            "</div>"
-          ).join("") +
-        "</div>" +
-      "</div>";
+    if (characterTabBody) {
+      characterTabBody.innerHTML =
+        "<div class='characterBody'>" +
+          "<div class='characterSectionTitle'>Статы</div>" +
+          "<div class='characterStats'>" +
+            stats.map(([key, value]) =>
+              "<div class='characterStat' data-game-tooltip='" + escapeHtml((CHARACTER_STAT_LABELS[key] || key) + ": " + Number(value) + " из 10") + "'>" +
+                "<span class='characterStatName'>" + escapeHtml(CHARACTER_STAT_LABELS[key] || key) + "</span>" +
+                "<span class='characterStatValue'>" + Number(value) + "</span>" +
+              "</div>"
+            ).join("") +
+          "</div>" +
+          "<div class='characterSectionTitle' style='margin-top:12px'>Скиллы</div>" +
+          "<div class='characterSkills'>" +
+            skills.map(skill =>
+              "<div class='characterSkill' data-game-tooltip='" + escapeHtml(skill.description || skill.name) + "'>" +
+                "<span class='characterSkillName'>" + escapeHtml(skill.name) + "</span>" +
+                "<span class='characterSkillLevel'>" + escapeHtml(skill.levelLabel || (skill.unlocked ? "Получен" : "Не изучен")) + "</span>" +
+                "<div class='characterSkillDesc'>" + escapeHtml(skill.description || "") + "</div>" +
+              "</div>"
+            ).join("") +
+          "</div>" +
+        "</div>";
+    }
   }
 
   function renderGameplayPanels() {
@@ -1266,10 +1393,13 @@
     }
 
     if (id === "reputation") {
-      return Object.entries(snapshot.reputation.values).map(([key, value]) =>
-        "<div class='field' style='margin-top:6px'><label>" + escapeHtml(key) + "</label><input type='number' data-rep='" + escapeHtml(key) + "' value='" + value + "'></div>"
-      ).join("") +
-      "<div class='inline' style='margin-top:8px'><input id='newRepKey' placeholder='фракция'><input id='newRepValue' value='0'><button class='smallButton primary' id='addRep'>+</button></div>";
+      const entries = Object.entries(snapshot.reputation?.entries || {});
+      const rows = entries
+        .map(([key, entry]) => "<div class='field' style='margin-top:6px'><label>" + escapeHtml(key) + "</label><input type='number' data-rep='" + escapeHtml(key) + "' value='" + Number(entry?.value || 0) + "'></div>")
+        .join("");
+      const list = rows || "<div class='miniLabel'>Нет НПЦ в канале репутации</div>";
+      return list +
+      "<div class='inline' style='margin-top:8px'><input id='newRepKey' placeholder='npc_id'><input id='newRepValue' value='0'><button class='smallButton primary' id='addRep'>+</button></div>";
     }
 
     if (id === "telemetry") {
