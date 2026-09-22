@@ -2055,19 +2055,25 @@
    * её строкой такого вида значило бы заставить Host угадывать формат. Собираем
    * ISO здесь, где формат поля уже известен.
    *
+   * <paramref name="withSeconds"/> выбирает источник времени: часы с секундами
+   * (для точки отсчёта локальных часов) или поле ввода без секунд. Иначе точка
+   * отсчёта теряла бы текущую секунду.
+   *
    * Смещение не указывается (мир живёт в «наивном» времени): часовой пояс машины
    * к игровому календарю отношения не имеет.
    */
-  function toIsoMoment(source) {
+  function toIsoMoment(source, withSeconds = false) {
     const dateText = String(source?.gameDateLabel || "").trim();
-    const timeText = String(source?.gameTimeLabel || "").trim();
+    const timeText = String(withSeconds
+      ? (source?.gameClockLabel || source?.gameTimeLabel || "")
+      : (source?.gameTimeLabel || "")).trim();
 
     const dateMatch = dateText.match(/^(\d{2})\.(\d{2})\.(\d{4})$/);
-    const timeMatch = timeText.match(/^(\d{2}):(\d{2})$/);
+    const timeMatch = timeText.match(/^(\d{2}):(\d{2})(?::(\d{2}))?$/);
     if (!dateMatch || !timeMatch) return "";
 
     return dateMatch[3] + "-" + dateMatch[2] + "-" + dateMatch[1] +
-      "T" + timeMatch[1] + ":" + timeMatch[2] + ":00";
+      "T" + timeMatch[1] + ":" + timeMatch[2] + ":" + (timeMatch[3] || "00");
   }
 
   /**
@@ -2116,7 +2122,9 @@
   let clockAnchor = null;
 
   function syncClockAnchor() {
-    const moment = daylight ? toIsoMoment(daylight) : "";
+    // Для точки отсчёта берётся время С СЕКУНДАМИ (gameClockLabel): без него
+    // часы в шапке начинались бы с :00 и первые секунды шли бы неточно.
+    const moment = daylight ? toIsoMoment(daylight, true) : "";
     if (!moment) {
       clockAnchor = null;
       return;
@@ -2126,31 +2134,47 @@
       moment: new Date(moment + "Z"),
       syncedAt: Date.now(),
       dateLabel: daylight.gameDateLabel,
-      timeLabel: daylight.gameTimeLabel
+      timeLabel: daylight.gameTimeLabel,
+      clockLabel: daylight.gameClockLabel || daylight.gameTimeLabel
     };
   }
 
-  /** Текущее игровое время: снимок плюс прошедшее реальное время. */
+  /**
+   * Текущее игровое время: снимок плюс прошедшее реальное время.
+   *
+   * Возвращает два представления: с секундами (для часов в шапке — по движению
+   * секунд видно, что время идёт) и без секунд (для поля ввода, где секунды
+   * только мешали бы).
+   */
   function currentGameMoment() {
     if (!clockAnchor) return null;
+
+    const pad = value => String(value).padStart(2, "0");
     if (!simulationRunning) {
-      return { date: clockAnchor.moment, text: clockAnchor.timeLabel };
+      return {
+        date: clockAnchor.moment,
+        clock: clockAnchor.clockLabel,
+        input: clockAnchor.timeLabel
+      };
     }
 
     const advanced = new Date(clockAnchor.moment.getTime() + (Date.now() - clockAnchor.syncedAt));
-    const pad = value => String(value).padStart(2, "0");
+    const hours = pad(advanced.getUTCHours());
+    const minutes = pad(advanced.getUTCMinutes());
+
     return {
       date: advanced,
-      text: pad(advanced.getUTCHours()) + ":" + pad(advanced.getUTCMinutes())
+      clock: hours + ":" + minutes + ":" + pad(advanced.getUTCSeconds()),
+      input: hours + ":" + minutes
     };
   }
 
   /**
    * Периодическое обновление отображения времени и индикатора светового дня.
    *
-   * Индикатор тоже обновляется: доля светового дня меняется медленно, но
-   * положение серпа должно следовать за временем, иначе оно «замирает» между
-   * снимками.
+   * Интервал 250 мс, а не 1000: при секундной границе тик мог попадать чуть
+   * раньше смены секунды, и она «перескакивала» бы через одну. Обновляется
+   * только текст, поэтому цена такого интервала незаметна.
    */
   function startClockTicker() {
     window.setInterval(() => {
@@ -2160,17 +2184,17 @@
       if (!current) return;
 
       const hudTime = document.getElementById("hudGameTime");
-      if (hudTime) hudTime.textContent = current.text;
+      if (hudTime) hudTime.textContent = current.clock;
 
       const simTimeInput = side.querySelector("#simTime");
       // Поле времени не перезаписывается, пока пользователь его правит: иначе
-      // ввод затирался бы каждую секунду.
+      // ввод затирался бы каждую секунду. Секунды в поле не показываются.
       if (simTimeInput && document.activeElement !== simTimeInput) {
-        simTimeInput.value = current.text;
+        simTimeInput.value = current.input;
       }
 
       updateDaylightPhase(current);
-    }, 1000);
+    }, 250);
   }
 
   /**
@@ -2221,8 +2245,8 @@
       daylight
         ? "<span class='badge " + (daylight.isDay ? "accent" : "blue") + "'>" +
             escapeHtml(daylight.gameDateLabel) + " · <span id='hudGameTime'>" +
-            escapeHtml(currentGameMoment()?.text || daylight.gameTimeLabel) + "</span>" +
-            (simulationRunning ? "" : " (пауза)") + "</span>"
+            escapeHtml(currentGameMoment()?.clock || daylight.gameClockLabel || daylight.gameTimeLabel) +
+            "</span>" + (simulationRunning ? "" : " (пауза)") + "</span>"
         : "",
       daylight
         ? "<span class='badge blue' title='Восход и закат по геокоординате кампании'>" +

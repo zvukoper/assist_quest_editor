@@ -64,6 +64,16 @@ public static class GameCalendar
     /// <summary>Игровое время в формате чч:мм.</summary>
     public static string FormatTime(DateTimeOffset moment) =>
         moment.ToString("HH:mm");
+
+    /// <summary>
+    /// Игровое время с секундами (чч:мм:сс) — для индикатора хода времени.
+    ///
+    /// Отдельный формат, а не замена <see cref="FormatTime"/>: время с секундами
+    /// нужно только там, где важно ВИДЕТЬ движение (часы в шапке). Поля ввода и
+    /// время восхода с секундами были бы неудобны и не нужны.
+    /// </summary>
+    public static string FormatClock(DateTimeOffset moment) =>
+        moment.ToString("HH:mm:ss");
 }
 
 /// <summary>

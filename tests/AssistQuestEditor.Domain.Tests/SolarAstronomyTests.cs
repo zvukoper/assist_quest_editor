@@ -192,4 +192,17 @@ public sealed class GameCalendarTests
         Assert.Equal("07.03.2026", GameCalendar.FormatDate(moment));
         Assert.Equal("09:05", GameCalendar.FormatTime(moment));
     }
+
+    [Fact]
+    public void ClockFormatKeepsSecondsSoTimeMovementIsVisible()
+    {
+        var moment = new DateTimeOffset(
+            new DateTime(2026, 3, 7, 9, 5, 42, DateTimeKind.Unspecified),
+            TimeSpan.Zero);
+
+        // Часы в шапке показывают секунды: по ним видно, что время идёт.
+        Assert.Equal("09:05:42", GameCalendar.FormatClock(moment));
+        // Поле ввода остаётся без секунд — там они только мешали бы.
+        Assert.Equal("09:05", GameCalendar.FormatTime(moment));
+    }
 }

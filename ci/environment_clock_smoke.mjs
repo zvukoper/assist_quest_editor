@@ -168,6 +168,8 @@ try {
         journalDetached: false,
         daylight: {
           gameDateLabel: "01.01.2026", gameTimeLabel: "12:00", seasonLabel: "Зима", running: running,
+          // Часы в шапке берут отдельное поле с секундами: по ним видно, что время идёт.
+          gameClockLabel: "12:00:00",
           dayFraction: 0.5, isDay: true, isPolarDay: false, isPolarNight: false,
           sunriseLabel: "07:50", sunsetLabel: "15:53", dayLengthLabel: "8 ч 03 мин", sunAltitude: 11.5
         },
@@ -199,6 +201,9 @@ try {
 
   check(!/\(пауза\)/.test(runningState.hud),
     "При включённой симуляции метка «(пауза)» появляться не должна: " + runningState.hud);
+  // Часы обязаны показывать секунды — иначе по ним не видно, что время идёт.
+  check(/\d{2}:\d{2}:\d{2}/.test(runningState.hud),
+    "Часы в шапке должны показывать время с секундами (чч:мм:сс): " + runningState.hud);
   check(runningState.simRunning,
     "Кнопка запущенной симуляции должна получать класс simRunning.");
   check(/rgb\(\s*17,\s*251,\s*6\s*\)/.test(runningState.background),
@@ -220,6 +225,41 @@ try {
     "При выключенной симуляции метка «(пауза)» должна быть: " + stoppedState.hud);
   check(!stoppedState.simRunning,
     "У выключенной симуляции класс simRunning должен сниматься.");
+
+  // Секунды обязаны ДВИГАТЬСЯ: именно ради этого они добавлены. Проверяем
+  // реальное изменение текста, а не только его формат — часы, которые стоят,
+  // формально «показывают секунды», но пользу не приносят.
+  await pushSnapshot(true);
+  await page.waitForTimeout(200);
+
+  const readClock = () => page.evaluate(() =>
+    document.getElementById("hudGameTime")?.textContent || "");
+  const firstTick = await readClock();
+  await page.waitForTimeout(1400);
+  const secondTick = await readClock();
+
+  check(/\d{2}:\d{2}:\d{2}/.test(firstTick),
+    "Часы должны показывать секунды при включённой симуляции: " + firstTick);
+  check(firstTick !== secondTick,
+    "Секунды должны увеличиваться (время идёт): " + firstTick + " → " + secondTick);
+
+  // Поле ввода времени секунд показывать НЕ должно: там они только мешают.
+  const inputValue = await page.evaluate(() => {
+    // Блок «Окружение» рендерится в боковой панели; открываем её секцию.
+    const section = [...document.querySelectorAll("#side .acc")].find(item =>
+      item.dataset.section === "environment");
+    if (section) {
+      section.classList.add("open");
+      section.querySelector(".accHead")?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    }
+    return document.getElementById("simTime")?.value || "";
+  });
+  if (inputValue) {
+    check(!/^\d{2}:\d{2}:\d{2}$/.test(inputValue),
+      "Поле ввода времени не должно показывать секунды: " + inputValue);
+  }
+
+  check(pageErrors.length === 0, "Ошибки страницы: " + pageErrors.join("; "));
 
   // Подписи на карте: «Игрок» и «Магазин» центрированы над своими точками.
   const labels = await page.evaluate(() => {

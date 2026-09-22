@@ -1630,7 +1630,12 @@ public sealed class SimulatorForm : WebViewForm
         return new
         {
             gameDateLabel = GameCalendar.FormatDate(clock.Now),
+            // Время без секунд — для поля ввода: там секунды только мешают.
             gameTimeLabel = GameCalendar.FormatTime(clock.Now),
+            // Время с секундами — для часов в шапке: по нему видно, что оно идёт.
+            // Отдельное поле, а не одно «на все случаи»: поле ввода не должно
+            // показывать и требовать секунды.
+            gameClockLabel = GameCalendar.FormatClock(clock.Now),
             seasonLabel = GameCalendar.SeasonName(clock.Now),
             running = clock.Running,
             dayFraction = Math.Round(phase.DayFraction, 4),
