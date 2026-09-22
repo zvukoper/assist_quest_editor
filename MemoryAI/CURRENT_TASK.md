@@ -382,3 +382,13 @@ Regression:
 - В Dialogue/Scene UI текст «Последняя JSON» заменён на «Последняя сцена», потому что canonical ресурс сцены — `.aqscene`.
 - Версия приложения и отображаемая версия повышены до `1.0.40.139` перед следующим физическим тестом.
 - В GitHub CI исправлен final gate: результат `Scene interface Playwright smoke` теперь действительно передаётся в итоговую проверку.
+## 2026-09-22 — 1.0.40.141 Quest ↔ Scene Resource Navigation
+
+- Добавлена двусторонняя навигация по ссылкам ресурсов: `DialogueScene.sceneId` → связанная `.aqscene` и обратно → исходная Quest Graph node по стабильному `NodeId`.
+- В Inspector `DialogueScene` рядом с `sceneId` появился переход в соответствующую Scene, только если ссылка существует в `Scene Catalog`.
+- При переходе из Quest Graph в Scene сохраняется контекст возврата; Scene Graph и Dialogue Workspace показывают `↩ Вернуться в Quest Graph`.
+- Возврат открывает текущий Quest Graph и выбирает исходную node. Если Graph Editor ещё не готов, выбор откладывается до BrowserReady.
+- Добавлен централизованный `QuestNodeReferenceCatalog` для текущих и прогнозируемых ссылок: Scene, WorldPoint, Condition, Reward и Item. Для будущих ресурсов UI/editor route может использовать тот же механизм.
+- Добавлен отдельный `ci/resource_navigation_smoke.mjs` и подключён к локальному CI и GitHub workflow.
+- Текущая версия: `1.0.40.141-QUEST-RESOURCE-NAVIGATION`.
+- Физический запуск этой навигации после коммита ещё не выполнялся; предыдущие `575aff1` и `3b26a65` уже прошли физический build/publish и перестроение учебного Quest Graph.
