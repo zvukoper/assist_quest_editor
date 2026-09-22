@@ -395,3 +395,17 @@ Canonical Scene authoring следует тому же правилу, что и
 Scene Editor canvas должен оставаться производной от отработанного Quest Graph canvas. При последующих изменениях сначала проверяется решение Quest Graph и только затем оно переносится в Scene Editor с заменой canonical actions/model.
 
 Не создавать отдельную механику drag/pan/zoom/socket hover/context menu без необходимости. sceneEditor.js и editor.js должны сохранять functional parity по базовым canvas interactions.
+
+
+## 2026-09-22 — Resource format registry
+
+Stable resource namespace is now fixed as long descriptive extensions rather than abbreviated editor-specific extensions. Canonical registry: `src/AssistQuestEditor.App/Core/ResourceFileTypes.cs`.
+
+Current types:
+`.aqquest` Quest, `.aqscene` Scene, `.aqdialogue` Dialogue, `.aqcampaign` Campaign, `.aqpoint` World Point, `.aqcity` City, `.aqitem` Item, `.aqloc` Localization, `.aqregistry` Node Registry, `.aqsnapshot` Runtime Snapshot, `.aqresource` reserved generic resource.
+
+Schema revisions keep the same extension and change `schemaVersion`; JSON also contains `format` as a defensive type discriminator.
+
+Windows file associations are per-user under HKCU\\Software\\Classes with versioned ProgIDs, OpenWithProgIds, DefaultIcon and open command. Registration does not overwrite an existing user-selected association. Resource-specific ICO files are generated into %LOCALAPPDATA%\\AssistQuestEditor\\FileIcons and Explorer is refreshed with SHChangeNotify.
+
+Current Quest and Scene editors are migrated from generic JSON to `.aqquest` and `.aqscene`, including data files, loaders, publish globs, Open/Save filters and double-click activation. Detailed contract: `MemoryAI/RESOURCE_FILE_FORMATS.md`.
