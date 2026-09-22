@@ -26,8 +26,18 @@ try {
   const errors = [];
   page.on("pageerror", error => errors.push(String(error)));
 
+  // editor.js на старте требует #root и #editorTitle: он строит layoutThree
+  // (nav + #workspace + #inspector) внутрь #root. Без них скрипт падал на
+  // root.innerHTML, поэтому #workspace не создавался и таб #dialogue
+  // оставался пустым.
   await page.setContent(
-    "<!doctype html><html lang='ru'><body><main id='testRoot'></main></body></html>"
+    "<!doctype html><html lang='ru'><head><style>" +
+    "html,body{height:100%;margin:0;overflow:hidden}" +
+    "#root{height:100%;min-height:0}" +
+    "</style></head><body>" +
+    "<header><strong id='editorTitle'></strong></header>" +
+    "<main id='root'></main>" +
+    "</body></html>"
   );
   await page.addStyleTag({ content: theme });
 
@@ -187,8 +197,17 @@ try {
   await page.locator("#dialogueSearch").fill("Вторая");
   if (await page.locator(".dialogueResourceItem").count() !== 1)
     throw new Error("Поиск Dialogue Workspace не отфильтровал список.");
-  if (await page.locator(".dialogueResourceItem").innerText() !== "other.dialogue\nГоша\nВторая реплика.")
-    throw new Error("Результат поиска Dialogue Workspace имеет неверное содержимое.");
+
+  // Строка ресурса содержит ещё и бейдж связи (linked/unlinked), который
+  // отрисовывается в верхнем регистре через text-transform, поэтому innerText
+  // всей строки не совпадёт с текстом ресурса. Проверяются компоненты.
+  const searchResult = page.locator(".dialogueResourceItem");
+  if (await searchResult.locator("strong").innerText() !== "other.dialogue")
+    throw new Error("Поиск Dialogue Workspace потерял стабильный resource ID.");
+  if (await searchResult.locator(".dialogueResourceSpeaker").innerText() !== "Гоша")
+    throw new Error("Результат поиска Dialogue Workspace имеет неверный Speaker.");
+  if (await searchResult.locator(".dialogueResourcePreview").innerText() !== "Вторая реплика.")
+    throw new Error("Результат поиска Dialogue Workspace имеет неверный текст.");
   await page.locator("#dialogueSearch").fill("");
 
   // Switch to Choice.
@@ -232,7 +251,7 @@ try {
   // Open in Scene Graph and retain the selected canonical node.
   await page.getByRole("button", { name: "Открыть в Graph" }).click();
   await page.waitForTimeout(20);
-  if (location.hash.toLowerCase() !== "#scene")
+  if (await page.evaluate(() => location.hash).then(hash => hash.toLowerCase()) !== "#scene")
     throw new Error("Переход из Dialogue Workspace в Scene Graph не сработал.");
   if (await page.evaluate(() => window.__assistSceneEditor.getState().selectedNodeId) !== "choice")
     throw new Error("Переход в Scene Graph не выбрал связанную Choice node.");
@@ -240,7 +259,7 @@ try {
     throw new Error("После перехода в Scene Graph канвас не отрисован.");
 
   // Return to Dialogue Workspace and verify resource list remains available.
-  location.hash = "#dialogue";
+  await page.evaluate(() => { location.hash = "#dialogue"; });
   await page.waitForTimeout(20);
   await page.locator("#dialogueSearch").waitFor();
   if (await page.locator("[data-resource-kind='choice'][data-resource-id='fixture.choice']").count() !== 1)
@@ -254,7 +273,13 @@ try {
     throw new Error("Кнопка '+ Новый диалог' не отправила scene_add_dialogue.");
   }
 
+  // Workspace помнит выбранную вкладку (сейчас «Выборы»), поэтому до выбора
+  // Dialogue resource нужно вернуться на вкладку «Диалоги».
+  await page.getByRole("button", { name: /Диалоги \(/ }).click();
   await page.locator("[data-resource-kind='dialogue'][data-resource-id='fixture.dialogue']").click();
+  // Удаление подтверждается через window.confirm: без обработчика диалога
+  // click зависает до таймаута.
+  page.once("dialog", dialog => dialog.accept());
   await page.getByRole("button", { name: "Удалить" }).click();
   const removeDialogue = await page.evaluate(() =>
     window.__messages.find(message =>
