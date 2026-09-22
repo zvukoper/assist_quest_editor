@@ -449,3 +449,29 @@ UI ориентирован на актуальный WolvenKit Scene Editor:
 - добавлены domain regression tests для создания/изменения Dialogue, создания Choice, add/remove option, сохранения stable IDs и запрета удаления подключённой ветки;
 - Playwright Scene Graph smoke расширен проверками Dialogue/Choice authoring;
 - физический build/publish и GitHub Actions run на этой версии здесь не запускались.
+## 2026-09-22 — 1.0.40.137 Dialogue Workspace R1
+
+Добавлено отдельное рабочее пространство `editor.html#dialogue` для авторинга conversation content.
+
+Контракт:
+- Dialogue Workspace и Scene Graph открываются как отдельные EditorForm окна, но используют общий `SceneGraphStore`;
+- список показывает Dialogue и Choice resources текущей Scene, поддерживает поиск по ID/Speaker/Title/Text;
+- Dialogue редактируется по полям Speaker/Text; Resource ID стабилен и не редактируется вручную;
+- есть создание нового standalone Dialogue resource и безопасное удаление: referenced Dialogue нельзя удалить;
+- Choice редактируется по Title/Speaker/Text и option text; stable OptionId/OutputSocketId не меняются;
+- Add Option работает только для Choice, привязанного к Graph node, потому что новый option обязан иметь canonical Output socket;
+- переход `Открыть в Graph` выбирает связанную Scene node;
+- Scene selector и Save/Save As работают из Dialogue Workspace;
+- изменения проходят через `SceneGraphStore`, поэтому сохраняют canonical persistence и Undo/Redo.
+
+WolvenKit reference:
+- отдельный dialogue-oriented authoring layer остаётся отделённым от graph/node properties;
+- Scene Graph продолжает отвечать за flow и связи, а dialogue workspace — за content;
+- внутренний RED4 screenplay/localization data model WolvenKit не копируется в sandbox; собственная `SceneDefinition.Dialogues/Choices` остаётся canonical до отдельного migration design.
+
+Regression:
+- `ci/dialogue_workspace_smoke.mjs` проверяет загрузку ресурсов, поиск, редактирование Dialogue, Choice authoring, Add Option и переход Graph ↔ Dialogue;
+- локальный `ci/run_local.ps1` теперь имеет 18 контрольных шагов и проверяет syntax `dialogueWorkspace.js`;
+- `.github/workflows/ci.yml` запускает Dialogue Workspace smoke;
+- domain tests покрывают Dialogue lifecycle;
+- физическая сборка/publish для этой версии ещё не выполнялись здесь.
