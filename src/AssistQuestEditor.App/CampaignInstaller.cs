@@ -74,7 +74,9 @@ public static class CampaignInstaller
         ICollection<string> visible,
         ICollection<string> logOnly)
     {
-        var destinationFolder = Path.Combine(userRoot, source.Definition.Id);
+        var destinationFolder =
+            FindLocalCampaignFolder(userRoot, source.Definition.Id) ??
+            Path.Combine(userRoot, Path.GetFileName(source.FolderPath));
         var destinationFile = Path.Combine(destinationFolder, CampaignStore.CampaignFileName);
 
         if (!File.Exists(destinationFile))
@@ -289,6 +291,34 @@ public static class CampaignInstaller
         }
 
         return result;
+    }
+
+    private static string? FindLocalCampaignFolder(string userRoot, string campaignId)
+    {
+        foreach (var file in Directory.EnumerateFiles(
+                     userRoot,
+                     CampaignStore.CampaignFileName,
+                     SearchOption.AllDirectories))
+        {
+            try
+            {
+                var document = ResourceJsonFormat.Deserialize<CampaignDefinitionDocument>(
+                    File.ReadAllText(file));
+
+                if (document?.Definition?.Id.Equals(
+                        campaignId,
+                        StringComparison.OrdinalIgnoreCase) == true)
+                {
+                    return Path.GetDirectoryName(file);
+                }
+            }
+            catch
+            {
+                // Некорректный файл будет обработан отдельной веткой синхронизации.
+            }
+        }
+
+        return null;
     }
 
     private static int ReadQuestVersion(string path, int fallback)
