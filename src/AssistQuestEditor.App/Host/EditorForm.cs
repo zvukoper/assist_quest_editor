@@ -110,6 +110,9 @@ public sealed class EditorForm : WebViewForm
 
     private bool OpenSceneResource(string path)
     {
+        if (!ConfirmSceneSwitch())
+            return false;
+
         LoadSceneFromPath(path);
         return true;
     }
