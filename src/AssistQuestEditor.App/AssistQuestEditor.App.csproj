@@ -11,10 +11,10 @@
     <Prefer32Bit>false</Prefer32Bit>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
 
-    <Version>1.0.40.137</Version>
-    <AssemblyVersion>1.0.40.137</AssemblyVersion>
-    <FileVersion>1.0.40.137</FileVersion>
-    <AssemblyInformationalVersion>1.0.40.137-QUEST-DIALOGUE-WORKSPACE-R1</AssemblyInformationalVersion>
+    <Version>1.0.40.138</Version>
+    <AssemblyVersion>1.0.40.138</AssemblyVersion>
+    <FileVersion>1.0.40.138</FileVersion>
+    <AssemblyInformationalVersion>1.0.40.138-QUEST-SCENE-DOCUMENT-CONTEXT-R1</AssemblyInformationalVersion>
     <PublishSingleFile>true</PublishSingleFile>
     <SelfContained>true</SelfContained>
     <RuntimeIdentifier>win-x64</RuntimeIdentifier>
