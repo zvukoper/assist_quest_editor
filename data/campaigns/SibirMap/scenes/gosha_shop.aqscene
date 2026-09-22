@@ -1,0 +1,174 @@
+{
+  "schemaVersion": 1,
+  "format": "aqscene",
+  "definition": {
+    "id": "gosha_shop",
+    "title": "Домашняя колбаса Гоши",
+    "description": "Гоша продаёт домашнюю колбасу за 450 ₽, но только игрокам с репутацией от 350. При меньшей репутации вариант покупки не попадает в список и в диалоге его не видно.",
+    "graph": {
+      "id": "gosha_shop",
+      "name": "Домашняя колбаса Гоши",
+      "nodes": [
+        {
+          "nodeId": "start",
+          "nodeType": "SceneStart",
+          "title": "Начало сцены",
+          "x": 80,
+          "y": 180,
+          "sockets": [
+            {
+              "socketId": "start.out",
+              "name": "Далее",
+              "direction": "Output",
+              "flowKind": "Normal"
+            }
+          ],
+          "parameters": {}
+        },
+        {
+          "nodeId": "dialogue",
+          "nodeType": "Dialogue",
+          "title": "Гоша предлагает колбасу",
+          "x": 340,
+          "y": 180,
+          "sockets": [
+            {
+              "socketId": "dialogue.in",
+              "name": "Вход",
+              "direction": "Input",
+              "flowKind": "Normal"
+            },
+            {
+              "socketId": "dialogue.out",
+              "name": "Далее",
+              "direction": "Output",
+              "flowKind": "Normal"
+            }
+          ],
+          "parameters": {
+            "dialogueId": "gosha.shop.greeting"
+          }
+        },
+        {
+          "nodeId": "choice",
+          "nodeType": "Choice",
+          "title": "Гоша: покупка колбасы",
+          "x": 640,
+          "y": 180,
+          "sockets": [
+            {
+              "socketId": "choice.in",
+              "name": "Вход",
+              "direction": "Input",
+              "flowKind": "Normal"
+            },
+            {
+              "socketId": "choice.buy",
+              "name": "Купить",
+              "direction": "Output",
+              "flowKind": "Normal"
+            },
+            {
+              "socketId": "choice.leave",
+              "name": "Уйти",
+              "direction": "Output",
+              "flowKind": "Normal"
+            }
+          ],
+          "parameters": {
+            "choiceId": "gosha.shop"
+          }
+        },
+        {
+          "nodeId": "buy",
+          "nodeType": "SceneEnd",
+          "title": "Сцена завершена: покупка",
+          "x": 960,
+          "y": 120,
+          "sockets": [
+            {
+              "socketId": "buy.in",
+              "name": "Вход",
+              "direction": "Input",
+              "flowKind": "Normal"
+            }
+          ],
+          "parameters": {}
+        },
+        {
+          "nodeId": "leave",
+          "nodeType": "SceneEnd",
+          "title": "Сцена завершена: без покупки",
+          "x": 960,
+          "y": 250,
+          "sockets": [
+            {
+              "socketId": "leave.in",
+              "name": "Вход",
+              "direction": "Input",
+              "flowKind": "Normal"
+            }
+          ],
+          "parameters": {}
+        }
+      ],
+      "connections": [
+        {
+          "fromNodeId": "start",
+          "fromSocketId": "start.out",
+          "toNodeId": "dialogue",
+          "toSocketId": "dialogue.in"
+        },
+        {
+          "fromNodeId": "dialogue",
+          "fromSocketId": "dialogue.out",
+          "toNodeId": "choice",
+          "toSocketId": "choice.in"
+        },
+        {
+          "fromNodeId": "choice",
+          "fromSocketId": "choice.buy",
+          "toNodeId": "buy",
+          "toSocketId": "buy.in"
+        },
+        {
+          "fromNodeId": "choice",
+          "fromSocketId": "choice.leave",
+          "toNodeId": "leave",
+          "toSocketId": "leave.in"
+        }
+      ]
+    },
+    "dialogues": [
+      {
+        "id": "gosha.shop.greeting",
+        "speaker": "Гоша",
+        "text": "Колбаса домашняя, 450 рублей за штуку. Берёшь?"
+      }
+    ],
+    "choices": [
+      {
+        "id": "gosha.shop",
+        "title": "Домашняя колбаса",
+        "speaker": "Гоша",
+        "text": "450 ₽ за штуку. Что скажешь?",
+        "options": [
+          {
+            "id": "gosha.shop.buy",
+            "text": "Беру за 450 ₽.",
+            "outputSocketId": "choice.buy",
+            "requirement": {
+              "npcId": "gosha",
+              "minValue": 350
+            }
+          },
+          {
+            "id": "gosha.shop.leave",
+            "text": "Пока не нужно.",
+            "outputSocketId": "choice.leave"
+          }
+        ]
+      }
+    ]
+  }
+}
