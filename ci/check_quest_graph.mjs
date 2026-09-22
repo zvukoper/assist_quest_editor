@@ -46,7 +46,7 @@ function validate(filePath) {
   }
 
   const incoming = new Map();
-  const adjacency = new Map(graph.nodes.map(node => [node.nodeId, []]));
+  const adjacency = new Map(graph.nodes.map(node => [nodeId(node), []]));
   const exact = new Set();
 
   for (const c of graph.connections) {
@@ -59,8 +59,10 @@ function validate(filePath) {
     const key = [c.fromNodeId,c.fromSocketId,c.toNodeId,c.toSocketId].join("\u001f");
     if (exact.has(key)) problems.push("duplicate connection");
     exact.add(key);
-    incoming.set(to.nodeId + "\u001f" + tsocket.socketId, (incoming.get(to.nodeId + "\u001f" + tsocket.socketId) || 0) + 1);
-    adjacency.get(from.nodeId).push(to.nodeId);
+    const fromId = nodeId(from);
+    const toId = nodeId(to);
+    incoming.set(toId + "\u001f" + tsocket.socketId, (incoming.get(toId + "\u001f" + tsocket.socketId) || 0) + 1);
+    adjacency.get(fromId).push(toId);
   }
 
   const starts = graph.nodes.filter(n => nodeType(n) === "Start");
