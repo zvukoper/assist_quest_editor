@@ -13,8 +13,8 @@
           "nodeId": "start",
           "nodeType": "Start",
           "title": "01. Начало",
-          "x": 80,
-          "y": 250,
+          "x": 0,
+          "y": 81,
           "sockets": [
             {
               "socketId": "start.out",
@@ -29,8 +29,8 @@
           "nodeId": "status-active",
           "nodeType": "SetStatus",
           "title": "02. Статус: Active",
-          "x": 330,
-          "y": 250,
+          "x": 400,
+          "y": 81,
           "sockets": [
             {
               "socketId": "status-active.in",
@@ -53,8 +53,8 @@
           "nodeId": "step-meet-ruslan",
           "nodeType": "SetStep",
           "title": "03. Этап: встретить Руслана",
-          "x": 580,
-          "y": 250,
+          "x": 800,
+          "y": 81,
           "sockets": [
             {
               "socketId": "step-meet-ruslan.in",
@@ -77,8 +77,8 @@
           "nodeId": "scene-ruslan-start",
           "nodeType": "DialogueScene",
           "title": "04. Scene: Руслан",
-          "x": 830,
-          "y": 250,
+          "x": 1200,
+          "y": 81,
           "sockets": [
             {
               "socketId": "scene-ruslan-start.in",
@@ -101,8 +101,8 @@
           "nodeId": "step-offer-answered",
           "nodeType": "SetStep",
           "title": "05. Этап: ответ получен",
-          "x": 1080,
-          "y": 250,
+          "x": 1600,
+          "y": 81,
           "sockets": [
             {
               "socketId": "step-offer-answered.in",
@@ -125,8 +125,8 @@
           "nodeId": "condition-offer",
           "nodeType": "Condition",
           "title": "06. Принял предложение?",
-          "x": 1330,
-          "y": 250,
+          "x": 2000,
+          "y": 75,
           "sockets": [
             {
               "socketId": "condition-offer.in",
@@ -158,8 +158,8 @@
           "nodeId": "step-find-gosha",
           "nodeType": "SetStep",
           "title": "07. Этап: найти Гошу",
-          "x": 1580,
-          "y": 130,
+          "x": 2400,
+          "y": 6,
           "sockets": [
             {
               "socketId": "step-find-gosha.in",
@@ -182,8 +182,8 @@
           "nodeId": "interaction-gosha",
           "nodeType": "Interaction",
           "title": "08. Подойти к Гоше",
-          "x": 1830,
-          "y": 130,
+          "x": 2800,
+          "y": 6,
           "sockets": [
             {
               "socketId": "interaction-gosha.in",
@@ -207,8 +207,8 @@
           "nodeId": "scene-gosha",
           "nodeType": "DialogueScene",
           "title": "09. Scene: Гоша",
-          "x": 2080,
-          "y": 130,
+          "x": 3200,
+          "y": 81,
           "sockets": [
             {
               "socketId": "scene-gosha.in",
@@ -231,8 +231,8 @@
           "nodeId": "step-gosha-answered",
           "nodeType": "SetStep",
           "title": "10. Этап: ответ Гоши",
-          "x": 2330,
-          "y": 130,
+          "x": 3600,
+          "y": 81,
           "sockets": [
             {
               "socketId": "step-gosha-answered.in",
@@ -255,8 +255,8 @@
           "nodeId": "condition-gosha",
           "nodeType": "Condition",
           "title": "11. Гоша отдаёт мясо?",
-          "x": 2580,
-          "y": 130,
+          "x": 4000,
+          "y": 75,
           "sockets": [
             {
               "socketId": "condition-gosha.in",
@@ -288,8 +288,8 @@
           "nodeId": "give-meat",
           "nodeType": "GiveItem",
           "title": "12. Получить мясо",
-          "x": 2830,
-          "y": 10,
+          "x": 4400,
+          "y": 6,
           "sockets": [
             {
               "socketId": "give-meat.in",
@@ -313,8 +313,8 @@
           "nodeId": "step-return",
           "nodeType": "SetStep",
           "title": "13. Этап: вернуться к Руслану",
-          "x": 3080,
-          "y": 10,
+          "x": 4800,
+          "y": 6,
           "sockets": [
             {
               "socketId": "step-return.in",
@@ -337,8 +337,8 @@
           "nodeId": "interaction-ruslan-return",
           "nodeType": "Interaction",
           "title": "14. Вернуться к Руслану",
-          "x": 3330,
-          "y": 10,
+          "x": 5200,
+          "y": 81,
           "sockets": [
             {
               "socketId": "interaction-ruslan-return.in",
@@ -362,8 +362,8 @@
           "nodeId": "condition-meat",
           "nodeType": "Condition",
           "title": "15. Проверить мясо",
-          "x": 3580,
-          "y": 10,
+          "x": 5600,
+          "y": 75,
           "sockets": [
             {
               "socketId": "condition-meat.in",
@@ -395,8 +395,8 @@
           "nodeId": "scene-ruslan-finish",
           "nodeType": "DialogueScene",
           "title": "16. Scene: финал",
-          "x": 3830,
-          "y": 10,
+          "x": 6000,
+          "y": 6,
           "sockets": [
             {
               "socketId": "scene-ruslan-finish.in",
@@ -419,8 +419,8 @@
           "nodeId": "condition-finish",
           "nodeType": "Condition",
           "title": "17. Финальное подтверждение?",
-          "x": 4080,
-          "y": 10,
+          "x": 6400,
+          "y": 0,
           "sockets": [
             {
               "socketId": "condition-finish.in",
@@ -452,8 +452,8 @@
           "nodeId": "remove-meat",
           "nodeType": "RemoveItem",
           "title": "18. Отдать мясо",
-          "x": 4330,
-          "y": 10,
+          "x": 6800,
+          "y": 6,
           "sockets": [
             {
               "socketId": "remove-meat.in",
@@ -477,8 +477,8 @@
           "nodeId": "add-reputation",
           "nodeType": "AddReputation",
           "title": "19. Репутация Руслана +10",
-          "x": 4580,
-          "y": 10,
+          "x": 7200,
+          "y": 6,
           "sockets": [
             {
               "socketId": "add-reputation.in",
@@ -502,8 +502,8 @@
           "nodeId": "step-completed",
           "nodeType": "SetStep",
           "title": "20. Этап: завершён",
-          "x": 4830,
-          "y": 10,
+          "x": 7600,
+          "y": 81,
           "sockets": [
             {
               "socketId": "step-completed.in",
@@ -526,8 +526,8 @@
           "nodeId": "end-completed",
           "nodeType": "End",
           "title": "21. Конец: успех",
-          "x": 5080,
-          "y": 10,
+          "x": 8000,
+          "y": 81,
           "sockets": [
             {
               "socketId": "end-completed.in",
@@ -542,8 +542,8 @@
           "nodeId": "step-declined",
           "nodeType": "SetStep",
           "title": "X1. Этап: отказ",
-          "x": 1580,
-          "y": 500,
+          "x": 2400,
+          "y": 156,
           "sockets": [
             {
               "socketId": "step-declined.in",
@@ -566,8 +566,8 @@
           "nodeId": "end-declined",
           "nodeType": "End",
           "title": "X2. Конец: отказ",
-          "x": 1830,
-          "y": 500,
+          "x": 2800,
+          "y": 156,
           "sockets": [
             {
               "socketId": "end-declined.in",
@@ -582,8 +582,8 @@
           "nodeId": "step-no-meat",
           "nodeType": "SetStep",
           "title": "X3. Этап: мясо не получено",
-          "x": 2830,
-          "y": 430,
+          "x": 4400,
+          "y": 156,
           "sockets": [
             {
               "socketId": "step-no-meat.in",
@@ -606,8 +606,8 @@
           "nodeId": "end-no-meat",
           "nodeType": "End",
           "title": "X4. Конец: без мяса",
-          "x": 3080,
-          "y": 430,
+          "x": 4800,
+          "y": 156,
           "sockets": [
             {
               "socketId": "end-no-meat.in",
@@ -622,8 +622,8 @@
           "nodeId": "step-missing-meat",
           "nodeType": "SetStep",
           "title": "X5. Этап: мясо отсутствует",
-          "x": 3830,
-          "y": 300,
+          "x": 6000,
+          "y": 156,
           "sockets": [
             {
               "socketId": "step-missing-meat.in",
@@ -646,8 +646,8 @@
           "nodeId": "end-missing-meat",
           "nodeType": "End",
           "title": "X6. Конец: проверка не пройдена",
-          "x": 4080,
-          "y": 300,
+          "x": 6400,
+          "y": 162,
           "sockets": [
             {
               "socketId": "end-missing-meat.in",
@@ -662,8 +662,8 @@
           "nodeId": "step-cancelled",
           "nodeType": "SetStep",
           "title": "X7. Этап: финал отменён",
-          "x": 4330,
-          "y": 300,
+          "x": 6800,
+          "y": 156,
           "sockets": [
             {
               "socketId": "step-cancelled.in",
@@ -686,8 +686,8 @@
           "nodeId": "end-cancelled",
           "nodeType": "End",
           "title": "X8. Конец: отмена",
-          "x": 4580,
-          "y": 300,
+          "x": 7200,
+          "y": 156,
           "sockets": [
             {
               "socketId": "end-cancelled.in",
