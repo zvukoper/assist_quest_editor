@@ -85,8 +85,17 @@ public sealed class SceneRuntime
 
     public void HandleEvent(SimulatorEvent value)
     {
-        if (State.Status != SceneRuntimeStatus.Waiting ||
-            !string.Equals(State.WaitingFor, "Choice", StringComparison.OrdinalIgnoreCase) ||
+        if (State.Status != SceneRuntimeStatus.Waiting)
+            return;
+
+        if (string.Equals(State.WaitingFor, "Dialogue", StringComparison.OrdinalIgnoreCase) &&
+            value.EventType.Equals("DialogueContinue", StringComparison.OrdinalIgnoreCase))
+        {
+            ContinueDialogue(value);
+            return;
+        }
+
+        if (!string.Equals(State.WaitingFor, "Choice", StringComparison.OrdinalIgnoreCase) ||
             !value.EventType.Equals("ChoiceSelected", StringComparison.OrdinalIgnoreCase))
         {
             return;
@@ -213,13 +222,10 @@ public sealed class SceneRuntime
                     break;
 
                 case "dialogue":
-                    ApplyDialogue(scene, node);
-                    if (State.Status == SceneRuntimeStatus.Failed)
-                    {
+                    if (!PresentDialogue(scene, node))
                         return;
-                    }
-                    MoveToFirstOutput(scene, node);
-                    break;
+                    Wait("Dialogue");
+                    return;
 
                 case "choice":
                     if (!OpenChoiceDialog(scene, node))
@@ -241,6 +247,83 @@ public sealed class SceneRuntime
         }
 
         Fail(State.SceneId, $"Слишком много переходов подряд (>{MaxTransitionsPerPass}). Возможен цикл в Scene Graph.");
+    }
+
+    private void ContinueDialogue(SimulatorEvent value)
+    {
+        if (State.SceneId is null)
+        {
+            Fail(null, "Продолжение диалога получено без активной сцены.");
+            return;
+        }
+
+        if (!_catalog.TryGetScene(State.SceneId, out var scene))
+        {
+            Fail(State.SceneId, "Активная Scene отсутствует в catalog.");
+            return;
+        }
+
+        var node = FindCurrentNode(scene);
+        if (node is null)
+        {
+            Fail(State.SceneId, "Текущая Dialogue node отсутствует в Scene Graph.");
+            return;
+        }
+
+        var dialogueId = GetParameter(node, "dialogueId");
+        var dialogue = scene.Dialogues.FirstOrDefault(
+            item => item.Id.Equals(dialogueId, StringComparison.OrdinalIgnoreCase));
+
+        if (dialogue is null)
+        {
+            Fail(State.SceneId, $"Dialogue resource «{dialogueId}» не найден.");
+            return;
+        }
+
+        var requestId = value.Payload.TryGetValue("requestId", out var requestedId)
+            ? requestedId
+            : string.Empty;
+        var activeDialogue = _hub.Get<InterfaceState>("interfaces").Value.ActiveDialogue;
+
+        if (activeDialogue is null ||
+            !activeDialogue.RequestId.Equals(requestId, StringComparison.OrdinalIgnoreCase))
+        {
+            Publish(
+                "SceneDialogueIgnored",
+                State.SceneId,
+                node.NodeId,
+                null,
+                $"Устаревший requestId диалога «{requestId}» проигнорирован.");
+            return;
+        }
+
+        ClearInterface();
+        var states = _hub.Get<RuntimeStatesState>("states").Value;
+        _hub.Get<RuntimeStatesState>("states").Set(
+            states with
+            {
+                DialogueId = null,
+                DialogueAnchor = null
+            },
+            "SceneRuntime");
+
+        State = State with
+        {
+            Status = SceneRuntimeStatus.Running,
+            WaitingFor = null,
+            LastEvent = "DialogueContinue",
+            LastTransition = $"Диалог «{dialogue.Id}» завершён."
+        };
+
+        Publish(
+            "SceneDialogueCompleted",
+            State.SceneId,
+            node.NodeId,
+            null,
+            $"Диалог «{dialogue.Id}» завершён.");
+
+        MoveToFirstOutput(scene, node);
+        Advance();
     }
 
     private bool OpenChoiceDialog(SceneDefinition scene, SceneNode node)
@@ -284,7 +367,7 @@ public sealed class SceneRuntime
         return true;
     }
 
-    private void ApplyDialogue(SceneDefinition scene, SceneNode node)
+    private bool PresentDialogue(SceneDefinition scene, SceneNode node)
     {
         var dialogueId = GetParameter(node, "dialogueId");
         var dialogue = scene.Dialogues.FirstOrDefault(
@@ -305,12 +388,24 @@ public sealed class SceneRuntime
             },
             "SceneRuntime");
 
+        var dialogRequest = new InterfaceDialogue(
+            $"{scene.Id}:{node.NodeId}:{Guid.NewGuid():N}",
+            node.Title,
+            dialogue.Speaker,
+            dialogue.Text);
+
+        _hub.Get<InterfaceState>("interfaces").Set(
+            new InterfaceState(null, dialogRequest),
+            "SceneRuntime");
+
         Publish(
             "SceneDialoguePresented",
             scene.Id,
             node.NodeId,
             null,
             $"Представлен dialogue «{dialogue.Id}».");
+
+        return true;
     }
 
     private void Complete()
