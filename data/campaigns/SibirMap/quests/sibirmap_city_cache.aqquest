@@ -1,0 +1,189 @@
+{
+  "schemaVersion": 1,
+  "format": "aqquest",
+  "definition": {
+    "id": "sibirmap_city_cache",
+    "title": "Тайник в Челябинске",
+    "description": "Небольшой независимый тайник для проверки Campaign activation. Квест отключён в Campaign store до ручной активации.",
+    "version": 1,
+    "sceneIds": [],
+    "activation": {
+      "mode": "Proximity",
+      "worldPointId": "city:chelyabinsk",
+      "radius": 750,
+      "repeatable": false
+    },
+    "graph": {
+      "id": "sibirmap_city_cache",
+      "name": "Тайник в Челябинске",
+      "nodes": [
+        {
+          "id": "start",
+          "type": "Start",
+          "title": "01. Начало",
+          "x": 80,
+          "y": 230,
+          "sockets": [
+            {
+              "socketId": "start.out",
+              "name": "Далее",
+              "direction": "Output",
+              "flowKind": "Normal"
+            }
+          ],
+          "parameters": {}
+        },
+        {
+          "id": "cache-trigger",
+          "type": "Interaction",
+          "title": "02. Войти в радиус тайника",
+          "x": 340,
+          "y": 230,
+          "sockets": [
+            {
+              "socketId": "cache-trigger.in",
+              "name": "Вход",
+              "direction": "Input",
+              "flowKind": "Normal"
+            },
+            {
+              "socketId": "cache-trigger.out",
+              "name": "Далее",
+              "direction": "Output",
+              "flowKind": "Normal"
+            }
+          ],
+          "parameters": {
+            "worldPointId": "city:chelyabinsk",
+            "triggerRadius": "750"
+          }
+        },
+        {
+          "id": "cache-found",
+          "type": "Notify",
+          "title": "03. Тайник найден",
+          "x": 600,
+          "y": 230,
+          "sockets": [
+            {
+              "socketId": "cache-found.in",
+              "name": "Вход",
+              "direction": "Input",
+              "flowKind": "Normal"
+            },
+            {
+              "socketId": "cache-found.out",
+              "name": "Далее",
+              "direction": "Output",
+              "flowKind": "Normal"
+            }
+          ],
+          "parameters": {
+            "message": "Ты нашёл тайник! Получено 5 000 ₽ и +50 к навыку «Разведчик»."
+          }
+        },
+        {
+          "id": "cache-money",
+          "type": "AddMoney",
+          "title": "04. Получить 5 000 ₽",
+          "x": 860,
+          "y": 180,
+          "sockets": [
+            {
+              "socketId": "cache-money.in",
+              "name": "Вход",
+              "direction": "Input",
+              "flowKind": "Normal"
+            },
+            {
+              "socketId": "cache-money.out",
+              "name": "Далее",
+              "direction": "Output",
+              "flowKind": "Normal"
+            }
+          ],
+          "parameters": {
+            "amount": "5000"
+          }
+        },
+        {
+          "id": "cache-scout",
+          "type": "AddSkill",
+          "title": "05. Разведчик +50",
+          "x": 1120,
+          "y": 180,
+          "sockets": [
+            {
+              "socketId": "cache-scout.in",
+              "name": "Вход",
+              "direction": "Input",
+              "flowKind": "Normal"
+            },
+            {
+              "socketId": "cache-scout.out",
+              "name": "Далее",
+              "direction": "Output",
+              "flowKind": "Normal"
+            }
+          ],
+          "parameters": {
+            "skillId": "scout",
+            "name": "Разведчик",
+            "description": "Находит тайники. Уровень 0–50 открывает простые тайники; 50–100 — тайники второго уровня.",
+            "kind": "Levelled",
+            "amount": "50",
+            "maxLevel": "100"
+          }
+        },
+        {
+          "id": "end",
+          "type": "End",
+          "title": "06. Тайник завершён",
+          "x": 1380,
+          "y": 180,
+          "sockets": [
+            {
+              "socketId": "end.in",
+              "name": "Вход",
+              "direction": "Input",
+              "flowKind": "Normal"
+            }
+          ],
+          "parameters": {}
+        }
+      ],
+      "connections": [
+        {
+          "fromNodeId": "start",
+          "fromSocketId": "start.out",
+          "toNodeId": "cache-trigger",
+          "toSocketId": "cache-trigger.in"
+        },
+        {
+          "fromNodeId": "cache-trigger",
+          "fromSocketId": "cache-trigger.out",
+          "toNodeId": "cache-found",
+          "toSocketId": "cache-found.in"
+        },
+        {
+          "fromNodeId": "cache-found",
+          "fromSocketId": "cache-found.out",
+          "toNodeId": "cache-money",
+          "toSocketId": "cache-money.in"
+        },
+        {
+          "fromNodeId": "cache-money",
+          "fromSocketId": "cache-money.out",
+          "toNodeId": "cache-scout",
+          "toSocketId": "cache-scout.in"
+        },
+        {
+          "fromNodeId": "cache-scout",
+          "fromSocketId": "cache-scout.out",
+          "toNodeId": "end",
+          "toSocketId": "end.in"
+        }
+      ]
+    }
+  }
+}
