@@ -11,6 +11,7 @@ public sealed class QuestGraphStore
     private QuestGraph _value;
     private string _description = string.Empty;
     private IReadOnlyList<string> _sceneIds = Array.Empty<string>();
+    private int _version = 1;
     private readonly Stack<QuestGraph> _undo = new();
     private readonly Stack<QuestGraph> _redo = new();
 
@@ -38,7 +39,7 @@ public sealed class QuestGraphStore
     /// файле. По той же причине SceneGraphStore хранит весь SceneDefinition.
     /// </summary>
     public QuestDefinition Definition =>
-        new(_value.Id, _value.Name, _description, _value, _sceneIds);
+        new(_value.Id, _value.Name, _description, _value, _sceneIds, Version: _version);
 
     public string Description => _description;
     public IReadOnlyList<string> SceneIds => _sceneIds;
@@ -245,6 +246,7 @@ public sealed class QuestGraphStore
         _value = graph;
         _description = string.Empty;
         _sceneIds = Array.Empty<string>();
+        _version = 1;
         _undo.Clear();
         _redo.Clear();
         Changed?.Invoke(this, EventArgs.Empty);
@@ -264,6 +266,7 @@ public sealed class QuestGraphStore
         _value = definition.Graph;
         _description = definition.Description ?? string.Empty;
         _sceneIds = definition.SceneIds ?? Array.Empty<string>();
+        _version = Math.Max(1, definition.Version);
         _undo.Clear();
         _redo.Clear();
         Changed?.Invoke(this, EventArgs.Empty);
@@ -414,6 +417,13 @@ public static class QuestNodeCatalog
             "removemoney" => Parameters(("amount", "1")),
             "setreserve" => Parameters(("value", "0")),
             "setcharacterstat" => Parameters(("stat", "strength"), ("value", "5")),
+            "addskill" => Parameters(
+                ("skillId", ""),
+                ("name", ""),
+                ("description", ""),
+                ("kind", "Levelled"),
+                ("amount", "1"),
+                ("maxLevel", "100")),
             "addreputation" => Parameters(("npcId", ""), ("amount", "1")),
             "removereputation" => Parameters(("npcId", ""), ("amount", "1")),
             "switch" or "random" or "choice" => Parameters(("outputCount", "2")),
