@@ -9,6 +9,7 @@ public sealed class MainForm : WebViewForm
     private readonly QuestGraphStore _questGraph;
     private readonly SceneCatalog _sceneCatalog;
     private readonly SceneGraphStore _sceneGraph;
+    private readonly SceneDocumentSession _sceneDocument;
     private readonly SceneRuntime _sceneRuntime;
     private readonly QuestRuntime _runtime;
     private readonly Dictionary<string, EditorForm> _editors = new(StringComparer.OrdinalIgnoreCase);
@@ -34,6 +35,11 @@ public sealed class MainForm : WebViewForm
             ? ruslanStart
             : _sceneCatalog.Scenes.FirstOrDefault() ?? SceneCatalogFactory.CreateStarter().Scenes.First();
         _sceneGraph = new SceneGraphStore(initialScene);
+        var preferences = AppUiPreferencesStore.Load();
+        _sceneDocument = new SceneDocumentSession(
+            initialScene.Id,
+            ResolveScenePath(initialScene.Id),
+            preferences.LastSceneDefinitionPath);
         _sceneCatalog.Changed += SceneCatalog_Changed;
         _sceneRuntime = new SceneRuntime(_sceneCatalog, _hub);
         _runtime = new QuestRuntime(_questGraph, _hub, _sceneRuntime);
@@ -246,6 +252,12 @@ public sealed class MainForm : WebViewForm
         WindowGeometryStore.ClearSavedGeometry();
     }
 
+    private static string? ResolveScenePath(string sceneId)
+    {
+        var path = Path.Combine(AppContext.BaseDirectory, "data", "scenes", sceneId + ".aqscene");
+        return File.Exists(path) ? path : null;
+    }
+
     private void OpenEditor(string editor)
     {
         var page = editor.ToLowerInvariant() switch
@@ -277,6 +289,7 @@ public sealed class MainForm : WebViewForm
             _questGraph,
             _sceneGraph,
             _sceneCatalog,
+            _sceneDocument,
             _runtime);
         _editors[page.Item2] = form;
         form.FormClosed += (_, _) => _editors.Remove(page.Item2);
