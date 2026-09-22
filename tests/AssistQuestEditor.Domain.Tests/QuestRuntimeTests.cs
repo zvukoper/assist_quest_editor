@@ -316,15 +316,33 @@ public sealed class QuestRuntimeTests
 
         Assert.True(sceneRuntime.Start("ruslan_start"));
         Assert.Equal(SceneRuntimeStatus.Waiting, sceneRuntime.State.Status);
+        Assert.Equal("Dialogue", sceneRuntime.State.WaitingFor);
+
+        var dialogue = hub.Get<InterfaceState>("interfaces").Value.ActiveDialogue;
+        Assert.NotNull(dialogue);
+        Assert.Equal("Руслан", dialogue!.Speaker);
+        Assert.Equal("Есть для тебя особое предложение.", dialogue.Text);
+        Assert.Null(hub.Get<InterfaceState>("interfaces").Value.ActiveDialog);
+
+        hub.Events.Publish(new SimulatorEvent(
+            "DialogueContinue",
+            DateTimeOffset.UtcNow,
+            "Interface",
+            new Dictionary<string, string>
+            {
+                ["requestId"] = dialogue.RequestId
+            }));
+
+        Assert.Equal(SceneRuntimeStatus.Waiting, sceneRuntime.State.Status);
         Assert.Equal("Choice", sceneRuntime.State.WaitingFor);
 
-        var dialog = hub.Get<InterfaceState>("interfaces").Value.ActiveDialog;
-        Assert.NotNull(dialog);
-        Assert.Equal("Руслан", dialog!.Speaker);
-        Assert.Equal("Нужно найти особое мясо. Возьмёшься?", dialog.Text);
+        var choice = hub.Get<InterfaceState>("interfaces").Value.ActiveDialog;
+        Assert.NotNull(choice);
+        Assert.Equal("Руслан", choice!.Speaker);
+        Assert.Equal("Нужно найти особое мясо. Возьмёшься?", choice.Text);
         Assert.Equal(
             new[] { "Да, берусь.", "Нет, сейчас не могу." },
-            dialog.Options.Select(option => option.Text).ToArray());
+            choice.Options.Select(option => option.Text).ToArray());
 
         hub.Events.Publish(new SimulatorEvent(
             "ChoiceSelected",
@@ -332,7 +350,7 @@ public sealed class QuestRuntimeTests
             "Interface",
             new Dictionary<string, string>
             {
-                ["requestId"] = dialog.RequestId,
+                ["requestId"] = choice.RequestId,
                 ["index"] = "1",
                 ["optionId"] = "ruslan.offer.accept"
             }));
@@ -341,6 +359,7 @@ public sealed class QuestRuntimeTests
         Assert.Equal("ruslan.offer.accept", sceneRuntime.State.LastChoiceId);
         Assert.Equal("accept", sceneRuntime.State.CurrentNodeId);
         Assert.Null(hub.Get<InterfaceState>("interfaces").Value.ActiveDialog);
+        Assert.Null(hub.Get<InterfaceState>("interfaces").Value.ActiveDialogue);
     }
 
     [Fact]
@@ -370,15 +389,26 @@ public sealed class QuestRuntimeTests
         Assert.Equal(QuestRuntimeStatus.Waiting, questRuntime.State.Status);
         Assert.Equal("Scene", questRuntime.State.WaitingFor);
 
-        var dialogRequest = hub.Get<InterfaceState>("interfaces").Value.ActiveDialog;
-        Assert.NotNull(dialogRequest);
+        var dialogueRequest = hub.Get<InterfaceState>("interfaces").Value.ActiveDialogue;
+        Assert.NotNull(dialogueRequest);
+        hub.Events.Publish(new SimulatorEvent(
+            "DialogueContinue",
+            DateTimeOffset.UtcNow,
+            "Interface",
+            new Dictionary<string, string>
+            {
+                ["requestId"] = dialogueRequest!.RequestId
+            }));
+
+        var choiceRequest = hub.Get<InterfaceState>("interfaces").Value.ActiveDialog;
+        Assert.NotNull(choiceRequest);
         hub.Events.Publish(new SimulatorEvent(
             "ChoiceSelected",
             DateTimeOffset.UtcNow,
             "Interface",
             new Dictionary<string, string>
             {
-                ["requestId"] = dialogRequest!.RequestId,
+                ["requestId"] = choiceRequest!.RequestId,
                 ["index"] = "2",
                 ["optionId"] = "ruslan.offer.decline"
             }));
