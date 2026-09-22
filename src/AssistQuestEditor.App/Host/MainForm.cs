@@ -292,9 +292,100 @@ public sealed class MainForm : WebViewForm
             _sceneDocument,
             _runtime);
         _editors[page.Item2] = form;
-        form.FormClosed += (_, _) => _editors.Remove(page.Item2);
+        form.NavigationRequested += Editor_NavigationRequested;
+        form.FormClosed += (_, _) =>
+        {
+            form.NavigationRequested -= Editor_NavigationRequested;
+            _editors.Remove(page.Item2);
+        };
         PlaceAuxiliaryWindow(form, _editors.Count);
         form.Show(this);
+    }
+
+    private void Editor_NavigationRequested(object? sender, EditorNavigationRequestEventArgs e)
+    {
+        switch (e.Action)
+        {
+            case "graph_open_scene":
+                OpenSceneFromQuestNode(e.NodeId);
+                break;
+            case "navigate_to_quest_node":
+                OpenQuestNodeFromScene(e.NodeId);
+                break;
+        }
+    }
+
+    private void OpenSceneFromQuestNode(string nodeId)
+    {
+        var node = _questGraph.FindNode(nodeId);
+        if (node is null)
+        {
+            MessageBox.Show(this, "Нода не найдена в текущем Quest Graph: " + nodeId,
+                "Навигация по ресурсу", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            return;
+        }
+
+        var reference = QuestNodeReferenceCatalog.GetReferences(node)
+            .FirstOrDefault(item => item.ResourceKind.Equals("Scene", StringComparison.OrdinalIgnoreCase));
+
+        if (reference is null)
+        {
+            MessageBox.Show(this, "У ноды «" + node.Title + "» нет заполненной ссылки на Scene.",
+                "Навигация по ресурсу", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            return;
+        }
+
+        if (!_sceneCatalog.TryGetScene(reference.ResourceId, out var scene))
+        {
+            MessageBox.Show(this, "Scene «" + reference.ResourceId + "» не найдена в Scene Catalog.",
+                "Навигация по ресурсу", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            return;
+        }
+
+        var path = ResolveScenePath(scene.Id);
+        if (string.IsNullOrWhiteSpace(path))
+        {
+            MessageBox.Show(this, "Для Scene «" + scene.Id + "» не найден файл .aqscene.",
+                "Навигация по ресурсу", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            return;
+        }
+
+        const string editorKey = "editor.html#scene";
+        OpenEditor("scene");
+
+        if (!_editors.TryGetValue(editorKey, out var sceneEditor) || sceneEditor.IsDisposed)
+            return;
+
+        try
+        {
+            sceneEditor.OpenSceneFromQuestNode(path, node.NodeId, node.Title);
+        }
+        catch (Exception ex)
+        {
+            AppLogger.Error(
+                "Не удалось перейти из Quest Graph в Scene.",
+                ex,
+                "node=" + node.NodeId + "; scene=" + scene.Id);
+            MessageBox.Show(this, ex.Message, "Навигация по ресурсу",
+                MessageBoxButtons.OK, MessageBoxIcon.Error);
+        }
+    }
+
+    private void OpenQuestNodeFromScene(string nodeId)
+    {
+        var node = _questGraph.FindNode(nodeId);
+        if (node is null)
+        {
+            MessageBox.Show(this, "Связанная Quest Graph нода больше не существует: " + nodeId,
+                "Возврат в Quest Graph", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            return;
+        }
+
+        const string editorKey = "editor.html#graph";
+        OpenEditor("graph");
+
+        if (_editors.TryGetValue(editorKey, out var graphEditor) && !graphEditor.IsDisposed)
+            graphEditor.FocusQuestNode(node.NodeId);
     }
 
     private void OpenSimulator()

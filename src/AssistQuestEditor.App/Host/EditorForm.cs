@@ -31,6 +31,11 @@ public sealed class EditorForm : WebViewForm
     private string? _lastDefinitionPath;
     private bool _documentDirty;
     private bool _loadingScene;
+    private string? _pendingQuestNodeSelection;
+    private string? _navigationBackQuestNodeId;
+    private string? _navigationBackQuestNodeTitle;
+
+    public event EventHandler<EditorNavigationRequestEventArgs>? NavigationRequested;
 
     public string WindowKey { get; }
 
@@ -84,6 +89,38 @@ public sealed class EditorForm : WebViewForm
     {
         if (_isGraphEditor || _isSceneEditor)
             PostSceneCatalog();
+    }
+
+    public void FocusQuestNode(string nodeId)
+    {
+        if (!_isGraphEditor)
+            return;
+
+        if (_questGraph.FindNode(nodeId) is null)
+            throw new InvalidOperationException("Quest Graph нода не найдена: " + nodeId);
+
+        _pendingQuestNodeSelection = nodeId;
+
+        if (Browser.CoreWebView2 is not null)
+        {
+            PostQuestGraph(nodeId);
+            _pendingQuestNodeSelection = null;
+        }
+    }
+
+    public bool OpenSceneFromQuestNode(string path, string nodeId, string nodeTitle)
+    {
+        if (!_isSceneEditor)
+            throw new InvalidOperationException("Переход в Scene доступен только в Scene Editor.");
+
+        if (string.IsNullOrWhiteSpace(nodeId))
+            throw new ArgumentException("NodeId обязателен.", nameof(nodeId));
+
+        if (!ConfirmSceneSwitch())
+            return false;
+
+        LoadSceneFromPath(path, nodeId, nodeTitle);
+        return true;
     }
 
     public bool OpenResourcePath(string path)
@@ -190,6 +227,13 @@ public sealed class EditorForm : WebViewForm
             PostSceneCatalog();
             PostSceneGraph();
         }
+
+        if (_isGraphEditor && !string.IsNullOrWhiteSpace(_pendingQuestNodeSelection))
+        {
+            var nodeId = _pendingQuestNodeSelection;
+            _pendingQuestNodeSelection = null;
+            PostQuestGraph(nodeId);
+        }
     }
 
     protected override void OnWebMessage(string json)
@@ -230,6 +274,15 @@ public sealed class EditorForm : WebViewForm
     {
         switch (action)
         {
+            case "navigate_to_quest_node":
+            {
+                var nodeId = Required(root, "nodeId");
+                NavigationRequested?.Invoke(
+                    this,
+                    new EditorNavigationRequestEventArgs("navigate_to_quest_node", nodeId));
+                break;
+            }
+
             case "scene_new":
                 if (!ConfirmSceneSwitch())
                     break;
@@ -626,6 +679,16 @@ public sealed class EditorForm : WebViewForm
                 break;
             }
 
+            case "graph_open_scene":
+            {
+                var nodeId = Required(root, "nodeId");
+                var sceneId = OptionalString(root, "sceneId");
+                NavigationRequested?.Invoke(
+                    this,
+                    new EditorNavigationRequestEventArgs("graph_open_scene", nodeId, sceneId));
+                break;
+            }
+
             case "graph_update_node":
             {
                 var nodeId = Required(root, "nodeId");
@@ -922,7 +985,10 @@ public sealed class EditorForm : WebViewForm
             LoadSceneFromPath(_sceneDocument.LastPath);
     }
 
-    private void LoadSceneFromPath(string path)
+    private void LoadSceneFromPath(
+        string path,
+        string? navigationBackQuestNodeId = null,
+        string? navigationBackQuestNodeTitle = null)
     {
         var document = JsonSerializer.Deserialize<SceneDefinitionDocument>(
             File.ReadAllText(path),
@@ -946,6 +1012,8 @@ public sealed class EditorForm : WebViewForm
         }
 
         _sceneDocument.Opened(document.Definition.Id, path);
+        _navigationBackQuestNodeId = navigationBackQuestNodeId;
+        _navigationBackQuestNodeTitle = navigationBackQuestNodeTitle;
         SaveLastScenePath();
         UpdateWindowTitle();
         PostSceneCatalog();
@@ -1066,7 +1134,14 @@ public sealed class EditorForm : WebViewForm
             validation = SceneGraphValidator.Validate(_sceneGraph.Value),
             documentPath = _sceneDocument.CurrentPath ?? string.Empty,
             lastDocumentPath = _sceneDocument.LastPath ?? string.Empty,
-            documentDirty = _sceneDocument.IsDirty
+            documentDirty = _sceneDocument.IsDirty,
+            navigationBack = string.IsNullOrWhiteSpace(_navigationBackQuestNodeId)
+                ? null
+                : new
+                {
+                    nodeId = _navigationBackQuestNodeId,
+                    nodeTitle = _navigationBackQuestNodeTitle
+                }
         }, WebJsonOptions));
     }
 

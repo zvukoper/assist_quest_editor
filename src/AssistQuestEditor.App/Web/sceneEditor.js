@@ -24,6 +24,7 @@
   let scenePreviewPositions = new Map();
   let sceneViewport = { x: 0, y: 0, width: 1200, height: 720 };
   let sceneDocument = { path: "", lastPath: "", dirty: false };
+  let sceneNavigationBack = null;
   let sceneDirtyNodeIds = new Set();
   let sceneSpaceDown = false;
   let pendingConnectionPoint = null;
@@ -49,6 +50,9 @@
         "<button class='toolButton' id='newScene'>Новая</button>" +
         "<button class='toolButton' id='openScene'>Открыть</button>" +
         "<button class='toolButton' id='openLastScene' " + (sceneDocument.lastPath ? "" : "disabled") + ">Последняя JSON</button>" +
+        (sceneNavigationBack
+          ? "<button class='toolButton' id='sceneBackToQuest' title='Вернуться к исходной ноде Quest Graph'>↩ Вернуться в Quest Graph</button>"
+          : "") +
         "<button class='toolButton primary' id='saveScene'>Сохранить</button>" +
         "<button class='toolButton' id='saveSceneAs'>Сохранить как…</button>" +
         "<span class='badge " + (sceneDocument.dirty ? "accent" : "blue") + "'>" +
@@ -92,6 +96,10 @@
     ws.querySelector("#newScene").addEventListener("click", () => send({ action: "scene_new" }));
     ws.querySelector("#openScene").addEventListener("click", () => send({ action: "scene_open" }));
     ws.querySelector("#openLastScene")?.addEventListener("click", () => send({ action: "scene_open_last" }));
+    ws.querySelector("#sceneBackToQuest")?.addEventListener("click", () => {
+      if (!sceneNavigationBack?.nodeId) return;
+      send({ action: "navigate_to_quest_node", nodeId: sceneNavigationBack.nodeId });
+    });
     ws.querySelector("#saveScene").addEventListener("click", () => send({ action: "scene_save" }));
     ws.querySelector("#saveSceneAs").addEventListener("click", () => send({ action: "scene_save_as" }));
     ws.querySelector("#sceneResource").addEventListener("change", event => {
@@ -1645,6 +1653,7 @@
         lastPath: data.lastDocumentPath || "",
         dirty: Boolean(data.documentDirty)
       };
+      sceneNavigationBack = data.navigationBack || null;
       sceneHistory = {
         canUndo: Boolean(data.canUndo),
         canRedo: Boolean(data.canRedo)

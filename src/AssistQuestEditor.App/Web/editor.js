@@ -29,6 +29,29 @@
   let executedNodeIds = new Set();
   let pendingGraphFit = false;
 
+  // Central UI registry of navigable resource references. Planned targets are
+  // recorded here so each new editor can use the same open-and-return pattern.
+  const GRAPH_REFERENCE_EDITORS = {
+    DialogueScene: {
+      sceneId: { resourceKind: "Scene", action: "graph_open_scene", label: "Открыть сцену" }
+    },
+    Interaction: {
+      worldPointId: { resourceKind: "WorldPoint", action: null, label: "Открыть точку" }
+    },
+    WaitForCondition: {
+      conditionId: { resourceKind: "Condition", action: null, label: "Открыть условие" }
+    },
+    Reward: {
+      rewardId: { resourceKind: "Reward", action: null, label: "Открыть награду" }
+    },
+    GiveItem: {
+      itemId: { resourceKind: "Item", action: null, label: "Открыть предмет" }
+    },
+    RemoveItem: {
+      itemId: { resourceKind: "Item", action: null, label: "Открыть предмет" }
+    }
+  };
+
   const GRAPH_NODE_TYPES = [
     ["Start", "Начало"], ["End", "Завершение"], ["Phase", "Фаза"],
     ["Interaction", "Интеракция"], ["Condition", "Условие"], ["And", "AND"],
@@ -877,18 +900,23 @@
       "<div class='tableRow' data-param-row>" +
         "<input class='toolButton' data-param-key value='" + escapeHtml(key) + "' title='" + escapeHtml(parameterLabel(key)) + "'>" +
         (node.nodeType === "DialogueScene" && key === "sceneId"
-          ? "<select class='toolButton' data-param-value>" +
+          ? "<div style='display:flex;gap:6px;align-items:center'>" +
+              "<select class='toolButton' data-param-value style='flex:1'>" +
+                (sceneCatalog.some(scene => scene.id === value)
+                  ? ""
+                  : "<option value='" + escapeHtml(value) + "' selected>" +
+                      escapeHtml(value || "— отсутствует в Scene catalog —") + "</option>") +
+                sceneCatalog.map(scene =>
+                  "<option value='" + escapeHtml(scene.id) + "'" +
+                    (scene.id === value ? " selected" : "") + ">" +
+                    escapeHtml(scene.title + " (" + scene.id + ")") +
+                  "</option>"
+                ).join("") +
+              "</select>" +
               (sceneCatalog.some(scene => scene.id === value)
-                ? ""
-                : "<option value='" + escapeHtml(value) + "' selected>" +
-                    escapeHtml(value || "— отсутствует в Scene catalog —") + "</option>") +
-              sceneCatalog.map(scene =>
-                "<option value='" + escapeHtml(scene.id) + "'" +
-                  (scene.id === value ? " selected" : "") + ">" +
-                  escapeHtml(scene.title + " (" + scene.id + ")") +
-                "</option>"
-              ).join("") +
-            "</select>"
+                ? "<button class='toolButton primary' type='button' data-open-reference='" + escapeHtml(value) + "' title='Открыть связанную сцену'>↗</button>"
+                : "") +
+            "</div>"
           : "<input class='toolButton' data-param-value value='" + escapeHtml(value) + "'>") +
         "<button class='toolButton' data-param-remove title='Удалить параметр'>×</button>" +
       "</div>"
@@ -974,6 +1002,20 @@
 
     ins.querySelectorAll("[data-param-remove]").forEach(button => {
       button.addEventListener("click", () => button.closest("[data-param-row]")?.remove());
+    });
+
+    ins.querySelectorAll("[data-open-reference]").forEach(button => {
+      button.addEventListener("click", () => {
+        const row = button.closest("[data-param-row]");
+        const key = row?.querySelector("[data-param-key]")?.value;
+        const spec = GRAPH_REFERENCE_EDITORS[node.nodeType]?.[key];
+        if (!spec?.action) return;
+        send({
+          action: spec.action,
+          nodeId: node.nodeId,
+          sceneId: button.dataset.openReference
+        });
+      });
     });
 
     ins.querySelector("#addGraphParameter").addEventListener("click", () => {

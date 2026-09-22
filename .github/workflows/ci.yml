@@ -84,6 +84,12 @@ jobs:
         shell: pwsh
         run: node ci/dialogue_workspace_smoke.mjs
 
+      - name: Навигация Quest ↔ Scene resource smoke
+        id: resource_navigation_smoke
+        continue-on-error: true
+        shell: pwsh
+        run: node ci/resource_navigation_smoke.mjs
+
       - name: Scene interface Playwright smoke
         id: scene_interface_smoke
         continue-on-error: true
@@ -186,6 +192,7 @@ jobs:
           QUEST_GRAPH_SMOKE_OUTCOME: ${{ steps.quest_graph_smoke.outcome }}
           SCENE_GRAPH_SMOKE_OUTCOME: ${{ steps.scene_graph_smoke.outcome }}
           DIALOGUE_WORKSPACE_SMOKE_OUTCOME: ${{ steps.dialogue_workspace_smoke.outcome }}
+          RESOURCE_NAVIGATION_SMOKE_OUTCOME: ${{ steps.resource_navigation_smoke.outcome }}
           PAN_SMOKE_OUTCOME: ${{ steps.pan_smoke.outcome }}
           SCENE_INTERFACE_SMOKE_OUTCOME: ${{ steps.scene_interface_smoke.outcome }}
           WEB_SYNTAX_OUTCOME: ${{ steps.web_syntax.outcome }}
@@ -203,6 +210,7 @@ jobs:
             @{ Name = 'Quest Graph UI smoke'; Outcome = $env:QUEST_GRAPH_SMOKE_OUTCOME },
             @{ Name = 'Scene Graph UI smoke'; Outcome = $env:SCENE_GRAPH_SMOKE_OUTCOME },
             @{ Name = 'Dialogue Workspace UI smoke'; Outcome = $env:DIALOGUE_WORKSPACE_SMOKE_OUTCOME },
+            @{ Name = 'Resource navigation smoke'; Outcome = $env:RESOURCE_NAVIGATION_SMOKE_OUTCOME },
             @{ Name = 'Scene interface UI smoke'; Outcome = $env:SCENE_INTERFACE_SMOKE_OUTCOME },
             @{ Name = 'Pan follows cursor'; Outcome = $env:PAN_SMOKE_OUTCOME },
             @{ Name = 'Web JavaScript syntax'; Outcome = $env:WEB_SYNTAX_OUTCOME },

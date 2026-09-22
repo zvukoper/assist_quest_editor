@@ -91,6 +91,9 @@
 
     return (
       "<div class='toolbar dialogueWorkspaceToolbar' style='flex-wrap:wrap'>" +
+        (getState()?.payload?.navigationBack
+          ? "<button class='toolButton' id='dialogueBackToQuest' title='Вернуться к исходной ноде Quest Graph'>↩ Вернуться в Quest Graph</button>"
+          : "") +
         "<button class='toolButton' id='dialogueOpenScene'>Открыть сцену</button>" +
         "<select id='dialogueSceneResource' class='toolButton' title='Текущая Scene'>" +
           catalog.map(item =>
@@ -373,6 +376,12 @@
   }
 
   function bind(ws, ins) {
+    ws.querySelector("#dialogueBackToQuest")?.addEventListener("click", () => {
+      const navigationBack = getState()?.payload?.navigationBack;
+      if (!navigationBack?.nodeId) return;
+      send({ action: "navigate_to_quest_node", nodeId: navigationBack.nodeId });
+    });
+
     ws.querySelector("#dialogueOpenScene")?.addEventListener("click", () => {
       location.hash = "#scene";
     });

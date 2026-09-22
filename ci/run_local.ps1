@@ -530,6 +530,11 @@ Invoke-Check -Name 'Scene interface UI smoke' -Body {
     node ci/scene_interface_smoke.mjs
 }
 
+# Навигация по resource reference: Quest node → Scene → обратно к исходной ноде.
+Invoke-Check -Name 'Resource navigation smoke' -Body {
+    node ci/resource_navigation_smoke.mjs
+}
+
 # Шаг 5.3: pan средней кнопкой следует за курсором в обоих нодовых редакторах.
 # Отдельная проверка нужна потому, что pan-ассерты в quest/scene smoke требуют
 # лишь изменения viewBox: при несовпадении аспекта канваса и viewBox pan
