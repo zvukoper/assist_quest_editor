@@ -26,6 +26,10 @@ public sealed class SimulatorForm : WebViewForm
     private bool _journalDetached;
     private bool _snapshotRequestScheduled;
     private bool _journalRefreshScheduled;
+    // Выделение квеста живёт в Host, а не только в Web UI: карта, окно кампаний
+    // и левый сайдбар должны показывать ОДИН выбранный квест.
+    private string _selectedCampaignId = string.Empty;
+    private string _selectedQuestId = string.Empty;
 
     public SimulatorForm(
         IDataChannelHub hub,
@@ -34,7 +38,7 @@ public sealed class SimulatorForm : WebViewForm
         CampaignStore campaignStore,
         Action<string> openQuestEditor)
         : base(
-            "Assist Quest Editor — Симулятор",
+            "Симулятор",
             "simulator.html",
             new Size(1440, 900),
             "simulator")
@@ -128,7 +132,12 @@ public sealed class SimulatorForm : WebViewForm
             runtime = _runtime.State,
             simulationRunning = _runtime.SimulationRunning,
             enabledQuestIds = _runtime.EnabledQuestIds,
-            questActivations = BuildQuestActivationMarkers(snapshot),
+            questCatalog = BuildQuestCatalog(snapshot),
+            selectedQuest = new
+            {
+                campaignId = _selectedCampaignId,
+                questId = _selectedQuestId
+            },
             questGraph = _runtime.ActiveGraph ?? _questGraph.Value,
             journalDetached = _journalDetached
         }, SnapshotJsonOptions);
@@ -231,7 +240,11 @@ public sealed class SimulatorForm : WebViewForm
                     break;
 
                 case "open_campaigns":
-                    OpenCampaignsWindow();
+                    OpenCampaignsWindow(root);
+                    break;
+
+                case "select_quest":
+                    SelectQuest(Required(root, "campaignId"), Required(root, "questId"));
                     break;
 
                 case "return_journal_to_sidebar":
@@ -421,6 +434,8 @@ public sealed class SimulatorForm : WebViewForm
         if (_campaignsForm is not null && !_campaignsForm.IsDisposed)
         {
             _campaignsForm.SetCatalog(_campaignStore.BuildSimulatorCatalog());
+            if (_selectedQuestId.Length > 0)
+                _campaignsForm.SelectQuest(_selectedCampaignId, _selectedQuestId);
             _campaignsForm.WindowState = FormWindowState.Normal;
             _campaignsForm.BringToFront();
             _campaignsForm.Activate();
@@ -433,8 +448,73 @@ public sealed class SimulatorForm : WebViewForm
         _campaignsForm.QuestEnabledChanged += CampaignsForm_QuestEnabledChanged;
         _campaignsForm.QuestOpenRequested += CampaignsForm_QuestOpenRequested;
         _campaignsForm.CampaignFolderOpenRequested += CampaignsForm_CampaignFolderOpenRequested;
-        _campaignsForm.FormClosed += (_, _) => _campaignsForm = null;
+        _campaignsForm.QuestSelected += CampaignsForm_QuestSelected;
+        _campaignsForm.FormClosed += (_, _) =>
+        {
+            _campaignsForm = null;
+            // Окно закрыли: выделение остаётся, но подсвечивать больше нечего.
+            RequestSnapshot("campaign window closed");
+        };
+        if (_selectedQuestId.Length > 0)
+            _campaignsForm.SelectQuest(_selectedCampaignId, _selectedQuestId);
         _campaignsForm.Show(this);
+    }
+
+    /// <summary>
+    /// Открывает окно кампаний, дополнительно выделив квест из запроса.
+    ///
+    /// Вызов приходит при ЛКМ по точке или названию квеста на карте: окно
+    /// должно открыться и подсветить именно этот квест оранжевой рамкой.
+    /// </summary>
+    private void OpenCampaignsWindow(JsonElement root)
+    {
+        var campaignId = root.TryGetProperty("campaignId", out var campaignNode)
+            ? campaignNode.GetString() ?? string.Empty
+            : string.Empty;
+        var questId = root.TryGetProperty("questId", out var questNode)
+            ? questNode.GetString() ?? string.Empty
+            : string.Empty;
+
+        if (!string.IsNullOrWhiteSpace(questId))
+            SelectQuest(campaignId, questId);
+
+        OpenCampaignsWindow();
+    }
+
+    /// <summary>
+    /// Единая точка смены выделенного квеста. Вызывается и картой, и окном
+    /// кампаний, поэтому обе стороны и левый сайдбар всегда согласованы.
+    /// </summary>
+    private void SelectQuest(string campaignId, string questId)
+    {
+        if (string.IsNullOrWhiteSpace(questId))
+            return;
+
+        var campaign = _campaignStore.BuildSimulatorCatalog()
+            .FirstOrDefault(item => item.Id.Equals(campaignId, StringComparison.OrdinalIgnoreCase))
+            ?? _campaignStore.BuildSimulatorCatalog().FirstOrDefault(item =>
+                item.Quests.Any(quest => quest.QuestId.Equals(questId, StringComparison.OrdinalIgnoreCase)));
+
+        var quest = campaign?.Quests.FirstOrDefault(item =>
+            item.QuestId.Equals(questId, StringComparison.OrdinalIgnoreCase));
+
+        if (campaign is null || quest is null)
+            return;
+
+        _selectedCampaignId = campaign.Id;
+        _selectedQuestId = quest.QuestId;
+        AppLogger.Info("SimulatorForm: выбран квест.",
+            $"campaignId={campaign.Id}; questId={quest.QuestId}; title={quest.Title}");
+
+        if (_campaignsForm is not null && !_campaignsForm.IsDisposed)
+            _campaignsForm.SelectQuest(campaign.Id, quest.QuestId);
+
+        RequestSnapshot("quest selected");
+    }
+
+    private void CampaignsForm_QuestSelected(object? sender, QuestSelectedEventArgs e)
+    {
+        SelectQuest(e.CampaignId, e.QuestId);
     }
 
     private void CampaignsForm_CampaignActiveChanged(object? sender, CampaignActiveChangedEventArgs e)
@@ -474,46 +554,70 @@ public sealed class SimulatorForm : WebViewForm
     private void CampaignsForm_CampaignFolderOpenRequested(object? sender, CampaignFolderOpenRequestedEventArgs e) =>
         OpenCampaignFolder(e.CampaignId);
 
-    private object[] BuildQuestActivationMarkers(SimulatorSnapshot snapshot)
+    /// <summary>
+    /// Квестовый слой карты Simulator.
+    ///
+    /// В отличие от прежних маркеров активации, сюда попадают ВСЕ квесты
+    /// установленных кампаний, а не только те, чей Proximity-триггер доступен:
+    /// неактивный квест должен оставаться на карте, но выглядеть иначе.
+    ///
+    /// Поля собираются здесь, а не в JS: состояние квеста (QuestStatus +
+    /// активность Runtime) известно только Host.
+    /// </summary>
+    private object[] BuildQuestCatalog(SimulatorSnapshot snapshot)
     {
+        var statuses = snapshot.QuestStatuses.Quests
+            .ToDictionary(item => item.QuestId, StringComparer.OrdinalIgnoreCase);
+        var activeQuestId = _runtime.State.QuestId;
+        var activeStatus = _runtime.State.Status;
+        var runtimeActive = activeStatus is QuestRuntimeStatus.Running or QuestRuntimeStatus.Waiting;
+
         return _campaignStore.BuildSimulatorCatalog()
-            .SelectMany(campaign => campaign.Quests
-                .Where(quest =>
-                    campaign.Active &&
-                    quest.Status == CampaignQuestStatus.Enabled &&
-                    quest.Activation is not null &&
-                    !string.IsNullOrWhiteSpace(quest.Activation.WorldPointId))
-                .Select(quest =>
+            .Select(campaign => new
+            {
+                campaignId = campaign.Id,
+                campaignName = campaign.Name,
+                quests = campaign.Quests.Select(quest =>
                 {
-                    var activation = quest.Activation!;
-                    var point = snapshot.World.Points.FirstOrDefault(item =>
-                        item.Id.Equals(activation.WorldPointId, StringComparison.OrdinalIgnoreCase));
-
-                    if (point is null)
-                        return null;
-
-                    var repOk =
-                        string.IsNullOrWhiteSpace(activation.RequiredReputationNpcId) ||
-                        !activation.RequiredReputation.HasValue ||
-                        snapshot.Reputation.ValueOf(activation.RequiredReputationNpcId) >=
-                        activation.RequiredReputation.Value;
+                    var status = statuses.TryGetValue(quest.QuestId, out var entry)
+                        ? entry.Status
+                        : QuestStatus.Available;
+                    var step = entry?.Step ?? "available";
 
                     return new
                     {
-                        campaignId = campaign.Id,
-                        campaignName = campaign.Name,
                         questId = quest.QuestId,
                         questTitle = quest.Title,
-                        worldPointId = point.Id,
-                        radius = Math.Max(0, activation.Radius),
-                        available = repOk,
-                        position = point.Position
+                        order = quest.Order,
+                        // Имя файла — второй ключ сортировки при равных номерах.
+                        fileName = Path.GetFileName(quest.RelativePath),
+                        worldPointId = quest.Activation?.WorldPointId ?? string.Empty,
+                        radius = quest.Activation?.Radius ?? 0,
+                        status = status.ToString(),
+                        statusLabel = QuestStatusLabels.GetValueOrDefault(status, status.ToString()),
+                        step,
+                        stepTitle = step,
+                        // Квест «активен», если его выполняет Runtime прямо сейчас.
+                        // Он не зависит от доступности Proximity-триггера: активный
+                        // квест должен перекрывать неактивные визуально.
+                        active = runtimeActive &&
+                            quest.QuestId.Equals(activeQuestId, StringComparison.OrdinalIgnoreCase)
                     };
-                })
-                .Where(item => item is not null)
-                .Cast<object>())
+                }).ToArray()
+            })
             .ToArray();
     }
+
+    private static readonly IReadOnlyDictionary<QuestStatus, string> QuestStatusLabels =
+        new Dictionary<QuestStatus, string>
+        {
+            [QuestStatus.Available] = "доступен",
+            [QuestStatus.Active] = "активен",
+            [QuestStatus.Completed] = "завершён",
+            [QuestStatus.Cancelled] = "отменён",
+            [QuestStatus.Failed] = "провалён",
+            [QuestStatus.Archived] = "архив"
+        };
 
     private void SetQuestStatus(JsonElement root)
     {

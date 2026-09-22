@@ -11,25 +11,29 @@
         "questId": "tutorial_ruslan_shashlik",
         "relativePath": "quests/tutorial_ruslan_shashlik.aqquest",
         "version": 2,
-        "status": "Enabled"
+        "status": "Enabled",
+        "order": 1
       },
       {
         "questId": "gosha_homemade_sausage",
         "relativePath": "quests/gosha_homemade_sausage.aqquest",
         "version": 2,
-        "status": "Enabled"
+        "status": "Enabled",
+        "order": 2
       },
       {
         "questId": "ruslan_shashlik_delivery",
         "relativePath": "quests/ruslan_shashlik_delivery.aqquest",
         "version": 2,
-        "status": "Enabled"
+        "status": "Enabled",
+        "order": 3
       },
       {
         "questId": "sibirmap_city_cache",
         "relativePath": "quests/sibirmap_city_cache.aqquest",
         "version": 2,
-        "status": "Disabled"
+        "status": "Disabled",
+        "order": 4
       }
     ],
     "files": [

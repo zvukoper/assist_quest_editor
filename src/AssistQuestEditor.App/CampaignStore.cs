@@ -14,7 +14,8 @@ public sealed record InstalledQuestView(
     CampaignQuestStatus Status,
     string RelativePath,
     string FullPath,
-    QuestActivation? Activation);
+    QuestActivation? Activation,
+    int Order);
 
 public sealed record InstalledCampaignView(
     string Id,
@@ -68,7 +69,7 @@ public sealed class CampaignStore
         foreach (var record in Records)
         {
             var quests = new List<InstalledQuestView>();
-            foreach (var entry in record.Definition.Quests)
+            foreach (var entry in OrderQuests(record.Definition.Quests))
             {
                 var path = SafeCombine(record.FolderPath, entry.RelativePath);
                 if (!File.Exists(path))
@@ -88,7 +89,8 @@ public sealed class CampaignStore
                         entry.Status,
                         entry.RelativePath,
                         path,
-                        definition.Activation));
+                        definition.Activation,
+                        entry.Order));
                 }
                 catch (Exception ex)
                 {
@@ -271,6 +273,20 @@ public sealed class CampaignStore
 
         return record;
     }
+
+    /// <summary>
+    /// Канонический порядок квестов внутри кампании.
+    ///
+    /// Приоритет — явный <see cref="CampaignQuestEntry.Order"/> из файла
+    /// кампании. Если номера совпадают (или не заданы), решает имя файла:
+    /// иначе порядок зависел бы от порядка строк в JSON.
+    /// </summary>
+    private static IEnumerable<CampaignQuestEntry> OrderQuests(
+        IReadOnlyList<CampaignQuestEntry> quests) =>
+        quests
+            .OrderBy(entry => entry.Order <= 0 ? int.MaxValue : entry.Order)
+            .ThenBy(entry => Path.GetFileName(entry.RelativePath), StringComparer.OrdinalIgnoreCase)
+            .ThenBy(entry => entry.QuestId, StringComparer.OrdinalIgnoreCase);
 
     private static QuestDefinition LoadQuest(string path)
     {

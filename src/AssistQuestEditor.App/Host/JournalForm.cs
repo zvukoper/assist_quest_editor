@@ -21,7 +21,7 @@ public sealed class JournalForm : Form
 
     public JournalForm()
     {
-        Text = "Assist Quest Editor — Журнал событий";
+        Text = "Журнал событий";
         StartPosition = FormStartPosition.Manual;
         var workArea = Screen.PrimaryScreen?.WorkingArea ?? new Rectangle(0, 0, 1280, 800);
         var defaultWidth = Math.Min(620, Math.Max(420, workArea.Width / 3));

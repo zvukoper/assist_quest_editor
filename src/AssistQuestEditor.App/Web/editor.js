@@ -240,6 +240,23 @@
     }).join("");
   }
 
+  /**
+   * Цвет кабеля, пришедшего в сокет (или выходящего из него).
+   *
+   * Сейчас у кабелей один цвет, поэтому точки во всех занятых сокетах белые.
+   * Когда кабели начнут кодироваться цветом по функции, достаточно вернуть
+   * здесь другой цвет — и точки автоматически совпадут с кабелем.
+   * Разрывная ветка (`.false`) рисуется красным, и точка следует за ней.
+   */
+  function socketCableColor(socketId) {
+    const connection = questGraph?.connections?.find(item =>
+      item.fromSocketId === socketId || item.toSocketId === socketId);
+    if (!connection) return null;
+    return connection.fromSocketId.endsWith(".false")
+      ? "var(--red)"
+      : "var(--cable)";
+  }
+
   function graphNodeMarkup(node) {
     const selected = node.nodeId === selectedGraphNodeId ? " selected" : "";
     const executed = executedNodeIds.has(node.nodeId) ? " executed" : "";
@@ -257,6 +274,19 @@
     const nodeId = fitNodeText(node.nodeId, 21);
     const centerWidth = GRAPH_NODE_WIDTH - GRAPH_NODE_INPUT_ZONE - GRAPH_NODE_OUTPUT_ZONE;
 
+    // Точка внутри сокета означает, что сокет занят кабелем. Радиус меньше
+    // самого сокета (4 против 6), поэтому кольцо сокета остаётся видимым.
+    const connectedDot = (socketId, cx, cy) => {
+      const color = socketCableColor(socketId);
+      if (!color) return "";
+      return "<circle class='socketCable' cx='" + cx + "' cy='" + cy + "' r='4' fill='" + color +
+        "' data-socket-id='" + escapeHtml(socketId) + "'></circle>";
+    };
+    // Класс нужен, чтобы контурная обводка сокета держала контраст с точкой:
+    // белая точка на акцентной обводке выходного сокета сливалась бы с ней.
+    const socketClass = (socketId, base) =>
+      base + (socketCableColor(socketId) ? " hasCable" : "");
+
     return "<g class='node" + selected + executed + active + source + dirty + "' data-node-id='" + escapeHtml(node.nodeId) + "' transform='translate(" + position.x + " " + position.y + ")'>" +
       "<rect class='nodeRect' rx='8' width='" + GRAPH_NODE_WIDTH + "' height='" + nodeHeight + "'></rect>" +
       "<rect class='nodeConnectorZone inputZone' x='1' y='1' width='" + (GRAPH_NODE_INPUT_ZONE - 1) + "' height='" + (nodeHeight - 2) + "' rx='7'></rect>" +
@@ -271,14 +301,16 @@
       inputs.map((socket, index) =>
         "<g class='socketGroup' data-socket-direction='Input' data-socket-id='" + escapeHtml(socket.socketId) + "'>" +
           "<rect class='socketHitArea inputHitArea' x='-8' y='" + (10 + index * 22) + "' width='" + (GRAPH_NODE_INPUT_ZONE + 2) + "' height='24' rx='8'></rect>" +
-          "<circle class='socket input' cx='0' cy='" + (22 + index * 22) + "' r='6'></circle>" +
+          "<circle class='" + socketClass(socket.socketId, "socket input") + "' cx='0' cy='" + (22 + index * 22) + "' r='6'></circle>" +
+          connectedDot(socket.socketId, 0, 22 + index * 22) +
           "<text class='socketLabel inputLabel' x='10' y='" + (26 + index * 22) + "'>" + escapeHtml(fitNodeText(socket.name, 9)) + "</text>" +
         "</g>"
       ).join("") +
       outputs.map((socket, index) =>
         "<g class='socketGroup' data-socket-direction='Output' data-socket-id='" + escapeHtml(socket.socketId) + "'>" +
           "<rect class='socketHitArea outputHitArea' x='" + (GRAPH_NODE_WIDTH - GRAPH_NODE_OUTPUT_ZONE - 2) + "' y='" + (10 + index * 22) + "' width='" + (GRAPH_NODE_OUTPUT_ZONE + 10) + "' height='24' rx='8'></rect>" +
-          "<circle class='socket output' cx='" + GRAPH_NODE_WIDTH + "' cy='" + (22 + index * 22) + "' r='6'></circle>" +
+          "<circle class='" + socketClass(socket.socketId, "socket output") + "' cx='" + GRAPH_NODE_WIDTH + "' cy='" + (22 + index * 22) + "' r='6'></circle>" +
+          connectedDot(socket.socketId, GRAPH_NODE_WIDTH, 22 + index * 22) +
           "<text class='socketLabel outputLabel' x='" + (GRAPH_NODE_WIDTH - 10) + "' y='" + (26 + index * 22) + "' text-anchor='end'>" + escapeHtml(fitNodeText(socket.name, 9)) + "</text>" +
         "</g>"
       ).join("") +

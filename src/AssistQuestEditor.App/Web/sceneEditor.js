@@ -186,6 +186,21 @@
     }).join("");
   }
 
+  /**
+   * Цвет кабеля, пришедшего в сокет (или выходящего из него).
+   *
+   * Симметрично editor.js: пока у кабелей один цвет, точки белые. Разрывная
+   * ветка (`.false`) красная, и точка следует за ней.
+   */
+  function sceneSocketCableColor(socketId) {
+    const connection = sceneGraph?.connections?.find(item =>
+      item.fromSocketId === socketId || item.toSocketId === socketId);
+    if (!connection) return null;
+    return connection.fromSocketId.endsWith(".false")
+      ? "var(--red)"
+      : "var(--cable)";
+  }
+
   function sceneNodeMarkup(node) {
     const selected = node.nodeId === selectedSceneNodeId ? " selected" : "";
     const executed = executedNodeIds.has(node.nodeId) ? " executed" : "";
@@ -203,6 +218,16 @@
     const nodeId = fitNodeText(node.nodeId, 21);
     const centerWidth = SCENE_NODE_WIDTH - SCENE_NODE_INPUT_ZONE - SCENE_NODE_OUTPUT_ZONE;
 
+    // Точка в занятом сокете: цвет кабеля, радиус меньше сокета.
+    const connectedDot = (socketId, cx, cy) => {
+      const color = sceneSocketCableColor(socketId);
+      if (!color) return "";
+      return "<circle class='socketCable' cx='" + cx + "' cy='" + cy + "' r='4' fill='" + color +
+        "' data-socket-id='" + escapeHtml(socketId) + "'></circle>";
+    };
+    const socketClass = (socketId, base) =>
+      base + (sceneSocketCableColor(socketId) ? " hasCable" : "");
+
     return "<g class='node" + selected + executed + active + source + dirty + "' data-node-id='" + escapeHtml(node.nodeId) + "' transform='translate(" + position.x + " " + position.y + ")'>" +
       "<rect class='nodeRect' rx='8' width='" + SCENE_NODE_WIDTH + "' height='" + nodeHeight + "'></rect>" +
       "<rect class='nodeConnectorZone inputZone' x='1' y='1' width='" + (SCENE_NODE_INPUT_ZONE - 1) + "' height='" + (nodeHeight - 2) + "' rx='7'></rect>" +
@@ -217,14 +242,16 @@
       inputs.map((socket, index) =>
         "<g class='socketGroup' data-socket-direction='Input' data-socket-id='" + escapeHtml(socket.socketId) + "'>" +
           "<rect class='socketHitArea inputHitArea' x='-8' y='" + (10 + index * 22) + "' width='" + (SCENE_NODE_INPUT_ZONE + 2) + "' height='24' rx='8'></rect>" +
-          "<circle class='socket input' cx='0' cy='" + (22 + index * 22) + "' r='6'></circle>" +
+          "<circle class='" + socketClass(socket.socketId, "socket input") + "' cx='0' cy='" + (22 + index * 22) + "' r='6'></circle>" +
+          connectedDot(socket.socketId, 0, 22 + index * 22) +
           "<text class='socketLabel inputLabel' x='10' y='" + (26 + index * 22) + "'>" + escapeHtml(fitNodeText(socket.name, 9)) + "</text>" +
         "</g>"
       ).join("") +
       outputs.map((socket, index) =>
         "<g class='socketGroup' data-socket-direction='Output' data-socket-id='" + escapeHtml(socket.socketId) + "'>" +
           "<rect class='socketHitArea outputHitArea' x='" + (SCENE_NODE_WIDTH - SCENE_NODE_OUTPUT_ZONE - 2) + "' y='" + (10 + index * 22) + "' width='" + (SCENE_NODE_OUTPUT_ZONE + 10) + "' height='24' rx='8'></rect>" +
-          "<circle class='socket output' cx='" + SCENE_NODE_WIDTH + "' cy='" + (22 + index * 22) + "' r='6'></circle>" +
+          "<circle class='" + socketClass(socket.socketId, "socket output") + "' cx='" + SCENE_NODE_WIDTH + "' cy='" + (22 + index * 22) + "' r='6'></circle>" +
+          connectedDot(socket.socketId, SCENE_NODE_WIDTH, 22 + index * 22) +
           "<text class='socketLabel outputLabel' x='" + (SCENE_NODE_WIDTH - 10) + "' y='" + (26 + index * 22) + "' text-anchor='end'>" + escapeHtml(fitNodeText(socket.name, 9)) + "</text>" +
         "</g>"
       ).join("") +

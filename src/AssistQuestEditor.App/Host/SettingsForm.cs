@@ -7,7 +7,7 @@ public sealed class SettingsForm : Form
 
     public SettingsForm()
     {
-        Text = "Assist Quest Editor — Настройки";
+        Text = "Настройки";
         StartPosition = FormStartPosition.CenterParent;
         Size = new Size(650, 470);
         MinimumSize = new Size(580, 420);

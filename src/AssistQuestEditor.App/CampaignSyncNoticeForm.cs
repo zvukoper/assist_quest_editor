@@ -8,7 +8,7 @@ public sealed class CampaignSyncNoticeForm : Form
 {
     public CampaignSyncNoticeForm(IReadOnlyList<string> changes)
     {
-        Text = "Assist Quest Editor — обновление квестов";
+        Text = "Обновление квестов";
         StartPosition = FormStartPosition.CenterScreen;
         Size = new Size(760, 560);
         MinimumSize = new Size(600, 420);

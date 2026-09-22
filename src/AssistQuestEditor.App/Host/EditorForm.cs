@@ -72,7 +72,7 @@ public sealed class EditorForm : WebViewForm
         SceneCatalog sceneCatalog,
         SceneDocumentSession sceneDocument,
         IQuestRuntimeController runtime)
-        : base($"Assist Quest Editor — {title}", page, new Size(1380, 900), "editor:" + page)
+        : base($"{title}", page, new Size(1380, 900), "editor:" + page)
     {
         WindowKey = "editor:" + page;
         _player = hub.Get<PlayerState>("player");
@@ -1461,7 +1461,7 @@ public sealed class EditorForm : WebViewForm
             var fileName = string.IsNullOrWhiteSpace(_currentDefinitionPath)
                 ? "Новый документ"
                 : Path.GetFileName(_currentDefinitionPath);
-            Text = $"Assist Quest Editor — Нодовый редактор — {fileName}" + (_documentDirty ? " *" : string.Empty);
+            Text = $"Нодовый редактор — {fileName}" + (_documentDirty ? " *" : string.Empty);
             return;
         }
 
@@ -1473,7 +1473,7 @@ public sealed class EditorForm : WebViewForm
             var prefix = _isDialogueWorkspace
                 ? "Рабочее пространство диалогов"
                 : "Редактор сцен";
-            Text = $"Assist Quest Editor — {prefix} — {fileName}" + (_sceneDocument.IsDirty ? " *" : string.Empty);
+            Text = $"{prefix} — {fileName}" + (_sceneDocument.IsDirty ? " *" : string.Empty);
         }
     }
 

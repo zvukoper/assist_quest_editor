@@ -22,7 +22,7 @@ public sealed class MainForm : WebViewForm
 
     public MainForm(IDataChannelHub hub, bool ciTest = false)
         : base(
-            "Assist Quest Editor — Редактор",
+            "Редактор",
             "main.html",
             new Size(1280, 820),
             "main")

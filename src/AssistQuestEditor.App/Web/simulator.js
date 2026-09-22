@@ -11,6 +11,8 @@
   const characterTabs = document.getElementById("characterTabs");
   const characterTabBody = document.getElementById("characterTabBody");
   const inventoryNotifications = document.getElementById("inventoryNotifications");
+  const onlyQuestsToggle = document.getElementById("onlyQuestsToggle");
+  const mapStatusHint = document.getElementById("mapStatusHint");
   const send = payload => window.chrome?.webview?.postMessage(payload);
 
   let snapshot = null;
@@ -22,7 +24,13 @@
   let hoveredPointId = null;
   let questGraph = null;
 
-  let questActivations = [];
+  let questCatalog = [];
+  let selectedQuest = { campaignId: "", questId: "" };
+  let onlyQuestsFilter = false;
+  let questHitAreas = [];
+  // Квест под курсором. Хранится отдельно от СДО-точки: квестовая графика
+  // лежит верхним слоем и имеет собственный приоритет подсветки.
+  let hoveredQuest = null;
   let simulationRunning = false;
   let camera = { cx: 0, cz: 0, mpp: 50 };
   let eventHistory = [];
@@ -36,6 +44,21 @@
   let uiRenderScheduled = false;
   const DISTANCE_RINGS = [25, 50, 100, 250, 500, 1000, 1500, 2000];
 
+  // Акцентный оранжевый приложения. Квестовая графика и подсветка выделения
+  // обязаны совпадать с цветом в C#-окне кампаний, поэтому значение задано
+  // строкой, а не вычисляется из темы: canvas не читает CSS-переменные.
+  const ACCENT_COLOR = "#fab003";
+  const CITY_COLOR = "#ffff00";
+  // Плашка названия квеста вдвое уже прежней: текст переносится по словам.
+  const QUEST_PLATE_WIDTH = 120;
+  const QUEST_PLATE_PADDING = 6;
+  const QUEST_PLATE_LINE_HEIGHT = 12;
+  // Неактивный квест: тёмно-серый фон и приглушённо-белый текст, серая точка.
+  const INACTIVE_PLATE_FILL = "rgba(74,79,86,.55)";
+  const INACTIVE_PLATE_STROKE = "rgba(150,155,165,.45)";
+  const INACTIVE_PLATE_TEXT = "#e6eaee";
+  const INACTIVE_POINT_COLOR = "#6d7480";
+
   function formatPosition(position) {
     if (!position) return "—";
     return "X " + Math.round(position.x) + " · Y " + Math.round(position.y) + " · Z " + Math.round(position.z);
@@ -44,6 +67,65 @@
   const escapeHtml = value => String(value ?? "").replace(/[&<>"']/g, char => ({
     "&": "&amp;", "<": "&lt;", ">": "&gt;", "\"": "&quot;", "'": "&#39;"
   }[char]));
+
+  /**
+   * Разбор CSS-цвета в компоненты.
+   *
+   * Данные приходят извне (WorldPoint.Color), поэтому поддерживаются и
+   * `#rgb`/`#rrggbb`, и `rgb()`/`rgba()`. Непонятный цвет возвращается как
+   * null: вызывающий код тогда оставляет исходное значение, а не рисует мусор.
+   */
+  function parseColor(value) {
+    const text = String(value ?? "").trim();
+    if (!text) return null;
+
+    const hex = text.match(/^#([0-9a-f]{3}|[0-9a-f]{6})$/i);
+    if (hex) {
+      const body = hex[1];
+      const expanded = body.length === 3
+        ? body.split("").map(char => char + char).join("")
+        : body;
+      return {
+        r: parseInt(expanded.slice(0, 2), 16),
+        g: parseInt(expanded.slice(2, 4), 16),
+        b: parseInt(expanded.slice(4, 6), 16),
+        a: 1
+      };
+    }
+
+    const rgb = text.match(/^rgba?\(([^)]+)\)$/i);
+    if (rgb) {
+      const parts = rgb[1].split(/[\s,\/]+/).filter(Boolean).map(Number);
+      if (parts.length < 3 || parts.slice(0, 3).some(number => !Number.isFinite(number))) return null;
+      return {
+        r: parts[0], g: parts[1], b: parts[2],
+        a: Number.isFinite(parts[3]) ? parts[3] : 1
+      };
+    }
+
+    return null;
+  }
+
+  /** Затемняет цвет на заданную долю (по умолчанию 25%) и возвращает CSS-строку. */
+  function darkenColor(value, amount = 0.25) {
+    const parsed = parseColor(value);
+    if (!parsed) return value;
+
+    const factor = Math.max(0, Math.min(1, 1 - amount));
+    const channel = raw => Math.max(0, Math.min(255, Math.round(raw * factor)));
+    const base = "rgb(" + channel(parsed.r) + "," + channel(parsed.g) + "," + channel(parsed.b) + ")";
+    return parsed.a < 1
+      ? "rgba(" + channel(parsed.r) + "," + channel(parsed.g) + "," + channel(parsed.b) + "," + parsed.a + ")"
+      : base;
+  }
+
+  /** Полупрозрачная версия цвета — для теней и заливок. */
+  function withAlpha(value, alpha) {
+    const parsed = parseColor(value);
+    if (!parsed) return value;
+    const round = raw => Math.max(0, Math.min(255, Math.round(raw)));
+    return "rgba(" + round(parsed.r) + "," + round(parsed.g) + "," + round(parsed.b) + "," + alpha + ")";
+  }
 
   function runtimeStatusName(status) {
     if (typeof status === "string") return status;
@@ -159,62 +241,33 @@
     ctx.fillStyle = "#0d1014";
     ctx.fillRect(0, 0, width, height);
     drawGrid(ctx, width, height);
-    drawQuestActivations(ctx, width, height);
 
     const points = snapshot.world?.points || [];
     const showAllLabels = camera.mpp < 24;
     const labelLimit = camera.mpp < 70 ? 140 : (camera.mpp < 180 ? 55 : 24);
     const occupied = new Set();
+    // Галочка «только квесты» скрывает всё, кроме городов и квестовых точек:
+    // СДО-точки остаются в данных, но не рисуются.
+    const basePoints = onlyQuestsFilter
+      ? points.filter(point => point.isCity === true)
+      : points;
 
-    for (const point of points) {
-      const q = worldToScreen(point.position.x, point.position.z);
-      if (q.x < -18 || q.y < -18 || q.x > width + 18 || q.y > height + 18) continue;
+    // Порядок слоёв задаётся требованием «вся квестовая графика — самый верхний
+    // слой». Внутри квестового слоя сначала рисуются неактивные квесты, затем
+    // активные: активные визуально перекрывают неактивные. Сортировка идёт по
+    // порядковому номеру из файла кампании, затем по имени файла.
+    const questLayer = buildQuestLayer(points);
+    const activeQuests = questLayer.filter(entry => entry.active);
+    const inactiveQuests = questLayer.filter(entry => !entry.active);
 
-      const selected = point.id === selectedPointId;
-      const hovered = point.id === hoveredPointId;
-      const isCity = point.isCity === true;
-      const radius = isCity
-        ? (hovered ? 5.2 : 3.4)
-        : (selected ? 5.5 : (hovered ? 5.2 : (camera.mpp > 250 ? 3.8 : 4.2)));
+    // Зоны попадания перезаписываются на каждой перерисовке: они зависят от
+    // камеры, поэтому хранить их между кадрами бессмысленно.
+    questHitAreas = [];
 
-      ctx.save();
-      ctx.beginPath();
-      ctx.arc(q.x, q.y, radius, 0, Math.PI * 2);
-      ctx.fillStyle = point.color || "#78c8f0";
-      ctx.shadowColor = selected
-        ? "rgba(250,176,3,.95)"
-        : hovered
-          ? "rgba(255,255,255,.9)"
-          : "rgba(0,0,0,.78)";
-      ctx.shadowBlur = selected ? 14 : (hovered ? 10 : 5);
-      ctx.shadowOffsetX = 0;
-      ctx.shadowOffsetY = 1.5;
-      ctx.fill();
+    for (const point of basePoints) drawWorldPoint(ctx, point, width, height, occupied, showAllLabels, labelLimit);
 
-      if (selected) {
-        ctx.beginPath();
-        ctx.arc(q.x, q.y, radius + 5, 0, Math.PI * 2);
-        ctx.lineWidth = 4.5;
-        ctx.strokeStyle = "#fab003";
-        ctx.shadowColor = "rgba(250,176,3,.9)";
-        ctx.shadowBlur = 16;
-        ctx.stroke();
-      } else if (hovered) {
-        ctx.beginPath();
-        ctx.arc(q.x, q.y, radius + 3.5, 0, Math.PI * 2);
-        ctx.lineWidth = isCity ? 2 : 2.5;
-        ctx.strokeStyle = "#ffffff";
-        ctx.shadowColor = "rgba(255,255,255,.75)";
-        ctx.shadowBlur = 9;
-        ctx.stroke();
-      }
-      ctx.restore();
-
-      if (selected || hovered || (isCity && camera.mpp < 220) ||
-          shouldLabel(q, showAllLabels, labelLimit, occupied, point)) {
-        drawPointLabel(ctx, point, q, selected, isCity);
-      }
-    }
+    for (const entry of inactiveQuests) drawQuestMarker(ctx, entry, false);
+    for (const entry of activeQuests) drawQuestMarker(ctx, entry, true);
 
     const playerForDraw = currentPlayerForDraw();
     drawDistanceRings(ctx, width, height, playerForDraw?.position);
@@ -258,9 +311,351 @@
       });
     }
 
-    drawCategoryLegend(ctx, width, height, points);
+    // Легенда категорий СДО намеренно не рисуется: она перекрывала карту и
+    // дублировала правую панель. Плотность мира читается по самим точкам.
     drawScaleBar(ctx, width, height);
     drawHud();
+  }
+
+  /**
+   * Квестовый слой карты.
+   *
+   * Возвращает плоский список квестов с точкой, радиусом, признаком
+   * доступности и порядком. Порядок — из файла кампании (порядковый номер
+   * квеста); при совпадении номеров сортирует имя файла, чтобы порядок не
+   * зависел от порядка строк в JSON.
+   */
+  function buildQuestLayer(points) {
+    const entries = [];
+
+    for (const campaign of questCatalog) {
+      for (const quest of campaign.quests || []) {
+        if (!quest.worldPointId) continue;
+
+        const point = points.find(item =>
+          String(item.id || "").toLowerCase() === String(quest.worldPointId).toLowerCase());
+
+        entries.push({
+          campaignId: campaign.campaignId,
+          campaignName: campaign.campaignName,
+          questId: quest.questId,
+          questTitle: quest.questTitle || quest.questId,
+          activationTitle: quest.activationTitle || "",
+          step: quest.step || "",
+          stepTitle: quest.stepTitle || "",
+          status: quest.status || "Available",
+          statusLabel: quest.statusLabel || "",
+          active: quest.active === true,
+          radius: Math.max(0, Number(quest.radius) || 0),
+          order: Number(quest.order) || 0,
+          fileName: quest.fileName || "",
+          // Квест без найденной СДО остаётся в каталоге (он виден в панели
+          // кампаний), но на карту не попадает: рисовать его негде.
+          point: point || null
+        });
+      }
+    }
+
+    return entries
+      .filter(entry => !!entry.point)
+      .sort((a, b) =>
+        (a.order <= 0 ? Number.MAX_SAFE_INTEGER : a.order) -
+        (b.order <= 0 ? Number.MAX_SAFE_INTEGER : b.order) ||
+        a.fileName.localeCompare(b.fileName, "ru") ||
+        a.questId.localeCompare(b.questId, "ru"));
+  }
+
+  function isSelectedQuest(entry) {
+    return String(entry.campaignId || "").toLowerCase() === String(selectedQuest.campaignId || "").toLowerCase() &&
+      String(entry.questId || "").toLowerCase() === String(selectedQuest.questId || "").toLowerCase();
+  }
+
+  function isHoveredQuest(entry) {
+    return !!hoveredQuest &&
+      hoveredQuest.campaignId.toLowerCase() === String(entry.campaignId || "").toLowerCase() &&
+      hoveredQuest.questId.toLowerCase() === String(entry.questId || "").toLowerCase();
+  }
+
+  function drawWorldPoint(ctx, point, width, height, occupied, showAllLabels, labelLimit) {
+    const q = worldToScreen(point.position.x, point.position.z);
+    if (q.x < -18 || q.y < -18 || q.x > width + 18 || q.y > height + 18) return;
+
+    const selected = point.id === selectedPointId;
+    const hovered = point.id === hoveredPointId;
+    const isCity = point.isCity === true;
+    const radius = isCity
+      ? (hovered ? 5.2 : 3.4)
+      : (selected ? 5.5 : (hovered ? 5.2 : (camera.mpp > 250 ? 3.8 : 4.2)));
+
+    // Город — максимально жёлтый: он должен читаться как ориентир, а не как
+    // очередная точка категории.
+    const fill = isCity ? CITY_COLOR : darkenColor(point.color || "#78c8f0");
+
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(q.x, q.y, radius, 0, Math.PI * 2);
+    ctx.fillStyle = fill;
+    ctx.shadowColor = selected
+      ? "rgba(250,176,3,.95)"
+      : hovered
+        ? "rgba(255,255,255,.9)"
+        : "rgba(0,0,0,.78)";
+    ctx.shadowBlur = selected ? 14 : (hovered ? 10 : 5);
+    ctx.shadowOffsetX = 0;
+    ctx.shadowOffsetY = 1.5;
+    ctx.fill();
+
+    if (selected) {
+      ctx.beginPath();
+      ctx.arc(q.x, q.y, radius + 5, 0, Math.PI * 2);
+      ctx.lineWidth = 4.5;
+      ctx.strokeStyle = ACCENT_COLOR;
+      ctx.shadowColor = "rgba(250,176,3,.9)";
+      ctx.shadowBlur = 16;
+      ctx.stroke();
+    } else if (hovered) {
+      ctx.beginPath();
+      ctx.arc(q.x, q.y, radius + 3.5, 0, Math.PI * 2);
+      ctx.lineWidth = isCity ? 2 : 2.5;
+      ctx.strokeStyle = "#ffffff";
+      ctx.shadowColor = "rgba(255,255,255,.75)";
+      ctx.shadowBlur = 9;
+      ctx.stroke();
+    }
+    ctx.restore();
+
+    if (selected || hovered || (isCity && camera.mpp < 220) ||
+        shouldLabel(q, showAllLabels, labelLimit, occupied, point)) {
+      drawPointLabel(ctx, point, q, selected, isCity);
+    }
+  }
+
+  /**
+   * Маркер квеста: пунктирная зона триггера, точка и плашка с названием.
+   *
+   * Неактивный квест не исчезает с карты, но теряет акцент: серые точка и
+   * пунктир, тёмно-серый фон плашки и приглушённо-белый текст.
+   */
+  function drawQuestMarker(ctx, entry, active) {
+    const q = worldToScreen(entry.point.position.x, entry.point.position.z);
+    const size = visibleSize();
+    const radiusPx = entry.radius / camera.mpp;
+
+    if (q.x < -140 || q.y < -60 || q.x > size.width + 140 || q.y > size.height + 70) return;
+
+    const selected = isSelectedQuest(entry);
+
+    if (Number.isFinite(radiusPx) && radiusPx >= 2) {
+      ctx.save();
+      ctx.beginPath();
+      ctx.arc(q.x, q.y, radiusPx, 0, Math.PI * 2);
+      ctx.setLineDash([7, 5]);
+      ctx.lineWidth = active ? 2 : 1.5;
+      // Неактивная зона триггера в два раза прозрачнее и серая.
+      //
+      // Заливка задаётся через globalAlpha с непрозрачным цветом: полупрозрачные
+      // rgba-строки на канвасе читаются хуже, а тут видно намерение — «намёк на
+      // радиус», а не реальная заливка, которая закрыла бы карту.
+      ctx.strokeStyle = active ? withAlpha(ACCENT_COLOR, .72) : "rgba(120,128,140,.30)";
+      ctx.fillStyle = active ? ACCENT_COLOR : "#78808c";
+      ctx.globalAlpha = active ? 0.045 : 0.012;
+      ctx.fill();
+      ctx.globalAlpha = 1;
+      ctx.stroke();
+      ctx.restore();
+    }
+
+    const pulse = 8 + Math.sin(Date.now() / 320) * 1.5;
+
+    // Точка квеста: ромб с центром в позиции. Зона попадания — ромб
+    // (манхэттенское расстояние), чтобы клик мимо углов не срабатывал.
+    questHitAreas.push({
+      shape: "diamond",
+      cx: q.x, cy: q.y, pulse: pulse + 4,
+      left: q.x - pulse - 4, top: q.y - pulse - 4,
+      right: q.x + pulse + 4, bottom: q.y + pulse + 4,
+      entry
+    });
+
+    ctx.save();
+    ctx.beginPath();
+    ctx.moveTo(q.x, q.y - pulse);
+    ctx.lineTo(q.x + pulse, q.y);
+    ctx.lineTo(q.x, q.y + pulse);
+    ctx.lineTo(q.x - pulse, q.y);
+    ctx.closePath();
+    ctx.fillStyle = active ? ACCENT_COLOR : INACTIVE_POINT_COLOR;
+
+    // Тень точки квеста: акцентная оранжевая у активного, серая у неактивного.
+    ctx.shadowColor = active ? withAlpha(ACCENT_COLOR, .85) : "rgba(90,96,106,.6)";
+    ctx.shadowBlur = selected ? 16 : (active ? 10 : 5);
+    ctx.shadowOffsetX = 0;
+    ctx.shadowOffsetY = 2.5;
+    ctx.fill();
+    ctx.shadowColor = "transparent";
+    ctx.shadowBlur = 0;
+    ctx.shadowOffsetY = 0;
+
+    ctx.lineWidth = 2.5;
+    ctx.strokeStyle = "rgba(0,0,0,.95)";
+    ctx.stroke();
+
+    if (selected) {
+      ctx.beginPath();
+      ctx.arc(q.x, q.y, pulse + 6, 0, Math.PI * 2);
+      ctx.lineWidth = 3;
+      ctx.strokeStyle = ACCENT_COLOR;
+      ctx.stroke();
+    }
+
+    ctx.font = "900 9px Open Sans, Arial, sans-serif";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillStyle = "#101319";
+    ctx.fillText("Q", q.x, q.y + 0.5);
+    ctx.restore();
+
+    drawQuestPlate(ctx, entry, q.x, q.y + pulse + 8, active);
+  }
+
+  /**
+   * Плашка названия квеста: название переносится по словам, затем разделитель,
+   * затем статус и этап. Ширина вдвое меньше прежней, фон — акцентный
+   * оранжевый на 25% прозрачности с чёрным текстом и удвоенной тенью.
+   */
+  function drawQuestPlate(ctx, entry, centerX, topY, active) {
+    const size = visibleSize();
+    const maxTextWidth = QUEST_PLATE_WIDTH - QUEST_PLATE_PADDING * 2;
+
+    ctx.save();
+    ctx.font = "700 9px Open Sans, Arial, sans-serif";
+    const titleLines = wrapText(ctx, entry.questTitle || "Квест", maxTextWidth);
+
+    ctx.font = "600 8px Open Sans, Arial, sans-serif";
+    const statusText = [entry.statusLabel, entry.stepTitle || entry.step]
+      .filter(part => !!part && String(part).trim().length > 0)
+      .join(" · ");
+    const statusLines = statusText ? wrapText(ctx, statusText, maxTextWidth) : [];
+
+    const dividerSpace = statusLines.length ? 6 : 0;
+    const boxWidth = QUEST_PLATE_WIDTH;
+    const boxHeight = QUEST_PLATE_PADDING * 2 +
+      titleLines.length * QUEST_PLATE_LINE_HEIGHT +
+      dividerSpace +
+      statusLines.length * 10;
+
+    const x = Math.max(6, Math.min(size.width - boxWidth - 6, centerX - boxWidth / 2));
+    const y = Math.max(6, Math.min(size.height - boxHeight - 6, topY));
+
+    // Тень удвоена относительно точки квеста.
+    ctx.shadowColor = active ? "rgba(0,0,0,.94)" : "rgba(0,0,0,.85)";
+    ctx.shadowBlur = 12;
+    ctx.shadowOffsetX = 0;
+    ctx.shadowOffsetY = 5;
+
+    ctx.beginPath();
+    ctx.roundRect(x, y, boxWidth, boxHeight, 5);
+    ctx.fillStyle = active ? withAlpha(ACCENT_COLOR, .25) : INACTIVE_PLATE_FILL;
+    ctx.fill();
+    ctx.shadowColor = "transparent";
+    ctx.shadowBlur = 0;
+    ctx.shadowOffsetY = 0;
+    // Рамка плашки: подсветка курсора -> выделение -> обычное состояние.
+    ctx.lineWidth = isHoveredQuest(entry) ? 2.5 : selectedStrokeWidth(entry);
+    ctx.strokeStyle = isSelectedQuest(entry)
+      ? ACCENT_COLOR
+      : (isHoveredQuest(entry)
+        ? "#ffffff"
+        : (active ? withAlpha(ACCENT_COLOR, .55) : INACTIVE_PLATE_STROKE));
+    ctx.stroke();
+
+    // Плашка — прямоугольная зона попадания: ЛКМ по названию квеста открывает
+    // список кампаний с подсветкой этого квеста.
+    questHitAreas.push({
+      shape: "rect",
+      left: x, top: y, right: x + boxWidth, bottom: y + boxHeight,
+      entry
+    });
+    // Текст рисуется с чёрным контуром: фон плашки полупрозрачный, и без
+    // обводки чёрный текст терялся бы на светлых участках карты.
+    ctx.textAlign = "left";
+    ctx.textBaseline = "top";
+    let cursorY = y + QUEST_PLATE_PADDING;
+    ctx.font = "700 9px Open Sans, Arial, sans-serif";
+    for (const line of titleLines) {
+      strokeAndFillText(ctx, line, x + QUEST_PLATE_PADDING, cursorY,
+        active ? "#000000" : INACTIVE_PLATE_TEXT, "rgba(0,0,0,.85)");
+      cursorY += QUEST_PLATE_LINE_HEIGHT;
+    }
+
+    if (statusLines.length) {
+      cursorY += 2;
+      ctx.strokeStyle = active ? withAlpha(ACCENT_COLOR, .7) : INACTIVE_PLATE_STROKE;
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(x + QUEST_PLATE_PADDING, cursorY + 1);
+      ctx.lineTo(x + boxWidth - QUEST_PLATE_PADDING, cursorY + 1);
+      ctx.stroke();
+      cursorY += 4;
+
+      ctx.font = "600 8px Open Sans, Arial, sans-serif";
+      for (const line of statusLines) {
+        strokeAndFillText(ctx, line, x + QUEST_PLATE_PADDING, cursorY,
+          active ? "#000000" : INACTIVE_PLATE_TEXT, "rgba(0,0,0,.85)");
+        cursorY += 10;
+      }
+    }
+
+    ctx.restore();
+  }
+
+  function selectedStrokeWidth(entry) {
+    return isSelectedQuest(entry) ? 2.5 : 1;
+  }
+
+  function strokeAndFillText(ctx, text, x, y, fill, stroke) {
+    ctx.lineWidth = 2.5;
+    ctx.strokeStyle = stroke;
+    ctx.strokeText(text, x, y);
+    ctx.fillStyle = fill;
+    ctx.fillText(text, x, y);
+  }
+
+  /** Перенос текста по словам. Длинное слово без пробелов режется посимвольно. */
+  function wrapText(ctx, text, maxWidth) {
+    const words = String(text ?? "").split(/\s+/).filter(Boolean);
+    if (!words.length) return [];
+
+    const lines = [];
+    let current = "";
+    for (const word of words) {
+      const candidate = current ? current + " " + word : word;
+      if (ctx.measureText(candidate).width <= maxWidth) {
+        current = candidate;
+        continue;
+      }
+
+      if (current) lines.push(current);
+      if (ctx.measureText(word).width <= maxWidth) {
+        current = word;
+        continue;
+      }
+
+      // Слово само длиннее строки: режем по символам, чтобы текст не вылезал.
+      let chunk = "";
+      for (const char of word) {
+        if (ctx.measureText(chunk + char).width > maxWidth && chunk) {
+          lines.push(chunk);
+          chunk = char;
+        } else {
+          chunk += char;
+        }
+      }
+      current = chunk;
+    }
+
+    if (current) lines.push(current);
+    return lines.slice(0, 3);
   }
 
   function drawGrid(ctx, width, height) {
@@ -409,10 +804,12 @@
       : (selected ? "700 12px Open Sans, Arial, sans-serif" : "600 10px Open Sans, Arial, sans-serif");
     ctx.textAlign = "left";
     ctx.textBaseline = "middle";
-    ctx.lineWidth = selected ? 4 : (isCity ? 3.5 : 3);
+    // Тень под названием удваивается вместе с тенью точки: подпись должна
+    // оставаться читаемой поверх светлой плашки квеста.
+    ctx.lineWidth = selected ? 5.5 : (isCity ? 5 : 4.5);
     ctx.strokeStyle = "rgba(0,0,0,.98)";
     ctx.strokeText(text, q.x + 10, q.y - offset);
-    ctx.fillStyle = isCity ? "#e2c85f" : (point.color || "#78c8f0");
+    ctx.fillStyle = isCity ? CITY_COLOR : darkenColor(point.color || "#78c8f0");
     ctx.fillText(text, q.x + 10, q.y - offset);
     ctx.restore();
   }
@@ -446,14 +843,16 @@
     // Тень под маркером: мягкое радиальное затемнение со смещением вниз.
     // Затемнение выходит за чёрную обводку, поэтому маркер «приподнят» над
     // картой и читается поверх светлых элементов (сетка, кольца, подписи).
-    const shadowOffsetY = 4;
-    const shadowRadius = radius * 3;
+    // Сила тени и смещение удвоены: под маркером теперь лежит квестовая
+    // графика, рисующаяся верхним слоем, и прежней тени не хватало.
+    const shadowOffsetY = 8;
+    const shadowRadius = radius * 4;
     const shadowGradient = ctx.createRadialGradient(
       q.x, q.y + shadowOffsetY, radius * 0.3,
       q.x, q.y + shadowOffsetY, shadowRadius
     );
-    shadowGradient.addColorStop(0, "rgba(0,0,0,.96)");
-    shadowGradient.addColorStop(0.42, "rgba(0,0,0,.62)");
+    shadowGradient.addColorStop(0, "rgba(0,0,0,.99)");
+    shadowGradient.addColorStop(0.42, "rgba(0,0,0,.78)");
     shadowGradient.addColorStop(1, "rgba(0,0,0,0)");
     ctx.beginPath();
     ctx.arc(q.x, q.y + shadowOffsetY, shadowRadius, 0, Math.PI * 2);
@@ -463,7 +862,7 @@
     // Заливка маркера.
     ctx.beginPath();
     ctx.arc(q.x, q.y, radius, 0, Math.PI * 2);
-    ctx.fillStyle = "#f59e0b";
+    ctx.fillStyle = ACCENT_COLOR;
     ctx.fill();
 
     // Красная обводка.
@@ -519,72 +918,69 @@
     return best;
   }
 
+  /**
+   * Квестовые зоны под курсором.
+   *
+   * Зоны рисуются верхним слоем, поэтому ЛКМ обязан проверять их ПЕРВЫМ:
+   * иначе квест под плашкой или точкой СДО был бы недоступен.
+   *
+   * Проверка идёт в два прохода: сначала зоны активных квестов, затем
+   * неактивных. Активный квест перекрывает неактивный визуально, значит и
+   * попадание должно выбирать его даже если сверху лежит плашка неактивного.
+   * Внутри прохода плашка проверяется раньше точки: она перекрывает точку
+   * соседнего квеста чаще, чем наоборот.
+   */
+  function hitQuestMarker(px, py) {
+    return hitQuestArea(px, py, true) || hitQuestArea(px, py, false);
+  }
 
-  function drawCategoryLegend(ctx, width, height, points) {
-    const counts = new Map();
-    for (const point of points) {
-      if (point.isCity) continue;
-      const q = worldToScreen(point.position.x, point.position.z);
-      if (q.x < 0 || q.y < 0 || q.x > width || q.y > height) continue;
-      const key = point.category || point.name || "СДО";
-      const existing = counts.get(key);
-      if (existing) {
-        existing.count += 1;
-      } else {
-        counts.set(key, {
-          count: 1,
-          color: point.color || "#78c8f0",
-          name: key
-        });
-      }
+  function hitQuestArea(px, py, activeOnly) {
+    const inside = area =>
+      px >= area.left && py >= area.top && px <= area.right && py <= area.bottom;
+    const matches = area =>
+      area.shape === "diamond"
+        ? Math.abs(px - area.cx) + Math.abs(py - area.cy) <= area.pulse
+        : (area.shape === "point"
+          ? Math.hypot(px - area.cx, py - area.cy) <= area.radius
+          : true);
+
+    // Обратный порядок: последние нарисованные зоны проверяются первыми.
+    for (let index = questHitAreas.length - 1; index >= 0; index -= 1) {
+      const area = questHitAreas[index];
+      if (area.entry.active !== activeOnly) continue;
+      if (area.shape !== "rect") continue;
+      if (inside(area) && matches(area)) return area.entry;
     }
 
-    const categories = [...counts.values()]
-      .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name, "ru"))
-      .slice(0, 10);
+    for (let index = questHitAreas.length - 1; index >= 0; index -= 1) {
+      const area = questHitAreas[index];
+      if (area.entry.active !== activeOnly) continue;
+      if (area.shape === "rect") continue;
+      if (inside(area) && matches(area)) return area.entry;
+    }
 
-    if (!categories.length) return;
-
-    const lineH = 18;
-    const pad = 9;
-    const boxW = 230;
-    const boxH = pad * 2 + lineH * (categories.length + 1);
-
-    ctx.save();
-    ctx.fillStyle = "rgba(10,12,16,.88)";
-    ctx.strokeStyle = "rgba(255,255,255,.12)";
-    ctx.lineWidth = 1;
-    ctx.beginPath();
-    ctx.roundRect(width - boxW - 12, 12, boxW, boxH, 8);
-    ctx.fill();
-    ctx.stroke();
-
-    ctx.font = "600 11px Open Sans, Arial, sans-serif";
-    ctx.textAlign = "left";
-    ctx.textBaseline = "middle";
-    ctx.fillStyle = "#e7edf4";
-    ctx.fillText("Категории СДО", width - boxW + 1, 12 + pad + lineH / 2);
-
-    categories.forEach((entry, index) => {
-      const y = 12 + pad + lineH * (index + 1) + lineH / 2;
-
-      ctx.beginPath();
-      ctx.arc(width - boxW + 7, y, 4, 0, Math.PI * 2);
-      ctx.fillStyle = entry.color;
-      ctx.fill();
-
-      ctx.textAlign = "left";
-      ctx.fillStyle = "#d9e2ec";
-      const label = entry.name.length > 25 ? entry.name.slice(0, 24) + "…" : entry.name;
-      ctx.fillText(label, width - boxW + 18, y);
-
-      ctx.textAlign = "right";
-      ctx.fillStyle = "#8f9baa";
-      ctx.fillText(String(entry.count), width - 20, y);
-    });
-
-    ctx.restore();
+    return null;
   }
+
+  /** ЛКМ по точке квеста: выделяет квест и открывает окно кампаний с ним. */
+  function selectQuestFromMap(entry) {
+    selectedQuest = { campaignId: entry.campaignId, questId: entry.questId };
+    const point = entry.point;
+    if (point && !point.isCity) {
+      // Точка квеста может совпадать с СДО: тогда выделяется и она, чтобы
+      // правая панель показала координаты, а левая — выбранный квест.
+      selectedPointId = point.id;
+      send({ action: "select_point", id: point.id });
+    }
+    send({
+      action: "open_campaigns",
+      campaignId: entry.campaignId,
+      questId: entry.questId
+    });
+    drawMap();
+    renderRuntimeSidebar();
+  }
+
 
   function runtimeStatusLabel(status) {
     return ({
@@ -796,78 +1192,6 @@
     }
 
     return parsed.toLocaleTimeString("ru-RU");
-  }
-
-  function drawQuestActivations(ctx, width, height) {
-    if (!questActivations?.length) return;
-
-    for (const marker of questActivations) {
-      if (!marker?.position) continue;
-
-      const center = worldToScreen(marker.position.x, marker.position.z);
-      const radius = Number(marker.radius);
-      const radiusPx = Number.isFinite(radius) ? radius / camera.mpp : 0;
-      const available = marker.available !== false;
-
-      if (radiusPx >= 2) {
-        ctx.save();
-        ctx.beginPath();
-        ctx.arc(center.x, center.y, radiusPx, 0, Math.PI * 2);
-        ctx.setLineDash([7, 5]);
-        ctx.lineWidth = available ? 2 : 1.5;
-        ctx.strokeStyle = available
-          ? "rgba(250,176,3,.72)"
-          : "rgba(140,150,165,.42)";
-        ctx.fillStyle = available
-          ? "rgba(250,176,3,.045)"
-          : "rgba(140,150,165,.018)";
-        ctx.fill();
-        ctx.stroke();
-        ctx.restore();
-      }
-
-      const pulse = 8 + Math.sin(Date.now() / 320) * 1.5;
-      ctx.save();
-      ctx.beginPath();
-      ctx.moveTo(center.x, center.y - pulse);
-      ctx.lineTo(center.x + pulse, center.y);
-      ctx.lineTo(center.x, center.y + pulse);
-      ctx.lineTo(center.x - pulse, center.y);
-      ctx.closePath();
-      ctx.fillStyle = available ? "#fab003" : "#707b89";
-      ctx.fill();
-      ctx.lineWidth = 2.5;
-      ctx.strokeStyle = "rgba(0,0,0,.95)";
-      ctx.stroke();
-
-      ctx.font = "900 9px Open Sans, Arial, sans-serif";
-      ctx.textAlign = "center";
-      ctx.textBaseline = "middle";
-      ctx.fillStyle = "#101319";
-      ctx.fillText("Q", center.x, center.y + 0.5);
-
-      const label = (marker.questTitle || marker.questId || "Квест") +
-        (available ? "" : " · условие не выполнено");
-      const maxLabelWidth = 240;
-      const measured = Math.min(maxLabelWidth, ctx.measureText(label).width + 12);
-      const x = Math.max(6, Math.min(width - measured - 6, center.x - measured / 2));
-      const y = Math.max(6, Math.min(height - 24, center.y + pulse + 8));
-
-      ctx.fillStyle = "rgba(10,12,16,.9)";
-      ctx.fillRect(x, y, measured, 18);
-      ctx.strokeStyle = available ? "rgba(250,176,3,.45)" : "rgba(140,150,165,.28)";
-      ctx.lineWidth = 1;
-      ctx.strokeRect(x, y, measured, 18);
-      ctx.fillStyle = available ? "#f4c04d" : "#aab2bd";
-      ctx.textAlign = "center";
-      ctx.textBaseline = "middle";
-      ctx.font = "700 9px Open Sans, Arial, sans-serif";
-      ctx.fillText(
-        label.length > 38 ? label.slice(0, 35) + "…" : label,
-        x + measured / 2,
-        y + 9);
-      ctx.restore();
-    }
   }
 
   function drawRuntimeTarget(ctx, playerPosition = null) {
@@ -1211,7 +1535,12 @@
                     ? ("Уровень " + Number(skill.level || 0) + "/" + Number(skill.maxLevel || 100))
                     : (skill.unlocked ? "Получен" : "Не изучен")) +
                 "</span>" +
-                "<div class='characterSkillDesc'>" + escapeHtml(skill.description || "") +
+                // Описание обязано быть закрыто ДО закрытия .characterSkill.
+                // Раньше `</div>` закрывал .characterSkillDesc, а внешний
+                // .characterSkill оставался открытым, поэтому каждый следующий
+                // скилл оказывался вложен в предыдущий (визуально «Очумелые
+                // ручки» внутри «Автошкольника»).
+                "<div class='characterSkillDesc'>" + escapeHtml(skill.description || "") + "</div>" +
               "</div>"
             ).join("") +
           "</div>" +
@@ -1283,6 +1612,53 @@
     });
   }
 
+  /**
+   * Квест, выделенный на карте или в окне кампаний.
+   *
+   * Сайдбар показывает информацию ТОЛЬКО о нём: без выделения блоки о ноде,
+   * цели и событиях не имеют смысла, потому что непонятно, к какому квесту
+   * они относятся.
+   */
+  function selectedQuestEntry() {
+    if (!selectedQuest.questId) return null;
+    for (const campaign of questCatalog) {
+      for (const quest of campaign.quests || []) {
+        if (String(quest.questId || "").toLowerCase() !== String(selectedQuest.questId).toLowerCase()) continue;
+        if (String(campaign.campaignId || "").toLowerCase() !== String(selectedQuest.campaignId || "").toLowerCase()) continue;
+        return { campaign, quest };
+      }
+    }
+    return null;
+  }
+
+  function selectedQuestBlock(entry) {
+    const { campaign, quest } = entry;
+    const point = findPoint(quest.worldPointId);
+    const player = snapshot?.player?.position;
+    const distance = point ? distanceMeters(player, point.position) : null;
+    const radius = Number(quest.radius);
+    const active = quest.active === true;
+
+    const statusText = [quest.statusLabel, quest.stepTitle || quest.step]
+      .filter(part => !!part && String(part).trim().length > 0)
+      .join(" · ");
+
+    return "<section class='runtimeBlock selectedQuestBlock" + (active ? " active" : " inactive") + "'>" +
+      "<div class='miniLabel'>Выбранный квест</div>" +
+      "<div class='selectedQuestTitle'>" + escapeHtml(quest.questTitle || quest.questId) + "</div>" +
+      "<div class='kv'><span>Кампания</span><span>" + escapeHtml(campaign.campaignName || campaign.campaignId) + "</span></div>" +
+      "<div class='kv'><span>Порядок</span><span>#" + (Number(quest.order) || 0) + "</span></div>" +
+      "<div class='kv'><span>Состояние</span><span>" +
+        (active ? "Активен" : "Неактивен") + (statusText ? " · " + escapeHtml(statusText) : "") + "</span></div>" +
+      "<div class='kv'><span>Точка</span><span>" +
+        (point ? escapeHtml(point.name || point.id) : escapeHtml(quest.worldPointId || "—")) + "</span></div>" +
+      (point ? "<div class='kv'><span>Координаты</span><span>" + formatPosition(point.position) + "</span></div>" : "") +
+      (point ? "<div class='kv'><span>Радиус</span><span>" + formatMeters(radius) + "</span></div>" : "") +
+      (point ? "<div class='kv'><span>До игрока</span><span>" + formatMeters(distance) + "</span></div>" : "") +
+      "<button class='smallButton' id='focusSelectedQuest' style='margin-top:8px'>Показать на карте</button>" +
+      "</section>";
+  }
+
   function renderRuntimeSidebar() {
     if (!runtimeSide || !snapshot) return;
 
@@ -1291,6 +1667,7 @@
     const info = runtimeTargetInfo();
     const expectedEvent = runtimeExpectedEvent();
     const pointCount = snapshot.world?.points?.length || 0;
+    const entry = selectedQuestEntry();
 
     runtimeSide.innerHTML =
       "<div class='runtimeSideHeader'>" +
@@ -1303,9 +1680,14 @@
       "</div>" +
       "<div class='runtimeControls'>" +
         "<button class='smallButton' id='fitWorldSide'>Все СДО</button>" +
+        "<button class='smallButton' id='openCampaignsSide'>Кампании</button>" +
       "</div>" +
       "<div class='miniLabel' style='margin-top:8px'>СДО на карте: " +
         pointCount.toLocaleString("ru-RU") + "</div>" +
+      (entry
+        ? selectedQuestBlock(entry)
+        : "<section class='runtimeBlock'><div class='notice'>Квест не выбран. " +
+          "Выбери его на карте или в окне кампаний.</div></section>") +
       "<div class='runtimeStatusCard' data-status='" + escapeHtml(String(status).toLowerCase()) + "'>" +
         "<span class='statusDot'></span><strong>" +
           escapeHtml(runtimeStatusLabel(status)) + "</strong>" +
@@ -1359,6 +1741,21 @@
       fitWorld();
       drawMap();
     });
+    runtimeSide.querySelector("#openCampaignsSide")?.addEventListener("click", () => {
+      send({
+        action: "open_campaigns",
+        campaignId: selectedQuest.campaignId,
+        questId: selectedQuest.questId
+      });
+    });
+    runtimeSide.querySelector("#focusSelectedQuest")?.addEventListener("click", () => {
+      const selected = selectedQuestEntry();
+      const point = selected ? findPoint(selected.quest.worldPointId) : null;
+      if (!point) return;
+      camera.cx = Number(point.position.x);
+      camera.cz = Number(point.position.z);
+      drawMap();
+    });
     runtimeSide.querySelector("#emitExpectedEventSide")?.addEventListener("click", () => {
       const expected = runtimeExpectedEvent();
       if (expected) send({ action: "emit_event", ...expected });
@@ -1375,6 +1772,7 @@
     const points = snapshot.world?.points || [];
     const sdoCount = points.filter(point => !point.isCity).length;
     const cityCount = points.filter(point => point.isCity).length;
+    const questCount = questCatalog.reduce((sum, campaign) => sum + (campaign.quests?.length || 0), 0);
     const simulationButton = document.getElementById("simulationToggle");
     if (simulationButton) {
       simulationButton.textContent = simulationRunning ? "Остановить симуляцию" : "Запустить симуляцию";
@@ -1386,11 +1784,22 @@
         (simulationRunning ? "Симуляция: ВКЛ" : "Симуляция: ВЫКЛ") + "</span>",
       "<span class='badge blue'>СДО " + sdoCount.toLocaleString("ru-RU") + "</span>",
       "<span class='badge blue'>Города " + cityCount.toLocaleString("ru-RU") + "</span>",
+      "<span class='badge accent'>Квесты " + questCount.toLocaleString("ru-RU") + "</span>",
       "<span class='badge blue'>X " + Math.round(p.x) + "</span>",
       "<span class='badge blue'>Y " + Math.round(p.y) + "</span>",
       "<span class='badge blue'>Z " + Math.round(p.z) + "</span>",
       "<span class='badge accent'>" + (selected ? "Выбрана: " + escapeHtml(selected.name || selected.category) : "Точка не выбрана") + "</span>"
     ].join("");
+
+    // Статус-панель внизу карты: галочка фильтра и краткая сводка.
+    if (onlyQuestsToggle) onlyQuestsToggle.checked = onlyQuestsFilter;
+    if (mapStatusHint) {
+      const visibleSdo = onlyQuestsFilter ? 0 : sdoCount;
+      mapStatusHint.textContent = onlyQuestsFilter
+        ? "показаны города и квесты · СДО скрыты (" + sdoCount.toLocaleString("ru-RU") + ")"
+        : "показаны города (" + cityCount.toLocaleString("ru-RU") + ") и СДО (" + visibleSdo.toLocaleString("ru-RU") + ")";
+    }
+
     renderRuntimeSidebar();
   }
 
@@ -1733,6 +2142,50 @@
       formatEventTimestamp(event.timestamp) + " · " + escapeHtml(event.source || "Источник неизвестен") + "</div>";
   }
 
+  /**
+   * Каталог квестов в форме «кампания со вложенным списком квестов».
+   *
+   * Host присылает именно эту форму, но нормализация терпима и к плоскому
+   * списку квестов с полями кампании: WebView2 кеширует web-ресурсы, поэтому
+   * новая страница может получить payload от старого host. Без нормализации
+   * каталог в этом случае молча оказался бы пустым — ни квестов на карте, ни
+   * счётчика в статусе.
+   */
+  function normalizeQuestCatalog(raw) {
+    if (!Array.isArray(raw) || !raw.length) return [];
+
+    const grouped = new Map();
+    const campaigns = [];
+
+    for (const item of raw) {
+      if (!item) continue;
+
+      if (Array.isArray(item.quests)) {
+        campaigns.push({
+          campaignId: item.campaignId || "",
+          campaignName: item.campaignName || item.campaignId || "",
+          quests: item.quests.slice()
+        });
+        continue;
+      }
+
+      const key = String(item.campaignId || "").toLowerCase();
+      let campaign = grouped.get(key);
+      if (!campaign) {
+        campaign = {
+          campaignId: item.campaignId || "",
+          campaignName: item.campaignName || item.campaignId || "",
+          quests: []
+        };
+        grouped.set(key, campaign);
+        campaigns.push(campaign);
+      }
+      campaign.quests.push(item);
+    }
+
+    return campaigns;
+  }
+
   function receive(message) {
     if (!message) {
       window.assistWebLog?.("WARN", "Simulator получил пустое сообщение.");
@@ -1745,7 +2198,11 @@
       window.__assistItemCatalog = Array.isArray(message.itemCatalog) ? message.itemCatalog : [];
       runtime = message.runtime || null;
       simulationRunning = !!message.simulationRunning;
-      questActivations = Array.isArray(message.questActivations) ? message.questActivations : [];
+      questCatalog = normalizeQuestCatalog(message.questCatalog);
+      selectedQuest = {
+        campaignId: message.selectedQuest?.campaignId || "",
+        questId: message.selectedQuest?.questId || ""
+      };
       questGraph = message.questGraph || questGraph;
       journalDetached = !!message.journalDetached;
       selectedPointId = snapshot.selection?.point?.id || null;
@@ -1870,6 +2327,15 @@
         return;
       }
 
+      // Квестовая графика рисуется верхним слоем, поэтому первой проверяется
+      // именно она: иначе плашка квеста «съедалась» бы точкой СДО под ней.
+      const quest = hitQuestMarker(pos.x, pos.y);
+      if (quest) {
+        selectQuestFromMap(quest);
+        event.preventDefault();
+        return;
+      }
+
       const point = hitPoint(pos.x, pos.y);
       if (point && !point.isCity) {
         send({ action: "select_point", id: point.id });
@@ -1891,13 +2357,25 @@
     const pos = pointerPosition(event);
 
     if (!draggingPlayer && !panning && snapshot) {
-      const hovered = hitPoint(pos.x, pos.y);
-      const nextHoveredPointId = hovered?.id || null;
+      const overQuest = hitQuestMarker(pos.x, pos.y);
+      const hoveredPoint = overQuest ? null : hitPoint(pos.x, pos.y);
+
+      let needsRedraw = false;
+      if (overQuest !== hoveredQuest) needsRedraw = true;
+      hoveredQuest = overQuest;
+
+      const nextHoveredPointId = hoveredPoint?.id || null;
       if (nextHoveredPointId !== hoveredPointId) {
         hoveredPointId = nextHoveredPointId;
-        map.style.cursor = hovered ? (hovered.isCity ? "default" : "pointer") : "default";
-        drawMap();
+        needsRedraw = true;
       }
+
+      // Курсор показывает, что квест кликабелен, даже если под плашкой лежит
+      // точка СДО: приоритет клика у квестовой графики.
+      const cursor = overQuest ? "pointer" : (hoveredPoint ? (hoveredPoint.isCity ? "default" : "pointer") : "default");
+      if (map.style.cursor !== cursor) map.style.cursor = cursor;
+
+      if (needsRedraw) drawMap();
     }
 
     if (draggingPlayer && snapshot) {
@@ -1947,8 +2425,9 @@
   });
 
   map.addEventListener("pointerleave", event => {
-    if (hoveredPointId !== null) {
+    if (hoveredPointId !== null || hoveredQuest !== null) {
       hoveredPointId = null;
+      hoveredQuest = null;
       map.style.cursor = "default";
       drawMap();
     }
@@ -2033,7 +2512,16 @@
   });
 
   document.getElementById("openCampaigns")?.addEventListener("click", () => {
-    send({ action: "open_campaigns" });
+    send({
+      action: "open_campaigns",
+      campaignId: selectedQuest.campaignId,
+      questId: selectedQuest.questId
+    });
+  });
+
+  onlyQuestsToggle?.addEventListener("change", () => {
+    onlyQuestsFilter = !!onlyQuestsToggle.checked;
+    drawMap();
   });
 
   document.getElementById("simulationToggle")?.addEventListener("click", () => {

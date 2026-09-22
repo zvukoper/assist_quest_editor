@@ -22,6 +22,7 @@ for (const file of files) {
 
   const campaignRoot = path.dirname(file);
   const questIds = new Set();
+  const orders = new Map();
 
   for (const entry of definition?.quests || []) {
     if (questIds.has(entry.questId))
@@ -41,6 +42,17 @@ for (const file of files) {
 
     if (!["Enabled", "Disabled"].includes(entry.status))
       problems.push("invalid quest status " + entry.questId);
+
+    // Порядковый номер задаёт сортировку квестов в Simulator и в окне
+    // кампаний, поэтому он должен быть задан явно и не повторяться внутри
+    // кампании: при совпадении сортировка уходила бы в алфавит по файлу.
+    if (!Number.isInteger(entry.order) || entry.order < 1)
+      problems.push("invalid quest order " + entry.questId + ": " + entry.order);
+    else if (orders.has(entry.order))
+      problems.push("duplicate quest order " + entry.order +
+        " (" + orders.get(entry.order) + " и " + entry.questId + ")");
+    else
+      orders.set(entry.order, entry.questId);
 
     const nodes = quest.definition?.graph?.nodes;
     if (!Array.isArray(nodes))
