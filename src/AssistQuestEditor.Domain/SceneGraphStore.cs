@@ -110,6 +110,7 @@ public sealed class SceneGraphStore
 
         var outputSockets = node.Sockets
             .Where(socket => socket.Direction == SocketDirection.Output)
+            .Take(16)
             .ToList();
 
         while (outputSockets.Count < 2)
@@ -261,6 +262,9 @@ public sealed class SceneGraphStore
 
         var choice = FindChoice(choiceId)
             ?? throw new InvalidOperationException("Choice resource «" + choiceId + "» не найден.");
+
+        if (choice.Options.Count >= 16)
+            throw new InvalidOperationException("Choice не может содержать более 16 вариантов.");
 
         var socketId = node.NodeId + ".option." + ShortToken();
         var optionId = choice.Id + ".option." + ShortToken();
