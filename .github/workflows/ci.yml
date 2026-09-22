@@ -114,6 +114,12 @@ jobs:
         shell: pwsh
         run: node ci/reputation_flow.mjs
 
+      - name: Портрет репутации загружается
+        id: reputation_avatar_smoke
+        continue-on-error: true
+        shell: pwsh
+        run: node ci/reputation_avatar_smoke.mjs
+
       - name: Проверить синтаксис web JavaScript
         id: web_syntax
         continue-on-error: true
@@ -208,6 +214,7 @@ jobs:
           PAN_SMOKE_OUTCOME: ${{ steps.pan_smoke.outcome }}
           QUEST_GRAPH_INTEGRITY_OUTCOME: ${{ steps.quest_graph_integrity.outcome }}
           REPUTATION_FLOW_OUTCOME: ${{ steps.reputation_flow.outcome }}
+          REPUTATION_AVATAR_OUTCOME: ${{ steps.reputation_avatar_smoke.outcome }}
           SCENE_INTERFACE_SMOKE_OUTCOME: ${{ steps.scene_interface_smoke.outcome }}
           WEB_SYNTAX_OUTCOME: ${{ steps.web_syntax.outcome }}
           DOTNET_SDK_OUTCOME: ${{ steps.dotnet_sdk.outcome }}
@@ -229,6 +236,7 @@ jobs:
             @{ Name = 'Pan follows cursor'; Outcome = $env:PAN_SMOKE_OUTCOME },
             @{ Name = 'Quest graph & scene integrity'; Outcome = $env:QUEST_GRAPH_INTEGRITY_OUTCOME },
             @{ Name = 'Reputation content rules'; Outcome = $env:REPUTATION_FLOW_OUTCOME },
+            @{ Name = 'Reputation avatar loads'; Outcome = $env:REPUTATION_AVATAR_OUTCOME },
             @{ Name = 'Web JavaScript syntax'; Outcome = $env:WEB_SYNTAX_OUTCOME },
             @{ Name = '.NET SDK'; Outcome = $env:DOTNET_SDK_OUTCOME },
             @{ Name = '.NET build'; Outcome = $env:DOTNET_BUILD_OUTCOME },

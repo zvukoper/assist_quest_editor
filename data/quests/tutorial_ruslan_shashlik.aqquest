@@ -502,8 +502,8 @@
           "nodeId": "add-reputation-gosha",
           "nodeType": "AddReputation",
           "title": "19a. Репутация Гоши +350",
-          "x": 7400,
-          "y": 6,
+          "x": 7600,
+          "y": 81,
           "sockets": [
             {
               "socketId": "add-reputation-gosha.in",
@@ -527,8 +527,8 @@
           "nodeId": "step-shop-gosha",
           "nodeType": "SetStep",
           "title": "20. Этап: колбаса у Гоши (можно покупать повторно)",
-          "x": 7600,
-          "y": 150,
+          "x": 8000,
+          "y": 81,
           "sockets": [
             {
               "socketId": "step-shop-gosha.in",
@@ -551,8 +551,8 @@
           "nodeId": "interaction-gosha-shop",
           "nodeType": "Interaction",
           "title": "21. Подойти к Гоше за колбасой",
-          "x": 7800,
-          "y": 150,
+          "x": 8477,
+          "y": -176,
           "sockets": [
             {
               "socketId": "interaction-gosha-shop.in",
@@ -576,8 +576,8 @@
           "nodeId": "scene-gosha-shop",
           "nodeType": "DialogueScene",
           "title": "22. Scene: покупка колбасы",
-          "x": 8000,
-          "y": 150,
+          "x": 8800,
+          "y": 81,
           "sockets": [
             {
               "socketId": "scene-gosha-shop.in",
@@ -600,8 +600,8 @@
           "nodeId": "condition-shop-buy",
           "nodeType": "Condition",
           "title": "23. Купил колбасу?",
-          "x": 8200,
-          "y": 140,
+          "x": 9168,
+          "y": 66,
           "sockets": [
             {
               "socketId": "condition-shop-buy.in",
@@ -633,8 +633,8 @@
           "nodeId": "shop-pay",
           "nodeType": "RemoveMoney",
           "title": "24. Оплата колбасы: 450 ₽",
-          "x": 8400,
-          "y": 100,
+          "x": 7566,
+          "y": -693,
           "sockets": [
             {
               "socketId": "shop-pay.in",
@@ -657,8 +657,8 @@
           "nodeId": "shop-receive-sausage",
           "nodeType": "GiveItem",
           "title": "25. Получить домашнюю колбасу",
-          "x": 8600,
-          "y": 100,
+          "x": 8133,
+          "y": -681,
           "sockets": [
             {
               "socketId": "shop-receive-sausage.in",
@@ -682,8 +682,8 @@
           "nodeId": "shop-reputation",
           "nodeType": "AddReputation",
           "title": "26. Репутация Гоши +25 за покупку",
-          "x": 8800,
-          "y": 100,
+          "x": 8614,
+          "y": -629,
           "sockets": [
             {
               "socketId": "shop-reputation.in",
@@ -707,8 +707,8 @@
           "nodeId": "step-delivery",
           "nodeType": "SetStep",
           "title": "27. Этап: заказ Руслана на доставку",
-          "x": 9000,
-          "y": 100,
+          "x": 9600,
+          "y": 156,
           "sockets": [
             {
               "socketId": "step-delivery.in",
@@ -731,8 +731,8 @@
           "nodeId": "condition-delivery-available",
           "nodeType": "ReputationCompare",
           "title": "28. У Гоши репутация от 400?",
-          "x": 9200,
-          "y": 90,
+          "x": 10000,
+          "y": 150,
           "sockets": [
             {
               "socketId": "condition-delivery-available.in",
@@ -764,8 +764,8 @@
           "nodeId": "interaction-ruslan-delivery",
           "nodeType": "Interaction",
           "title": "29. Вернуться к Руслану за заказом",
-          "x": 9400,
-          "y": 60,
+          "x": 10400,
+          "y": 156,
           "sockets": [
             {
               "socketId": "interaction-ruslan-delivery.in",
@@ -789,8 +789,8 @@
           "nodeId": "scene-ruslan-delivery",
           "nodeType": "DialogueScene",
           "title": "30. Scene: Руслан даёт заказ",
-          "x": 9600,
-          "y": 60,
+          "x": 10800,
+          "y": 81,
           "sockets": [
             {
               "socketId": "scene-ruslan-delivery.in",
@@ -813,8 +813,8 @@
           "nodeId": "condition-delivery-accepted",
           "nodeType": "Condition",
           "title": "31. Заказ принят?",
-          "x": 9800,
-          "y": 50,
+          "x": 11200,
+          "y": 75,
           "sockets": [
             {
               "socketId": "condition-delivery-accepted.in",
@@ -846,8 +846,8 @@
           "nodeId": "interaction-gosha-delivery",
           "nodeType": "Interaction",
           "title": "32. Отвезти шашлык Гоше",
-          "x": 10000,
-          "y": 20,
+          "x": 11600,
+          "y": 81,
           "sockets": [
             {
               "socketId": "interaction-gosha-delivery.in",
@@ -871,8 +871,8 @@
           "nodeId": "scene-gosha-delivery",
           "nodeType": "DialogueScene",
           "title": "33. Scene: Гоша принимает шашлык",
-          "x": 10200,
-          "y": 20,
+          "x": 12000,
+          "y": 81,
           "sockets": [
             {
               "socketId": "scene-gosha-delivery.in",
@@ -895,8 +895,8 @@
           "nodeId": "condition-delivery-given",
           "nodeType": "Condition",
           "title": "34. Шашлык передан?",
-          "x": 10400,
-          "y": 10,
+          "x": 12400,
+          "y": 75,
           "sockets": [
             {
               "socketId": "condition-delivery-given.in",
@@ -928,8 +928,8 @@
           "nodeId": "delivery-reputation-ruslan",
           "nodeType": "AddReputation",
           "title": "35. Репутация Руслана +100 за доставку",
-          "x": 10600,
-          "y": -30,
+          "x": 12800,
+          "y": 81,
           "sockets": [
             {
               "socketId": "delivery-reputation-ruslan.in",
@@ -953,8 +953,8 @@
           "nodeId": "delivery-reputation-gosha",
           "nodeType": "AddReputation",
           "title": "36. Репутация Гоши +150 за доставку",
-          "x": 10800,
-          "y": -30,
+          "x": 13200,
+          "y": 81,
           "sockets": [
             {
               "socketId": "delivery-reputation-gosha.in",
@@ -978,7 +978,7 @@
           "nodeId": "step-completed",
           "nodeType": "SetStep",
           "title": "20. Этап: завершён",
-          "x": 7600,
+          "x": 13600,
           "y": 81,
           "sockets": [
             {
@@ -1002,7 +1002,7 @@
           "nodeId": "end-completed",
           "nodeType": "End",
           "title": "21. Конец: успех",
-          "x": 8000,
+          "x": 14000,
           "y": 81,
           "sockets": [
             {

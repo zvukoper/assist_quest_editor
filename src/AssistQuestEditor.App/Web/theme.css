@@ -355,6 +355,9 @@ input,select,textarea{padding:4px 5px;border-radius:4px;font-size:10px}textarea{
   width:44px;height:44px;border-radius:7px;object-fit:cover;
   background:#1b1f26;border:1px solid rgba(255,255,255,.12);
 }
+/* Без портрета остаётся только фон рамки: битая иконка изображения смотрится
+   хуже пустого места. Класс ставит renderReputationPanel при ошибке загрузки. */
+.reputationAvatar.missing{border-style:dashed;border-color:rgba(255,255,255,.18)}
 .reputationBody{min-width:0;display:grid;gap:4px}
 .reputationTop{display:flex;align-items:baseline;justify-content:space-between;gap:8px}
 .reputationName{font-size:11px;font-weight:800;color:#fff;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}

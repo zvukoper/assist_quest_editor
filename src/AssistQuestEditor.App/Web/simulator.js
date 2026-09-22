@@ -1009,7 +1009,8 @@
           const view = ReputationScaleView(row.npcId, row.value);
           return (
             "<article class='reputationRow' data-reputation-npc='" + escapeHtml(row.npcId) + "'>" +
-              "<img class='reputationAvatar' src='" + escapeHtml(row.avatar) + "' alt='' loading='lazy'>" +
+              "<img class='reputationAvatar' src='" + escapeHtml(resolveAssetUrl(row.avatar)) + "'" +
+                " alt='' loading='lazy' onerror=\"this.removeAttribute('src');this.className+=' missing'\">" +
               "<div class='reputationBody'>" +
                 "<div class='reputationTop'>" +
                   "<span class='reputationName'>" + escapeHtml(row.name) + "</span>" +
@@ -1027,6 +1028,26 @@
         }).join("") +
       "</div>"
     );
+  }
+
+  /**
+   * Преобразует путь ресурса игры в URL, понятный странице.
+   *
+   * Страницы лежат в подкаталоге Web, а data/ — рядом с executable, поэтому
+   * относительный путь "data/images/..." со страницы Web/ уходил бы в
+   * несуществующий Web/data/... и давал битое изображение. Ведущий "../"
+   * возвращает путь к корню приложения — эта форма проверена и для file://,
+   * и для виртуального хоста WebView2, в отличие от пути с ведущим слешем,
+   * который под file:// уходит в корень диска.
+   *
+   * Внешние URL (http:, data:, blob:) не трогаем — их отдаёт не приложение.
+   */
+  function resolveAssetUrl(path) {
+    if (!path) return "";
+    if (/^(?:[a-z][a-z0-9+.-]*:|\/\/)/i.test(path)) return path;
+
+    var trimmed = path.replace(/^\.?\//, "");
+    return "../" + trimmed;
   }
 
   /**
