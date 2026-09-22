@@ -33,7 +33,7 @@ public static class SceneCatalogLoader
                     AppLogger.Warn("Scene Definition пропущена: пустой документ.", $"path={path}");
                     continue;
                 }
-                if (document.SchemaVersion != 1 || !document.Format.Equals("aqscene", StringComparison.OrdinalIgnoreCase))
+                if (document.SchemaVersion != 1 || !string.Equals(document.Format, "aqscene", StringComparison.OrdinalIgnoreCase))
                 {
                     AppLogger.Warn("Scene Definition пропущена: неподдерживаемая schemaVersion.", $"path={path}; schema={document.SchemaVersion}");
                     continue;
