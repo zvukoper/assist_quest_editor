@@ -925,7 +925,7 @@
                 ).join("") +
               "</select>" +
               (sceneCatalog.some(scene => scene.id === value)
-                ? "<button class='toolButton primary' type='button' data-open-reference='" + escapeHtml(value) + "' title='Открыть связанную сцену'>↗</button>"
+                ? "<button class='toolButton primary' type='button' data-open-reference='" + escapeHtml(value) + "' title='Открыть связанную сцену'>Открыть сцену</button>"
                 : "") +
             "</div>"
           : "<input class='toolButton' data-param-value value='" + escapeHtml(value) + "'>") +
@@ -981,6 +981,13 @@
         "<div class='field'><label>Y</label><input id='graphEditY' type='number' value='" + node.y + "'></div>" +
       "</div>" +
       "<div class='field' style='margin-top:8px'><label>NodeType</label><input value='" + escapeHtml(node.nodeType) + "' disabled></div>" +
+      (node.nodeType === "DialogueScene" && node.parameters?.sceneId && sceneCatalog.some(item => item.id === node.parameters.sceneId)
+        ? "<div class='card' style='margin-top:12px;padding:10px;border:1px solid var(--accent)'>" +
+            "<div class='miniLabel'>Связанная сцена</div>" +
+            "<div style='margin-top:4px'>" + escapeHtml(sceneCatalog.find(item => item.id === node.parameters.sceneId)?.title || node.parameters.sceneId) + "</div>" +
+            "<button class='toolButton primary' type='button' id='openSceneReference' style='margin-top:8px'>Открыть сцену</button>" +
+          "</div>"
+        : "") +
       "<div class='miniLabel' style='margin-top:14px'>Параметры</div>" +
       "<div id='graphParameterEditor' style='margin-top:6px'>" + parameterEditorHtml(node) + "</div>" +
       "<button class='toolButton' id='addGraphParameter' style='margin-top:6px'>Добавить параметр</button>" +
@@ -1027,6 +1034,12 @@
           sceneId: button.dataset.openReference
         });
       });
+    });
+
+    ins.querySelector("#openSceneReference")?.addEventListener("click", () => {
+      const sceneId = node.parameters?.sceneId;
+      if (!sceneId || !sceneCatalog.some(item => item.id === sceneId)) return;
+      send({ action: "graph_open_scene", nodeId: node.nodeId, sceneId });
     });
 
     ins.querySelector("#addGraphParameter").addEventListener("click", () => {

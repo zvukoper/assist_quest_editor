@@ -22,7 +22,7 @@ public sealed class EditorForm : WebViewForm
     private readonly SceneGraphStore _sceneGraph;
     private readonly SceneCatalog _sceneCatalog;
     private readonly SceneDocumentSession _sceneDocument;
-    private readonly QuestRuntime _runtime;
+    private readonly IQuestRuntimeController _runtime;
     private readonly HashSet<string> _executedNodeIds = new(StringComparer.OrdinalIgnoreCase);
     private readonly bool _isGraphEditor;
     private readonly bool _isSceneEditor;
@@ -66,7 +66,7 @@ public sealed class EditorForm : WebViewForm
         SceneGraphStore sceneGraph,
         SceneCatalog sceneCatalog,
         SceneDocumentSession sceneDocument,
-        QuestRuntime runtime)
+        IQuestRuntimeController runtime)
         : base($"Assist Quest Editor — {title}", page, new Size(1380, 900), "editor:" + page)
     {
         WindowKey = "editor:" + page;

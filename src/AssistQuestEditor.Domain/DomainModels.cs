@@ -12,6 +12,20 @@ public enum QuestStatus
     Archived
 }
 
+public enum QuestStartMode
+{
+    Manual,
+    Proximity
+}
+
+public sealed record QuestActivation(
+    QuestStartMode Mode = QuestStartMode.Manual,
+    string? WorldPointId = null,
+    double Radius = 35,
+    string? RequiredReputationNpcId = null,
+    int? RequiredReputation = null,
+    bool Repeatable = false);
+
 public enum SocketDirection
 {
     Input,
@@ -212,7 +226,8 @@ public sealed record QuestDefinition(
     string Title,
     string Description,
     QuestGraph Graph,
-    IReadOnlyList<string> SceneIds);
+    IReadOnlyList<string> SceneIds,
+    QuestActivation? Activation = null);
 
 public sealed record QuestDefinitionDocument(
     [property: JsonPropertyOrder(0)] int SchemaVersion,

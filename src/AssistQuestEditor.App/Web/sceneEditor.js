@@ -92,6 +92,12 @@
         "<span class='badge " + (errors.length ? "red" : "blue") + "'>" + errors.length + " ошибок</span>" +
         "<span class='badge " + (warnings.length ? "accent" : "blue") + "'>" + warnings.length + " предупреждений</span>" +
       "</div>" +
+      (sceneNavigationBack
+        ? "<div class='card' style='margin-bottom:10px;padding:9px 12px;border:1px solid var(--accent)'><strong>Контекст перехода:</strong> " +
+            escapeHtml(sceneNavigationBack.nodeTitle || sceneNavigationBack.nodeId) +
+            " · NodeId " + escapeHtml(sceneNavigationBack.nodeId) +
+          "</div>"
+        : "") +
       "<div style='height:calc(100% - 46px);min-height:560px;border:1px solid var(--border);border-radius:8px;overflow:hidden;background:#111419'>" +
         "<svg id='sceneGraphSvg' viewBox='" + sceneViewport.x + " " + sceneViewport.y + " " + sceneViewport.width + " " + sceneViewport.height + "' xmlns='http://www.w3.org/2000/svg' style='width:100%;height:100%'>" +
           "<g id='sceneGraphEdges'>" + sceneEdges() + "</g>" +

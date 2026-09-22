@@ -7,6 +7,41 @@ namespace AssistQuestEditor.App;
 public static class QuestDefinitionLoader
 {
     private const string RelativePath = "quests/tutorial_ruslan_shashlik.aqquest";
+    private const string RelativeDirectory = "quests";
+
+    /// <summary>
+    /// Загружает все canonical Quest Definitions из resource-каталога.
+    /// Каждый .aqquest является самостоятельным документом.
+    /// </summary>
+    public static IReadOnlyList<QuestDefinition> LoadAllOrFallback()
+    {
+        var directory = Path.Combine(AppPaths.ResourceRoot, RelativeDirectory);
+        if (!Directory.Exists(directory))
+            return new[] { LoadDocumentOrFallback().Definition };
+
+        var definitions = new List<QuestDefinition>();
+        foreach (var path in Directory.EnumerateFiles(directory, "*.aqquest", SearchOption.TopDirectoryOnly).OrderBy(path => path))
+        {
+            try
+            {
+                var document = ResourceJsonFormat.Deserialize<QuestDefinitionDocument>(File.ReadAllText(path));
+                if (document?.Definition?.Graph is null ||
+                    document.SchemaVersion != 1 ||
+                    !string.Equals(document.Format, "aqquest", StringComparison.OrdinalIgnoreCase))
+                    continue;
+
+                definitions.Add(document.Definition);
+            }
+            catch (Exception ex)
+            {
+                AppLogger.Error("Ошибка загрузки Quest Definition в Runtime catalog.", ex, path);
+            }
+        }
+
+        return definitions.Count == 0
+            ? new[] { LoadDocumentOrFallback().Definition }
+            : definitions;
+    }
 
     /// <summary>
     /// Загружает учебный Quest Definition целиком (граф + метаданные документа).

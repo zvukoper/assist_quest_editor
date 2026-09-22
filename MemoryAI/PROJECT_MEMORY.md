@@ -503,3 +503,16 @@ Regression:
 - В Dialogue/Scene UI текст «Последняя JSON» заменён на «Последняя сцена», потому что canonical ресурс сцены — `.aqscene`.
 - Версия приложения и отображаемая версия повышены до `1.0.40.139` перед следующим физическим тестом.
 - В GitHub CI исправлен final gate: результат `Scene interface Playwright smoke` теперь действительно передаётся в итоговую проверку.
+
+
+## 2026-09-22 — 1.0.40.145 Independent Quest Lifecycle
+
+- Учебный сценарий разделён на три самостоятельных canonical Quest Definition: `tutorial_ruslan_shashlik.aqquest`, `gosha_homemade_sausage.aqquest`, `ruslan_shashlik_delivery.aqquest`.
+- Первый Quest заканчивается сразу после передачи мяса и начисления репутации; graph connection к следующему квесту удалён.
+- Добавлен `QuestActivation`: Manual/Proximity, WorldPoint, радиус, репутационный порог и Repeatable.
+- Добавлен `QuestRuntimeCoordinator`: одновременно выполняется только один QuestRuntime; Proximity-квесты запускаются по изменениям Player/Reputation Data Channels.
+- Gosha shop сделан независимым repeatable Quest; повторная активация происходит на следующем изменении позиции/возвращении в область, а не автоматически каждый Tick.
+- Delivery Quest запускается независимо у Руслана при достижении Gosha reputation 400 и не запускается после Quest 2 как продолжение графа.
+- Simulator использует ActiveGraph координатора, а QuestStatus включает все три sample Quest.
+- Навигация Quest Scene сделана визуально явной: Inspector показывает кнопку «Открыть сцену», Scene Editor — «Вернуться в Quest Graph» и плашку контекста.
+- `ci/check_quest_graph.mjs` и `ci/reputation_flow.mjs` проверяют весь каталог Quest resources.

@@ -11,7 +11,7 @@ public sealed class MainForm : WebViewForm
     private readonly SceneGraphStore _sceneGraph;
     private readonly SceneDocumentSession _sceneDocument;
     private readonly SceneRuntime _sceneRuntime;
-    private readonly QuestRuntime _runtime;
+    private readonly IQuestRuntimeController _runtime;
     private readonly Dictionary<string, EditorForm> _editors = new(StringComparer.OrdinalIgnoreCase);
     private readonly RecentFileList _recentQuestFiles;
     private readonly RecentFileList _recentSceneFiles;
@@ -44,7 +44,11 @@ public sealed class MainForm : WebViewForm
             preferences.LastSceneDefinitionPath);
         _sceneCatalog.Changed += SceneCatalog_Changed;
         _sceneRuntime = new SceneRuntime(_sceneCatalog, _hub);
-        _runtime = new QuestRuntime(_questGraph, _hub, _sceneRuntime);
+        _runtime = new QuestRuntimeCoordinator(
+            _hub,
+            _sceneRuntime,
+            QuestDefinitionLoader.LoadAllOrFallback,
+            "tutorial_ruslan_shashlik");
         _sceneRuntime.Published += SceneRuntime_Published;
 
         // История последних открытых ресурсов: список читается здесь один раз и
@@ -63,6 +67,7 @@ public sealed class MainForm : WebViewForm
             BrowserReady -= MainForm_BrowserReady;
             _sceneRuntime.Published -= SceneRuntime_Published;
             _sceneCatalog.Changed -= SceneCatalog_Changed;
+            _runtime.Dispose();
             _recentQuestFiles.Changed -= RecentQuestFiles_Changed;
             _recentSceneFiles.Changed -= RecentSceneFiles_Changed;
 

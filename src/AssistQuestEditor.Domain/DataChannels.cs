@@ -148,7 +148,9 @@ public sealed class SimulatorDataChannelHub : IDataChannelHub
             "Статусы квестов",
             new QuestStatusesState(new[]
             {
-                new QuestStatusEntry("special_marinated_shashlik", QuestStatus.Available, "available")
+                new QuestStatusEntry("tutorial_ruslan_shashlik", QuestStatus.Available, "available"),
+                new QuestStatusEntry("gosha_homemade_sausage", QuestStatus.Available, "available"),
+                new QuestStatusEntry("ruslan_shashlik_delivery", QuestStatus.Available, "available")
             }));
 
         States = new DataChannel<RuntimeStatesState>(
@@ -301,7 +303,9 @@ public sealed class SimulatorDataChannelHub : IDataChannelHub
         }), "Сброс симулятора");
         QuestStatuses.Set(new QuestStatusesState(new[]
         {
-            new QuestStatusEntry("special_marinated_shashlik", QuestStatus.Available, "available")
+            new QuestStatusEntry("tutorial_ruslan_shashlik", QuestStatus.Available, "available"),
+            new QuestStatusEntry("gosha_homemade_sausage", QuestStatus.Available, "available"),
+            new QuestStatusEntry("ruslan_shashlik_delivery", QuestStatus.Available, "available")
         }), "Сброс симулятора");
         States.Set(new RuntimeStatesState(
             new Dictionary<string, bool>

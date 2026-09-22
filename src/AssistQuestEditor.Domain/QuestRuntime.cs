@@ -24,7 +24,7 @@ public sealed record QuestRuntimeEvent(
     string? NodeId,
     string Message);
 
-public sealed class QuestRuntime
+public sealed class QuestRuntime : IQuestRuntimeController
 {
     private const int MaxTransitionsPerPass = 64;
 
@@ -57,6 +57,7 @@ public sealed class QuestRuntime
     }
 
     public QuestRuntimeState State { get; private set; }
+    public QuestGraph ActiveGraph => _graphStore.Value;
     public event EventHandler<QuestRuntimeEvent>? Published;
 
     public void Start()
@@ -78,6 +79,19 @@ public sealed class QuestRuntime
         Publish("RuntimeStarted", "QuestRuntime", State.CurrentNodeId, "Runtime запущен.");
         PublishSystem("Runtime запущен");
         Advance();
+    }
+
+    public void Reset()
+    {
+        Stop("Сброс Quest Runtime.");
+        SetQuestStatus(QuestStatus.Available, "available");
+        State = State with
+        {
+            Status = QuestRuntimeStatus.Stopped,
+            WaitingFor = null,
+            LastEvent = "RuntimeReset",
+            LastTransition = "Quest Runtime сброшен."
+        };
     }
 
     public void Stop(string reason = "Runtime остановлен")
@@ -1103,6 +1117,17 @@ public sealed class QuestRuntime
                 source,
                 nodeId,
                 message));
+    }
+
+    public void Dispose()
+    {
+        _graphStore.Changed -= GraphStore_Changed;
+        _hub.Events.Published -= Events_Published;
+
+        if (_sceneRuntime is not null)
+            _sceneRuntime.Published -= SceneRuntime_Published;
+
+        Published = null;
     }
 
     private void PublishSystem(string transition)

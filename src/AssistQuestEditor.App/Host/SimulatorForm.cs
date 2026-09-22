@@ -7,7 +7,7 @@ namespace AssistQuestEditor.App;
 public sealed class SimulatorForm : WebViewForm
 {
     private readonly IDataChannelHub _hub;
-    private readonly QuestRuntime _runtime;
+    private readonly IQuestRuntimeController _runtime;
     private readonly QuestGraphStore _questGraph;
     private readonly System.Windows.Forms.Timer _runtimeTimer;
     private static readonly JsonSerializerOptions SnapshotJsonOptions = new()
@@ -23,7 +23,7 @@ public sealed class SimulatorForm : WebViewForm
     private bool _snapshotRequestScheduled;
     private bool _journalRefreshScheduled;
 
-    public SimulatorForm(IDataChannelHub hub, QuestRuntime runtime, QuestGraphStore questGraph)
+    public SimulatorForm(IDataChannelHub hub, IQuestRuntimeController runtime, QuestGraphStore questGraph)
         : base(
             "Assist Quest Editor — Симулятор",
             "simulator.html",
@@ -101,7 +101,7 @@ public sealed class SimulatorForm : WebViewForm
                 pair => ReputationScale.Describe(pair.Value.Value),
                 StringComparer.OrdinalIgnoreCase),
             runtime = _runtime.State,
-            questGraph = _questGraph.Value,
+            questGraph = _runtime.ActiveGraph ?? _questGraph.Value,
             journalDetached = _journalDetached
         }, SnapshotJsonOptions);
 
@@ -215,11 +215,11 @@ public sealed class SimulatorForm : WebViewForm
                     break;
 
                 case "reset":
-                    _runtime.Stop("Сброс симулятора");
                     if (_hub is SimulatorDataChannelHub simulatorHub)
                     {
                         simulatorHub.Reset();
                     }
+                    _runtime.Reset();
                     break;
 
                 default:
@@ -638,7 +638,9 @@ public sealed class SimulatorForm : WebViewForm
 
         if (e.NodeId is not null)
         {
-            var node = _questGraph.FindNode(e.NodeId);
+            var graph = _runtime.ActiveGraph ?? _questGraph.Value;
+            var node = graph.Nodes.FirstOrDefault(item =>
+                item.NodeId.Equals(e.NodeId, StringComparison.OrdinalIgnoreCase));
             if (node is not null)
             {
                 QuestLogger.Info("Quest Runtime: активная нода.", QuestLogger.Json(new
@@ -790,7 +792,7 @@ public sealed class SimulatorForm : WebViewForm
     private void LogQuestSnapshot(string stage)
     {
         var state = _runtime.State;
-        var graph = _questGraph.Value;
+        var graph = _runtime.ActiveGraph ?? _questGraph.Value;
         var node = state.CurrentNodeId is null ? null : graph.Nodes.FirstOrDefault(x =>
             x.NodeId.Equals(state.CurrentNodeId, StringComparison.OrdinalIgnoreCase));
 
