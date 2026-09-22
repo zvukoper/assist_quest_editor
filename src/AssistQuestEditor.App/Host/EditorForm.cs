@@ -58,6 +58,17 @@ public sealed class EditorForm : WebViewForm
     /// </summary>
     public event EventHandler<string>? RecentFileUnavailable;
 
+    /// <summary>
+    /// Документ записан на диск. Аргумент — путь к файлу.
+    ///
+    /// Событие, а не прямая ссылка на Simulator: редактор не знает, кто
+    /// заинтересован в изменении. Симулятор перечитывает квесты с диска, поэтому
+    /// без такого уведомления он показывал бы каталог, прочитанный при последнем
+    /// открытии окна, и правка активации не отображалась бы на карте до
+    /// ручного перезапуска.
+    /// </summary>
+    public event EventHandler<string>? DocumentSaved;
+
     public string WindowKey { get; }
 
     public string? CurrentQuestPath =>
@@ -1142,9 +1153,31 @@ public sealed class EditorForm : WebViewForm
         PostQuestGraph();
         RecentFileOpened?.Invoke(this, path!);
 
+        // Симулятор кэширует каталог квестов, поэтому он должен узнать о записи
+        // файла: иначе новый WorldPoint активации не появится на карте.
+        PublishDocumentSaved(path!);
+
         AppLogger.Info("Quest Graph: документ сохранён.",
             $"path={_currentDefinitionPath}; schema={DefinitionSchemaVersion}; bytes={output.Length}");
         return true;
+    }
+
+    /// <summary>
+    /// Оповещает подписчиков о записи документа на диск.
+    ///
+    /// Обработчик может бросить исключение (например, симулятор уже закрыт);
+    /// это не должно отменять успешное сохранение — файл уже записан.
+    /// </summary>
+    private void PublishDocumentSaved(string path)
+    {
+        try
+        {
+            DocumentSaved?.Invoke(this, path);
+        }
+        catch (Exception ex)
+        {
+            AppLogger.Error("Quest Graph: подписчик записи документа завершился ошибкой.", ex, "path=" + path);
+        }
     }
 
     private void SaveLastDefinitionPath()
@@ -1260,6 +1293,11 @@ public sealed class EditorForm : WebViewForm
         PostSceneCatalog();
         PostSceneGraph();
         RecentFileOpened?.Invoke(this, path!);
+
+        // Сцена тоже влияет на отображение: симулятор должен узнать о записи
+        // файла, иначе его снимок останется собранным по прежней сцене.
+        PublishDocumentSaved(path!);
+
         AppLogger.Info(
             "Scene Editor: документ сохранён.",
             "path=" + _sceneDocument.CurrentPath + "; scene=" + _sceneGraph.Value.Id + "; bytes=" + output.Length);

@@ -528,13 +528,40 @@ public sealed class MainForm : WebViewForm
         form.NavigationRequested += Editor_NavigationRequested;
         form.RecentFileOpened += (_, path) => NoteRecentFile(form.RecentFileKind, path);
         form.RecentFileUnavailable += (_, path) => ForgetRecentFile(form.RecentFileKind, path);
+        form.DocumentSaved += Editor_DocumentSaved;
         form.FormClosed += (_, _) =>
         {
             form.NavigationRequested -= Editor_NavigationRequested;
+            form.DocumentSaved -= Editor_DocumentSaved;
             _editors.Remove(page.Item2);
         };
         PlaceAuxiliaryWindow(form, _editors.Count);
         form.Show(this);
+    }
+
+    /// <summary>
+    /// Сохранение документа в редакторе должно быть видно на карте Симулятора.
+    ///
+    /// Карта строит маркеры квестов из кэшированного каталога кампании, поэтому
+    /// без перечитывания файлов правка точки активации не отображалась бы до
+    /// перезапуска окна симулятора. Каталог перечитывает только Quest-редактор:
+    /// сохранение сцены требует лишь свежего снимка, а лишний Reload зря
+    /// перечитывал бы все файлы кампаний.
+    /// </summary>
+    private void Editor_DocumentSaved(object? sender, string path)
+    {
+        if (_simulator is null || _simulator.IsDisposed)
+        {
+            return;
+        }
+
+        if (sender is EditorForm editor && editor.RecentFileKind != App.RecentFileKind.Quest)
+        {
+            _simulator.RequestSnapshot("document saved: " + Path.GetFileName(path));
+            return;
+        }
+
+        _simulator.ReloadCatalog("document saved: " + Path.GetFileName(path));
     }
 
     private void Editor_NavigationRequested(object? sender, EditorNavigationRequestEventArgs e)

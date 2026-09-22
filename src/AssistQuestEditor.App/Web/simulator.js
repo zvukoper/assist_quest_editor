@@ -2633,6 +2633,12 @@
   });
 
   document.getElementById("reset")?.addEventListener("click", () => send({ action: "reset" }));
+
+  // Кнопка нужна, когда файл квеста правили вне редактора: каталог квестов
+  // кэшируется в Host, и без перечитывания карта показывала бы старую точку
+  // активации. Сохранение из редактора обновляет каталог автоматически.
+  document.getElementById("reloadCatalog")?.addEventListener("click", () => send({ action: "reload_catalog" }));
+
   window.addEventListener("resize", () => {
     drawMap();
   });

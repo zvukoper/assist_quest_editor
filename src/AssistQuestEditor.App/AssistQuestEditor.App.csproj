@@ -11,10 +11,10 @@
     <Prefer32Bit>false</Prefer32Bit>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
 
-    <Version>1.0.40.155</Version>
-    <AssemblyVersion>1.0.40.155</AssemblyVersion>
-    <FileVersion>1.0.40.155</FileVersion>
-    <AssemblyInformationalVersion>1.0.40.155-QUEST-ACTIVATION-R4</AssemblyInformationalVersion>
+    <Version>1.0.40.156</Version>
+    <AssemblyVersion>1.0.40.156</AssemblyVersion>
+    <FileVersion>1.0.40.156</FileVersion>
+    <AssemblyInformationalVersion>1.0.40.156-CATALOG-RELOAD-R1</AssemblyInformationalVersion>
     <PublishSingleFile>true</PublishSingleFile>
     <SelfContained>true</SelfContained>
     <RuntimeIdentifier>win-x64</RuntimeIdentifier>

@@ -284,6 +284,10 @@ public sealed class SimulatorForm : WebViewForm
                     _runtime.SetSimulationRunning(false);
                     break;
 
+                case "reload_catalog":
+                    ReloadCatalog("web action reload_catalog");
+                    break;
+
                 default:
                     return;
             }
@@ -1114,6 +1118,53 @@ public sealed class SimulatorForm : WebViewForm
         catch (InvalidOperationException)
         {
             _snapshotRequestScheduled = false;
+        }
+    }
+
+    /// <summary>
+    /// Перечитывает квесты кампаний с диска и обновляет карту.
+    ///
+    /// Каталог квестов (и точка активации вместе с ним) кэшируется в памяти
+    /// при построении снимка, поэтому правка файла в редакторе сама по себе
+    /// ничего не меняет: нужно перечитать файлы. Вызывается автоматически после
+    /// сохранения документа и вручную кнопкой «Обновить квесты» — на случай,
+    /// если файл правили вне редактора.
+    /// </summary>
+    public void ReloadCatalog(string reason)
+    {
+        if (IsDisposed || !IsHandleCreated)
+        {
+            return;
+        }
+
+        _campaignStore.Reload();
+
+        // Включённость квестов живёт в Runtime и пересчитывается из нового
+        // каталога: после перечитывания файла квест может быть отключён в
+        // кампании, и тогда его нельзя оставлять активным в Runtime.
+        SyncRuntimeQuestEnabled();
+
+        AppLogger.Info("SimulatorForm: каталог квестов перечитан.", $"reason={reason}");
+        RequestSnapshot("reload catalog: " + reason);
+    }
+
+    /// <summary>
+    /// Приводит набор включённых квестов Runtime в соответствие каталогу
+    /// кампании.
+    ///
+    /// Нужен после перечитывания файлов: без него Runtime продолжал бы считать
+    /// включённым квест, который в кампании уже отключён.
+    /// </summary>
+    private void SyncRuntimeQuestEnabled()
+    {
+        foreach (var campaign in _campaignStore.BuildSimulatorCatalog())
+        {
+            foreach (var quest in campaign.Quests)
+            {
+                _runtime.SetQuestEnabled(
+                    quest.QuestId,
+                    quest.CampaignActive && quest.Status == CampaignQuestStatus.Enabled);
+            }
         }
     }
 

@@ -66,6 +66,12 @@ jobs:
         shell: pwsh
         run: node ci/selection_context_smoke.mjs
 
+      - name: Обновление каталога квестов
+        id: catalog_reload_smoke
+        continue-on-error: true
+        shell: pwsh
+        run: node ci/catalog_reload_smoke.mjs
+
       - name: Quest Graph Playwright smoke
         id: quest_graph_smoke
         continue-on-error: true

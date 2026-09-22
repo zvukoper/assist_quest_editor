@@ -162,13 +162,16 @@
         "<span class='badge'>" + questGraph.connections.length + " связей</span>" +
         "<span class='badge red'>" + escapeHtml(questGraph.name) + "</span>" +
         "<span class='badge " + (questActivation ? "blue" : "accent") + "' id='activationBadge' " +
-          "title='Политика запуска квеста в игре. Без Proximity-активации квест не появится на карте Симулятора.'>" +
+          "title='Точка и режим запуска квеста в игре. Именно это поле задаёт место маркера квеста на карте Симулятора; параметр worldPointId у ноды Interaction — только цель Runtime.'>" +
           escapeHtml(questActivation
             ? "Запуск: " + questActivation.mode + (questActivation.worldPointId ? " · " + questActivation.worldPointId : "")
             : "Запуск не задан") + "</span>" +
         "<button class='toolButton' id='editActivation'>Активация…</button>" +
       "</div>" +
       "<div id='activationPanel' style='display:none;margin-bottom:8px;padding:8px;border:1px solid var(--border);border-radius:8px;background:#111419;flex-wrap:wrap;gap:6px'>" +
+        "<div class='miniLabel' style='flex-basis:100%'>Точка активации: место квеста на карте Симулятора. " +
+          "Для режима Proximity квест стартует, когда игрок входит в радиус. " +
+          "Параметр worldPointId у ноды Interaction здесь не используется — он задаёт цель внутри квеста.</div>" +
         "<label class='miniLabel' style='display:flex;align-items:center;gap:6px'>Режим" +
           "<select id='activationMode' class='toolButton'>" +
             ["Manual", "Proximity"].map(mode =>
@@ -981,8 +984,35 @@
     faction: "Фракция", amount: "Количество", outputCount: "Количество выходов"
   };
 
+  /**
+   * Пояснение к параметру ноды.
+   *
+   * У Interaction два разных worldPointId: параметр ноды — это цель, к которой
+   * Runtime приближает игрока внутри квеста, а точка на карте Симулятора берётся
+   * только из активации документа. Без пояснения правка параметра выглядит как
+   * «поменял координату, но квест не сдвинулся».
+   */
+  const PARAMETER_HINTS = {
+    worldPointId: "Цель Runtime: к этой точке приближается игрок по ходу квеста. " +
+      "Маркер квеста на карте задаётся в «Активация…» и берётся из активации документа."
+  };
+
   function parameterLabel(key) {
     return PARAMETER_LABELS[key] || key;
+  }
+
+  function parameterHint(key) {
+    return PARAMETER_HINTS[key] || "";
+  }
+
+  /**
+   * Нода, хранящая точку привязки к миру в параметре worldPointId.
+   *
+   * Для такой ноды имеет смысл предложить перенос точки в активацию квеста:
+   * пользователь всё равно ожидает, что правка координаты сдвинет квест.
+   */
+  function isInteractionNode(node) {
+    return node?.nodeType === "Interaction";
   }
 
   function parameterEditorHtml(node) {
@@ -1015,7 +1045,10 @@
             "</div>"
           : "<input class='toolButton' data-param-value value='" + escapeHtml(value) + "'>") +
         "<button class='toolButton' data-param-remove title='Удалить параметр'>×</button>" +
-      "</div>"
+      "</div>" +
+      (parameterHint(key)
+        ? "<div class='miniLabel' style='margin:2px 0 8px'>" + escapeHtml(parameterHint(key)) + "</div>"
+        : "")
     ).join("") + "</div>";
   }
 
@@ -1076,6 +1109,11 @@
       "<div class='miniLabel' style='margin-top:14px'>Параметры</div>" +
       "<div id='graphParameterEditor' style='margin-top:6px'>" + parameterEditorHtml(node) + "</div>" +
       "<button class='toolButton' id='addGraphParameter' style='margin-top:6px'>Добавить параметр</button>" +
+      (isInteractionNode(node)
+        ? "<button class='toolButton primary' id='useNodeAsActivation' style='margin-top:10px' " +
+            "title='Записать точку и радиус ноды в активацию квеста: маркер на карте Симулятора встанет сюда'>" +
+            "Сделать точкой активации</button>"
+        : "") +
       "<button class='toolButton primary' id='saveGraphNode' style='margin-top:10px'>Сохранить свойства</button>" +
       "<button class='toolButton' id='deleteGraphNode' style='margin-top:6px'>Удалить ноду</button>" +
       "<div class='miniLabel' style='margin-top:14px'>Sockets</div>" +
@@ -1129,6 +1167,25 @@
 
     ins.querySelector("#addGraphParameter").addEventListener("click", () => {
       addParameterRow(ins.querySelector("#graphParameterEditor"));
+    });
+
+    // Переносит точку ноды в активацию документа: пользователь правит точку в
+    // одном месте, а маркер квеста на карте берётся только из активации.
+    ins.querySelector("#useNodeAsActivation")?.addEventListener("click", () => {
+      const parameters = collectParameters(ins);
+      const worldPointId = (parameters.worldPointId || "").trim();
+      if (!worldPointId) {
+        window.alert("У ноды не задан параметр worldPointId.");
+        return;
+      }
+
+      const radius = Number(parameters.triggerRadius);
+      send({
+        action: "set_activation",
+        mode: "Proximity",
+        worldPointId,
+        radius: Number.isFinite(radius) && radius > 0 ? radius : 35
+      });
     });
 
     ins.querySelector("#saveGraphNode").addEventListener("click", () => {
