@@ -11,10 +11,18 @@ public sealed record ResourceFileType(
 
 public static class ResourceFileTypes
 {
-    // Только реально существующие в текущем прототипе standalone resources.
+    // Канонические standalone resources редактора.
     // Dialogue/Choice сейчас являются частью .aqscene и отдельными файлами не являются.
     public static readonly IReadOnlyList<ResourceFileType> All =
     [
+        new(
+            ".aqcampaign",
+            "Campaign",
+            "Assist Quest Campaign",
+            "Campaign",
+            "aqcampaign.ico",
+            "campaign.aqcampaign",
+            "Канонический Campaign Definition. Содержит состав кампании и статусы квестов."),
         new(
             ".aqquest",
             "Quest",
