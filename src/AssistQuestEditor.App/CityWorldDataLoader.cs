@@ -5,11 +5,12 @@ namespace AssistQuestEditor.App;
 
 public static class CityWorldDataLoader
 {
-    private const string RelativePath = "data/world/cities.json";
+    private const string RelativePath = "world/cities.json";
 
     public static IReadOnlyList<WorldPoint> Load()
     {
-        var path = Path.Combine(AppContext.BaseDirectory, RelativePath);
+        // Каталог ресурсов, а не BaseDirectory: см. AppPaths о single-file публикации.
+        var path = Path.Combine(AppPaths.ResourceRoot, RelativePath);
         AppLogger.Info("CityWorldDataLoader.Load()", $"path={path}; exists={File.Exists(path)}");
 
         if (!File.Exists(path))

@@ -133,11 +133,28 @@ foreach ($file in $requiredAssetFiles) {
     }
 }
 
-# Проверяем требование: каталог публикации должен содержать только один EXE.
-$publishedFiles = @(Get-ChildItem -LiteralPath $publishDir -File -Force)
-if ($publishedFiles.Count -ne 1 -or $publishedFiles[0].FullName -ne $exePath) {
-    Write-Host "Проверка single-file не пройдена. В каталоге публикации находятся:" -ForegroundColor Red
-    $publishedFiles | ForEach-Object { Write-Host "  $($_.FullName)" -ForegroundColor Red }
+# Проверяем требование: каталог публикации содержит EXE и папку ресурсов data,
+# и больше ничего. Папка данных появилась сознательно: в single-file ресурсы
+# распаковываются в кэш %TEMP%, который не виден и не заменяется, поэтому рядом
+# с EXE лежит проверенная копия по манифесту.
+$publishedEntries = @(Get-ChildItem -LiteralPath $publishDir -Force)
+$unexpected = @($publishedEntries | Where-Object {
+    $_.FullName -ne $exePath -and
+    $_.Name -ne 'data' -and
+    $_.Name -ne 'data-verify-report.txt'
+})
+if (-not (Test-Path -LiteralPath $exePath) -or $unexpected.Count -gt 0) {
+    Write-Host "Проверка состава публикации не пройдена. В каталоге публикации находятся:" -ForegroundColor Red
+    $publishedEntries | ForEach-Object { Write-Host "  $($_.FullName)" -ForegroundColor Red }
+    exit 1
+}
+
+# Ресурсы рядом с EXE обязательны: без них приложение прочитает данные из кэша
+# распаковки single-file, где могут остаться файлы прошлых сборок.
+$publishedDataDir = Join-Path $publishDir 'data'
+$publishedManifest = Join-Path $publishedDataDir 'data-manifest.json'
+if (-not (Test-Path -LiteralPath $publishedManifest)) {
+    Write-Host "Ресурсы не опубликованы: не найден $publishedManifest" -ForegroundColor Red
     exit 1
 }
 
@@ -156,7 +173,10 @@ Write-Host "Версия: $version"
 Write-Host "Размер: $sizeMb MB"
 Write-Host "WebView2 cache очищен: $webViewUserDataDir"
 Write-Host "Web-ресурсы включены в single-file через IncludeAllContentForSelfExtract." -ForegroundColor Green
-Write-Host "Проверка: опубликован ровно один файл." -ForegroundColor Green
+Write-Host "Ресурсы опубликованы рядом с EXE: $publishedDataDir" -ForegroundColor Green
+Write-Host "Манифест ресурсов: $publishedManifest" -ForegroundColor Green
+$resourceCount = @(Get-ChildItem -LiteralPath $publishedDataDir -Recurse -File).Count
+Write-Host "Проверка: EXE + папка data, файлов ресурсов $resourceCount." -ForegroundColor Green
 
 # После успешной публикации временные диагностические логи удаляются: если
 # сборка прошла, они не нужны. При неудачной сборке логи сохраняются для разбора.

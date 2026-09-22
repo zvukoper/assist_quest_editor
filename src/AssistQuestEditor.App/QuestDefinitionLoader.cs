@@ -6,16 +6,20 @@ namespace AssistQuestEditor.App;
 
 public static class QuestDefinitionLoader
 {
-    private const string RelativePath = "data/quests/tutorial_ruslan_shashlik.aqquest";
+    private const string RelativePath = "quests/tutorial_ruslan_shashlik.aqquest";
 
     /// <summary>
     /// Загружает учебный Quest Definition целиком (граф + метаданные документа).
     /// Возврат только QuestGraph терял Description/SceneIds уже на старте, поэтому
     /// первое же сохранение записывало документ без них.
+    ///
+    /// Путь строится от каталога ресурсов, а не от <see cref="AppContext.BaseDirectory"/>:
+    /// в single-file публикации базовый каталог — это кэш распаковки, где могут
+    /// лежать ресурсы прошлых сборок.
     /// </summary>
     public static QuestDefinitionDocument LoadDocumentOrFallback()
     {
-        var path = Path.Combine(AppContext.BaseDirectory, RelativePath);
+        var path = Path.Combine(AppPaths.ResourceRoot, RelativePath);
         AppLogger.Info("QuestDefinitionLoader.LoadDocumentOrFallback()", $"path={path}; exists={File.Exists(path)}");
 
         if (!File.Exists(path))

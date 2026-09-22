@@ -11,10 +11,10 @@
     <Prefer32Bit>false</Prefer32Bit>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
 
-    <Version>1.0.40.142</Version>
-    <AssemblyVersion>1.0.40.142</AssemblyVersion>
-    <FileVersion>1.0.40.142</FileVersion>
-    <AssemblyInformationalVersion>1.0.40.142-REPUTATION-AVATAR-FIX</AssemblyInformationalVersion>
+    <Version>1.0.40.143</Version>
+    <AssemblyVersion>1.0.40.143</AssemblyVersion>
+    <FileVersion>1.0.40.143</FileVersion>
+    <AssemblyInformationalVersion>1.0.40.143-RESOURCE-SYNC-R1</AssemblyInformationalVersion>
     <PublishSingleFile>true</PublishSingleFile>
     <SelfContained>true</SelfContained>
     <RuntimeIdentifier>win-x64</RuntimeIdentifier>
@@ -68,5 +68,104 @@
       <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
     </None>
   </ItemGroup>
+
+  <Target Name="VerifyDataResources" AfterTargets="Build" Condition="'$(Configuration)' == 'Release'">
+    <!--
+      Ресурсы data копируются в каталог сборки отдельной задачей, а не через
+      CopyToOutputDirectory: так они лежат рядом с исполняемым файлом и читаются
+      приложением напрямую, а не из временного кэша распаковки single-file.
+      Синхронизация идёт по манифесту с SHA-256, поэтому остаток прошлой сборки
+      или файл со старой схемой не сможет проехать незамеченным.
+    -->
+    <PropertyGroup>
+      <AssistQuestSyncScript>$(MSBuildThisFileDirectory)../../ci/sync_data_resources.ps1</AssistQuestSyncScript>
+      <AssistQuestResourceTarget>$(TargetDir)data</AssistQuestResourceTarget>
+    </PropertyGroup>
+
+    <!--
+      Проверка запускается через apphost рядом с DLL, а не через $(TargetPath):
+      $(TargetPath) указывает на DLL, и Windows открыла бы его как документ,
+      а не выполнила. Приложение собрано как WinExe, поэтому вердикт читается
+      из файла отчёта, который оно пишет рядом с собой.
+    -->
+    <PropertyGroup>
+      <AssistQuestVerifyHost>$(TargetDir)$(AssemblyName).exe</AssistQuestVerifyHost>
+      <AssistQuestResourceReport>$(TargetDir)data-verify-report.txt</AssistQuestResourceReport>
+    </PropertyGroup>
+
+    <Error Condition="!Exists('$(AssistQuestSyncScript)')"
+           Text="Скрипт синхронизации ресурсов не найден: $(AssistQuestSyncScript)" />
+
+    <Error Condition="!Exists('$(AssistQuestVerifyHost)')"
+           Text="Исполняемый файл приложения не найден для проверки ресурсов: $(AssistQuestVerifyHost)" />
+
+    <Exec Command="powershell -NoProfile -NonInteractive -ExecutionPolicy Bypass -File &quot;$(AssistQuestSyncScript)&quot; -SourceDirectory &quot;$(MSBuildThisFileDirectory)../../data&quot; -TargetDirectory &quot;$(AssistQuestResourceTarget)&quot; -AppVersion &quot;$(Version)&quot; -Commit &quot;$(AssistQuestRepositoryCommit)&quot;"
+          WorkingDirectory="$(MSBuildThisFileDirectory)../.." />
+
+    <Delete Files="$(AssistQuestResourceReport)" ContinueOnError="true" />
+
+    <Exec Command="&quot;$(AssistQuestVerifyHost)&quot; --verify-resources"
+          WorkingDirectory="$(TargetDir)"
+          ContinueOnError="true"
+          IgnoreExitCode="true">
+      <Output TaskParameter="ExitCode" PropertyName="AssistQuestResourceExitCode" />
+    </Exec>
+
+    <!-- ReadLinesFromFile — штатная задача MSBuild: функции вида
+         [System.IO.File]::ReadAllLines запрещены в property functions. -->
+    <ReadLinesFromFile File="$(AssistQuestResourceReport)"
+                       Condition="Exists('$(AssistQuestResourceReport)')">
+      <Output TaskParameter="Lines" ItemName="AssistQuestResourceReportLines" />
+    </ReadLinesFromFile>
+
+    <Message Condition="Exists('$(AssistQuestResourceReport)')"
+             Importance="high"
+             Text="Ресурсы публикации: @(AssistQuestResourceReportLines, ' | ')" />
+
+    <Error Condition="'$(AssistQuestResourceExitCode)' != '0'"
+           Text="Проверка целостности ресурсов публикации не пройдена (код $(AssistQuestResourceExitCode)). Отчёт: $(AssistQuestResourceReport)" />
+  </Target>
+
+  <Target Name="SyncDataResourcesToPublish" AfterTargets="Publish">
+    <!--
+      Ресурсы попадают в публикацию настоящей папкой data рядом с EXE, а не только
+      внутрь single-file. Причина: включённый в single-file ресурс распаковывается
+      в системный кэш, который не виден и не заменяется, а папку рядом с EXE
+      видит человек, и отдельный файл можно заменить без пересборки. Манифест в
+      той же папке фиксирует размер и SHA-256 каждого файла, поэтому остаток
+      прошлой сборки или файл со старой схемой не проедет незамеченным.
+    -->
+    <PropertyGroup>
+      <AssistQuestPublishDataDir>$(PublishDir)data</AssistQuestPublishDataDir>
+    </PropertyGroup>
+
+    <Error Condition="!Exists('$(AssistQuestSyncScript)')"
+           Text="Скрипт синхронизации ресурсов не найден: $(AssistQuestSyncScript)" />
+
+    <Exec Command="powershell -NoProfile -NonInteractive -ExecutionPolicy Bypass -File &quot;$(AssistQuestSyncScript)&quot; -SourceDirectory &quot;$(MSBuildThisFileDirectory)../../data&quot; -TargetDirectory &quot;$(AssistQuestPublishDataDir)&quot; -AppVersion &quot;$(Version)&quot; -Commit &quot;$(AssistQuestRepositoryCommit)&quot;"
+          WorkingDirectory="$(MSBuildThisFileDirectory)../.." />
+
+    <!-- Проверка выполняется по опубликованной раскладке: именно её увидит пользователь. -->
+    <Delete Files="$(AssistQuestPublishDataDir)/../data-verify-report.txt" ContinueOnError="true" />
+
+    <Exec Command="&quot;$(PublishDir)$(AssemblyName).exe&quot; --verify-resources"
+          WorkingDirectory="$(PublishDir)"
+          ContinueOnError="true"
+          IgnoreExitCode="true">
+      <Output TaskParameter="ExitCode" PropertyName="AssistQuestResourceExitCode" />
+    </Exec>
+
+    <ReadLinesFromFile File="$(PublishDir)data-verify-report.txt"
+                       Condition="Exists('$(PublishDir)data-verify-report.txt')">
+      <Output TaskParameter="Lines" ItemName="AssistQuestPublishedReportLines" />
+    </ReadLinesFromFile>
+
+    <Message Condition="Exists('$(PublishDir)data-verify-report.txt')"
+             Importance="high"
+             Text="Ресурсы публикации: @(AssistQuestPublishedReportLines, ' | ')" />
+
+    <Error Condition="'$(AssistQuestResourceExitCode)' != '0'"
+           Text="Проверка целостности ресурсов публикации не пройдена (код $(AssistQuestResourceExitCode)). Отчёт: $(PublishDir)data-verify-report.txt" />
+  </Target>
 
 </Project>

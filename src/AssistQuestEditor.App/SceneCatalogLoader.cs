@@ -6,11 +6,13 @@ namespace AssistQuestEditor.App;
 
 public static class SceneCatalogLoader
 {
-    private const string RelativeDirectory = "data/scenes";
+    private const string RelativeDirectory = "scenes";
 
     public static SceneCatalog Load()
     {
-        var directory = Path.Combine(AppContext.BaseDirectory, RelativeDirectory);
+        // Каталог ресурсов, а не BaseDirectory: в single-file публикации базовый
+        // каталог — это кэш распаковки, ресурсы в нём не видны и не заменяются.
+        var directory = Path.Combine(AppPaths.ResourceRoot, RelativeDirectory);
         AppLogger.Info("SceneCatalogLoader.Load()", $"directory={directory}; exists={Directory.Exists(directory)}");
 
         if (!Directory.Exists(directory))

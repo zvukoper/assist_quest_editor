@@ -79,7 +79,7 @@ $script:HeartbeatPath = Join-Path $script:StateDir 'monitor.heartbeat'
 # Значение фиксировано: publish присутствует всегда (как «пропущено»), поэтому
 # число не зависит от -IncludePublish.
 # Держать в актуальном состоянии при добавлении/удалении Invoke-Check.
-$script:TotalChecks = 23
+$script:TotalChecks = 24
 
 # Подавление уведомления скрипта. Вызывающий скрипт может взять уведомление на
 # себя: pull.ps1 показывает одно уведомление с учётом признака активности
@@ -576,6 +576,53 @@ Invoke-Check -Name 'Single instance probe' -Body {
     }
 }
 
+# Шаг 5.8: синхронизация ресурсов и проверка по манифесту.
+# Проверка нужна отдельно от сборки: она ловит именно потерянные, необновлённые и
+# оставшиеся от прошлых сборок ресурсы, а не ошибки компиляции. Прогон идёт в
+# временный каталог, поэтому рабочие файлы не трогаются.
+Invoke-Check -Name 'Синхронизация ресурсов data' -Body {
+    $tmp = Join-Path $env:TEMP ("aq-resources-" + [Guid]::NewGuid().ToString('N'))
+    try {
+        & powershell -NoProfile -NonInteractive -ExecutionPolicy Bypass -File ci/sync_data_resources.ps1 `
+            -SourceDirectory (Join-Path $root 'data') `
+            -TargetDirectory $tmp `
+            -AppVersion 'ci' `
+            -Commit 'ci'
+        if ($LASTEXITCODE -ne 0) {
+            throw "sync_data_resources.ps1 завершился с кодом $LASTEXITCODE"
+        }
+
+        $manifest = Join-Path $tmp 'data-manifest.json'
+        if (-not (Test-Path -LiteralPath $manifest)) {
+            throw 'Манифест ресурсов не создан.'
+        }
+
+        $sourceCount = @(Get-ChildItem -LiteralPath (Join-Path $root 'data') -Recurse -File).Count
+        $targetCount = @(Get-ChildItem -LiteralPath $tmp -Recurse -File).Count
+        if ($targetCount -ne $sourceCount + 1) {
+            # +1 — сам манифест.
+            throw "Число ресурсов не совпало: источник $sourceCount, публикация $targetCount."
+        }
+
+        # Остаток прошлой сборки обязан удаляться, иначе в публикации накапливались
+        # бы файлы, которых уже нет в источнике.
+        $stale = Join-Path $tmp 'scenes\removed_by_test.aqscene'
+        Set-Content -LiteralPath $stale -Value '{}' -Encoding UTF8
+        & powershell -NoProfile -NonInteractive -ExecutionPolicy Bypass -File ci/sync_data_resources.ps1 `
+            -SourceDirectory (Join-Path $root 'data') `
+            -TargetDirectory $tmp `
+            -AppVersion 'ci' `
+            -Commit 'ci'
+        if (Test-Path -LiteralPath $stale) {
+            throw 'Лишний ресурс не удалён из публикации.'
+        }
+
+        Write-Host "Ресурсы синхронизированы: файлов $sourceCount, лишние удаляются, манифест создан." -ForegroundColor Green
+    } finally {
+        Remove-Item -LiteralPath $tmp -Recurse -Force -ErrorAction SilentlyContinue
+    }
+}
+
 # Шаг 6: синтаксис web JavaScript.
 Invoke-Check -Name 'Синтаксис web JavaScript' -Body {
     $files = @(
@@ -625,8 +672,7 @@ Invoke-Check -Name 'Сборка проектов .NET' -Body {
 }
 
 # Шаг 9: тесты домена с TRX, как в CI.
-Invoke-Check -Name 'Тесты домена' -Body {
-    $tests = @(Get-ChildItem -Path tests -Recurse -File -Filter *.csproj)
+Invoke-Check -Name 'Тесты домена' -Body {    $tests = @(Get-ChildItem -Path tests -Recurse -File -Filter *.csproj)
     if ($tests.Count -eq 0) {
         throw 'В tests нет C# тестовых проектов.'
     }
@@ -662,14 +708,37 @@ if ($IncludePublish) {
 
         $publish = Join-Path $root 'bin\Release\net10.0-windows\win-x64\publish'
         $files = @(Get-ChildItem -LiteralPath $publish -File -Force)
+        $dataDir = Join-Path $publish 'data'
+        $manifest = Join-Path $dataDir 'data-manifest.json'
 
+        # Рядом с EXE допускается только папка ресурсов: иначе single-file перестал
+        # быть одним файлом, а лишние файлы легко принять за актуальные данные.
         if ($files.Count -ne 1 -or $files[0].Extension -ne '.exe') {
             Write-Host 'В каталоге публикации находятся:' -ForegroundColor Red
             $files | ForEach-Object { Write-Host "  $($_.FullName)" -ForegroundColor Red }
             throw 'compile.ps1 не создал ровно один EXE.'
         }
 
+        # Ресурсы обязаны лежать рядом с EXE с манифестом: именно из этой папки
+        # приложение читает данные, а не из кэша распаковки single-file.
+        if (-not (Test-Path -LiteralPath $manifest)) {
+            throw "Ресурсы публикации не опубликованы: не найден $manifest"
+        }
+
+        $report = Join-Path $publish 'data-verify-report.txt'
+        if (Test-Path -LiteralPath $report) {
+            $reportLines = [IO.File]::ReadAllLines($report)
+            foreach ($line in $reportLines) { Write-Host "  $line" -ForegroundColor DarkGray }
+            if ($reportLines.Count -eq 0 -or $reportLines[0] -notmatch 'совпадают') {
+                throw "Проверка целостности ресурсов публикации не подтверждена: $($reportLines[0])"
+            }
+        } else {
+            throw "Приложение не оставило отчёт о ресурсах: $report"
+        }
+
+        $resourceCount = @(Get-ChildItem -LiteralPath $dataDir -Recurse -File).Count
         Write-Host "Single-file публикация: $($files[0].FullName)" -ForegroundColor Green
+        Write-Host "Ресурсы рядом с EXE: файлов $resourceCount, манифест подтверждён." -ForegroundColor Green
     }
 } else {
     Add-Result -Name 'Single-file publish' -Ok $null -Seconds 0 -Detail 'пропущено' -Output @('Шаг пропущен: нужен -IncludePublish.')

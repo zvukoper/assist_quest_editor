@@ -400,7 +400,9 @@ public sealed class MainForm : WebViewForm
 
     private static string? ResolveScenePath(string sceneId)
     {
-        var path = Path.Combine(AppContext.BaseDirectory, "data", "scenes", sceneId + ".aqscene");
+        // Каталог ресурсов, а не BaseDirectory: в single-file публикации базовый
+        // каталог — это кэш распаковки, где могут лежать файлы прошлых сборок.
+        var path = Path.Combine(AppPaths.ResourceRoot, "scenes", sceneId + ".aqscene");
         return File.Exists(path) ? path : null;
     }
 

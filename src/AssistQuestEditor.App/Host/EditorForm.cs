@@ -1191,7 +1191,8 @@ public sealed class EditorForm : WebViewForm
 
     private string? ResolveScenePath(string sceneId)
     {
-        var path = Path.Combine(AppContext.BaseDirectory, "data", "scenes", sceneId + ".aqscene");
+        // Каталог ресурсов, а не BaseDirectory: см. AppPaths о single-file публикации.
+        var path = Path.Combine(AppPaths.ResourceRoot, "scenes", sceneId + ".aqscene");
         return File.Exists(path) ? path : null;
     }
 

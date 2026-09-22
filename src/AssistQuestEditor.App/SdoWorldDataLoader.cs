@@ -5,11 +5,13 @@ namespace AssistQuestEditor.App;
 
 public static class SdoWorldDataLoader
 {
-    private const string RelativePath = "data/world/sdo_points.json";
+    private const string RelativePath = "world/sdo_points.json";
 
     public static IReadOnlyList<WorldPoint> Load()
     {
-        var path = Path.Combine(AppContext.BaseDirectory, RelativePath);
+        // Каталог ресурсов, а не BaseDirectory: в single-file публикации базовый
+        // каталог — это кэш распаковки, где могут лежать данные прошлых сборок.
+        var path = Path.Combine(AppPaths.ResourceRoot, RelativePath);
         AppLogger.Info("SdoWorldDataLoader.Load()", $"path={path}; exists={File.Exists(path)}");
 
         if (!File.Exists(path))
