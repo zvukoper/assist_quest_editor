@@ -11,6 +11,7 @@ public sealed class SimulatorForm : WebViewForm
     private readonly IQuestRuntimeController _runtime;
     private readonly QuestGraphStore _questGraph;
     private readonly CampaignStore _campaignStore;
+    private readonly SimulationSaveStore _saveStore = new();
     private readonly Action<string> _openQuestEditor;
     private readonly System.Windows.Forms.Timer _runtimeTimer;
     private static readonly JsonSerializerOptions SnapshotJsonOptions = new()
@@ -139,7 +140,9 @@ public sealed class SimulatorForm : WebViewForm
                 questId = _selectedQuestId
             },
             questGraph = _runtime.ActiveGraph ?? _questGraph.Value,
-            journalDetached = _journalDetached
+            journalDetached = _journalDetached,
+            // Индикатор светового дня: астрономию считает домен, UI только рисует.
+            daylight = BuildDaylight(snapshot)
         }, SnapshotJsonOptions);
 
         AppLogger.Info("SimulatorForm: отправляю snapshot в WebView2.", $"jsonChars={payload.Length}; points={pointCount}");
@@ -253,10 +256,15 @@ public sealed class SimulatorForm : WebViewForm
 
                 case "simulation_start":
                     _runtime.SetSimulationRunning(true);
+                    StartPersistence();
                     break;
 
                 case "simulation_stop":
                     _runtime.SetSimulationRunning(false);
+                    // При выключении симуляции сохранённое состояние фиксируется,
+                    // а последующие пробы пользователя остаются локальными: при
+                    // следующем запуске мир вернётся к этому снимку.
+                    PersistSession("симуляция остановлена", force: true);
                     break;
 
                 case "set_quest_enabled":
@@ -281,11 +289,41 @@ public sealed class SimulatorForm : WebViewForm
                         simulatorHub.Reset();
                     }
                     _runtime.Reset();
-                    _runtime.SetSimulationRunning(false);
+                    // «Сбросить» обнуляет сохранённое прохождение, но НЕ выключает
+                    // симуляцию: пользователь продолжает работу в чистом мире с
+                    // той же сессией.
+                    _saveStore.ClearSession();
+                    PersistSession("сброс после очистки", force: true);
+                    AppLogger.Info("SimulatorForm: прохождение сброшено.",
+                        $"simulationRunning={_runtime.SimulationRunning}");
                     break;
 
                 case "reload_catalog":
                     ReloadCatalog("web action reload_catalog");
+                    break;
+
+                case "list_saves":
+                    PostSaveList();
+                    break;
+
+                case "create_save":
+                    CreateSave(root);
+                    break;
+
+                case "load_save":
+                    LoadSave(root);
+                    break;
+
+                case "overwrite_save":
+                    OverwriteSave(root);
+                    break;
+
+                case "delete_save":
+                    DeleteSave(root);
+                    break;
+
+                case "rename_save":
+                    RenameSave(root);
                     break;
 
                 default:
@@ -1166,6 +1204,289 @@ public sealed class SimulatorForm : WebViewForm
                     quest.CampaignActive && quest.Status == CampaignQuestStatus.Enabled);
             }
         }
+    }
+
+    /// <summary>
+    /// Отправляет список сохранений в панель.
+    ///
+    /// Панель открывается по требованию, поэтому список не живёт в снимке:
+    /// пересылать его при каждой перерисовке карты было бы лишней работой (чтение
+    /// заголовков всех файлов на каждый кадр).
+    /// </summary>
+    private void PostSaveList()
+    {
+        var items = _saveStore.List()
+            .Select(item => new
+            {
+                path = item.Path,
+                name = item.Name,
+                sizeLabel = item.SizeLabel,
+                sizeBytes = item.SizeBytes,
+                createdLabel = item.CreatedAt.ToLocalTime().ToString("dd.MM.yyyy HH:mm"),
+                gameDateLabel = GameCalendar.FormatDate(item.GameDate),
+                gameTimeLabel = GameCalendar.FormatTime(item.GameDate),
+                playedLabel = item.PlayedLabel,
+                campaignId = item.CampaignId
+            })
+            .ToArray();
+
+        PostJson(JsonSerializer.Serialize(new
+        {
+            type = "save_list",
+            items,
+            root = _saveStore.Root,
+            simulationRunning = _runtime.SimulationRunning
+        }, SnapshotJsonOptions));
+    }
+
+    /// <summary>
+    /// Создаёт сохранение текущего состояния.
+    ///
+    /// Снимок разрешён только при запущенной симуляции: выключенный симулятор —
+    /// визуальный инструмент, и его изменения намеренно не считаются состоянием
+    /// мира. Иначе «точный снимок прохождения» включал бы пробы пользователя.
+    /// </summary>
+    private void CreateSave(JsonElement root)
+    {
+        if (!_runtime.SimulationRunning)
+        {
+            PostSaveError("Сохранение возможно только при запущенной симуляции.");
+            return;
+        }
+
+        var requested = root.TryGetProperty("name", out var nameNode) ? nameNode.GetString() : null;
+        var createdAt = DateTimeOffset.UtcNow;
+
+        var header = new SimulationSaveHeader(
+            SimulationSaveState.CurrentFormatVersion,
+            string.IsNullOrWhiteSpace(requested)
+                ? SimulationSaveNaming.DefaultName(createdAt.ToLocalTime())
+                : requested!,
+            VersionInfo.InformationalVersion,
+            createdAt,
+            null,
+            _hub.Get<WorldClockState>("sim-time").Value.Now,
+            CurrentCampaignId(),
+            _hub.Get<WorldClockState>("sim-time").Value.Elapsed);
+
+        var item = _saveStore.Create(new SimulationSave(header, CaptureState()), createdAt);
+        AppLogger.Info("SimulatorForm: создано сохранение.",
+            $"path={item.Path}; size={item.SizeBytes}");
+
+        PostSaveResult("created", item.Path, "Сохранение создано: " + item.Name);
+    }
+
+    /// <summary>
+    /// Загружает сохранение и ВЫКЛЮЧАЕТ симуляцию.
+    ///
+    /// Симуляция гасится намеренно: загрузка одним движением меняет игрока,
+    /// факты, инвентарь и статусы квестов, и если бы симуляция продолжала идти,
+    /// эти изменения немедленно вызвали бы срабатывания нод (активация квестов,
+    /// события, эффекты). Пользователь должен сначала убедиться, что мир в
+    /// ожидаемом состоянии, и запустить симуляцию сам.
+    /// </summary>
+    private void LoadSave(JsonElement root)
+    {
+        var path = Required(root, "path");
+        var save = _saveStore.Load(path);
+
+        SimulationSaveMapper.Apply(_hub, save.State);
+        _runtime.SetSimulationRunning(false);
+
+        // Статусы квестов пришли из снимка: пересчёт из каталога кампании
+        // обязателен, иначе включённость квестов в Runtime осталась бы прежней.
+        SyncRuntimeQuestEnabled();
+
+        AppLogger.Info("SimulatorForm: сохранение загружено.",
+            $"path={path}; name={save.Header.Name}; simulationRunning=false");
+
+        PostSaveResult("loaded", path, "Загружено: " + save.Header.Name + ". Симуляция выключена.");
+        RequestSnapshot("save loaded");
+    }
+
+    /// <summary>Перезаписывает существующее сохранение текущим состоянием.</summary>
+    private void OverwriteSave(JsonElement root)
+    {
+        if (!_runtime.SimulationRunning)
+        {
+            PostSaveError("Перезапись возможна только при запущенной симуляции.");
+            return;
+        }
+
+        var path = Required(root, "path");
+        var clock = _hub.Get<WorldClockState>("sim-time").Value;
+
+        var header = new SimulationSaveHeader(
+            SimulationSaveState.CurrentFormatVersion,
+            string.Empty,
+            VersionInfo.InformationalVersion,
+            DateTimeOffset.UtcNow,
+            null,
+            clock.Now,
+            CurrentCampaignId(),
+            clock.Elapsed);
+
+        var item = _saveStore.Overwrite(path, new SimulationSave(header, CaptureState()));
+        AppLogger.Info("SimulatorForm: сохранение перезаписано.",
+            $"path={item.Path}; size={item.SizeBytes}");
+
+        PostSaveResult("overwritten", item.Path, "Перезаписано: " + item.Name);
+    }
+
+    private void DeleteSave(JsonElement root)
+    {
+        var path = Required(root, "path");
+        _saveStore.Delete(path);
+        PostSaveResult("deleted", path, "Сохранение удалено.");
+    }
+
+    private void RenameSave(JsonElement root)
+    {
+        var path = Required(root, "path");
+        var name = Required(root, "name");
+
+        var item = _saveStore.Rename(path, name);
+        AppLogger.Info("SimulatorForm: сохранение переименовано.",
+            $"path={item.Path}; name={item.Name}");
+
+        PostSaveResult("renamed", item.Path, "Переименовано в «" + item.Name + "».");
+    }
+
+    private SimulationSaveState CaptureState() =>
+        SimulationSaveMapper.Capture(_hub, CurrentCampaignId());
+
+    /// <summary>
+    /// Запускает режим прохождения.
+    ///
+    /// Сначала восстанавливается сохранённое состояние: запуск симуляции обязан
+    /// продолжать прохождение, а не начинать его заново. Локальные изменения,
+    /// сделанные выключенным симулятором (визуальным инструментом), при этом
+    /// теряются — это и есть требуемое поведение.
+    /// </summary>
+    private void StartPersistence()
+    {
+        var session = _saveStore.LoadSession();
+        if (session is null)
+        {
+            AppLogger.Info("SimulatorForm: сохранённого прохождения нет, начинаем новое.");
+            PersistSession("старт без сохранения");
+            return;
+        }
+
+        SimulationSaveMapper.Apply(_hub, session.State);
+        SyncRuntimeQuestEnabled();
+        AppLogger.Info("SimulatorForm: прохождение восстановлено.",
+            $"gameDate={session.Header.GameDate:yyyy-MM-dd HH:mm}; played={session.Header.PlayedTime}");
+        PersistSession("старт с восстановлением");
+        RequestSnapshot("simulation started: session restored");
+    }
+
+    /// <summary>
+    /// Записывает текущее состояние прохождения.
+    ///
+    /// Правило режима: состояние попадает на диск только когда симуляция включена.
+    /// Выключенный симулятор — визуальный инструмент, и его изменения на диск не
+    /// попадают. Исключение одно: <paramref name="force"/> при выключении
+    /// симуляции, когда нужно зафиксировать последнее игровое состояние.
+    /// </summary>
+    private void PersistSession(string reason, bool force = false)
+    {
+        if (!_runtime.SimulationRunning && !force)
+            return;
+
+        try
+        {
+            var clock = _hub.Get<WorldClockState>("sim-time").Value;
+            var header = new SimulationSaveHeader(
+                SimulationSaveState.CurrentFormatVersion,
+                "session",
+                VersionInfo.InformationalVersion,
+                DateTimeOffset.UtcNow,
+                null,
+                clock.Now,
+                CurrentCampaignId(),
+                clock.Elapsed);
+
+            _saveStore.SaveSession(new SimulationSave(header, CaptureState()));
+            AppLogger.Info("SimulatorForm: прохождение записано.",
+                $"reason={reason}; gameTime={clock.Now:yyyy-MM-dd HH:mm}; elapsed={clock.Elapsed}");
+        }
+        catch (Exception ex)
+        {
+            // Ошибка записи не должна ломать работу симуляции.
+            AppLogger.Error("SimulatorForm: не удалось записать прохождение.", ex, "reason=" + reason);
+        }
+    }
+    /// <summary>
+    /// Id активной кампании для подписи сохранения.
+    ///
+    /// В сохранении важен для того, чтобы понять, к какому миру относится
+    /// прохождение: квесты и точки разных кампаний несовместимы.
+    /// </summary>
+    private string CurrentCampaignId() =>
+        _campaignStore.Records.FirstOrDefault(record => record.Definition.Active)?.Definition.Id
+        ?? _campaignStore.Records.FirstOrDefault()?.Definition.Id
+        ?? string.Empty;
+
+    private void PostSaveResult(string action, string path, string message) =>
+        PostJson(JsonSerializer.Serialize(new
+        {
+            type = "save_result",
+            action,
+            path,
+            message,
+            simulationRunning = _runtime.SimulationRunning
+        }, SnapshotJsonOptions));
+
+    private void PostSaveError(string message) =>
+        PostJson(JsonSerializer.Serialize(new
+        {
+            type = "save_error",
+            message
+        }, SnapshotJsonOptions));
+
+    /// <summary>
+    /// Данные индикатора светового дня.
+    ///
+    /// Считает домен: астрономия не должна дублироваться в web-слое, иначе
+    /// восход и закат в интерфейсе расходились бы с игровым временем.
+    /// </summary>
+    private object BuildDaylight(SimulatorSnapshot snapshot)
+    {
+        var clock = snapshot.Clock;
+        var location = CurrentGeo();
+        var phase = SolarAstronomy.Describe(clock.Now, location);
+
+        return new
+        {
+            gameDateLabel = GameCalendar.FormatDate(clock.Now),
+            gameTimeLabel = GameCalendar.FormatTime(clock.Now),
+            seasonLabel = GameCalendar.SeasonName(clock.Now),
+            running = clock.Running,
+            dayFraction = Math.Round(phase.DayFraction, 4),
+            isDay = phase.IsDay,
+            isPolarDay = phase.IsPolarDay,
+            isPolarNight = phase.IsPolarNight,
+            sunriseLabel = SolarAstronomy.DescribeSunrise(phase),
+            sunsetLabel = SolarAstronomy.DescribeSunset(phase),
+            dayLengthLabel = SolarAstronomy.DescribeDayLength(phase),
+            sunAltitude = Math.Round(phase.SunAltitudeDegrees, 1)
+        };
+    }
+
+    /// <summary>
+    /// Геокоордината мира из активной кампании.
+    ///
+    /// Если кампания её не задала, берётся значение по умолчанию: индикатор
+    /// светового дня обязан работать и на кампании без астрономических свойств.
+    /// </summary>
+    private GeoCoordinate CurrentGeo()
+    {
+        var campaign = _campaignStore.Records
+            .FirstOrDefault(record => record.Definition.Active)
+            ?? _campaignStore.Records.FirstOrDefault();
+
+        return campaign?.Definition.Geo ?? GeoCoordinate.CreateDefault();
     }
 
     private void LogQuestSnapshot(string stage)

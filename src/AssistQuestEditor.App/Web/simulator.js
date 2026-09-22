@@ -52,6 +52,16 @@
   let lastQuestVisualLogKey = "";
   let lastQuestTargetResolutionKey = "";
   let gameplayInventoryOpen = false;
+  // Индикатор светового дня и игровое время из снимка. Живут отдельной
+  // переменной: они нужны боковой панели и HUD одновременно.
+  let daylight = null;
+  // Список сохранений приходит отдельным сообщением только при открытии панели:
+  // пересылать его в каждом снимке значило бы читать заголовки файлов на каждую
+  // перерисовку карты.
+  let saveItems = [];
+  let savesOpen = false;
+  let saveBusy = false;
+  let savesRoot = "";
   const locallySeenInventoryItems = new Set();
   let uiRenderScheduled = false;
   const DISTANCE_RINGS = [25, 50, 100, 250, 500, 1000, 1500, 2000];
@@ -1903,6 +1913,122 @@
 
   }
 
+  /**
+   * Список сохранений.
+   *
+   * Каждая строка показывает то, что нужно для выбора: имя (клик — переименование),
+   * реальный размер файла, дату создания до минуты, игровую дату и время и
+   * длительность прохождения. Действия — отдельными кнопками: загрузка,
+   * перезапись, удаление.
+   */
+  function renderSaves() {
+    const list = document.getElementById("savesList");
+    const root = document.getElementById("savesRoot");
+    if (!list) return;
+
+    if (root) root.textContent = savesRoot ? "каталог: " + savesRoot : "";
+
+    if (!saveItems.length) {
+      list.innerHTML = "<div class='notice'>Сохранений пока нет. " +
+        "Создайте первое при запущенной симуляции.</div>";
+      return;
+    }
+
+    list.innerHTML = saveItems.map((item, index) =>
+      "<div class='savesRow' data-save-index='" + index + "'>" +
+        "<div class='savesRowMain'>" +
+          "<input class='savesNameInput' data-save-name='" + index + "' " +
+            "value='" + escapeHtml(item.name) + "' title='Нажмите, чтобы переименовать'>" +
+          "<div class='savesRowMeta'>" +
+            "<span>" + escapeHtml(item.createdLabel) + "</span>" +
+            "<span>размер " + escapeHtml(item.sizeLabel) + "</span>" +
+            "<span>игровое " + escapeHtml(item.gameDateLabel) + " " + escapeHtml(item.gameTimeLabel) + "</span>" +
+            "<span>в игре " + escapeHtml(item.playedLabel) + "</span>" +
+          "</div>" +
+        "</div>" +
+        "<div class='savesRowActions'>" +
+          "<button class='toolButton primary' data-save-load='" + index + "'>Загрузить</button>" +
+          "<button class='toolButton' data-save-overwrite='" + index + "'>Перезаписать</button>" +
+          "<button class='toolButton' data-save-delete='" + index + "'>Удалить</button>" +
+        "</div>" +
+      "</div>"
+    ).join("");
+
+    const itemAt = index => saveItems[Number(index)];
+
+    list.querySelectorAll("[data-save-load]").forEach(button => {
+      button.addEventListener("click", () => {
+        const item = itemAt(button.dataset.saveLoad);
+        if (!item || saveBusy) return;
+        if (!window.confirm("Загрузить сохранение «" + item.name + "»?\n\nСимуляция будет выключена.")) return;
+        saveBusy = true;
+        setSavesNotice("Загрузка…");
+        send({ action: "load_save", path: item.path });
+      });
+    });
+
+    list.querySelectorAll("[data-save-overwrite]").forEach(button => {
+      button.addEventListener("click", () => {
+        const item = itemAt(button.dataset.saveOverwrite);
+        if (!item || saveBusy) return;
+        // Имя при перезаписи не меняется: иначе это была бы новая запись,
+        // а не замена выбранной.
+        if (!window.confirm("Перезаписать «" + item.name + "» текущим состоянием?")) return;
+        saveBusy = true;
+        setSavesNotice("Перезапись…");
+        send({ action: "overwrite_save", path: item.path });
+      });
+    });
+
+    list.querySelectorAll("[data-save-delete]").forEach(button => {
+      button.addEventListener("click", () => {
+        const item = itemAt(button.dataset.saveDelete);
+        if (!item || saveBusy) return;
+        if (!window.confirm("Удалить сохранение «" + item.name + "»?\n\nДействие необратимо.")) return;
+        saveBusy = true;
+        setSavesNotice("Удаление…");
+        send({ action: "delete_save", path: item.path });
+      });
+    });
+
+    // Переименование — по Enter или потере фокуса. Клик по имени не должен
+    // открывать диалог: пользователь может просто хотеть выделить текст.
+    list.querySelectorAll("[data-save-name]").forEach(input => {
+      const commit = () => {
+        const index = Number(input.dataset.saveName);
+        const item = itemAt(index);
+        if (!item) return;
+
+        const next = input.value.trim();
+        if (!next || next === item.name) {
+          input.value = item.name;
+          return;
+        }
+
+        saveBusy = true;
+        setSavesNotice("Переименование…");
+        send({ action: "rename_save", path: item.path, name: next });
+      };
+
+      input.addEventListener("keydown", event => {
+        if (event.key === "Enter") {
+          event.preventDefault();
+          input.blur();
+        } else if (event.key === "Escape") {
+          const item = itemAt(input.dataset.saveName);
+          if (item) input.value = item.name;
+          input.blur();
+        }
+      });
+      input.addEventListener("blur", commit);
+    });
+  }
+
+  function setSavesNotice(text) {
+    const notice = document.getElementById("savesNotice");
+    if (notice) notice.textContent = text || "";
+  }
+
   function drawHud() {
     const p = snapshot.player.position;
     const selected = snapshot.selection?.point;
@@ -1919,6 +2045,18 @@
     hud.innerHTML = [
       "<span class='badge " + (simulationRunning ? "accent" : "blue") + "'>" +
         (simulationRunning ? "Симуляция: ВКЛ" : "Симуляция: ВЫКЛ") + "</span>",
+      daylight
+        ? "<span class='badge " + (daylight.isDay ? "accent" : "blue") + "'>" +
+            escapeHtml(daylight.gameDateLabel) + " · " + escapeHtml(daylight.gameTimeLabel) +
+            (daylight.running ? "" : " (пауза)") + "</span>"
+        : "",
+      daylight
+        ? "<span class='badge blue' title='Восход и закат по геокоординате кампании'>" +
+            "☀ " + escapeHtml(daylight.sunriseLabel) + "–" + escapeHtml(daylight.sunsetLabel) + "</span>"
+        : "",
+      daylight
+        ? "<span class='badge blue'>" + escapeHtml(daylight.seasonLabel) + "</span>"
+        : "",
       "<span class='badge blue'>СДО " + sdoCount.toLocaleString("ru-RU") + "</span>",
       "<span class='badge blue'>Города " + cityCount.toLocaleString("ru-RU") + "</span>",
       "<span class='badge accent'>Квесты " + questCount.toLocaleString("ru-RU") + "</span>",
@@ -1942,7 +2080,78 @@
       mapStatusHint.textContent = parts.join(" · ");
     }
 
+    renderDaylight();
     renderRuntimeSidebar();
+  }
+
+  /**
+   * Индикатор светового дня: окружность-«поверхность земли».
+   *
+   * Смысл — показать, насколько прошёл световой день. Зенит и 12:00 дня — полная
+   * жёлтая заливка. До обеда и после обеда заливка становится полумесяцем:
+   * на рассвете свет выходит слева, после обеда уходит вправо. Ночью виден
+   * только контур: солнца над горизонтом нет.
+   *
+   * Рисуется полумесяц не двумя дугами, а пересечением двух окружностей:
+   * полная окружность обрезается второй окружностью со смещением — так толщина
+   * серпа сама убывает к рассвету и закату, и не нужно подбирать радиусы.
+   */
+  function renderDaylight() {
+    const container = document.getElementById("daylightIndicator");
+    if (!container || !daylight) return;
+
+    const fraction = Number(daylight.dayFraction);
+    const isNight = !daylight.isDay;
+    const size = 42;
+    const center = size / 2;
+    const radius = 15;
+
+    // Смещение обрезающей окружности. 0 — полное светило (полдень),
+    // ±радиус*2 — серп нулевой толщины (восход и закат).
+    const daylightPosition = Math.max(0, Math.min(1, Number.isFinite(fraction) ? fraction : 0));
+    const phase = daylightPosition * 2 - 1; // -1 рассвет, 0 полдень, +1 закат
+    const offset = phase * radius * 2;
+
+    let phaseText;
+    if (isNight) phaseText = daylight.isPolarNight ? "полярная ночь" : "ночь";
+    else if (daylight.isPolarDay) phaseText = "полярный день";
+    else phaseText = daylightPosition < 0.5 ? "до полудня" : "после полудня";
+
+    const title =
+      "Световой день: " + phaseText +
+      " · восход " + daylight.sunriseLabel +
+      " · закат " + daylight.sunsetLabel +
+      " · длина " + daylight.dayLengthLabel +
+      " · солнце " + daylight.sunAltitude + "°";
+
+    // Цвета: жёлтый на свету, приглушённый серый ночью. Ночная заливка нужна,
+    // иначе индикатор в темноте выглядел бы сломанным пустым кругом.
+    const fill = isNight ? "rgba(120,128,140,.22)" : "#ffd21f";
+    const stroke = isNight ? "rgba(150,155,165,.55)" : "#fab003";
+
+    container.innerHTML =
+      "<svg viewBox='0 0 " + size + " " + size + "' width='" + size + "' height='" + size + "' " +
+        "role='img' aria-label='" + escapeHtml(title) + "'>" +
+        "<title>" + escapeHtml(title) + "</title>" +
+        // «Поверхность земли»: контур круга — горизонт наблюдателя.
+        "<circle cx='" + center + "' cy='" + center + "' r='" + radius + "' " +
+          "fill='none' stroke='rgba(150,155,165,.35)' stroke-width='1'/>" +
+        "<defs><clipPath id='daylightClip'>" +
+          "<circle cx='" + center + "' cy='" + center + "' r='" + radius + "'/>" +
+        "</clipPath></defs>" +
+        "<g clip-path='url(#daylightClip)'>" +
+          // Полное светило: жёлтый круг, из которого вырезается часть.
+          "<circle cx='" + center + "' cy='" + center + "' r='" + radius + "' fill='" + fill + "'/>" +
+          // Ночная/теневая часть: сдвинутая окружность цвета фона, она и создаёт
+          // серп. Смещение растёт к восходу/закату.
+          (isNight
+            ? "<circle cx='" + center + "' cy='" + center + "' r='" + radius + "' fill='rgba(13,16,20,.86)'/>"
+            : "<circle cx='" + (center + offset) + "' cy='" + center + "' r='" + radius + "' " +
+              "fill='rgba(13,16,20,.86)'/>") +
+        "</g>" +
+        "<circle cx='" + center + "' cy='" + center + "' r='" + radius + "' " +
+          "fill='none' stroke='" + stroke + "' stroke-width='1.5'/>" +
+      "</svg>";
   }
 
     function renderSide() {
@@ -2347,6 +2556,7 @@
       };
       questGraph = message.questGraph || questGraph;
       journalDetached = !!message.journalDetached;
+      daylight = message.daylight || null;
       selectedPointId = snapshot.selection?.point?.id || null;
 
       window.assistQuestLog?.("INFO", "Quest UI: snapshot загружен.", {
@@ -2387,8 +2597,34 @@
       return;
     }
 
-    if (message.type === "runtime_event") {
-      runtime = message.runtime || runtime;
+    if (message.type === "save_list") {
+      saveItems = Array.isArray(message.items) ? message.items : [];
+      savesRoot = message.root || "";
+      saveBusy = false;
+      setSavesNotice("");
+      renderSaves();
+      return;
+    }
+
+    if (message.type === "save_result") {
+      saveBusy = false;
+      setSavesNotice(message.message || "");
+      // Симуляция могла быть выключена загрузкой: состояние кнопки берётся из
+      // ответа Host, а не из локального предположения.
+      if (typeof message.simulationRunning === "boolean") {
+        simulationRunning = message.simulationRunning;
+      }
+      if (savesOpen) send({ action: "list_saves" });
+      return;
+    }
+
+    if (message.type === "save_error") {
+      saveBusy = false;
+      setSavesNotice(message.message || "Не удалось выполнить действие.");
+      return;
+    }
+
+    if (message.type === "runtime_event") {      runtime = message.runtime || runtime;
       window.assistQuestLog?.("INFO", "Quest UI: Runtime event получен.", {
         event: message["@event"] || message.event || null,
         runtime: runtime ? {
@@ -2698,6 +2934,29 @@
   // кэшируется в Host, и без перечитывания карта показывала бы старую точку
   // активации. Сохранение из редактора обновляет каталог автоматически.
   document.getElementById("reloadCatalog")?.addEventListener("click", () => send({ action: "reload_catalog" }));
+
+  document.getElementById("openSaves")?.addEventListener("click", () => {
+    savesOpen = true;
+    const panel = document.getElementById("savesPanel");
+    if (panel) panel.hidden = false;
+    // Список запрашивается при открытии: он не приходит в снимке, потому что
+    // чтение заголовков всех файлов на каждую перерисовку карты бессмысленно.
+    send({ action: "list_saves" });
+  });
+
+  document.getElementById("closeSaves")?.addEventListener("click", () => {
+    savesOpen = false;
+    const panel = document.getElementById("savesPanel");
+    if (panel) panel.hidden = true;
+  });
+
+  document.getElementById("createSave")?.addEventListener("click", () => {
+    if (saveBusy) return;
+    saveBusy = true;
+    setSavesNotice("Создание сохранения…");
+    // Имя не задаём: Host подставит дату и время создания до секунды.
+    send({ action: "create_save" });
+  });
 
   window.addEventListener("resize", () => {
     drawMap();

@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Text;
 
 namespace AssistQuestEditor.Domain;
 
@@ -84,6 +85,27 @@ public static class SimulationSaveNaming
         if (bytes < 1024 * 1024)
             return (bytes / 1024.0).ToString("0.0", CultureInfo.InvariantCulture) + " КБ";
         return (bytes / (1024.0 * 1024.0)).ToString("0.00", CultureInfo.InvariantCulture) + " МБ";
+    }
+
+    /// <summary>
+    /// Превращает отображаемое имя в допустимое имя файла.
+    ///
+    /// Живёт в Domain, а не в хранилище: это чистое правило именования, и его
+    /// нужно покрывать тестами, не поднимая файловую систему. Двоеточие особенно
+    /// важно — имя по умолчанию содержит время «18:30:42», недопустимое в имени
+    /// файла Windows.
+    /// </summary>
+    public static string ToFileName(string name)
+    {
+        var invalid = Path.GetInvalidFileNameChars();
+        var builder = new StringBuilder(name?.Length ?? 0);
+        foreach (var character in name ?? string.Empty)
+        {
+            builder.Append(Array.IndexOf(invalid, character) >= 0 ? '-' : character);
+        }
+
+        var result = builder.ToString().Trim().TrimEnd('.');
+        return result.Length == 0 ? "save" : result;
     }
 
     /// <summary>

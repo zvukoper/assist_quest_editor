@@ -48,6 +48,11 @@
       "scenes/ruslan_delivery.aqscene",
       "scenes/ruslan_finish.aqscene",
       "scenes/ruslan_start.aqscene"
-    ]
+    ],
+    "geo": {
+      "latitude": 55.1644,
+      "longitude": 61.4368
+    },
+    "startDate": "2026-01-01T00:00:00+00:00"
   }
 }

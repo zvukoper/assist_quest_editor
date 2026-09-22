@@ -32,4 +32,24 @@ public static class AppPaths
             return Path.Combine(localAppData, "Assist Quest Editor", "quests");
         }
     }
+
+    /// <summary>
+    /// Каталог сохранений симуляции.
+    ///
+    /// Лежит рядом с пользовательскими кампаниями, но отдельно от них: сохранения
+    /// — результат прохождения, а не контент, поэтому их можно удалить целиком,
+    /// не задев кампании. Не в каталоге публикации: он перезаписывается при
+    /// обновлении приложения.
+    /// </summary>
+    public static string SimulationSaveRoot
+    {
+        get
+        {
+            var localAppData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+            if (string.IsNullOrWhiteSpace(localAppData))
+                localAppData = AppContext.BaseDirectory;
+
+            return Path.Combine(localAppData, "Assist Quest Editor", "saves");
+        }
+    }
 }

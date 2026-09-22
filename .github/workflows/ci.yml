@@ -84,6 +84,12 @@ jobs:
         shell: pwsh
         run: node ci/text_outline_smoke.mjs
 
+      - name: Сохранения симуляции
+        id: simulation_saves_smoke
+        continue-on-error: true
+        shell: pwsh
+        run: node ci/simulation_saves_smoke.mjs
+
       - name: Quest Graph Playwright smoke
         id: quest_graph_smoke
         continue-on-error: true

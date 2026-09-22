@@ -261,4 +261,31 @@ public sealed class SimulationSaveNamingTests
     {
         Assert.Equal(expected, SimulationSaveNaming.FormatGameTime(new TimeSpan(hours, minutes, seconds)));
     }
+
+    [Fact]
+    public void ToFileNameReplacesCharactersForbiddenInWindows()
+    {
+        // Имя по умолчанию содержит двоеточия времени: в имени файла они недопустимы.
+        var name = SimulationSaveNaming.DefaultName(
+            new DateTimeOffset(new DateTime(2026, 7, 4, 9, 5, 7, DateTimeKind.Utc), TimeSpan.Zero));
+
+        var fileName = SimulationSaveNaming.ToFileName(name);
+
+        Assert.DoesNotContain(':', fileName);
+        Assert.Contains("2026-07-04", fileName);
+    }
+
+    [Fact]
+    public void ToFileNameNeverReturnsEmpty()
+    {
+        Assert.Equal("save", SimulationSaveNaming.ToFileName(""));
+        Assert.Equal("save", SimulationSaveNaming.ToFileName("   "));
+        Assert.Equal("save", SimulationSaveNaming.ToFileName("..."));
+    }
+
+    [Fact]
+    public void ToFileNameKeepsCyrillicNames()
+    {
+        Assert.Equal("Прохождение Руслана", SimulationSaveNaming.ToFileName("Прохождение Руслана"));
+    }
 }

@@ -568,6 +568,52 @@ input,select,textarea{padding:4px 5px;border-radius:4px;font-size:10px}textarea{
 .mapStatusSpacer{flex:1}
 .mapStatusHint{color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 
+/* Индикатор светового дня в шапке симулятора.
+   Размер задаётся слотом, а SVG внутри масштабируется: индикатор не должен
+   менять высоту шапки при перерисовке. */
+.daylightSlot{display:inline-flex;align-items:center;justify-content:center;width:42px;height:42px;flex:0 0 auto}
+.daylightSlot svg{display:block}
+
+/* Панель сохранений: модальный слой поверх карты.
+   Список снимков — действие над миром, а не часть карты, поэтому он не должен
+   сдвигать раскладку симулятора. */
+.savesPanel{
+  position:fixed;inset:0;z-index:120;display:flex;align-items:center;justify-content:center;
+  background:rgba(6,8,11,.72);
+}
+.savesPanel[hidden]{display:none}
+.savesPanelCard{
+  width:min(720px,calc(100% - 40px));max-height:min(560px,calc(100% - 60px));
+  display:flex;flex-direction:column;gap:10px;padding:14px;
+  border:1px solid var(--border);border-radius:10px;background:#111419;
+  box-shadow:0 24px 60px rgba(0,0,0,.6);
+}
+.savesPanelHead{display:flex;align-items:center;gap:10px}
+.savesPanelHead strong{font-size:13px;color:#fff}
+.savesPanelRoot{flex:1;font-size:10px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.savesPanelActions{display:flex;align-items:center;gap:10px}
+.savesPanelNotice{font-size:10px;color:#ffce6a}
+.savesList{
+  flex:1;min-height:80px;overflow-y:auto;display:flex;flex-direction:column;gap:8px;
+  border-top:1px solid var(--border);padding-top:10px;
+}
+.savesRow{
+  display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:8px;
+  border:1px solid var(--border);background:rgba(17,20,25,.75);
+}
+.savesRowMain{flex:1;min-width:0}
+.savesNameInput{
+  width:100%;border:1px solid transparent;background:transparent;color:#fff;
+  font-size:12px;font-weight:700;padding:2px 4px;border-radius:5px;cursor:text;
+}
+.savesNameInput:hover{border-color:var(--border);background:rgba(255,255,255,.04)}
+.savesNameInput:focus{border-color:var(--accent);background:#0d1014;outline:none}
+.savesRowMeta{
+  display:flex;flex-wrap:wrap;gap:10px;margin-top:3px;padding-left:4px;
+  font-size:10px;color:var(--muted);
+}
+.savesRowActions{display:flex;gap:6px;flex:0 0 auto}
+
 /* Выбранный квест в левом сайдбаре: активный — акцентный, неактивный — серый. */
 .selectedQuestBlock.active{border-left:2px solid #fab003}
 .selectedQuestBlock.inactive{border-left:2px solid #6d7480}
@@ -576,8 +622,7 @@ input,select,textarea{padding:4px 5px;border-radius:4px;font-size:10px}textarea{
 .inventoryNotifications{
   position:absolute;left:18px;top:50%;transform:translateY(-50%);z-index:50;
   width:min(300px,calc(100% - 36px));display:flex;flex-direction:column;gap:6px;pointer-events:none;
-}
-.inventoryNotification{
+}.inventoryNotification{
   padding:9px 11px;border:1px solid rgba(250,176,3,.28);border-left:3px solid #fab003;
   border-radius:7px;background:rgba(17,19,23,.96);box-shadow:0 10px 30px rgba(0,0,0,.4);
   color:#e7edf4;font-size:10px;line-height:1.35;opacity:1;
