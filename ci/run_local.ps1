@@ -549,6 +549,7 @@ Invoke-Check -Name 'Pan следует за курсором' -Body {
 # сборку, но Runtime молча зависает на такой ноде.
 Invoke-Check -Name 'Целостность Quest Graph и сцен' -Body {
     node ci/check_quest_graph.mjs
+node ci/check_campaigns.mjs
 }
 
 # Шаг 5.6: правила репутации на реальном контенте.
