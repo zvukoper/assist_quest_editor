@@ -1,0 +1,49 @@
+{
+  "schemaVersion": 1,
+  "format": "aqcampaign",
+  "definition": {
+    "id": "sibir_map",
+    "name": "SibirMap",
+    "version": 1,
+    "active": true,
+    "quests": [
+      {
+        "questId": "tutorial_ruslan_shashlik",
+        "relativePath": "quests/tutorial_ruslan_shashlik.aqquest",
+        "version": 2,
+        "status": "Enabled"
+      },
+      {
+        "questId": "gosha_homemade_sausage",
+        "relativePath": "quests/gosha_homemade_sausage.aqquest",
+        "version": 2,
+        "status": "Enabled"
+      },
+      {
+        "questId": "ruslan_shashlik_delivery",
+        "relativePath": "quests/ruslan_shashlik_delivery.aqquest",
+        "version": 2,
+        "status": "Enabled"
+      },
+      {
+        "questId": "sibirmap_city_cache",
+        "relativePath": "quests/sibirmap_city_cache.aqquest",
+        "version": 1,
+        "status": "Disabled"
+      }
+    ],
+    "files": [
+      "campaign.aqcampaign",
+      "quests/tutorial_ruslan_shashlik.aqquest",
+      "quests/gosha_homemade_sausage.aqquest",
+      "quests/ruslan_shashlik_delivery.aqquest",
+      "quests/sibirmap_city_cache.aqquest",
+      "scenes/gosha_delivery.aqscene",
+      "scenes/gosha_meat.aqscene",
+      "scenes/gosha_shop.aqscene",
+      "scenes/ruslan_delivery.aqscene",
+      "scenes/ruslan_finish.aqscene",
+      "scenes/ruslan_start.aqscene"
+    ]
+  }
+}
