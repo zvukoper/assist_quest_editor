@@ -256,3 +256,32 @@ Quest/Scene editor Open/Save dialogs больше не предлагают об
 Для каждого зарегистрированного типа приложение генерирует отдельный маленький ICO в `%LOCALAPPDATA%\\AssistQuestEditor\\FileIcons`. `.aqquest` и `.aqscene` открываются двойным щелчком в соответствующем редакторе. `--unregister-file-associations` удаляет зарегистрированные нами ProgID/association entries.
 
 Версия физического тестирования: `1.0.40.133-RESOURCE-FORMATS-R1`.
+
+
+## 2026-09-22 — 1.0.40.134 Scene Dialogue R1
+
+Scene Runtime integration доведена до полноценной игровой семантики.
+
+Фактическая цепочка теперь:
+`QuestNode(DialogueScene)` → canonical `SceneDefinition` → `SceneStart` → `Dialogue` → пользовательское `DialogueContinue` → `Choice` → пользовательский `ChoiceSelected` → `SceneEnd` → возврат в Quest Runtime.
+
+Dialogue больше не является pass-through. При входе в Scene Dialogue Runtime:
+- находит `SceneDialogue` resource внутри Scene Definition;
+- создаёт отдельный `InterfaceDialogue` с уникальным requestId;
+- публикует его через canonical `interfaces` Data Channel;
+- устанавливает `WaitingFor = Dialogue`;
+- ждёт только matching `DialogueContinue`;
+- устаревший requestId игнорируется;
+- после Continue очищает Dialogue UI и `RuntimeStatesState.DialogueId/DialogueAnchor`, затем продолжает Scene Graph.
+
+Choice сохранил существующий контракт `ActiveDialog + ChoiceSelected`, теперь Dialogue и Choice являются двумя последовательными состояниями одного Scene interface layer.
+
+Web UI `interface.js` теперь умеет оба режима: Dialogue с кнопкой «Продолжить» и Choice с вариантами. Добавлены Enter/Space для продолжения Dialogue и цифровые клавиши для Choice.
+
+SimulatorForm принимает `interface_dialogue_continue` и переводит его в `DialogueContinue` через Data Channel Events.
+
+Добавлен Playwright smoke `ci/scene_interface_smoke.mjs`, проверяющий Dialogue rendering/Continue и не регрессирующий Choice.
+
+Regression в `QuestRuntimeTests` обновлён для реальной цепочки Dialogue → Choice → End и добавлен тест на stale Dialogue request.
+
+Итог: в эталонном `.aqquest` все три разговорных участка остаются `DialogueScene` и используют canonical `.aqscene`; прямого Quest-level Dialogue UI больше не требуется для основного пути.
