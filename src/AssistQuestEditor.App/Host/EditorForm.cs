@@ -306,7 +306,7 @@ public sealed class EditorForm : WebViewForm
                     out error);
 
                 if (!updated)
-                    throw new InvalidOperationException(error);
+                    throw new InvalidOperationException(error ?? "Не удалось обновить Choice resource.");
 
                 AppLogger.Info(
                     "Scene Content: обновлён Choice.",
@@ -336,7 +336,7 @@ public sealed class EditorForm : WebViewForm
                 var removed = _sceneGraph.RemoveChoiceOption(nodeId, choiceId, optionId, out var error);
 
                 if (!removed)
-                    throw new InvalidOperationException(error);
+                    throw new InvalidOperationException(error ?? "Не удалось удалить Choice option.");
 
                 AppLogger.Info(
                     "Scene Content: удалён Choice option.",
