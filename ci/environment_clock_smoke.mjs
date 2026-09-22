@@ -29,6 +29,9 @@ const themeCss = read("src/AssistQuestEditor.App/Web/theme.css");const simulator
 const coordinator = read("src/AssistQuestEditor.Domain/QuestRuntimeCoordinator.cs");
 const mapper = read("src/AssistQuestEditor.Domain/SimulationSaveMapper.cs");
 const campaignModels = read("src/AssistQuestEditor.Domain/CampaignModels.cs");
+const worldClock = read("src/AssistQuestEditor.Domain/WorldClock.cs");
+const geoType = campaignModels + worldClock;
+const campaignContentCheck = read("ci/check_campaigns.mjs");
 const campaignStore = read("src/AssistQuestEditor.App/CampaignStore.cs");
 
 // 1. Признак «часы идут» — зеркало состояния симуляции, а не флаг из снимка.
@@ -54,6 +57,52 @@ check(/WorldStartConditions/.test(campaignModels),
   "CampaignDefinition должен хранить стартовые условия мира (погода, дождь, видимость).");
 check(/SaveWorldSettings/.test(campaignStore),
   "CampaignStore должен уметь записывать стартовые условия мира в кампанию.");
+
+// Гео-координата: пустое поле не должно превращаться в 0.
+// Number("") === 0, и 0 проходит проверку диапазона — именно так координата
+// 55.1644 была записана в файл кампании как 0.
+const saveGeoBody = simulatorJs.slice(
+  simulatorJs.indexOf('#saveWorldToCampaign'),
+  simulatorJs.indexOf('#loadWorldFromCampaign')
+);
+check(!/Number\(side\.querySelector\("#worldLatitude"\)\?\.value\)/.test(saveGeoBody),
+  "Гео-координата не должна читаться через Number(): пустое поле даёт 0 и портит файл.");
+check(/parseCoordinate/.test(saveGeoBody),
+  "Гео-координата должна разбираться с различением «пусто» и «ноль».");
+check(/=== null/.test(saveGeoBody),
+  "Пустое поле гео-координаты должно отвергаться, а не сохраняться как 0.");
+
+// Host: гео опциональна и проверяется, иначе пустое поле снова обнулит файл.
+check(/OptionalDouble\(root, "latitude"\)/.test(simulatorForm),
+  "Host должен читать широту как необязательное значение (null вместо 0).");
+check(/candidate\.IsValid/.test(simulatorForm),
+  "Host должен проверять допустимость гео-координаты перед записью.");
+check(/PostSaveError\(/.test(simulatorForm.slice(
+  simulatorForm.indexOf("private void SaveWorldToCampaign("),
+  simulatorForm.indexOf("private void LoadWorldFromCampaign("))),
+  "Сохранение мира должно сообщать об ошибке вместо записи мусора.");
+
+// «Сброс» обязан возвращать мир к стартовым условиям кампании.
+const resetBody = simulatorForm.slice(
+  simulatorForm.indexOf('case "reset"'),
+  simulatorForm.indexOf('case "reload_catalog"')
+);
+check(/ApplyWorldFromCampaign/.test(resetBody),
+  "«Сбросить» должен приводить мир к стартовым условиям кампании: иначе " +
+  "испорченная правка в Окружении не отменяется ни сбросом, ни загрузкой.");
+check(!/SetSimulationRunning\(false\)/.test(resetBody),
+  "«Сбросить» НЕ должен выключать симуляцию: сброс и остановка — разные действия.");
+
+// Кампания: вычисляемое свойство не должно утекать в файл.
+// Проверяется именно атрибут НА свойстве: простое вхождение строки "JsonIgnore"
+// ничего не доказывает — слово встречается и в поясняющем комментарии.
+check(/\[JsonIgnore\][\s\S]{0,120}public bool IsValid/.test(geoType),
+  "Вычисляемое свойство GeoCoordinate.IsValid должно быть помечено [JsonIgnore]: " +
+  "иначе оно попадает в файл кампании.");
+check(/isValid leaked into campaign geo/.test(campaignContentCheck) &&
+      /is zero: world lost its position/.test(campaignContentCheck),
+  "ci/check_campaigns.mjs должен отвергать нулевую гео-координату в data/: " +
+  "иначе испорченная кампания снова пройдёт проверку.");
 
 // 3. Подписи: единая геометрия «по центру над точкой», игрок подписан.
 check(

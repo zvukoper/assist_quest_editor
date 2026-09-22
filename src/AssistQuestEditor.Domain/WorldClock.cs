@@ -1,3 +1,6 @@
+using System.Globalization;
+using System.Text.Json.Serialization;
+
 namespace AssistQuestEditor.Domain;
 
 /// <summary>
@@ -92,6 +95,14 @@ public sealed record GeoCoordinate(double Latitude, double Longitude)
     /// </summary>
     public static GeoCoordinate CreateDefault() => new(55.1644, 61.4368);
 
+    /// <summary>
+    /// Проверка допустимости координаты.
+    ///
+    /// Вычисляемое свойство, и это важно подчеркнуть: без <see cref="JsonIgnoreAttribute"/>
+    /// сериализатор запишет его в файл кампании как обычное свойство (в файле
+    /// появлялось <c>"isValid": true</c>). Данные, а не разметка, в файле быть не должно.
+    /// </summary>
+    [JsonIgnore]
     public bool IsValid =>
         Latitude is >= -90 and <= 90 &&
         Longitude is >= -180 and <= 180;

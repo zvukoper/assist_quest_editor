@@ -2730,11 +2730,25 @@
     });
 
     side.querySelector("#saveWorldToCampaign")?.addEventListener("click", () => {
-      const latitude = Number(side.querySelector("#worldLatitude")?.value);
-      const longitude = Number(side.querySelector("#worldLongitude")?.value);
+      // Пустое поле читается из DOM как "", а Number("") даёт 0 — и 0 проходит
+      // проверку диапазона, записывая координату 55° в ноль. Поэтому «пусто»
+      // и «ноль» различаются явно, а не через Number().
+      const parseCoordinate = input => {
+        const text = String(input?.value ?? "").trim();
+        if (text.length === 0) return null;
+        const value = Number(text);
+        return Number.isFinite(value) ? value : null;
+      };
 
-      if (!Number.isFinite(latitude) || !Number.isFinite(longitude) ||
-          latitude < -90 || latitude > 90 || longitude < -180 || longitude > 180) {
+      const latitude = parseCoordinate(side.querySelector("#worldLatitude"));
+      const longitude = parseCoordinate(side.querySelector("#worldLongitude"));
+
+      if (latitude === null || longitude === null) {
+        setWorldNotice("Заполните широту и долготу: пустое поле сохранить нельзя.");
+        return;
+      }
+
+      if (latitude < -90 || latitude > 90 || longitude < -180 || longitude > 180) {
         setWorldNotice("Широта от -90 до 90, долгота от -180 до 180.");
         return;
       }

@@ -72,6 +72,35 @@ for (const file of files) {
       problems.push("missing declared file " + relative);
   }
 
+  // Свойства мира: гео-координата нужна астрономии, и её порча (0,0) не видна ни
+  // сборке, ни приложению — мир просто теряет своё место на Земле. Случай уже был:
+  // пустое поле в интерфейсе сохранялось как 0. Ноль допустим географически, но
+  // для кампании это признак потерянных данных, поэтому отвергается явно.
+  const geo = definition?.geo;
+  if (geo === undefined || geo === null) {
+    problems.push("missing world geo coordinate");
+  } else {
+    const { latitude, longitude } = geo;
+
+    // Вычисляемое свойство не должно попадать в файл.
+    if (Object.prototype.hasOwnProperty.call(geo, "isValid"))
+      problems.push("computed isValid leaked into campaign geo");
+
+    for (const [name, value, limit] of [["latitude", latitude, 90], ["longitude", longitude, 180]]) {
+      if (typeof value !== "number" || !Number.isFinite(value))
+        problems.push("invalid geo " + name + ": " + value);
+      else if (Math.abs(value) > limit)
+        problems.push("geo " + name + " out of range: " + value);
+      else if (value === 0)
+        problems.push("geo " + name + " is zero: world lost its position (was it an empty input field?)");
+    }
+  }
+
+  if (definition?.startDate !== undefined && definition?.startDate !== null &&
+      Number.isNaN(Date.parse(definition.startDate))) {
+    problems.push("invalid world startDate: " + definition.startDate);
+  }
+
   console.log(path.basename(path.dirname(file)) + ": " + (problems.length ? "FAIL" : "OK") +
     " quests=" + (definition?.quests?.length || 0) +
     " version=" + definition?.version);

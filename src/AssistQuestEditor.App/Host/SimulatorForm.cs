@@ -316,6 +316,13 @@ public sealed class SimulatorForm : WebViewForm
                     // той же сессией.
                     _saveStore.ClearSession();
                     PersistSession("сброс после очистки", force: true);
+
+                    // Свойства мира берутся из КАМПАНИИ, а не остаются какими были:
+                    // сброс возвращает мир к состоянию «на входе», и погода с
+                    // временем — часть этого состояния. Раньше сброс их не трогал,
+                    // и после испорченной правки координаты не возвращались.
+                    ApplyWorldFromCampaign("сброс симулятора");
+
                     AppLogger.Info("SimulatorForm: прохождение сброшено.",
                         $"simulationRunning={_runtime.SimulationRunning}");
                     break;
@@ -908,12 +915,36 @@ public sealed class SimulatorForm : WebViewForm
         var clock = _hub.Get<WorldClockState>("sim-time").Value;
         var environment = _hub.Get<EnvironmentState>("environment").Value;
 
-        var latitude = Number(root, "latitude", campaign.Definition.Geo?.Latitude ?? GeoCoordinate.CreateDefault().Latitude);
-        var longitude = Number(root, "longitude", campaign.Definition.Geo?.Longitude ?? GeoCoordinate.CreateDefault().Longitude);
+        // Гео-координата — НЕОБЯЗАТЕЛЬНЫЙ параметр: отсутствие означает «не
+        // менять». Это защищает от порчи файла, если поле пришло пустым или
+        // отсутствует: раньше пустая строка превращалась в 0 и стирала координату.
+        GeoCoordinate? geo = campaign.Definition.Geo;
+        if (root.TryGetProperty("latitude", out _) || root.TryGetProperty("longitude", out _))
+        {
+            var latitude = OptionalDouble(root, "latitude");
+            var longitude = OptionalDouble(root, "longitude");
+
+            if (latitude is null || longitude is null)
+            {
+                PostSaveError("Широта и долгота должны быть заданы обе.");
+                return;
+            }
+
+            var candidate = new GeoCoordinate(latitude.Value, longitude.Value);
+            if (!candidate.IsValid)
+            {
+                PostSaveError(
+                    $"Недопустимая гео-координата: широта {latitude}, долгота {longitude}. " +
+                    "Широта от -90 до 90, долгота от -180 до 180.");
+                return;
+            }
+
+            geo = candidate;
+        }
 
         var world = campaign.Definition with
         {
-            Geo = new GeoCoordinate(latitude, longitude),
+            Geo = geo,
             // Стартовая дата мира, а не текущий момент: кампания описывает, с чего
             // начинается прохождение. Текущее время хранится в сохранениях.
             StartDate = clock.StartDate,
@@ -936,12 +967,30 @@ public sealed class SimulatorForm : WebViewForm
     /// </summary>
     private void LoadWorldFromCampaign()
     {
+        if (!ApplyWorldFromCampaign("загрузка из кампании"))
+            return;
+
+        var campaign = _campaignStore.ActiveRecord();
+        PostWorldSettings("loaded",
+            "Стартовые условия загружены из кампании «" + campaign!.Definition.Name + "».");
+    }
+
+    /// <summary>
+    /// Приводит мир симуляции к стартовым условиям кампании.
+    ///
+    /// Общий метод для двух действий: «Загрузить из кампании» и «Сбросить».
+    /// Оба обязаны давать одинаковый результат — мир «как в кампании», и разница
+    /// только в том, что сброс ещё и очищает прохождение. Раньше сброс свойства
+    /// мира не возвращал, поэтому испорченная правка в Окружении выглядела как
+    /// невосстановимая: ни загрузка из кампании, ни сброс её не отменяли.
+    ///
+    /// Возвращает false, если активной кампании нет.
+    /// </summary>
+    private bool ApplyWorldFromCampaign(string reason)
+    {
         var campaign = _campaignStore.ActiveRecord();
         if (campaign is null)
-        {
-            PostSaveError("Активная кампания не найдена.");
-            return;
-        }
+            return false;
 
         var definition = campaign.Definition;
         var conditions = definition.StartConditions;
@@ -965,11 +1014,11 @@ public sealed class SimulatorForm : WebViewForm
             clock with { StartDate = start, Elapsed = TimeSpan.Zero },
             "Кампания");
 
-        AppLogger.Info("SimulatorForm: стартовые условия мира загружены из кампании.",
-            $"campaignId={definition.Id}; startDate={start:yyyy-MM-dd HH:mm}; weather={conditions?.Weather}");
+        AppLogger.Info("SimulatorForm: мир приведён к стартовым условиям кампании.",
+            $"reason={reason}; campaignId={definition.Id}; startDate={start:yyyy-MM-dd HH:mm}; " +
+            $"weather={conditions?.Weather}; geo={definition.Geo}");
 
-        PostWorldSettings("loaded", "Стартовые условия загружены из кампании «" + definition.Name + "».");
-        RequestSnapshot("world settings loaded");
+        return true;
     }
 
     private void PostWorldSettings(string action, string message)
@@ -1812,5 +1861,28 @@ public sealed class SimulatorForm : WebViewForm
         return element.ValueKind == JsonValueKind.Number && element.TryGetDouble(out var value)
             ? value
             : double.TryParse(element.ToString(), out var parsed) ? parsed : fallback;
+    }
+
+    /// <summary>
+    /// Число, которого может не быть: null вместо подстановки значения по умолчанию.
+    ///
+    /// Нужен для необязательных параметров (например гео-координаты). Метод
+    /// <see cref="Number(JsonElement, string, double)"/> здесь не подходит: он
+    /// возвращает fallback, и отличить «не задано» от «задан ноль» невозможно —
+    /// именно на этом пустое поле превращалось в координату 0.
+    /// </summary>
+    private static double? OptionalDouble(JsonElement root, string name)
+    {
+        if (!root.TryGetProperty(name, out var element) || element.ValueKind == JsonValueKind.Null)
+        {
+            return null;
+        }
+
+        if (element.ValueKind == JsonValueKind.Number && element.TryGetDouble(out var value))
+        {
+            return value;
+        }
+
+        return double.TryParse(element.ToString(), out var parsed) ? parsed : null;
     }
 }
