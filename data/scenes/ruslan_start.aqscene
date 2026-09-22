@@ -1,0 +1,170 @@
+{
+  "schemaVersion": 1,
+  "format": "aqscene",
+  "definition": {
+    "id": "ruslan_start",
+    "title": "Разговор с Русланом",
+    "description": "Первая сцена: обычная реплика авторски отделена от Choice resource.",
+    "graph": {
+      "id": "ruslan_start",
+      "name": "Разговор с Русланом",
+      "nodes": [
+        {
+          "nodeId": "start",
+          "nodeType": "SceneStart",
+          "title": "Начало сцены",
+          "x": 80,
+          "y": 180,
+          "sockets": [
+            {
+              "socketId": "start.out",
+              "name": "Далее",
+              "direction": "Output",
+              "flowKind": "Normal"
+            }
+          ],
+          "parameters": {}
+        },
+        {
+          "nodeId": "dialogue",
+          "nodeType": "Dialogue",
+          "title": "Руслан: приветствие",
+          "x": 340,
+          "y": 180,
+          "sockets": [
+            {
+              "socketId": "dialogue.in",
+              "name": "Вход",
+              "direction": "Input",
+              "flowKind": "Normal"
+            },
+            {
+              "socketId": "dialogue.out",
+              "name": "Далее",
+              "direction": "Output",
+              "flowKind": "Normal"
+            }
+          ],
+          "parameters": {
+            "dialogueId": "ruslan.greeting"
+          }
+        },
+        {
+          "nodeId": "choice",
+          "nodeType": "Choice",
+          "title": "Руслан предлагает работу",
+          "x": 640,
+          "y": 180,
+          "sockets": [
+            {
+              "socketId": "choice.in",
+              "name": "Вход",
+              "direction": "Input",
+              "flowKind": "Normal"
+            },
+            {
+              "socketId": "choice.accept",
+              "name": "Принять",
+              "direction": "Output",
+              "flowKind": "Normal"
+            },
+            {
+              "socketId": "choice.decline",
+              "name": "Отказаться",
+              "direction": "Output",
+              "flowKind": "Normal"
+            }
+          ],
+          "parameters": {
+            "choiceId": "ruslan.offer"
+          }
+        },
+        {
+          "nodeId": "accept",
+          "nodeType": "SceneEnd",
+          "title": "Сцена завершена: принято",
+          "x": 960,
+          "y": 120,
+          "sockets": [
+            {
+              "socketId": "accept.in",
+              "name": "Вход",
+              "direction": "Input",
+              "flowKind": "Normal"
+            }
+          ],
+          "parameters": {}
+        },
+        {
+          "nodeId": "decline",
+          "nodeType": "SceneEnd",
+          "title": "Сцена завершена: отказ",
+          "x": 960,
+          "y": 250,
+          "sockets": [
+            {
+              "socketId": "decline.in",
+              "name": "Вход",
+              "direction": "Input",
+              "flowKind": "Normal"
+            }
+          ],
+          "parameters": {}
+        }
+      ],
+      "connections": [
+        {
+          "fromNodeId": "start",
+          "fromSocketId": "start.out",
+          "toNodeId": "dialogue",
+          "toSocketId": "dialogue.in"
+        },
+        {
+          "fromNodeId": "dialogue",
+          "fromSocketId": "dialogue.out",
+          "toNodeId": "choice",
+          "toSocketId": "choice.in"
+        },
+        {
+          "fromNodeId": "choice",
+          "fromSocketId": "choice.accept",
+          "toNodeId": "accept",
+          "toSocketId": "accept.in"
+        },
+        {
+          "fromNodeId": "choice",
+          "fromSocketId": "choice.decline",
+          "toNodeId": "decline",
+          "toSocketId": "decline.in"
+        }
+      ]
+    },
+    "dialogues": [
+      {
+        "id": "ruslan.greeting",
+        "speaker": "Руслан",
+        "text": "Есть для тебя особое предложение."
+      }
+    ],
+    "choices": [
+      {
+        "id": "ruslan.offer",
+        "title": "Предложение",
+        "speaker": "Руслан",
+        "text": "Нужно найти особое мясо для моего шашлычного маринада. Возьмёшься?",
+        "options": [
+          {
+            "id": "ruslan.offer.accept",
+            "text": "Да, берусь.",
+            "outputSocketId": "choice.accept"
+          },
+          {
+            "id": "ruslan.offer.decline",
+            "text": "Нет, сейчас не могу.",
+            "outputSocketId": "choice.decline"
+          }
+        ]
+      }
+    ]
+  }
+}
