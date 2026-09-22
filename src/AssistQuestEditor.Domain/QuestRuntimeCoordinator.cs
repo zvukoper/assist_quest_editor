@@ -18,6 +18,8 @@ public sealed class QuestRuntimeCoordinator : IQuestRuntimeController
     private QuestRuntime? _activeRuntime;
     private QuestRuntimeState _lastState;
     private readonly Dictionary<string, bool> _activationReady = new(StringComparer.OrdinalIgnoreCase);
+    private readonly HashSet<string> _enabledQuestIds = new(StringComparer.OrdinalIgnoreCase);
+    private bool _simulationRunning;
 
     public QuestRuntimeCoordinator(
         IDataChannelHub hub,
@@ -45,11 +47,17 @@ public sealed class QuestRuntimeCoordinator : IQuestRuntimeController
         _hub.Get<ReputationState>("reputation").Changed += Reputation_Changed;
 
         RefreshQuestStatuses();
+        InitializeEnabledQuestIds();
     }
 
     public QuestRuntimeState State => _activeRuntime?.State ?? _lastState;
 
     public QuestGraph? ActiveGraph => _activeRuntime?.ActiveGraph;
+
+    public bool SimulationRunning => _simulationRunning;
+
+    public IReadOnlyCollection<string> EnabledQuestIds =>
+        _enabledQuestIds.ToArray();
 
     public event EventHandler<QuestRuntimeEvent>? Published;
 
@@ -61,6 +69,49 @@ public sealed class QuestRuntimeCoordinator : IQuestRuntimeController
     public void Start() => StartQuest(_defaultQuestId, ignoreLifecycle: true);
 
     public bool StartQuest(string questId) => StartQuest(questId, ignoreLifecycle: true);
+
+    public void SetSimulationRunning(bool running)
+    {
+        if (_simulationRunning == running)
+            return;
+
+        _simulationRunning = running;
+        _activeRuntime?.SetSimulationRunning(running);
+
+        PublishSynthetic(
+            running ? "SimulationStarted" : "SimulationStopped",
+            null,
+            running ? "Симуляция запущена." : "Симуляция остановлена.");
+
+        if (running)
+            EvaluateAutomaticStart();
+    }
+
+    public void SetQuestEnabled(string questId, bool enabled)
+    {
+        if (string.IsNullOrWhiteSpace(questId))
+            return;
+
+        if (enabled)
+            _enabledQuestIds.Add(questId);
+        else
+            _enabledQuestIds.Remove(questId);
+
+        AppLogger.Info(
+            "Quest Runtime: изменена активация квеста.",
+            $"questId={questId}; enabled={enabled}");
+
+        if (!enabled &&
+            _activeRuntime is not null &&
+            _activeRuntime.State.QuestId.Equals(questId, StringComparison.OrdinalIgnoreCase))
+        {
+            _activeRuntime.Stop("Квест деактивирован в Simulator.");
+            DisposeActiveRuntime();
+        }
+
+        if (_simulationRunning)
+            EvaluateAutomaticStart();
+    }
 
     public void Stop(string reason = "Runtime остановлен")
     {
@@ -98,7 +149,14 @@ public sealed class QuestRuntimeCoordinator : IQuestRuntimeController
         };
     }
 
-    public void Tick() => _activeRuntime?.Tick();
+    public void Tick()
+    {
+        if (!_simulationRunning)
+            return;
+
+        _activeRuntime?.Tick();
+        EvaluateAutomaticStart();
+    }
 
     private bool StartQuest(string questId, bool ignoreLifecycle)
     {
@@ -124,6 +182,9 @@ public sealed class QuestRuntimeCoordinator : IQuestRuntimeController
         if (!ignoreLifecycle && !CanAutoStart(definition, status))
             return false;
 
+        if (!ignoreLifecycle && !_enabledQuestIds.Contains(definition.Id))
+            return false;
+
         if (_activeRuntime is not null)
         {
             _activeRuntime.Stop("Запускается другой Quest Runtime.");
@@ -136,6 +197,7 @@ public sealed class QuestRuntimeCoordinator : IQuestRuntimeController
             _sceneRuntime);
 
         _activeRuntime.Published += ActiveRuntime_Published;
+        _activeRuntime.SetSimulationRunning(_simulationRunning);
         _lastState = _activeRuntime.State;
         _activeRuntime.Start();
 
@@ -147,6 +209,9 @@ public sealed class QuestRuntimeCoordinator : IQuestRuntimeController
 
     private void EvaluateAutomaticStart()
     {
+        if (!_simulationRunning)
+            return;
+
         var runtimeBusy = _activeRuntime is not null &&
             _activeRuntime.State.Status is QuestRuntimeStatus.Running or QuestRuntimeStatus.Waiting;
 
@@ -168,6 +233,8 @@ public sealed class QuestRuntimeCoordinator : IQuestRuntimeController
                 continue;
 
             var status = GetQuestStatus(definition.Id);
+            if (!_enabledQuestIds.Contains(definition.Id))
+                continue;
             if (!CanAutoStart(definition, status))
                 continue;
 
@@ -223,6 +290,17 @@ public sealed class QuestRuntimeCoordinator : IQuestRuntimeController
             .FirstOrDefault(item =>
                 item.QuestId.Equals(questId, StringComparison.OrdinalIgnoreCase))
             ?.Status ?? QuestStatus.Available;
+    }
+
+    private void InitializeEnabledQuestIds()
+    {
+        _enabledQuestIds.Clear();
+        foreach (var definition in SafeLoadDefinitions())
+        {
+            var status = GetQuestStatus(definition.Id);
+            if (status != QuestStatus.Archived)
+                _enabledQuestIds.Add(definition.Id);
+        }
     }
 
     private void RefreshQuestStatuses(bool forceAvailable = false)
