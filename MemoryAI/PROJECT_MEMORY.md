@@ -420,3 +420,32 @@ The canonical Scene pipeline is now fully interactive for dialogue:
 Dialogue uses `InterfaceDialogue` and a unique requestId. The Simulator interface renders the dialogue and sends `DialogueContinue`; Scene Runtime validates the requestId before advancing. Choice keeps the existing `InterfaceChoiceDialog / ChoiceSelected` contract.
 
 Do not reintroduce direct Quest-level dialogue presentation as the primary path. New conversation content belongs to Scene resources. The current sandbox keeps Dialogue/Choice resource collections inside SceneDefinition; `.aqdialogue` and `.aqchoice` are reserved resource file types for the later resource extraction layer, not required to break Scene ownership now.
+
+## 2026-09-22 — 1.0.40.136 Dialogue/Choice Authoring R1
+
+Scene Editor получил специализированное редактирование conversation content без выноса Dialogue/Choice в отдельные файлы.
+
+Архитектурный контракт:
+- SceneDefinition.Graph отвечает за порядок, ветвление, sockets и connections;
+- SceneDefinition.Dialogues и SceneDefinition.Choices являются canonical content resources текущей Scene;
+- Dialogue node содержит только стабильную ссылку dialogueId;
+- Choice node содержит стабильную ссылку choiceId;
+- ID Dialogue/Choice/Option не редактируются как обычный текстовый параметр;
+- SceneGraphStore является единственным владельцем мутаций контента, поэтому authoring получает Undo/Redo и ту же canonical persistence, что и graph;
+- Choice options сохраняют свои stable IDs и OutputSocketId; добавление создаёт новый stable socket ID, удаление подключённой ветки запрещается до разрыва связи;
+- при изменении текста Choice обновляются только подписи существующих Output sockets, без пересоздания sockets и потери connections;
+- максимум Choice options: 16.
+
+UI ориентирован на актуальный WolvenKit Scene Editor:
+- Node Properties остаётся contextual inspector;
+- Dialogue/Choice content редактируется специализированным UI при выборе соответствующей graph node;
+- есть список resource IDs, Speaker, Text/Title, редактирование option text и Add Option;
+- отсутствующая ссылка явно показывается как ошибка, а для Dialogue/Choice предусмотрено создание resource прямо из node;
+- при отсутствии выбранной node inspector показывает обзор Dialogue/Choice resources и позволяет открыть связанную graph node.
+
+Сверка с WolvenKit показала правильный долгосрочный паттерн: Scene Editor отделяет Node Properties от Dialogue content, использует отдельную dialogue-oriented область авторинга, создаёт stable IDs и обновляет Choice sockets без необязательной регенерации. Не копируется внутренний RED4 screenplay/localization формат; в sandbox сохраняется собственная canonical модель.
+
+Проверки:
+- добавлены domain regression tests для создания/изменения Dialogue, создания Choice, add/remove option, сохранения stable IDs и запрета удаления подключённой ветки;
+- Playwright Scene Graph smoke расширен проверками Dialogue/Choice authoring;
+- физический build/publish и GitHub Actions run на этой версии здесь не запускались.
