@@ -112,6 +112,164 @@ public sealed class SceneGraphStoreTests
             item => item.Severity == GraphDiagnosticSeverity.Error);
     }
 
+
+    [Fact]
+    public void CreateDialogueForNodeCreatesAndLinksStableResource()
+    {
+        var scene = SceneCatalogFactory.CreateStarter().Scenes.Single();
+        var graph = scene.Graph with
+        {
+            Nodes = scene.Graph.Nodes.Select(node =>
+                node.NodeId == "dialogue"
+                    ? node with
+                    {
+                        Parameters = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+                    }
+                    : node).ToArray()
+        };
+        var store = new SceneGraphStore(scene with { Graph = graph });
+
+        var dialogue = store.CreateDialogueForNode("dialogue");
+
+        Assert.StartsWith("dialogue.", dialogue.Id);
+        Assert.Equal(dialogue.Id, store.FindNode("dialogue")!.Parameters["dialogueId"]);
+        Assert.Equal(dialogue, store.FindDialogue(dialogue.Id));
+    }
+
+    [Fact]
+    public void UpdateDialogueIsUndoable()
+    {
+        var scene = SceneCatalogFactory.CreateStarter().Scenes.Single();
+        var store = new SceneGraphStore(scene);
+        var original = store.FindDialogue("ruslan.greeting")!;
+
+        Assert.True(store.UpdateDialogue("ruslan.greeting", "Новый Руслан", "Новый текст."));
+
+        var updated = store.FindDialogue("ruslan.greeting")!;
+        Assert.Equal("Новый Руслан", updated.Speaker);
+        Assert.Equal("Новый текст.", updated.Text);
+
+        Assert.True(store.Undo());
+        Assert.Equal(original, store.FindDialogue("ruslan.greeting"));
+    }
+
+    [Fact]
+    public void CreateChoiceForNodeUsesExistingOutputSockets()
+    {
+        var scene = SceneCatalogFactory.CreateStarter().Scenes.Single();
+        var graph = scene.Graph with
+        {
+            Nodes = scene.Graph.Nodes.Select(node =>
+                node.NodeId == "choice"
+                    ? node with
+                    {
+                        Parameters = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+                    }
+                    : node).ToArray()
+        };
+        var store = new SceneGraphStore(scene with { Graph = graph });
+
+        var choice = store.CreateChoiceForNode("choice");
+        var node = store.FindNode("choice")!;
+
+        Assert.StartsWith("choice.", choice.Id);
+        Assert.Equal(2, choice.Options.Count);
+        Assert.All(choice.Options, option =>
+            Assert.Contains(node.Sockets, socket =>
+                socket.Direction == SocketDirection.Output &&
+                socket.SocketId == option.OutputSocketId));
+        Assert.Equal(choice.Id, node.Parameters["choiceId"]);
+    }
+
+    [Fact]
+    public void ChoiceOptionAddCreatesStableSocketAndUndoRestores()
+    {
+        var scene = SceneCatalogFactory.CreateStarter().Scenes.Single();
+        var store = new SceneGraphStore(scene);
+        var before = store.FindChoice("ruslan.offer")!.Options.Count;
+
+        var option = store.AddChoiceOption("choice", "ruslan.offer");
+        var updated = store.FindChoice("ruslan.offer")!;
+
+        Assert.Equal(before + 1, updated.Options.Count);
+        Assert.StartsWith("ruslan.offer.option.", option.Id);
+        Assert.StartsWith("choice.option.", option.OutputSocketId);
+        Assert.Contains(store.FindNode("choice")!.Sockets, socket =>
+            socket.SocketId == option.OutputSocketId &&
+            socket.Direction == SocketDirection.Output);
+
+        Assert.True(store.Undo());
+        Assert.Equal(before, store.FindChoice("ruslan.offer")!.Options.Count);
+    }
+
+    [Fact]
+    public void ConnectedChoiceOptionCannotBeRemoved()
+    {
+        var scene = SceneCatalogFactory.CreateStarter().Scenes.Single();
+        var store = new SceneGraphStore(scene);
+
+        var removed = store.RemoveChoiceOption(
+            "choice",
+            "ruslan.offer",
+            "ruslan.offer.accept",
+            out var error);
+
+        Assert.False(removed);
+        Assert.Contains("подключён", error, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void UnconnectedChoiceOptionCanBeRemovedWithoutBreakingOtherSockets()
+    {
+        var scene = SceneCatalogFactory.CreateStarter().Scenes.Single();
+        var store = new SceneGraphStore(scene);
+
+        Assert.True(store.RemoveChoiceOption(
+            "choice",
+            "ruslan.offer",
+            "ruslan.offer.decline",
+            out var error), error);
+
+        Assert.DoesNotContain(
+            store.FindChoice("ruslan.offer")!.Options,
+            option => option.Id.Equals("ruslan.offer.decline", StringComparison.OrdinalIgnoreCase));
+        Assert.DoesNotContain(
+            store.FindNode("choice")!.Sockets,
+            socket => socket.SocketId.Equals("choice.decline", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(
+            store.FindNode("choice")!.Sockets,
+            socket => socket.SocketId.Equals("choice.accept", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public void UpdatingChoicePreservesOptionAndSocketIds()
+    {
+        var scene = SceneCatalogFactory.CreateStarter().Scenes.Single();
+        var store = new SceneGraphStore(scene);
+        var before = store.FindChoice("ruslan.offer")!;
+
+        var optionTexts = before.Options.ToDictionary(
+            option => option.Id,
+            option => option.Text + " ✱",
+            StringComparer.OrdinalIgnoreCase);
+
+        Assert.True(store.UpdateChoice(
+            before.Id,
+            "Новое название",
+            "Новый Speaker",
+            "Новый вопрос",
+            optionTexts,
+            out var error), error);
+
+        var after = store.FindChoice(before.Id)!;
+        Assert.Equal(before.Options.Select(option => option.Id), after.Options.Select(option => option.Id));
+        Assert.Equal(before.Options.Select(option => option.OutputSocketId), after.Options.Select(option => option.OutputSocketId));
+        Assert.Equal("Новый вопрос", after.Text);
+        Assert.Contains(
+            store.FindNode("choice")!.Sockets,
+            socket => socket.SocketId == "choice.accept" && socket.Name.Contains("Да, берусь.", StringComparison.Ordinal));
+    }
+
     private static void AssertNoOverlaps(SceneGraph graph)
     {
         for (var i = 0; i < graph.Nodes.Count; i++)
