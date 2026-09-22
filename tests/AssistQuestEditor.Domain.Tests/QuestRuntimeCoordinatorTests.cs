@@ -15,6 +15,7 @@ public sealed class QuestRuntimeCoordinatorTests
         var hub = new SimulatorDataSourceAdapter(new[] { point }).Channels;
         var sceneRuntime = new SceneRuntime(SceneCatalogFactory.CreateStarter(), hub);
         using var coordinator = new QuestRuntimeCoordinator(hub, sceneRuntime, () => new[] { main, side }, "main");
+        coordinator.SetSimulationRunning(true);
 
         hub.Get<PlayerState>("player").Set(
             new PlayerState(point.Position, 0, 0, false, true),
@@ -51,6 +52,7 @@ public sealed class QuestRuntimeCoordinatorTests
         var hub = new SimulatorDataSourceAdapter(new[] { point }).Channels;
         var sceneRuntime = new SceneRuntime(SceneCatalogFactory.CreateStarter(), hub);
         using var coordinator = new QuestRuntimeCoordinator(hub, sceneRuntime, () => new[] { side }, "side");
+        coordinator.SetSimulationRunning(true);
 
         var starts = 0;
         coordinator.Published += (_, e) =>
@@ -78,6 +80,34 @@ public sealed class QuestRuntimeCoordinatorTests
 
         Assert.Equal(QuestRuntimeStatus.Completed, coordinator.State.Status);
         Assert.Equal(2, starts);
+    }
+
+    [Fact]
+    public void DisabledQuestAndStoppedSimulationDoNotReactToProximity()
+    {
+        var point = new WorldPoint("cache", "Тайник", "Test", new WorldCoordinate(100, 0, 0));
+        var quest = Definition("quest", point.Id, null, null, false, GraphWithEnd("quest"));
+
+        var hub = new SimulatorDataSourceAdapter(new[] { point }).Channels;
+        var sceneRuntime = new SceneRuntime(SceneCatalogFactory.CreateStarter(), hub);
+        using var coordinator = new QuestRuntimeCoordinator(hub, sceneRuntime, () => new[] { quest }, "quest");
+
+        hub.Get<PlayerState>("player").Set(
+            new PlayerState(point.Position, 0, 0, false, true),
+            "Stopped simulation");
+
+        Assert.Equal(QuestRuntimeStatus.Stopped, coordinator.State.Status);
+
+        coordinator.SetQuestEnabled("quest", false);
+        coordinator.SetSimulationRunning(true);
+        hub.Get<PlayerState>("player").Set(
+            new PlayerState(new WorldCoordinate(0, 0, 0), 0, 0, false, true),
+            "Outside");
+        hub.Get<PlayerState>("player").Set(
+            new PlayerState(point.Position, 0, 0, false, true),
+            "Disabled quest");
+
+        Assert.Equal(QuestRuntimeStatus.Stopped, coordinator.State.Status);
     }
 
     private static QuestDefinition Definition(
