@@ -14,6 +14,7 @@
     selection: { point: null }
   };
   let questGraph = null;
+  let sceneCatalog = [];
   let selectedGraphNodeId = null;
   let pendingOutput = null;
   let graphHistory = { canUndo: false, canRedo: false };
@@ -871,7 +872,20 @@
     return "<div class='tableLike'>" + entries.map(([key, value]) =>
       "<div class='tableRow' data-param-row>" +
         "<input class='toolButton' data-param-key value='" + escapeHtml(key) + "' title='" + escapeHtml(parameterLabel(key)) + "'>" +
-        "<input class='toolButton' data-param-value value='" + escapeHtml(value) + "'>" +
+        (node.nodeType === "DialogueScene" && key === "sceneId"
+          ? "<select class='toolButton' data-param-value>" +
+              (sceneCatalog.some(scene => scene.id === value)
+                ? ""
+                : "<option value='" + escapeHtml(value) + "' selected>" +
+                    escapeHtml(value || "— отсутствует в Scene catalog —") + "</option>") +
+              sceneCatalog.map(scene =>
+                "<option value='" + escapeHtml(scene.id) + "'" +
+                  (scene.id === value ? " selected" : "") + ">" +
+                  escapeHtml(scene.title + " (" + scene.id + ")") +
+                "</option>"
+              ).join("") +
+            "</select>"
+          : "<input class='toolButton' data-param-value value='" + escapeHtml(value) + "'>") +
         "<button class='toolButton' data-param-remove title='Удалить параметр'>×</button>" +
       "</div>"
     ).join("") + "</div>";
@@ -1517,6 +1531,11 @@
   const handleWebviewMessage = event => {
     const data = typeof event.data === "string" ? JSON.parse(event.data) : event.data;
 
+    if (data?.type === "scene_catalog") {
+      sceneCatalog = Array.isArray(data.scenes) ? data.scenes : [];
+      if (currentId() === "graph") render();
+      return;
+    }
     if (data?.type === "quest_graph") {
       questGraph = data.graph;
       graphDocument = {
