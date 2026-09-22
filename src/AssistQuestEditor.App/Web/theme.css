@@ -418,3 +418,254 @@ input,select,textarea{padding:4px 5px;border-radius:4px;font-size:10px}textarea{
   .playerOverlay.visible{grid-template-columns:1fr}.characterPanel{display:none}
   .playerOverlay{height:min(560px,calc(100% - 98px));width:min(480px,calc(100% - 32px))}
 }
+
+
+/* Dialogue Workspace */
+.dialogueWorkspaceToolbar {
+  align-items: center;
+  gap: 8px;
+}
+
+.dialogueWorkspaceToolbar #dialogueSceneResource {
+  min-width: 210px;
+}
+
+.dialogueWorkspace {
+  display: grid;
+  grid-template-columns: minmax(260px, 340px) minmax(0, 1fr);
+  gap: 0;
+  height: calc(100% - 4px);
+  min-height: 560px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+  background: #111419;
+}
+
+.dialogueResourcePane {
+  min-width: 0;
+  border-right: 1px solid var(--border);
+  background: var(--panel);
+  display: flex;
+  flex-direction: column;
+}
+
+.dialogueResourceHeader {
+  display: grid;
+  gap: 8px;
+  padding: 10px;
+  border-bottom: 1px solid var(--border);
+  background: var(--panel-alt);
+}
+
+.dialogueResourceTabs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+}
+
+.dialogueResourceHeader input {
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.dialogueResourceList {
+  min-height: 0;
+  overflow-y: auto;
+  padding: 6px;
+}
+
+.dialogueResourceItem {
+  display: block;
+  width: 100%;
+  margin: 0 0 6px;
+  padding: 9px 10px;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+}
+
+.dialogueResourceItem:hover {
+  border-color: var(--border);
+  background: rgba(255,255,255,.035);
+}
+
+.dialogueResourceItem.active {
+  border-color: var(--accent);
+  background: rgba(255,145,0,.10);
+}
+
+.dialogueResourceItemTop {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.dialogueResourceItemTop strong {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dialogueLinkBadge {
+  flex: 0 0 auto;
+  font-size: 10px;
+  letter-spacing: .05em;
+  text-transform: uppercase;
+  opacity: .8;
+}
+
+.dialogueLinkBadge.muted {
+  opacity: .45;
+}
+
+.dialogueResourceSpeaker {
+  display: block;
+  margin-top: 5px;
+  font-size: 12px;
+  color: var(--accent);
+}
+
+.dialogueResourcePreview {
+  display: block;
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.35;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+}
+
+.dialogueEditorPane {
+  min-width: 0;
+  overflow: auto;
+  padding: 18px 20px 24px;
+}
+
+.dialogueEditorHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 14px;
+  margin-bottom: 10px;
+}
+
+.dialogueEditorHeader h2 {
+  margin: 4px 0 0;
+}
+
+.dialogueResourceMeta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 14px;
+}
+
+.dialogueEditorPane textarea,
+.dialogueEditorPane input {
+  box-sizing: border-box;
+}
+
+.dialogueChoiceOptionsHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  margin-top: 18px;
+}
+
+.dialogueChoiceOptions {
+  display: grid;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.dialogueChoiceOption {
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr);
+  gap: 10px;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: rgba(255,255,255,.02);
+}
+
+.dialogueChoiceOptionIndex {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: rgba(255,255,255,.06);
+  color: var(--accent);
+  font-weight: 700;
+}
+
+.dialogueChoiceOptionBody {
+  min-width: 0;
+}
+
+.dialogueChoiceOptionMeta {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 6px;
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.dialogueChoiceOptionMeta strong {
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dialogueChoiceOptionMeta span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dialogueChoiceOptionInput {
+  width: 100%;
+}
+
+.dialogueChoiceOptionTarget {
+  margin-top: 5px;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.dialogueChoiceOptionRemove {
+  margin-top: 7px;
+}
+
+.dialogueLinkedNode small {
+  margin-top: 4px;
+}
+
+@media (max-width: 1050px) {
+  .dialogueWorkspace {
+    grid-template-columns: 230px minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 800px) {
+  .dialogueWorkspace {
+    grid-template-columns: 1fr;
+    grid-template-rows: minmax(220px, 36%) minmax(0, 1fr);
+  }
+
+  .dialogueResourcePane {
+    border-right: 0;
+    border-bottom: 1px solid var(--border);
+  }
+}
