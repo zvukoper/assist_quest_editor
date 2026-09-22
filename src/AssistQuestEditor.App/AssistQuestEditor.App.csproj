@@ -53,11 +53,11 @@
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
       <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
     </None>
-    <None Include="../../data/quests/*.json" LinkBase="data/quests">
+    <None Include="../../data/quests/*.aqquest" LinkBase="data/quests">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
       <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
     </None>
-    <None Include="../../data/scenes/*.json" LinkBase="data/scenes">
+    <None Include="../../data/scenes/*.aqscene" LinkBase="data/scenes">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
       <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
     </None>
