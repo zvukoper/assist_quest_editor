@@ -56,6 +56,51 @@ public sealed class MainForm : WebViewForm
     private void MainForm_BrowserReady(object? sender, EventArgs e)
     {
         OpenSimulator();
+
+        var startupPath = FileActivationRequest.Consume();
+        if (!string.IsNullOrWhiteSpace(startupPath))
+        {
+            BeginInvoke(() => OpenStartupResource(startupPath));
+        }
+    }
+
+    private void OpenStartupResource(string path)
+    {
+        if (!ResourceFileTypes.TryGet(Path.GetExtension(path), out var resource))
+        {
+            MessageBox.Show(this, "Неизвестный тип Assist Quest ресурса: " + Path.GetExtension(path),
+                "Открытие ресурса", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            return;
+        }
+
+        var editorKey = resource.Kind switch
+        {
+            "Quest" => "editor.html#graph",
+            "Scene" => "editor.html#scene",
+            _ => string.Empty
+        };
+
+        if (string.IsNullOrWhiteSpace(editorKey))
+        {
+            MessageBox.Show(this, resource.FriendlyName + " зарегистрирован в системе, но соответствующий редактор ещё не реализован.",
+                "Открытие ресурса", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            return;
+        }
+
+        OpenEditor(resource.Kind.Equals("Quest", StringComparison.OrdinalIgnoreCase) ? "graph" : "scene");
+
+        if (_editors.TryGetValue(editorKey, out var editor) && !editor.IsDisposed)
+        {
+            try
+            {
+                editor.OpenResourcePath(path);
+            }
+            catch (Exception ex)
+            {
+                AppLogger.Error("Не удалось открыть ресурс через ассоциацию файла.", ex, "path=" + path);
+                MessageBox.Show(this, ex.Message, "Ошибка открытия ресурса", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
+        }
     }
 
     protected override void OnWebMessage(string json)
