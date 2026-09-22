@@ -1633,6 +1633,11 @@
       return;
     }
 
+    if (data.type === "scene_content_selected") {
+      window.__assistDialogueWorkspace?.selectResource?.(data.kind, data.id);
+      return;
+    }
+
     if (data.type === "scene_definition") {
       sceneGraph = data.definition?.graph || null;
       sceneDocument = {
