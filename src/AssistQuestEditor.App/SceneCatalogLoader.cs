@@ -19,15 +19,12 @@ public static class SceneCatalogLoader
             return SceneCatalogFactory.CreateStarter();
         }
 
-        var options = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
-        options.Converters.Add(new JsonStringEnumConverter());
-
         var scenes = new List<SceneDefinition>();
         foreach (var path in Directory.EnumerateFiles(directory, "*.aqscene", SearchOption.TopDirectoryOnly).OrderBy(path => path))
         {
             try
             {
-                var document = JsonSerializer.Deserialize<SceneDefinitionDocument>(File.ReadAllText(path), options);
+                var document = ResourceJsonFormat.Deserialize<SceneDefinitionDocument>(File.ReadAllText(path));
                 if (document?.Definition is null)
                 {
                     AppLogger.Warn("Scene Definition пропущена: пустой документ.", $"path={path}");

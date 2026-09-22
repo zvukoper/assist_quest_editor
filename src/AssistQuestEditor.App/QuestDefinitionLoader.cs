@@ -26,9 +26,8 @@ public static class QuestDefinitionLoader
 
         try
         {
-            var options = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
-            options.Converters.Add(new JsonStringEnumConverter());
-            var document = JsonSerializer.Deserialize<QuestDefinitionDocument>(File.ReadAllText(path), options);
+            // Чтение и запись идут через один контракт формата resource-файла.
+            var document = ResourceJsonFormat.Deserialize<QuestDefinitionDocument>(File.ReadAllText(path));
 
             if (document?.Definition?.Graph is null || document.SchemaVersion != 1 || !string.Equals(document.Format, "aqquest", StringComparison.OrdinalIgnoreCase))
             {
@@ -51,6 +50,7 @@ public static class QuestDefinitionLoader
         var graph = QuestGraphFactory.CreateStarter();
         return new QuestDefinitionDocument(
             1,
+            "aqquest",
             new QuestDefinition(graph.Id, graph.Name, string.Empty, graph, Array.Empty<string>()));
     }
 }

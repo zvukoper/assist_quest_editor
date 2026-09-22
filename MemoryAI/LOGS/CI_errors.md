@@ -3,9 +3,9 @@
 Файл перезаписывается каждым прогоном `ci/run_local.ps1`.
 CI его не проверяет и не загружает: это диагностический материал для агента.
 
-- Время: 2026-09-22 11:09:55
+- Время: 2026-09-22 11:19:22
 - Ветка: main
-- Commit: 1d29b5a
+- Commit: 9558f17
 - Итог: успех
 
 ## Сводка
@@ -14,20 +14,20 @@ CI его не проверяет и не загружает: это диагн�
 |---|---|---|---|
 | Установить Playwright | успех | 0 |  |
 | Установить Chromium | успех | 0 |  |
-| Playwright + Chromium smoke | успех | 0.6 |  |
+| Playwright + Chromium smoke | успех | 0.5 |  |
 | Контракт simulator <-> editor | успех | 0.6 |  |
 | Горячие клавиши Simulator | успех | 0.8 |  |
 | Маркер игрока Simulator | успех | 0.8 |  |
-| Quest Graph Playwright smoke | успех | 1.9 |  |
+| Quest Graph Playwright smoke | успех | 2 |  |
 | Перестроение нод Quest Graph | успех | 0.7 |  |
 | Scene Graph UI smoke | успех | 1.5 |  |
 | Dialogue Workspace UI smoke | успех | 1 |  |
-| Scene interface UI smoke | успех | 1 |  |
+| Scene interface UI smoke | успех | 1.1 |  |
 | Pan следует за курсором | успех | 0.9 |  |
 | Синтаксис web JavaScript | успех | 0.2 |  |
 | .NET SDK | успех | 0.1 |  |
 | Сборка проектов .NET | успех | 3.3 |  |
-| Тесты домена | успех | 2.8 |  |
+| Тесты домена | успех | 2.7 |  |
 | Single-file publish | пропущено | 0 | пропущено |
 | Проверка памяти (вне CI) | успех | 0.1 |  |
 

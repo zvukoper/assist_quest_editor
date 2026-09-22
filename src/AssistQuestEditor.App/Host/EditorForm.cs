@@ -13,6 +13,7 @@ public sealed class EditorForm : WebViewForm
         Converters = { new JsonStringEnumConverter() }
     };
 
+
     private readonly IDataChannel<PlayerState> _player;
     private readonly IDataChannel<WorldSelectionState> _selection;
     private const int DefinitionSchemaVersion = 1;
@@ -817,7 +818,7 @@ public sealed class EditorForm : WebViewForm
     private void LoadGraphFromPath(string path)
     {
         var json = File.ReadAllText(path);
-        var document = JsonSerializer.Deserialize<QuestDefinitionDocument>(json, WebJsonOptions)
+        var document = JsonSerializer.Deserialize<QuestDefinitionDocument>(json, ResourceJsonFormat.Options)
             ?? throw new InvalidOperationException("Файл Quest Definition пуст или повреждён.");
 
         if (document.SchemaVersion != DefinitionSchemaVersion ||
@@ -868,8 +869,8 @@ public sealed class EditorForm : WebViewForm
         // затирало метаданные квеста.
         var definition = _questGraph.Definition;
 
-        var document = new QuestDefinitionDocument(DefinitionSchemaVersion, definition);
-        var output = JsonSerializer.Serialize(document, WebJsonOptions);
+        var document = new QuestDefinitionDocument(DefinitionSchemaVersion, "aqquest", definition);
+        var output = ResourceJsonFormat.Serialize(document);
         File.WriteAllText(path!, output);
 
         _currentDefinitionPath = path;
@@ -925,7 +926,7 @@ public sealed class EditorForm : WebViewForm
     {
         var document = JsonSerializer.Deserialize<SceneDefinitionDocument>(
             File.ReadAllText(path),
-            WebJsonOptions) ?? throw new InvalidOperationException("Файл Scene Definition пуст или повреждён.");
+            ResourceJsonFormat.Options) ?? throw new InvalidOperationException("Файл Scene Definition пуст или повреждён.");
 
         if (document.SchemaVersion != DefinitionSchemaVersion ||
             !string.Equals(document.Format, "aqscene", StringComparison.OrdinalIgnoreCase))
@@ -978,8 +979,8 @@ public sealed class EditorForm : WebViewForm
         }
 
         _sceneCatalog.Upsert(_sceneGraph.Value);
-        var document = new SceneDefinitionDocument(DefinitionSchemaVersion, _sceneGraph.Value);
-        var output = JsonSerializer.Serialize(document, WebJsonOptions);
+        var document = new SceneDefinitionDocument(DefinitionSchemaVersion, "aqscene", _sceneGraph.Value);
+        var output = ResourceJsonFormat.Serialize(document);
         File.WriteAllText(path!, output);
 
         _sceneDocument.Saved(_sceneGraph.Value.Id, path!);

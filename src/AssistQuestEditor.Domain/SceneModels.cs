@@ -1,3 +1,5 @@
+using System.Text.Json.Serialization;
+
 namespace AssistQuestEditor.Domain;
 
 public enum SceneRuntimeStatus
@@ -59,9 +61,9 @@ public sealed record SceneDefinition(
     IReadOnlyList<SceneChoice> Choices);
 
 public sealed record SceneDefinitionDocument(
-    int SchemaVersion,
-    SceneDefinition Definition,
-    string Format = "aqscene");
+    [property: JsonPropertyOrder(0)] int SchemaVersion,
+    [property: JsonPropertyOrder(1)] string Format,
+    [property: JsonPropertyOrder(2)] SceneDefinition Definition);
 
 public sealed record SceneRuntimeState(
     string? SceneId,

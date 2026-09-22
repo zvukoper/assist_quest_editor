@@ -591,6 +591,7 @@ public sealed class QuestRuntimeTests
 
         var document = new QuestDefinitionDocument(
             1,
+            "aqquest",
             new QuestDefinition(
                 graph.Id,
                 graph.Name,

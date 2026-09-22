@@ -1,3 +1,5 @@
+using System.Text.Json.Serialization;
+
 namespace AssistQuestEditor.Domain;
 
 public enum QuestStatus
@@ -213,9 +215,9 @@ public sealed record QuestDefinition(
     IReadOnlyList<string> SceneIds);
 
 public sealed record QuestDefinitionDocument(
-    int SchemaVersion,
-    QuestDefinition Definition,
-    string Format = "aqquest");
+    [property: JsonPropertyOrder(0)] int SchemaVersion,
+    [property: JsonPropertyOrder(1)] string Format,
+    [property: JsonPropertyOrder(2)] QuestDefinition Definition);
 
 public sealed record DataChannelDescriptor(
     string Key,
