@@ -60,13 +60,19 @@ public static class QuestDefinitionLoader
     /// </summary>
     public static QuestDefinitionDocument LoadDocumentOrFallback()
     {
-        var userPath = Path.Combine(AppPaths.UserQuestRoot, RelativePath);
         var sourcePath = Path.Combine(AppPaths.ResourceRoot, RelativePath);
-        var path = File.Exists(userPath) ? userPath : sourcePath;
+        var userPath = Directory.Exists(AppPaths.UserQuestRoot)
+            ? Directory.EnumerateFiles(
+                    AppPaths.UserQuestRoot,
+                    Path.GetFileName(RelativePath),
+                    SearchOption.AllDirectories)
+                .FirstOrDefault()
+            : null;
+        var path = userPath ?? sourcePath;
 
         AppLogger.Info(
             "QuestDefinitionLoader.LoadDocumentOrFallback()",
-            $"path={path}; userExists={File.Exists(userPath)}; sourceExists={File.Exists(sourcePath)}");
+            $"path={path}; userExists={userPath is not null}; sourceExists={File.Exists(sourcePath)}");
 
         if (!File.Exists(path))
         {
