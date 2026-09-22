@@ -360,16 +360,17 @@ public sealed class SceneGraphStore
                 .ToArray()
         };
 
+        var parameters = NormalizeParameters(node.Parameters);
+        if (parameters.ContainsKey("outputCount"))
+            parameters["outputCount"] = updatedChoice.Options.Count.ToString(CultureInfo.InvariantCulture);
+
         var updatedNode = node with
         {
             Sockets = node.Sockets
                 .Where(socket => !socket.SocketId.Equals(option.OutputSocketId, StringComparison.OrdinalIgnoreCase))
                 .ToArray(),
-            Parameters = NormalizeParameters(node.Parameters)
+            Parameters = parameters
         };
-
-        if (updatedNode.Parameters.ContainsKey("outputCount"))
-            updatedNode.Parameters["outputCount"] = updatedChoice.Options.Count.ToString(CultureInfo.InvariantCulture);
 
         Apply(_value with
         {
