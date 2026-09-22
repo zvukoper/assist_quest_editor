@@ -20,6 +20,7 @@ public sealed class QuestRuntimeCoordinator : IQuestRuntimeController
     private readonly Dictionary<string, bool> _activationReady = new(StringComparer.OrdinalIgnoreCase);
     private readonly HashSet<string> _enabledQuestIds = new(StringComparer.OrdinalIgnoreCase);
     private bool _simulationRunning;
+    private DateTimeOffset? _lastClockTick;
 
     public QuestRuntimeCoordinator(
         IDataChannelHub hub,
@@ -152,8 +153,37 @@ public sealed class QuestRuntimeCoordinator : IQuestRuntimeController
         if (!_simulationRunning)
             return;
 
+        AdvanceWorldClock();
         _activeRuntime?.Tick();
         EvaluateAutomaticStart();
+    }
+
+    /// <summary>
+    /// Двигает игровое время вперёд с реальной скоростью.
+    ///
+    /// Время идёт только при запущенной симуляции: выключенный симулятор —
+    /// визуальный инструмент, и его изменения не должны накапливаться. Шаг
+    /// считается по реальным часам, а не по числу вызовов Tick: таймер UI
+    /// дёргается с плавающим интервалом, и «одно деление = одна секунда» дало
+    /// бы ускорение времени при частых перерисовках.
+    /// </summary>
+    private void AdvanceWorldClock()
+    {
+        var channel = _hub.Get<WorldClockState>("sim-time");
+        var clock = channel.Value;
+        var now = DateTimeOffset.UtcNow;
+
+        if (_lastClockTick is { } previous)
+        {
+            var delta = now - previous;
+            // Отрицательная дельта (перевод часов) игнорируется: время мира не
+            // должно идти назад.
+            if (delta > TimeSpan.Zero)
+                clock = clock with { Elapsed = clock.Elapsed + delta };
+        }
+
+        _lastClockTick = now;
+        channel.Set(clock with { Running = true }, "Игровое время");
     }
 
     private bool StartQuest(string questId, bool ignoreLifecycle)

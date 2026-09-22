@@ -226,6 +226,14 @@ public sealed class SimulatorDataChannelHub : IDataChannelHub
             "Окружение",
             new EnvironmentState("Ясно", 0, "12:30", 5000));
 
+        // Игровое время идёт отдельным каналом: оно часть сохраняемого состояния
+        // мира и обязано переживать перезапуск, тогда как Environment описывает
+        // погоду конкретного кадра.
+        Clock = new DataChannel<WorldClockState>(
+            "sim-time",
+            "Игровое время",
+            WorldClockState.CreateDefault());
+
         System = new DataChannel<SystemState>(
             "system",
             "Система",
@@ -251,6 +259,7 @@ public sealed class SimulatorDataChannelHub : IDataChannelHub
             [Reputation.Key] = Reputation,
             [Telemetry.Key] = Telemetry,
             [Environment.Key] = Environment,
+            [Clock.Key] = Clock,
             [System.Key] = System,
             [Interfaces.Key] = Interfaces
         };
@@ -274,6 +283,7 @@ public sealed class SimulatorDataChannelHub : IDataChannelHub
     public DataChannel<ReputationState> Reputation { get; }
     public DataChannel<TelemetryState> Telemetry { get; }
     public DataChannel<EnvironmentState> Environment { get; }
+    public DataChannel<WorldClockState> Clock { get; }
     public DataChannel<SystemState> System { get; }
     public DataChannel<InterfaceState> Interfaces { get; }
 
@@ -349,6 +359,9 @@ public sealed class SimulatorDataChannelHub : IDataChannelHub
         Reputation.Set(ReputationState.ForNpcs(NpcCatalogFactory.CreateStarter()), "Сброс симулятора");
         Telemetry.Set(new TelemetryState(0, 800, 0, 0, 0, 78, 82, 34, 0, 0, 0, 0, false), "Сброс симулятора");
         Environment.Set(new EnvironmentState("Ясно", 0, "12:30", 5000), "Сброс симулятора");
+        // Игровое время возвращается к дате старта мира: «Сбросить» обнуляет всё
+        // сохранённое состояние, а не только данные игрока.
+        Clock.Set(WorldClockState.CreateDefault(), "Сброс симулятора");
         System.Set(new SystemState(true, "Симулятор", "", "Симуляция сброшена"), "Сброс симулятора");
         Interfaces.Set(new InterfaceState(null), "Сброс симулятора");
     }
@@ -378,6 +391,7 @@ public sealed class SimulatorDataChannelHub : IDataChannelHub
             Reputation.Value,
             Telemetry.Value,
             Environment.Value,
+            Clock.Value,
             System.Value,
             Interfaces.Value);
 

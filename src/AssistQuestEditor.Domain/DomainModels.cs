@@ -267,5 +267,6 @@ public sealed record SimulatorSnapshot(
     ReputationState Reputation,
     TelemetryState Telemetry,
     EnvironmentState Environment,
+    WorldClockState Clock,
     SystemState System,
     InterfaceState Interfaces);

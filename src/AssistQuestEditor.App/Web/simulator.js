@@ -23,6 +23,10 @@
   let panStart = null;
   let selectedPointId = null;
   let hoveredPointId = null;
+  // Игрок под курсором. Отдельное состояние, а не проверка в момент отрисовки:
+  // подсветка должна меняться только по событию мыши (иначе хит-тест считался бы
+  // на каждом кадре) и одновременно управлять и курсором, и перерисовкой.
+  let hoveredPlayer = false;
   let questGraph = null;
 
   let questCatalog = [];
@@ -967,6 +971,24 @@
     ctx.beginPath();
     ctx.arc(q.x, q.y, radius - 2, 0, Math.PI * 2);
     ctx.stroke();
+
+    // Подсветка при наведении: то же белое кольцо со свечением, что у точек СДО.
+    //
+    // Без неё перетаскиваемый игрок ничем не отличался от статичной точки, и о
+    // том, что его вообще можно тянуть, догадаться было нельзя. Кольцо рисуется
+    // снаружи чёрной обводки (радиус + 7 при её внешнем крае радиус + 5), чтобы
+    // не сливаться с разделительными обводками маркера.
+    if (hoveredPlayer) {
+      ctx.beginPath();
+      ctx.arc(q.x, q.y, radius + 7, 0, Math.PI * 2);
+      ctx.lineWidth = 2.5;
+      ctx.strokeStyle = "#ffffff";
+      ctx.shadowColor = "rgba(255,255,255,.75)";
+      ctx.shadowBlur = 9;
+      ctx.stroke();
+      ctx.shadowColor = "transparent";
+      ctx.shadowBlur = 0;
+    }
 
     ctx.restore();
   }
@@ -2477,10 +2499,18 @@
     const pos = pointerPosition(event);
 
     if (!draggingPlayer && !panning && snapshot) {
-      const overQuest = hitQuestMarker(pos.x, pos.y);
-      const hoveredPoint = overQuest ? null : hitPoint(pos.x, pos.y);
+      // Приоритет подсветки повторяет приоритет нажатия: в pointerdown ЛКМ по
+      // игроку начинает перетаскивание раньше любых проверок карты, значит и
+      // подсветка обязана показывать игрока, а не элемент под ним.
+      const overPlayer = hitPlayer(pos.x, pos.y);
+      const overQuest = overPlayer ? null : hitQuestMarker(pos.x, pos.y);
+      const hoveredPoint = (overPlayer || overQuest) ? null : hitPoint(pos.x, pos.y);
 
       let needsRedraw = false;
+      if (overPlayer !== hoveredPlayer) {
+        hoveredPlayer = overPlayer;
+        needsRedraw = true;
+      }
       if (overQuest !== hoveredQuest) needsRedraw = true;
       hoveredQuest = overQuest;
 
@@ -2490,9 +2520,11 @@
         needsRedraw = true;
       }
 
-      // Курсор показывает, что квест кликабелен, даже если под плашкой лежит
-      // точка СДО: приоритет клика у квестовой графики.
-      const cursor = overQuest ? "pointer" : (hoveredPoint ? (hoveredPoint.isCity ? "default" : "pointer") : "default");
+      // Курсор показывает, что элемент доступен: игрок перетаскивается («grab»),
+      // квест и СДО кликабельны («pointer»). Приоритет тот же, что у подсветки.
+      const cursor = overPlayer
+        ? "grab"
+        : (overQuest ? "pointer" : (hoveredPoint ? (hoveredPoint.isCity ? "default" : "pointer") : "default"));
       if (map.style.cursor !== cursor) map.style.cursor = cursor;
 
       if (needsRedraw) drawMap();
@@ -2545,9 +2577,10 @@
   });
 
   map.addEventListener("pointerleave", event => {
-    if (hoveredPointId !== null || hoveredQuest !== null) {
+    if (hoveredPointId !== null || hoveredQuest !== null || hoveredPlayer) {
       hoveredPointId = null;
       hoveredQuest = null;
+      hoveredPlayer = false;
       map.style.cursor = "default";
       drawMap();
     }
