@@ -60,7 +60,20 @@ public sealed class QuestRuntime : IQuestRuntimeController
     public QuestGraph ActiveGraph => _graphStore.Value;
     public bool SimulationRunning { get; private set; } = true;
 
+    public IReadOnlyCollection<string> EnabledQuestIds =>
+        [ActiveGraph.Id];
+
     public void SetSimulationRunning(bool running) => SimulationRunning = running;
+
+    public void SetQuestEnabled(string questId, bool enabled)
+    {
+        if (string.IsNullOrWhiteSpace(questId) ||
+            !ActiveGraph.Id.Equals(questId, StringComparison.OrdinalIgnoreCase))
+            return;
+
+        if (!enabled)
+            Stop("Quest деактивирован.");
+    }
     public event EventHandler<QuestRuntimeEvent>? Published;
 
     public void Start()
