@@ -357,3 +357,15 @@ Regression:
 - `.github/workflows/ci.yml` запускает Dialogue Workspace smoke;
 - domain tests покрывают Dialogue lifecycle;
 - физическая сборка/publish для этой версии ещё не выполнялись здесь.
+
+## 2026-09-22 — 1.0.40.138 Scene Document Context + automatic node layout
+
+- Исправлен общий контекст Scene для Scene Graph и Dialogue Workspace: обе формы используют один `SceneDocumentSession` вместе с общим `SceneGraphStore`.
+- `CurrentPath`, `LastPath` и dirty-state больше не принадлежат отдельному окну. Обычная команда `Сохранить сцену` в Dialogue Workspace сохраняет текущий открытый `.aqscene`; `Сохранить как…` остаётся явной операцией.
+- Переключение Scene через selector/open/new и открытие `.aqscene` через file association теперь учитывают несохранённые изменения и предлагают сохранить, отбросить или отменить.
+- Сверка с актуальным WolvenKit сохранена как архитектурный ориентир: Dialogue/Choice редактируются на Dialogue-вкладке текущего Scene resource; создание помечает именно Scene document dirty. Отдельное окно authoring в нашем sandbox не меняет владение ресурсом.
+- `QuestGraphStore.AddNode` и `SceneGraphStore.AddNode` теперь сразу применяют canonical layout. Создание ноды и её автоперестроение являются одной Undo-операцией.
+- Добавлены regression tests для общего Scene document context и автоматического layout после создания ноды.
+- Три canonical sandbox Scene (`ruslan_start`, `gosha_meat`, `ruslan_finish`) не удалялись: они валидны и используются `tutorial_ruslan_shashlik.aqquest`. Ранее ошибочно размещённый `.aqscene` в `data/quests` уже удалён отдельным предыдущим commit.
+- Текущая версия: `1.0.40.138-QUEST-SCENE-DOCUMENT-CONTEXT-R1`.
+- Физическая сборка/publish после этих изменений здесь не выполнялись; текущие проверки базовой ветки до этой серии изменений были указаны в commit `cd1f616710b1d8fe8ee278403a0c91301f9c9293`.
