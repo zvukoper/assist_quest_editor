@@ -1,0 +1,170 @@
+{
+  "schemaVersion": 1,
+  "format": "aqscene",
+  "definition": {
+    "id": "ruslan_delivery",
+    "title": "Свежий шашлык для Гоши",
+    "description": "Квест-продолжение: доступен только при репутации Гоши от 400. Руслан просит отвезти Гоше свежий шашлык с новыми специями.",
+    "graph": {
+      "id": "ruslan_delivery",
+      "name": "Свежий шашлык для Гоши",
+      "nodes": [
+        {
+          "nodeId": "start",
+          "nodeType": "SceneStart",
+          "title": "Начало сцены",
+          "x": 80,
+          "y": 180,
+          "sockets": [
+            {
+              "socketId": "start.out",
+              "name": "Далее",
+              "direction": "Output",
+              "flowKind": "Normal"
+            }
+          ],
+          "parameters": {}
+        },
+        {
+          "nodeId": "dialogue",
+          "nodeType": "Dialogue",
+          "title": "Руслан предлагает доставку",
+          "x": 340,
+          "y": 180,
+          "sockets": [
+            {
+              "socketId": "dialogue.in",
+              "name": "Вход",
+              "direction": "Input",
+              "flowKind": "Normal"
+            },
+            {
+              "socketId": "dialogue.out",
+              "name": "Далее",
+              "direction": "Output",
+              "flowKind": "Normal"
+            }
+          ],
+          "parameters": {
+            "dialogueId": "ruslan.delivery.greeting"
+          }
+        },
+        {
+          "nodeId": "choice",
+          "nodeType": "Choice",
+          "title": "Взять заказ на доставку",
+          "x": 640,
+          "y": 180,
+          "sockets": [
+            {
+              "socketId": "choice.in",
+              "name": "Вход",
+              "direction": "Input",
+              "flowKind": "Normal"
+            },
+            {
+              "socketId": "choice.accept",
+              "name": "Согласиться",
+              "direction": "Output",
+              "flowKind": "Normal"
+            },
+            {
+              "socketId": "choice.decline",
+              "name": "Отказаться",
+              "direction": "Output",
+              "flowKind": "Normal"
+            }
+          ],
+          "parameters": {
+            "choiceId": "ruslan.delivery"
+          }
+        },
+        {
+          "nodeId": "accept",
+          "nodeType": "SceneEnd",
+          "title": "Сцена завершена: заказ взят",
+          "x": 960,
+          "y": 120,
+          "sockets": [
+            {
+              "socketId": "accept.in",
+              "name": "Вход",
+              "direction": "Input",
+              "flowKind": "Normal"
+            }
+          ],
+          "parameters": {}
+        },
+        {
+          "nodeId": "decline",
+          "nodeType": "SceneEnd",
+          "title": "Сцена завершена: отказ",
+          "x": 960,
+          "y": 250,
+          "sockets": [
+            {
+              "socketId": "decline.in",
+              "name": "Вход",
+              "direction": "Input",
+              "flowKind": "Normal"
+            }
+          ],
+          "parameters": {}
+        }
+      ],
+      "connections": [
+        {
+          "fromNodeId": "start",
+          "fromSocketId": "start.out",
+          "toNodeId": "dialogue",
+          "toSocketId": "dialogue.in"
+        },
+        {
+          "fromNodeId": "dialogue",
+          "fromSocketId": "dialogue.out",
+          "toNodeId": "choice",
+          "toSocketId": "choice.in"
+        },
+        {
+          "fromNodeId": "choice",
+          "fromSocketId": "choice.accept",
+          "toNodeId": "accept",
+          "toSocketId": "accept.in"
+        },
+        {
+          "fromNodeId": "choice",
+          "fromSocketId": "choice.decline",
+          "toNodeId": "decline",
+          "toSocketId": "decline.in"
+        }
+      ]
+    },
+    "dialogues": [
+      {
+        "id": "ruslan.delivery.greeting",
+        "speaker": "Руслан",
+        "text": "Гоша уже оценил твою работу. Свези ему свежий шашлык с новыми специями — заодно и сам попробуешь."
+      }
+    ],
+    "choices": [
+      {
+        "id": "ruslan.delivery",
+        "title": "Доставка шашлыка",
+        "speaker": "Руслан",
+        "text": "Отвезёшь шашлык Гоше?",
+        "options": [
+          {
+            "id": "ruslan.delivery.accept",
+            "text": "Отвезу.",
+            "outputSocketId": "choice.accept"
+          },
+          {
+            "id": "ruslan.delivery.decline",
+            "text": "Позже.",
+            "outputSocketId": "choice.decline"
+          }
+        ]
+      }
+    ]
+  }
+}
