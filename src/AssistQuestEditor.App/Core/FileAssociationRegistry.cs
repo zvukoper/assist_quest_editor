@@ -144,7 +144,7 @@ public static class FileAssociationRegistry
                     // REG_EXPAND_SZ позволяет не зашивать конкретный профиль
                     // пользователя в реестр.
                     var iconValue =
-                        QuotePath("%LOCALAPPDATA%\" + IconDirectoryRelative + "\\" + resource.IconFileName) +
+                        QuotePath($@"%LOCALAPPDATA%\{IconDirectoryRelative}\{resource.IconFileName}") +
                         ",0";
 
                     icon.SetValue(

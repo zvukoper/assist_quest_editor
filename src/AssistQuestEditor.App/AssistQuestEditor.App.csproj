@@ -50,7 +50,7 @@
       <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
     </None>
     <None Include="../../data/world/cities.json" Link="data/world/cities.json">
-      <CopyToOutputDirectory>PreserveNewest</CopyToPublishDirectory>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
       <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
     </None>
     <None Include="../../data/quests/*.aqquest" LinkBase="data/quests">
