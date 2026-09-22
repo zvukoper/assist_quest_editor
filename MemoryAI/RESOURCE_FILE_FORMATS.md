@@ -166,6 +166,18 @@ publish/
 лишний ресурс, несовместимую схему, ресурс без схемы, отсутствующий и повреждённый
 манифест, а также выбор каталога ресурсов.
 
+## Quest lifecycle and activation
+
+.aqquest является самостоятельным документом Quest. Один Quest Graph не должен продолжаться прямым graph connection в другой .aqquest: граница документа должна оставаться явной.
+
+Для sandbox-runtime условия добровольной активации хранятся в QuestDefinition.Activation:
+
+- Manual — запуск только явной командой;
+- Proximity — активация по WorldPoint и радиусу;
+- RequiredReputationNpcId / RequiredReputation — дополнительный runtime gate;
+- Repeatable — после завершения ресурс может быть активирован снова на следующем входе в область.
+
+Это runtime-метаданные поверх canonical Quest resource. Они не превращают Quest в UI-окно: расширение .aqquest по-прежнему обозначает тип ресурса, а редактор лишь предоставляет authoring surface.
 ## Architectural rule
 
 Do not tie an extension to a UI window. A future combined editor can still open `.aqscene`.

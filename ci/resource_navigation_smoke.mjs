@@ -62,6 +62,9 @@ try {
   }, questGraph);
 
   await page.locator("[data-open-reference='ruslan_start']").waitFor();
+  await page.locator("#openSceneReference").waitFor();
+  if (await page.locator("#openSceneReference").innerText() !== "Открыть сцену")
+    throw new Error("Inspector navigation button is not visibly labelled «Открыть сцену».");
   await page.locator("[data-open-reference='ruslan_start']").click();
   const openMessage = await page.evaluate(() => window.__messages.find(item => item.action === "graph_open_scene"));
   if (!openMessage || openMessage.nodeId !== "dialogue-scene" || openMessage.sceneId !== "ruslan_start")

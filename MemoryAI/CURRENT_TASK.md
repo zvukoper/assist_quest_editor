@@ -564,3 +564,10 @@ UI: правая панель персонажа получила табы «П�
 - отказ в Quest 3 завершает только его;
 - Inspector явно показывает «Открыть сцену» у DialogueScene.sceneId;
 - Scene/Dialogue Workspace явно показывают «Вернуться в Quest Graph» и возвращают к исходному NodeId.
+
+## 2026-09-22 — 1.0.40.146 Quest Activation Edge Fix
+
+- Repeatable Quest activation теперь является edge-triggered: readiness обновляется на каждом изменении Player/Reputation, но повторный запуск происходит только при переходе из not ready в ready.
+- Поэтому квест Гоши не перезапускается от обычного движения внутри города или от Tick; требуется выйти из области и вернуться либо заново создать условие активации.
+- UI resource navigation smoke дополнительно проверяет, что в Inspector видна кнопка «Открыть сцену».
+- WebView HTML version synchronized to 1.0.40.146-QUEST-ACTIVATION-EDGE-FIX.
