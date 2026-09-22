@@ -219,3 +219,36 @@ Scene Editor R1 переведён с UI-заглушки на canonical pipelin
 Также SceneGraphLayout синхронизирован с каноническим Quest Graph layout, а theme CSS получил те же #questGraphSvg эффекты для #sceneGraphSvg.
 
 Версия физического тестирования: 1.0.40.132-QUEST-SCENE-EDITOR-R2.
+
+
+## 2026-09-22 — 1.0.40.133 Resource Formats R1
+
+Зафиксирован и внедрён стабильный реестр типизированных ресурсов:
+
+- `.aqquest` — Quest;
+- `.aqscene` — Scene;
+- `.aqdialogue` — Dialogue;
+- `.aqcampaign` — Campaign;
+- `.aqpoint` — World Point;
+- `.aqcity` — City;
+- `.aqitem` — Item definition;
+- `.aqloc` — Localization;
+- `.aqregistry` — Node Registry;
+- `.aqsnapshot` — Runtime Snapshot;
+- `.aqresource` — зарезервированный generic resource.
+
+Правило: расширение описывает семантический тип ресурса, а не окно редактора; версия схемы меняется через `schemaVersion`, расширение при этом не меняется. Канонический реестр находится в `src/AssistQuestEditor.App/Core/ResourceFileTypes.cs`, подробная спецификация — `MemoryAI/RESOURCE_FILE_FORMATS.md`.
+
+Quest/Scene editor Open/Save dialogs больше не предлагают общий `.json`: Quest принимает `.aqquest`, Scene принимает `.aqscene`. Loaders также фильтруют каталог по этим расширениям и проверяют `format` внутри JSON.
+
+Существующие sandbox-ресурсы мигрированы без изменения графов:
+- `tutorial_ruslan_shashlik.aqquest`;
+- `ruslan_start.aqscene`;
+- `gosha_meat.aqscene`;
+- `ruslan_finish.aqscene`.
+
+Добавлены Windows file associations для текущего пользователя через `HKCU\\Software\\Classes`, versioned ProgID, OpenWithProgIds, DefaultIcon и shell/open/command. Регистрация не перезаписывает уже выбранную пользователем ассоциацию. Explorer уведомляется через SHChangeNotify.
+
+Для каждого зарегистрированного типа приложение генерирует отдельный маленький ICO в `%LOCALAPPDATA%\\AssistQuestEditor\\FileIcons`. `.aqquest` и `.aqscene` открываются двойным щелчком в соответствующем редакторе. `--unregister-file-associations` удаляет зарегистрированные нами ProgID/association entries.
+
+Версия физического тестирования: `1.0.40.133-RESOURCE-FORMATS-R1`.
