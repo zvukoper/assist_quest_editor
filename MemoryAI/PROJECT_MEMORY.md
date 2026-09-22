@@ -523,3 +523,27 @@ Regression:
 - Поэтому квест Гоши не перезапускается от обычного движения внутри города или от Tick; требуется выйти из области и вернуться либо заново создать условие активации.
 - UI resource navigation smoke дополнительно проверяет, что в Inspector видна кнопка «Открыть сцену».
 - WebView HTML version synchronized to 1.0.40.146-QUEST-ACTIVATION-EDGE-FIX.
+## 2026-09-22 — 1.0.40.148 Campaign Store
+
+Долгосрочная модель sandbox теперь использует Campaign как resource boundary:
+Campaign = папка с `campaign.aqcampaign`, Quest/Scene/asset resources и собственной версией.
+Состояние `Active` кампании и `Enabled/Disabled` отдельных Quest хранится в самом
+campaign-файле, а не в Simulator UI.
+
+Пользовательское хранилище: `%LOCALAPPDATA%\\Assist Quest Editor\\quests`.
+Bundled install store: `data/campaigns/<Campaign>/`.
+Startup synchronizer переносит/обновляет bundled resources в user store, сравнивая
+версии Campaign и Quest; старые удалённые Quest не стираются, а переводятся в Disabled.
+Изменения обновления и отключения записываются в log и показываются пользователю.
+
+Simulator: одна глобальная кнопка запускает/останавливает Simulation. Галочка Campaign
+и галочки Quest определяют состав тестового сценария. Это не равно принятию игроком Quest.
+Enabled/Active — доступность ресурса для симуляции; QuestRuntime — фактическое прохождение.
+Включённые Proximity Quest получают на карте отдельную иконку, точку и trigger radius.
+
+`SibirMap` — первая bundled Campaign. В ней три существующих независимых Quest и
+отключённый `sibirmap_city_cache`. Тайник демонстрирует `SkillKind.Levelled` и `AddSkill`:
+при входе в радиус выдаётся 5000 ₽ и +50 к `Разведчик`, максимум 100.
+
+Открытый архитектурный следующий шаг: ввести отдельный Quest Offer/Interaction слой,
+чтобы «Quest доступен/активирован в сценарии» окончательно отделился от «игрок принял Quest».
