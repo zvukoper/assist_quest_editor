@@ -1,0 +1,370 @@
+{
+  "schemaVersion": 1,
+  "format": "aqquest",
+  "definition": {
+    "id": "gosha_homemade_sausage",
+    "title": "Домашняя колбаса у Гоши",
+    "description": "Независимый повторяемый side quest: при репутации Гоши от 350 можно покупать домашнюю колбасу или уйти. Повторная активация происходит при следующем возвращении в точку Гоши.",
+    "graph": {
+      "id": "gosha_homemade_sausage",
+      "name": "Домашняя колбаса у Гоши",
+      "nodes": [
+        {
+          "nodeId": "start",
+          "nodeType": "Start",
+          "title": "01. Начало",
+          "x": 0,
+          "y": 120,
+          "parameters": {},
+          "sockets": [
+            {
+              "socketId": "start.out",
+              "name": "Далее",
+              "direction": "Output",
+              "flowKind": "Normal"
+            }
+          ]
+        },
+        {
+          "nodeId": "status-active",
+          "nodeType": "SetStatus",
+          "title": "02. Статус: Active",
+          "x": 400,
+          "y": 120,
+          "parameters": {
+            "status": "Active"
+          },
+          "sockets": [
+            {
+              "socketId": "status-active.in",
+              "name": "Вход",
+              "direction": "Input",
+              "flowKind": "Normal"
+            },
+            {
+              "socketId": "status-active.out",
+              "name": "Далее",
+              "direction": "Output",
+              "flowKind": "Normal"
+            }
+          ]
+        },
+        {
+          "nodeId": "activation-reputation",
+          "nodeType": "ReputationCompare",
+          "title": "03. Репутация Гоши ≥ 350",
+          "x": 800,
+          "y": 120,
+          "parameters": {
+            "operator": "ReputationCompare",
+            "npcId": "gosha",
+            "comparison": ">=",
+            "right": "350"
+          },
+          "sockets": [
+            {
+              "socketId": "activation-reputation.in",
+              "name": "Вход",
+              "direction": "Input",
+              "flowKind": "Normal"
+            },
+            {
+              "socketId": "activation-reputation.true",
+              "name": "Да",
+              "direction": "Output",
+              "flowKind": "Normal"
+            },
+            {
+              "socketId": "activation-reputation.false",
+              "name": "Нет",
+              "direction": "Output",
+              "flowKind": "Cut"
+            }
+          ]
+        },
+        {
+          "nodeId": "step-shop-gosha",
+          "nodeType": "SetStep",
+          "title": "20. Этап: колбаса у Гоши (можно покупать повторно)",
+          "x": 1200,
+          "y": 120,
+          "sockets": [
+            {
+              "socketId": "step-shop-gosha.in",
+              "name": "Вход",
+              "direction": "Input",
+              "flowKind": "Normal"
+            },
+            {
+              "socketId": "step-shop-gosha.out",
+              "name": "Далее",
+              "direction": "Output",
+              "flowKind": "Normal"
+            }
+          ],
+          "parameters": {
+            "step": "gosha_shop"
+          }
+        },
+        {
+          "nodeId": "interaction-gosha-shop",
+          "nodeType": "Interaction",
+          "title": "21. Подойти к Гоше за колбасой",
+          "x": 1600,
+          "y": 120,
+          "sockets": [
+            {
+              "socketId": "interaction-gosha-shop.in",
+              "name": "Вход",
+              "direction": "Input",
+              "flowKind": "Normal"
+            },
+            {
+              "socketId": "interaction-gosha-shop.out",
+              "name": "Далее",
+              "direction": "Output",
+              "flowKind": "Normal"
+            }
+          ],
+          "parameters": {
+            "worldPointId": "city:chelyabinsk",
+            "triggerRadius": "1500"
+          }
+        },
+        {
+          "nodeId": "scene-gosha-shop",
+          "nodeType": "DialogueScene",
+          "title": "22. Scene: покупка колбасы",
+          "x": 2000,
+          "y": 120,
+          "sockets": [
+            {
+              "socketId": "scene-gosha-shop.in",
+              "name": "Вход",
+              "direction": "Input",
+              "flowKind": "Normal"
+            },
+            {
+              "socketId": "scene-gosha-shop.out",
+              "name": "Далее",
+              "direction": "Output",
+              "flowKind": "Normal"
+            }
+          ],
+          "parameters": {
+            "sceneId": "gosha_shop"
+          }
+        },
+        {
+          "nodeId": "condition-shop-buy",
+          "nodeType": "Condition",
+          "title": "23. Купил колбасу?",
+          "x": 2400,
+          "y": 60,
+          "sockets": [
+            {
+              "socketId": "condition-shop-buy.in",
+              "name": "Вход",
+              "direction": "Input",
+              "flowKind": "Normal"
+            },
+            {
+              "socketId": "condition-shop-buy.true",
+              "name": "Да",
+              "direction": "Output",
+              "flowKind": "Normal"
+            },
+            {
+              "socketId": "condition-shop-buy.false",
+              "name": "Нет",
+              "direction": "Output",
+              "flowKind": "Cut"
+            }
+          ],
+          "parameters": {
+            "operator": "VariableEquals",
+            "left": "scene.gosha_shop.lastChoiceId",
+            "comparison": "==",
+            "right": "gosha.shop.buy"
+          }
+        },
+        {
+          "nodeId": "shop-pay",
+          "nodeType": "RemoveMoney",
+          "title": "24. Оплата колбасы: 450 ₽",
+          "x": 2800,
+          "y": 120,
+          "sockets": [
+            {
+              "socketId": "shop-pay.in",
+              "name": "Вход",
+              "direction": "Input",
+              "flowKind": "Normal"
+            },
+            {
+              "socketId": "shop-pay.out",
+              "name": "Далее",
+              "direction": "Output",
+              "flowKind": "Normal"
+            }
+          ],
+          "parameters": {
+            "amount": "450"
+          }
+        },
+        {
+          "nodeId": "shop-receive-sausage",
+          "nodeType": "GiveItem",
+          "title": "25. Получить домашнюю колбасу",
+          "x": 3200,
+          "y": 120,
+          "sockets": [
+            {
+              "socketId": "shop-receive-sausage.in",
+              "name": "Вход",
+              "direction": "Input",
+              "flowKind": "Normal"
+            },
+            {
+              "socketId": "shop-receive-sausage.out",
+              "name": "Далее",
+              "direction": "Output",
+              "flowKind": "Normal"
+            }
+          ],
+          "parameters": {
+            "itemId": "gosha.homemade_sausage",
+            "count": "1"
+          }
+        },
+        {
+          "nodeId": "shop-reputation",
+          "nodeType": "AddReputation",
+          "title": "26. Репутация Гоши +25 за покупку",
+          "x": 3600,
+          "y": 120,
+          "sockets": [
+            {
+              "socketId": "shop-reputation.in",
+              "name": "Вход",
+              "direction": "Input",
+              "flowKind": "Normal"
+            },
+            {
+              "socketId": "shop-reputation.out",
+              "name": "Далее",
+              "direction": "Output",
+              "flowKind": "Normal"
+            }
+          ],
+          "parameters": {
+            "npcId": "gosha",
+            "amount": "25"
+          }
+        },
+        {
+          "nodeId": "end-gosha-shop",
+          "nodeType": "End",
+          "title": "08. Уйти от Гоши — игрок свободен",
+          "x": 4800,
+          "y": 220,
+          "parameters": {},
+          "sockets": [
+            {
+              "socketId": "end-gosha-shop.in",
+              "name": "Вход",
+              "direction": "Input",
+              "flowKind": "Normal"
+            }
+          ]
+        }
+      ],
+      "connections": [
+        {
+          "fromNodeId": "start",
+          "fromSocketId": "start.out",
+          "toNodeId": "status-active",
+          "toSocketId": "status-active.in"
+        },
+        {
+          "fromNodeId": "status-active",
+          "fromSocketId": "status-active.out",
+          "toNodeId": "activation-reputation",
+          "toSocketId": "activation-reputation.in"
+        },
+        {
+          "fromNodeId": "activation-reputation",
+          "fromSocketId": "activation-reputation.true",
+          "toNodeId": "step-shop-gosha",
+          "toSocketId": "step-shop-gosha.in"
+        },
+        {
+          "fromNodeId": "activation-reputation",
+          "fromSocketId": "activation-reputation.false",
+          "toNodeId": "end-gosha-shop",
+          "toSocketId": "end-gosha-shop.in"
+        },
+        {
+          "fromNodeId": "step-shop-gosha",
+          "fromSocketId": "step-shop-gosha.out",
+          "toNodeId": "interaction-gosha-shop",
+          "toSocketId": "interaction-gosha-shop.in"
+        },
+        {
+          "fromNodeId": "interaction-gosha-shop",
+          "fromSocketId": "interaction-gosha-shop.out",
+          "toNodeId": "scene-gosha-shop",
+          "toSocketId": "scene-gosha-shop.in"
+        },
+        {
+          "fromNodeId": "scene-gosha-shop",
+          "fromSocketId": "scene-gosha-shop.out",
+          "toNodeId": "condition-shop-buy",
+          "toSocketId": "condition-shop-buy.in"
+        },
+        {
+          "fromNodeId": "condition-shop-buy",
+          "fromSocketId": "condition-shop-buy.true",
+          "toNodeId": "shop-pay",
+          "toSocketId": "shop-pay.in"
+        },
+        {
+          "fromNodeId": "condition-shop-buy",
+          "fromSocketId": "condition-shop-buy.false",
+          "toNodeId": "end-gosha-shop",
+          "toSocketId": "end-gosha-shop.in"
+        },
+        {
+          "fromNodeId": "shop-pay",
+          "fromSocketId": "shop-pay.out",
+          "toNodeId": "shop-receive-sausage",
+          "toSocketId": "shop-receive-sausage.in"
+        },
+        {
+          "fromNodeId": "shop-receive-sausage",
+          "fromSocketId": "shop-receive-sausage.out",
+          "toNodeId": "shop-reputation",
+          "toSocketId": "shop-reputation.in"
+        },
+        {
+          "fromNodeId": "shop-reputation",
+          "fromSocketId": "shop-reputation.out",
+          "toNodeId": "interaction-gosha-shop",
+          "toSocketId": "interaction-gosha-shop.in"
+        }
+      ]
+    },
+    "sceneIds": [
+      "gosha_shop"
+    ],
+    "activation": {
+      "mode": "Proximity",
+      "worldPointId": "city:chelyabinsk",
+      "radius": 1500,
+      "requiredReputationNpcId": "gosha",
+      "requiredReputation": 350,
+      "repeatable": true
+    },
+    "version": 2
+  }
+}
