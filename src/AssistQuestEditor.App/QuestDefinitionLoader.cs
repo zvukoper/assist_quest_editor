@@ -15,12 +15,18 @@ public static class QuestDefinitionLoader
     /// </summary>
     public static IReadOnlyList<QuestDefinition> LoadAllOrFallback()
     {
-        var directory = Path.Combine(AppPaths.ResourceRoot, RelativeDirectory);
+        var userDirectory = AppPaths.UserQuestRoot;
+        var sourceDirectory = Path.Combine(AppPaths.ResourceRoot, RelativeDirectory);
+        var directory = Directory.Exists(userDirectory) &&
+                        Directory.EnumerateFiles(userDirectory, "*.aqquest", SearchOption.AllDirectories).Any()
+            ? userDirectory
+            : sourceDirectory;
+
         if (!Directory.Exists(directory))
             return new[] { LoadDocumentOrFallback().Definition };
 
         var definitions = new List<QuestDefinition>();
-        foreach (var path in Directory.EnumerateFiles(directory, "*.aqquest", SearchOption.TopDirectoryOnly).OrderBy(path => path))
+        foreach (var path in Directory.EnumerateFiles(directory, "*.aqquest", SearchOption.AllDirectories).OrderBy(path => path))
         {
             try
             {
@@ -54,8 +60,13 @@ public static class QuestDefinitionLoader
     /// </summary>
     public static QuestDefinitionDocument LoadDocumentOrFallback()
     {
-        var path = Path.Combine(AppPaths.ResourceRoot, RelativePath);
-        AppLogger.Info("QuestDefinitionLoader.LoadDocumentOrFallback()", $"path={path}; exists={File.Exists(path)}");
+        var userPath = Path.Combine(AppPaths.UserQuestRoot, RelativePath);
+        var sourcePath = Path.Combine(AppPaths.ResourceRoot, RelativePath);
+        var path = File.Exists(userPath) ? userPath : sourcePath;
+
+        AppLogger.Info(
+            "QuestDefinitionLoader.LoadDocumentOrFallback()",
+            $"path={path}; userExists={File.Exists(userPath)}; sourceExists={File.Exists(sourcePath)}");
 
         if (!File.Exists(path))
         {
