@@ -264,11 +264,19 @@ public sealed class EditorForm : WebViewForm
                 if (!_sceneCatalog.TryGetScene(sceneId, out var scene))
                     throw new InvalidOperationException("Scene «" + sceneId + "» не найдена.");
 
-                if (string.Equals(_sceneDocument.CurrentSceneId, scene.Id, StringComparison.OrdinalIgnoreCase))
+                var scenePath = ResolveScenePath(scene.Id);
+                var sameDocument =
+                    string.Equals(_sceneDocument.CurrentSceneId, scene.Id, StringComparison.OrdinalIgnoreCase) &&
+                    string.Equals(_sceneDocument.CurrentPath, scenePath, StringComparison.OrdinalIgnoreCase);
+
+                if (sameDocument)
                     break;
 
                 if (!ConfirmSceneSwitch())
+                {
+                    PostSceneGraph();
                     break;
+                }
 
                 _loadingScene = true;
                 try
@@ -280,7 +288,6 @@ public sealed class EditorForm : WebViewForm
                     _loadingScene = false;
                 }
 
-                var scenePath = ResolveScenePath(scene.Id);
                 if (string.IsNullOrWhiteSpace(scenePath))
                     throw new InvalidOperationException("Для Scene «" + scene.Id + "» не найден исходный .aqscene файл.");
 
