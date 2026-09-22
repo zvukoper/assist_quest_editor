@@ -9,13 +9,39 @@ public sealed record GraphConnectionResult(bool Added, QuestConnection? Connecti
 public sealed class QuestGraphStore
 {
     private QuestGraph _value;
+    private string _description = string.Empty;
+    private IReadOnlyList<string> _sceneIds = Array.Empty<string>();
     private readonly Stack<QuestGraph> _undo = new();
     private readonly Stack<QuestGraph> _redo = new();
 
     public QuestGraphStore(QuestGraph initial) =>
         _value = initial ?? throw new ArgumentNullException(nameof(initial));
 
+    public QuestGraphStore(QuestDefinition initial)
+    {
+        ArgumentNullException.ThrowIfNull(initial);
+        if (initial.Graph is null)
+            throw new ArgumentException("Quest Definition должен содержать Graph.", nameof(initial));
+
+        _value = initial.Graph;
+        _description = initial.Description ?? string.Empty;
+        _sceneIds = initial.SceneIds ?? Array.Empty<string>();
+    }
+
     public QuestGraph Value => _value;
+
+    /// <summary>
+    /// Полный Quest Definition вместе с метаданными документа (Description, SceneIds).
+    ///
+    /// Хранится именно здесь, а не в UI: иначе сохранение собирало бы новый
+    /// Quest Definition из одного графа и затирало метаданные, которые есть в
+    /// файле. По той же причине SceneGraphStore хранит весь SceneDefinition.
+    /// </summary>
+    public QuestDefinition Definition =>
+        new(_value.Id, _value.Name, _description, _value, _sceneIds);
+
+    public string Description => _description;
+    public IReadOnlyList<string> SceneIds => _sceneIds;
     public bool CanUndo => _undo.Count > 0;
     public bool CanRedo => _redo.Count > 0;
     public event EventHandler? Changed;
@@ -195,10 +221,40 @@ public sealed class QuestGraphStore
         return true;
     }
 
+    /// <summary>
+    /// Заменяет граф целиком, как новый документ: метаданные Description/SceneIds
+    /// сбрасываются, потому что при замене только графа о них ничего не известно.
+    ///
+    /// Это fail-safe выбор: унаследованные метаданные прежнего документа
+    /// записались бы в файл молча. Загрузка документа идёт через
+    /// Replace(QuestDefinition), а правки графа (AddNode/UpdateNode) метаданные
+    /// сохраняют — их меняет только Apply.
+    /// </summary>
     public void Replace(QuestGraph graph)
     {
         ArgumentNullException.ThrowIfNull(graph);
         _value = graph;
+        _description = string.Empty;
+        _sceneIds = Array.Empty<string>();
+        _undo.Clear();
+        _redo.Clear();
+        Changed?.Invoke(this, EventArgs.Empty);
+    }
+
+    /// <summary>
+    /// Загружает документ целиком: граф вместе с метаданными Description/SceneIds.
+    /// Загрузка через Replace(QuestGraph) оставила бы метаданные от предыдущего
+    /// документа, и следующее сохранение записало бы их вместо прочитанных из файла.
+    /// </summary>
+    public void Replace(QuestDefinition definition)
+    {
+        ArgumentNullException.ThrowIfNull(definition);
+        if (definition.Graph is null)
+            throw new ArgumentException("Quest Definition должен содержать Graph.", nameof(definition));
+
+        _value = definition.Graph;
+        _description = definition.Description ?? string.Empty;
+        _sceneIds = definition.SceneIds ?? Array.Empty<string>();
         _undo.Clear();
         _redo.Clear();
         Changed?.Invoke(this, EventArgs.Empty);

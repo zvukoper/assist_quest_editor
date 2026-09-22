@@ -153,6 +153,68 @@ public sealed class QuestGraphStoreTests
     }
 
     [Fact]
+    public void DefinitionKeepsDocumentMetadataAcrossGraphEdits()
+    {
+        var graph = QuestGraphFactory.CreateStarter();
+        var store = new QuestGraphStore(new QuestDefinition(
+            graph.Id,
+            graph.Name,
+            "Описание квеста.",
+            graph,
+            new[] { "ruslan_start", "gosha_meat" }));
+
+        Assert.Equal("Описание квеста.", store.Definition.Description);
+        Assert.Equal(new[] { "ruslan_start", "gosha_meat" }, store.Definition.SceneIds);
+
+        // Правка графа не должна терять метаданные документа: именно на этом
+        // сценарии сохранение затирало Description и SceneIds.
+        store.AddNode("Phase", "Новая фаза", 420, 120);
+
+        Assert.Equal("Описание квеста.", store.Definition.Description);
+        Assert.Equal(new[] { "ruslan_start", "gosha_meat" }, store.Definition.SceneIds);
+        Assert.Equal(store.Value, store.Definition.Graph);
+    }
+
+    [Fact]
+    public void ReplaceWithDefinitionRestoresMetadataFromLoadedDocument()
+    {
+        var store = new QuestGraphStore(QuestGraphFactory.CreateStarter());
+
+        var loaded = new QuestGraph("loaded", "Загруженный квест", Array.Empty<QuestNode>(), Array.Empty<QuestConnection>());
+        store.Replace(new QuestDefinition(
+            loaded.Id,
+            loaded.Name,
+            "Загруженное описание.",
+            loaded,
+            new[] { "scene_a" }));
+
+        Assert.Equal("Загруженное описание.", store.Definition.Description);
+        Assert.Equal(new[] { "scene_a" }, store.Definition.SceneIds);
+        Assert.Equal(loaded, store.Value);
+        Assert.False(store.CanUndo);
+        Assert.False(store.CanRedo);
+    }
+
+    [Fact]
+    public void ReplaceWithGraphOnlyClearsMetadataInsteadOfLeakingIt()
+    {
+        var graph = QuestGraphFactory.CreateStarter();
+        var store = new QuestGraphStore(new QuestDefinition(
+            graph.Id,
+            graph.Name,
+            "Описание первого документа.",
+            graph,
+            new[] { "scene_a" }));
+
+        var replacement = new QuestGraph("other", "Другой квест", Array.Empty<QuestNode>(), Array.Empty<QuestConnection>());
+        store.Replace(replacement);
+
+        // Метаданные прежнего документа не должны «протечь» в новый.
+        Assert.Equal(string.Empty, store.Definition.Description);
+        Assert.Empty(store.Definition.SceneIds);
+    }
+
+    [Fact]
     public void UndoAndRedoRestoreGraphSnapshots()
     {
         var store = new QuestGraphStore(QuestGraphFactory.CreateStarter());

@@ -659,6 +659,8 @@ public sealed class EditorForm : WebViewForm
             }
             case "graph_new":
             {
+                // Replace(QuestGraph) сбрасывает метаданные документа, поэтому
+                // новый квест не унаследует Description/SceneIds предыдущего.
                 _questGraph.Replace(QuestGraphFactory.CreateStarter());
                 _currentDefinitionPath = null;
                 _documentDirty = false;
@@ -785,7 +787,9 @@ public sealed class EditorForm : WebViewForm
         if (document.Definition?.Graph is null)
             throw new InvalidOperationException("В документе отсутствует Quest Graph.");
 
-        _questGraph.Replace(document.Definition.Graph);
+        // Replace(QuestDefinition), а не Replace(graph): иначе Description и
+        // SceneIds из файла потеряются ещё при открытии и уйдут в следующее сохранение.
+        _questGraph.Replace(document.Definition);
         _currentDefinitionPath = path;
         _lastDefinitionPath = path;
         SaveLastDefinitionPath();
@@ -817,12 +821,11 @@ public sealed class EditorForm : WebViewForm
             path = dialog.FileName;
         }
 
-        var definition = new QuestDefinition(
-            _questGraph.Value.Id,
-            _questGraph.Value.Name,
-            string.Empty,
-            _questGraph.Value,
-            Array.Empty<string>());
+        // Метаданные документа хранит стор, а не форма: Description и SceneIds
+        // восстанавливаются из загруженного файла. Раньше здесь стояли
+        // string.Empty и Array.Empty<string>(), поэтому каждое сохранение
+        // затирало метаданные квеста.
+        var definition = _questGraph.Definition;
 
         var document = new QuestDefinitionDocument(DefinitionSchemaVersion, definition);
         var output = JsonSerializer.Serialize(document, WebJsonOptions);

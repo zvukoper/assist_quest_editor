@@ -28,7 +28,7 @@ public sealed class MainForm : WebViewForm
         }
 
         _hub = hub;
-        _questGraph = new QuestGraphStore(QuestDefinitionLoader.LoadOrFallback());
+        _questGraph = new QuestGraphStore(QuestDefinitionLoader.LoadDocumentOrFallback().Definition);
         _sceneCatalog = SceneCatalogLoader.Load();
         var initialScene = _sceneCatalog.TryGetScene("ruslan_start", out var ruslanStart)
             ? ruslanStart
