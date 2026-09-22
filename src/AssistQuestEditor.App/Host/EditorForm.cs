@@ -645,7 +645,7 @@ public sealed class EditorForm : WebViewForm
             ?? throw new InvalidOperationException("Файл Quest Definition пуст или повреждён.");
 
         if (document.SchemaVersion != DefinitionSchemaVersion ||
-            !document.Format.Equals("aqquest", StringComparison.OrdinalIgnoreCase))
+            !string.Equals(document.Format, "aqquest", StringComparison.OrdinalIgnoreCase))
             throw new InvalidOperationException(
                 $"Файл не является поддерживаемым Quest resource. Format={document.Format}; schema={document.SchemaVersion}.");
 
@@ -750,7 +750,7 @@ public sealed class EditorForm : WebViewForm
             WebJsonOptions) ?? throw new InvalidOperationException("Файл Scene Definition пуст или повреждён.");
 
         if (document.SchemaVersion != DefinitionSchemaVersion ||
-            !document.Format.Equals("aqscene", StringComparison.OrdinalIgnoreCase))
+            !string.Equals(document.Format, "aqscene", StringComparison.OrdinalIgnoreCase))
             throw new InvalidOperationException(
                 "Файл не является поддерживаемым Scene resource. Format=" +
                 document.Format + "; schema=" + document.SchemaVersion + ".");
