@@ -857,15 +857,327 @@
     return parameters;
   }
 
+
+  function findSceneDialogue(node) {
+    const id = node?.parameters?.dialogueId;
+    return sceneDefinition()?.dialogues?.find(item =>
+      item.id === id) || null;
+  }
+
+  function findSceneChoice(node) {
+    const id = node?.parameters?.choiceId;
+    return sceneDefinition()?.choices?.find(item =>
+      item.id === id) || null;
+  }
+
+  function sceneResourceOptions(resources, currentId) {
+    const items = Array.isArray(resources) ? resources : [];
+    const options = [];
+
+    if (currentId && !items.some(item => item.id === currentId)) {
+      options.push(
+        "<option value='" + escapeHtml(currentId) + "' selected>" +
+        escapeHtml(currentId + " — отсутствует") +
+        "</option>"
+      );
+    }
+
+    options.push(...items.map(item =>
+      "<option value='" + escapeHtml(item.id) + "'" +
+      (item.id === currentId ? " selected" : "") + ">" +
+      escapeHtml(item.id + " — " + (item.title || item.speaker || "Без названия")) +
+      "</option>"
+    ));
+
+    return options.join("");
+  }
+
+  function updateSceneNodeParameter(node, key, value) {
+    const parameters = { ...(node.parameters || {}) };
+    parameters[key] = value;
+    queueSceneDirtyNode(node.nodeId);
+    updateSceneVisuals();
+
+    send({
+      action: "scene_update_node",
+      nodeId: node.nodeId,
+      title: node.title,
+      x: node.x,
+      y: node.y,
+      parameters
+    });
+  }
+
+  function specialSceneNodePropertyHtml(node, contentHtml) {
+    return (
+      "<div class='badge accent'>" + escapeHtml(node.nodeType) + "</div>" +
+      "<h3 style='margin:10px 0 4px'>" + escapeHtml(node.title) + "</h3>" +
+      "<div class='field'><label>NodeId</label><input value='" + escapeHtml(node.nodeId) + "' disabled></div>" +
+      "<div class='field' style='margin-top:8px'><label>Название ноды</label><input id='sceneGraphEditTitle' value='" + escapeHtml(node.title) + "'></div>" +
+      "<div class='fieldGrid' style='margin-top:8px'>" +
+        "<div class='field'><label>X</label><input id='sceneGraphEditX' type='number' value='" + node.x + "'></div>" +
+        "<div class='field'><label>Y</label><input id='sceneGraphEditY' type='number' value='" + node.y + "'></div>" +
+      "</div>" +
+      contentHtml +
+      "<div class='miniLabel' style='margin-top:16px'>Технические параметры</div>" +
+      "<div id='sceneGraphParameterEditor' style='margin-top:6px'>" + parameterEditorHtml(node) + "</div>" +
+      "<button class='toolButton' id='addSceneGraphParameter' style='margin-top:6px'>Добавить параметр</button>" +
+      "<button class='toolButton primary' id='saveSceneGraphNode' style='margin-top:10px'>Сохранить свойства ноды</button>" +
+      "<button class='toolButton' id='deleteSceneGraphNode' style='margin-top:6px'>Удалить ноду</button>" +
+      "<div class='notice' style='margin-top:12px'>ID ресурсов и Output socket ID не редактируются вручную: они являются стабильными связями canonical Scene.</div>"
+    );
+  }
+
+  function bindSpecialSceneNodePropertyInspector(ins, node) {
+    ins.querySelectorAll("[data-param-remove]").forEach(button => {
+      button.addEventListener("click", () => button.closest("[data-param-row]")?.remove());
+    });
+
+    ins.querySelector("#addSceneGraphParameter")?.addEventListener("click", () => {
+      addParameterRow(ins.querySelector("#sceneGraphParameterEditor"));
+    });
+
+    ins.querySelector("#saveSceneGraphNode")?.addEventListener("click", () => {
+      queueSceneDirtyNode(node.nodeId);
+      updateSceneVisuals();
+      send({
+        action: "scene_update_node",
+        nodeId: node.nodeId,
+        title: ins.querySelector("#sceneGraphEditTitle")?.value ?? node.title,
+        x: Number(ins.querySelector("#sceneGraphEditX")?.value ?? node.x),
+        y: Number(ins.querySelector("#sceneGraphEditY")?.value ?? node.y),
+        parameters: collectParameters(ins)
+      });
+    });
+
+    ins.querySelector("#deleteSceneGraphNode")?.addEventListener("click", () => {
+      requestSceneNodeDelete(node.nodeId);
+    });
+  }
+
+  function renderDialogueInspector(ins, node) {
+    const dialogueId = node.parameters?.dialogueId || "";
+    const dialogue = findSceneDialogue(node);
+    const dialogues = sceneDefinition()?.dialogues || [];
+
+    const content =
+      "<div class='miniLabel' style='margin-top:16px'>Dialogue resource</div>" +
+      "<select id='sceneDialogueResource' class='toolButton' style='width:100%;margin-top:6px'>" +
+        "<option value=''>— не выбран —</option>" +
+        sceneResourceOptions(dialogues, dialogueId) +
+      "</select>" +
+      (!dialogue
+        ? "<div class='notice' style='margin-top:8px'>У ноды нет корректного Dialogue resource. Создайте новый ресурс или выберите существующий.</div>" +
+          "<button class='toolButton primary' id='createSceneDialogue' style='margin-top:8px'>Создать диалог для ноды</button>"
+        : "<div class='badge blue' style='margin-top:8px'>Resource ID: " + escapeHtml(dialogue.id) + "</div>" +
+          "<div class='field' style='margin-top:10px'><label>Speaker</label><input id='sceneDialogueSpeaker' value='" + escapeHtml(dialogue.speaker) + "'></div>" +
+          "<div class='field' style='margin-top:8px'><label>Текст</label><textarea id='sceneDialogueText' rows='7' style='width:100%;resize:vertical'>" + escapeHtml(dialogue.text) + "</textarea></div>" +
+          "<button class='toolButton primary' id='saveSceneDialogue' style='margin-top:8px'>Сохранить диалог</button>"
+      );
+
+    ins.innerHTML = specialSceneNodePropertyHtml(node,
+      "<div class='miniLabel' style='margin-top:16px'>Содержимое диалога</div>" +
+      "<div class='tableLike' style='margin-top:6px'>" + content + "</div>"
+    );
+
+    bindSpecialSceneNodePropertyInspector(ins, node);
+
+    ins.querySelector("#sceneDialogueResource")?.addEventListener("change", event => {
+      updateSceneNodeParameter(node, "dialogueId", event.target.value);
+    });
+
+    ins.querySelector("#createSceneDialogue")?.addEventListener("click", () => {
+      queueSceneDirtyNode(node.nodeId);
+      send({ action: "scene_create_dialogue_for_node", nodeId: node.nodeId });
+    });
+
+    ins.querySelector("#saveSceneDialogue")?.addEventListener("click", () => {
+      send({
+        action: "scene_update_dialogue",
+        dialogueId: dialogue.id,
+        speaker: ins.querySelector("#sceneDialogueSpeaker")?.value ?? "",
+        text: ins.querySelector("#sceneDialogueText")?.value ?? ""
+      });
+    });
+  }
+
+  function renderChoiceInspector(ins, node) {
+    const choiceId = node.parameters?.choiceId || "";
+    const choice = findSceneChoice(node);
+    const choices = sceneDefinition()?.choices || [];
+
+    let optionsHtml = "";
+    if (choice) {
+      optionsHtml = choice.options?.length
+        ? choice.options.map((option, index) => {
+            const socket = node.sockets?.find(item =>
+              item.socketId === option.outputSocketId &&
+              item.direction === "Output");
+            const socketExists = Boolean(socket);
+            return (
+              "<div class='tableRow' data-choice-option-row='" + escapeHtml(option.id) + "' style='display:grid;grid-template-columns:minmax(110px,1fr) minmax(180px,2fr);gap:8px;align-items:center'>" +
+                "<div>" +
+                  "<strong>Вариант " + (index + 1) + "</strong>" +
+                  "<small>" + escapeHtml(option.id) + "</small>" +
+                "</div>" +
+                "<div>" +
+                  "<input class='toolButton' data-choice-option-text value='" + escapeHtml(option.text) + "' style='width:100%'>" +
+                  "<div class='notice' style='margin-top:4px;padding:5px 7px'>" +
+                    escapeHtml(socketExists ? socket.name + " · " + option.outputSocketId : "Output socket отсутствует: " + option.outputSocketId) +
+                  "</div>" +
+                  "<button class='toolButton' data-remove-choice-option='" + escapeHtml(option.id) + "' style='margin-top:5px'>Удалить вариант</button>" +
+                "</div>" +
+              "</div>"
+            );
+          }).join("")
+        : "<div class='notice'>Вариантов пока нет.</div>";
+
+      optionsHtml +=
+        "<button class='toolButton' id='addSceneChoiceOption' style='margin-top:8px'>Добавить вариант</button>";
+    } else {
+      optionsHtml =
+        "<div class='notice'>У ноды нет корректного Choice resource.</div>" +
+        "<button class='toolButton primary' id='createSceneChoice' style='margin-top:8px'>Создать выбор для ноды</button>";
+    }
+
+    const content =
+      "<div class='miniLabel' style='margin-top:16px'>Choice resource</div>" +
+      "<select id='sceneChoiceResource' class='toolButton' style='width:100%;margin-top:6px'>" +
+        "<option value=''>— не выбран —</option>" +
+        sceneResourceOptions(choices, choiceId) +
+      "</select>" +
+      (choice
+        ? "<div class='badge blue' style='margin-top:8px'>Resource ID: " + escapeHtml(choice.id) + "</div>" +
+          "<div class='field' style='margin-top:10px'><label>Название выбора</label><input id='sceneChoiceTitle' value='" + escapeHtml(choice.title) + "'></div>" +
+          "<div class='field' style='margin-top:8px'><label>Speaker</label><input id='sceneChoiceSpeaker' value='" + escapeHtml(choice.speaker) + "'></div>" +
+          "<div class='field' style='margin-top:8px'><label>Текст выбора</label><textarea id='sceneChoiceText' rows='5' style='width:100%;resize:vertical'>" + escapeHtml(choice.text) + "</textarea></div>" +
+          "<button class='toolButton primary' id='saveSceneChoice' style='margin-top:8px'>Сохранить выбор</button>" +
+          "<div class='miniLabel' style='margin-top:14px'>Варианты и Output sockets</div>" +
+          "<div class='tableLike' style='margin-top:6px'>" + optionsHtml + "</div>"
+        : optionsHtml);
+
+    ins.innerHTML = specialSceneNodePropertyHtml(node, content);
+    bindSpecialSceneNodePropertyInspector(ins, node);
+
+    ins.querySelector("#sceneChoiceResource")?.addEventListener("change", event => {
+      updateSceneNodeParameter(node, "choiceId", event.target.value);
+    });
+
+    ins.querySelector("#createSceneChoice")?.addEventListener("click", () => {
+      queueSceneDirtyNode(node.nodeId);
+      send({ action: "scene_create_choice_for_node", nodeId: node.nodeId });
+    });
+
+    ins.querySelector("#saveSceneChoice")?.addEventListener("click", () => {
+      const options = Array.from(ins.querySelectorAll("[data-choice-option-row]")).map(row => ({
+        id: row.dataset.choiceOptionRow,
+        text: row.querySelector("[data-choice-option-text]")?.value ?? ""
+      }));
+
+      send({
+        action: "scene_update_choice",
+        choiceId: choice.id,
+        title: ins.querySelector("#sceneChoiceTitle")?.value ?? "",
+        speaker: ins.querySelector("#sceneChoiceSpeaker")?.value ?? "",
+        text: ins.querySelector("#sceneChoiceText")?.value ?? "",
+        options
+      });
+    });
+
+    ins.querySelector("#addSceneChoiceOption")?.addEventListener("click", () => {
+      send({
+        action: "scene_add_choice_option",
+        nodeId: node.nodeId,
+        choiceId: choice?.id || choiceId
+      });
+    });
+
+    ins.querySelectorAll("[data-remove-choice-option]").forEach(button => {
+      button.addEventListener("click", () => {
+        const optionId = button.dataset.removeChoiceOption;
+        if (!optionId || !choice) return;
+        if (!window.confirm("Удалить этот вариант выбора?\n\nЕсли его Output socket уже подключён, операция будет отклонена.")) return;
+
+        send({
+          action: "scene_remove_choice_option",
+          nodeId: node.nodeId,
+          choiceId: choice.id,
+          optionId
+        });
+      });
+    });
+  }
+
+  function selectSceneNodeByContent(kind, resourceId) {
+    const nodes = sceneGraph?.nodes || [];
+    const key = kind === "dialogue" ? "dialogueId" : "choiceId";
+    const node = nodes.find(item =>
+      item.parameters?.[key] &&
+      item.parameters[key] === resourceId);
+    if (!node) return;
+
+    selectedSceneNodeId = node.nodeId;
+    updateSceneVisuals();
+    updateSceneInspector(document.getElementById("inspector"));
+  }
+
+  function renderSceneContentOverview(ins) {
+    const definition = sceneDefinition() || { dialogues: [], choices: [] };
+    const dialogues = definition.dialogues || [];
+    const choices = definition.choices || [];
+
+    const dialogueRows = dialogues.length
+      ? dialogues.map(item =>
+          "<div class='tableRow'><span><strong>" + escapeHtml(item.id) + "</strong><small>" +
+          escapeHtml((item.speaker || "Без Speaker") + ": " + (item.text || "Без текста")) +
+          "</small></span><button class='toolButton' data-open-dialogue='" + escapeHtml(item.id) + "'>Открыть</button></div>"
+        ).join("")
+      : "<div class='notice'>Dialogue resources пока нет.</div>";
+
+    const choiceRows = choices.length
+      ? choices.map(item =>
+          "<div class='tableRow'><span><strong>" + escapeHtml(item.id) + "</strong><small>" +
+          escapeHtml((item.title || "Без названия") + ": " + (item.text || "Без текста")) +
+          "</small></span><button class='toolButton' data-open-choice='" + escapeHtml(item.id) + "'>Открыть</button></div>"
+        ).join("")
+      : "<div class='notice'>Choice resources пока нет.</div>";
+
+    ins.innerHTML =
+      "<div class='badge accent'>Контент сцены</div>" +
+      "<h3 style='margin:10px 0 4px'>Dialogue / Choice</h3>" +
+      "<div class='notice'>Выберите ресурс ниже. Редактор откроет связанную Graph-ноду и сохранит контент в canonical Scene Definition.</div>" +
+      "<div class='miniLabel' style='margin-top:14px'>Dialogues (" + dialogues.length + ")</div>" +
+      "<div class='tableLike' style='margin-top:6px'>" + dialogueRows + "</div>" +
+      "<div class='miniLabel' style='margin-top:14px'>Choices (" + choices.length + ")</div>" +
+      "<div class='tableLike' style='margin-top:6px'>" + choiceRows + "</div>";
+
+    ins.querySelectorAll("[data-open-dialogue]").forEach(button => {
+      button.addEventListener("click", () =>
+        selectSceneNodeByContent("dialogue", button.dataset.openDialogue));
+    });
+    ins.querySelectorAll("[data-open-choice]").forEach(button => {
+      button.addEventListener("click", () =>
+        selectSceneNodeByContent("choice", button.dataset.openChoice));
+    });
+  }
+
   function updateSceneInspector(ins) {
     if (!ins) return;
 
     const node = sceneGraph?.nodes?.find(item => item.nodeId === selectedSceneNodeId);
     if (!node) {
-      ins.innerHTML =
-        "<div class='badge'>Scene Graph</div>" +
-        "<h3 style='margin:10px 0 4px'>Нет выбранной ноды</h3>" +
-        "<div class='notice'>Выберите ноду. Для связи нажмите Output, затем нужный Input.</div>";
+      renderSceneContentOverview(ins);
+      return;
+    }
+
+
+    if (node.nodeType === "Dialogue") {
+      renderDialogueInspector(ins, node);
+      return;
+    }
+
+    if (node.nodeType === "Choice") {
+      renderChoiceInspector(ins, node);
       return;
     }
 
