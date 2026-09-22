@@ -187,6 +187,7 @@ jobs:
           SCENE_GRAPH_SMOKE_OUTCOME: ${{ steps.scene_graph_smoke.outcome }}
           DIALOGUE_WORKSPACE_SMOKE_OUTCOME: ${{ steps.dialogue_workspace_smoke.outcome }}
           PAN_SMOKE_OUTCOME: ${{ steps.pan_smoke.outcome }}
+          SCENE_INTERFACE_SMOKE_OUTCOME: ${{ steps.scene_interface_smoke.outcome }}
           WEB_SYNTAX_OUTCOME: ${{ steps.web_syntax.outcome }}
           DOTNET_SDK_OUTCOME: ${{ steps.dotnet_sdk.outcome }}
           DOTNET_BUILD_OUTCOME: ${{ steps.dotnet_build.outcome }}
