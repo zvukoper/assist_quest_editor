@@ -66,7 +66,7 @@ function Get-SchemaVersion([string] $Path) {
         мог бы проехать в публикацию и сломать загрузку.
     #>
     $extension = [IO.Path]::GetExtension($Path)
-    $schemaAware = $extension -in @('.aqquest', '.aqscene')
+    $schemaAware = $extension -in @('.aqcampaign', '.aqquest', '.aqscene')
 
     if (-not $schemaAware) { return $null }
 
