@@ -60,7 +60,8 @@ public sealed record SceneDefinition(
 
 public sealed record SceneDefinitionDocument(
     int SchemaVersion,
-    SceneDefinition Definition);
+    SceneDefinition Definition,
+    string Format = "aqscene");
 
 public sealed record SceneRuntimeState(
     string? SceneId,
