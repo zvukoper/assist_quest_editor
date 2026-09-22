@@ -1299,6 +1299,11 @@
         const runtimeStatus = runtimeEntry?.status || "Available";
         const runtimeLabel = runtimeStatusName(runtimeStatus);
 
+        const effectiveEnabled = enabled && campaignChecked;
+        const activationLabel = !enabled
+          ? "Отключён"
+          : (campaignChecked ? "Активен" : "Кампания выкл.");
+
         return "<div class='campaignQuestRow'>" +
           "<label class='campaignQuestMain'>" +
             "<input type='checkbox' data-quest-enabled='1' " +
@@ -1311,8 +1316,8 @@
                 escapeHtml(runtimeLabel) + "</small>" +
             "</span>" +
           "</label>" +
-          "<span class='campaignQuestStatus " + (enabled ? "enabled" : "disabled") + "'>" +
-            (enabled ? "Активен" : "Отключён") +
+          "<span class='campaignQuestStatus " + (effectiveEnabled ? "enabled" : "disabled") + "'>" +
+            activationLabel +
           "</span>" +
           "<button class='microButton' type='button' " +
             "data-open-quest='" + escapeHtml(quest.fullPath || "") + "'>Ред.</button>" +
