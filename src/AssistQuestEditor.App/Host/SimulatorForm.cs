@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using AssistQuestEditor.Domain;
@@ -9,6 +10,8 @@ public sealed class SimulatorForm : WebViewForm
     private readonly IDataChannelHub _hub;
     private readonly IQuestRuntimeController _runtime;
     private readonly QuestGraphStore _questGraph;
+    private readonly CampaignStore _campaignStore;
+    private readonly Action<string> _openQuestEditor;
     private readonly System.Windows.Forms.Timer _runtimeTimer;
     private static readonly JsonSerializerOptions SnapshotJsonOptions = new()
     {
@@ -23,7 +26,12 @@ public sealed class SimulatorForm : WebViewForm
     private bool _snapshotRequestScheduled;
     private bool _journalRefreshScheduled;
 
-    public SimulatorForm(IDataChannelHub hub, IQuestRuntimeController runtime, QuestGraphStore questGraph)
+    public SimulatorForm(
+        IDataChannelHub hub,
+        IQuestRuntimeController runtime,
+        QuestGraphStore questGraph,
+        CampaignStore campaignStore,
+        Action<string> openQuestEditor)
         : base(
             "Assist Quest Editor — Симулятор",
             "simulator.html",
@@ -33,6 +41,8 @@ public sealed class SimulatorForm : WebViewForm
         _hub = hub;
         _runtime = runtime ?? throw new ArgumentNullException(nameof(runtime));
         _questGraph = questGraph ?? throw new ArgumentNullException(nameof(questGraph));
+        _campaignStore = campaignStore ?? throw new ArgumentNullException(nameof(campaignStore));
+        _openQuestEditor = openQuestEditor ?? throw new ArgumentNullException(nameof(openQuestEditor));
         _journalDetached = AppUiPreferencesStore.Load().JournalDetached;
         Opacity = 0;
         _questGraph.Changed += QuestGraph_Changed;
@@ -101,6 +111,10 @@ public sealed class SimulatorForm : WebViewForm
                 pair => ReputationScale.Describe(pair.Value.Value),
                 StringComparer.OrdinalIgnoreCase),
             runtime = _runtime.State,
+            simulationRunning = _runtime.SimulationRunning,
+            enabledQuestIds = _runtime.EnabledQuestIds,
+            campaigns = _campaignStore.BuildSimulatorCatalog(),
+            questActivations = BuildQuestActivationMarkers(snapshot),
             questGraph = _runtime.ActiveGraph ?? _questGraph.Value,
             journalDetached = _journalDetached
         }, SnapshotJsonOptions);
@@ -206,12 +220,28 @@ public sealed class SimulatorForm : WebViewForm
                     ReturnJournalToSidebar();
                     break;
 
-                case "runtime_start":
-                    _runtime.Start();
+                case "simulation_start":
+                    _runtime.SetSimulationRunning(true);
                     break;
 
-                case "runtime_stop":
-                    _runtime.Stop();
+                case "simulation_stop":
+                    _runtime.SetSimulationRunning(false);
+                    break;
+
+                case "set_quest_enabled":
+                    SetQuestEnabled(root);
+                    break;
+
+                case "set_campaign_active":
+                    SetCampaignActive(root);
+                    break;
+
+                case "open_quest_editor":
+                    OpenQuestEditor(root);
+                    break;
+
+                case "open_campaign_folder":
+                    OpenCampaignFolder(root);
                     break;
 
                 case "reset":
@@ -220,6 +250,7 @@ public sealed class SimulatorForm : WebViewForm
                         simulatorHub.Reset();
                     }
                     _runtime.Reset();
+                    _runtime.SetSimulationRunning(false);
                     break;
 
                 default:
@@ -309,6 +340,108 @@ public sealed class SimulatorForm : WebViewForm
             [key] = String(root, "value")
         };
         _hub.Get<RuntimeStatesState>("states").Set(state with { Variables = variables }, "Редактор состояний");
+    }
+
+    private void SetQuestEnabled(JsonElement root)
+    {
+        var campaignId = Required(root, "campaignId");
+        var questId = Required(root, "questId");
+        var enabled = root.GetProperty("enabled").GetBoolean();
+
+        _campaignStore.SetQuestEnabled(campaignId, questId, enabled);
+
+        var campaign = _campaignStore.BuildSimulatorCatalog()
+            .FirstOrDefault(item => item.Id.Equals(campaignId, StringComparison.OrdinalIgnoreCase));
+
+        _runtime.SetQuestEnabled(
+            questId,
+            enabled && campaign?.Active == true);
+    }
+
+    private void SetCampaignActive(JsonElement root)
+    {
+        var campaignId = Required(root, "campaignId");
+        var active = root.GetProperty("active").GetBoolean();
+
+        _campaignStore.SetCampaignActive(campaignId, active);
+
+        var campaign = _campaignStore.BuildSimulatorCatalog()
+            .FirstOrDefault(item => item.Id.Equals(campaignId, StringComparison.OrdinalIgnoreCase));
+
+        if (campaign is null)
+            return;
+
+        foreach (var quest in campaign.Quests)
+        {
+            var enabled = campaign.Active && quest.Status == CampaignQuestStatus.Enabled;
+            _runtime.SetQuestEnabled(quest.QuestId, enabled);
+        }
+    }
+
+    private void OpenQuestEditor(JsonElement root)
+    {
+        var path = Required(root, "path");
+        if (!File.Exists(path))
+            throw new InvalidOperationException("Quest файл не найден: " + path);
+
+        BeginInvoke(() => _openQuestEditor(path));
+    }
+
+    private void OpenCampaignFolder(JsonElement root)
+    {
+        var campaignId = Required(root, "campaignId");
+        var campaign = _campaignStore.BuildSimulatorCatalog()
+            .FirstOrDefault(item => item.Id.Equals(campaignId, StringComparison.OrdinalIgnoreCase));
+
+        if (campaign is null || !Directory.Exists(campaign.FolderPath))
+            throw new InvalidOperationException("Папка кампании не найдена: " + campaignId);
+
+        Process.Start(new ProcessStartInfo
+        {
+            FileName = campaign.FolderPath,
+            UseShellExecute = true
+        });
+    }
+
+    private object[] BuildQuestActivationMarkers(SimulatorSnapshot snapshot)
+    {
+        return _campaignStore.BuildSimulatorCatalog()
+            .SelectMany(campaign => campaign.Quests
+                .Where(quest =>
+                    campaign.Active &&
+                    quest.Status == CampaignQuestStatus.Enabled &&
+                    quest.Activation is not null &&
+                    !string.IsNullOrWhiteSpace(quest.Activation.WorldPointId))
+                .Select(quest =>
+                {
+                    var activation = quest.Activation!;
+                    var point = snapshot.World.Points.FirstOrDefault(item =>
+                        item.Id.Equals(activation.WorldPointId, StringComparison.OrdinalIgnoreCase));
+
+                    if (point is null)
+                        return null;
+
+                    var repOk =
+                        string.IsNullOrWhiteSpace(activation.RequiredReputationNpcId) ||
+                        !activation.RequiredReputation.HasValue ||
+                        snapshot.Reputation.ValueOf(activation.RequiredReputationNpcId) >=
+                        activation.RequiredReputation.Value;
+
+                    return new
+                    {
+                        campaignId = campaign.Id,
+                        campaignName = campaign.Name,
+                        questId = quest.QuestId,
+                        questTitle = quest.Title,
+                        worldPointId = point.Id,
+                        radius = Math.Max(0, activation.Radius),
+                        available = repOk,
+                        position = point.Position
+                    };
+                })
+                .Where(item => item is not null)
+                .Cast<object>())
+            .ToArray();
     }
 
     private void SetQuestStatus(JsonElement root)
