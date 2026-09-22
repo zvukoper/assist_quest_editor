@@ -656,10 +656,28 @@
     return isSelectedQuest(entry) ? 2.5 : 1;
   }
 
+  /**
+   * Обводка текста без «пиков» на острых углах глифов.
+   *
+   * Canvas по умолчанию соединяет линии «митрой» (`lineJoin="miter"` при
+   * `miterLimit=10`). На острых углах букв (вершины «М», «А», «Ц») митра
+   * вытягивается далеко за пределы глифа, и при толстой обводке над буквами
+   * появляются чёрные «пики». Скруглённое соединение с жёстким `miterLimit`
+   * ограничивает выступ половиной толщины обводки.
+   *
+   * Все обводки текста идут только через этот помощник: проверка
+   * `ci/text_outline_smoke.mjs` следит, что прямых вызовов `strokeText` нет.
+   */
+  function strokeTextOutline(ctx, text, x, y) {
+    ctx.lineJoin = "round";
+    ctx.miterLimit = 2;
+    ctx.strokeText(text, x, y);
+  }
+
   function strokeAndFillText(ctx, text, x, y, fill, stroke) {
     ctx.lineWidth = 2.5;
     ctx.strokeStyle = stroke;
-    ctx.strokeText(text, x, y);
+    strokeTextOutline(ctx, text, x, y);
     ctx.fillStyle = fill;
     ctx.fillText(text, x, y);
   }
@@ -856,7 +874,7 @@
       ctx.font = "600 11px Open Sans, Arial, sans-serif";
       ctx.textAlign = "center";
       const baseline = q.y - 10;
-      ctx.strokeText(text, q.x, baseline);
+      strokeTextOutline(ctx, text, q.x, baseline);
       ctx.fillText(text, q.x, baseline);
       ctx.restore();
       return;
@@ -866,7 +884,7 @@
       ? "700 12px Open Sans, Arial, sans-serif"
       : "600 10px Open Sans, Arial, sans-serif";
     ctx.textAlign = "left";
-    ctx.strokeText(text, q.x + 10, q.y - 10);
+    strokeTextOutline(ctx, text, q.x + 10, q.y - 10);
     ctx.fillText(text, q.x + 10, q.y - 10);
     ctx.restore();
   }
@@ -1333,7 +1351,7 @@
     ctx.fillStyle = "#fab003";
     ctx.strokeStyle = "rgba(0,0,0,.95)";
     ctx.lineWidth = 4;
-    ctx.strokeText("ЦЕЛЬ", target.x + 12, target.y - 12);
+    strokeTextOutline(ctx, "ЦЕЛЬ", target.x + 12, target.y - 12);
     ctx.fillText("ЦЕЛЬ", target.x + 12, target.y - 12);
     if (playerScreen) {
       ctx.beginPath();

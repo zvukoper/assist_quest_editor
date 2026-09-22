@@ -78,6 +78,12 @@ jobs:
         shell: pwsh
         run: node ci/quest_plate_smoke.mjs
 
+      - name: Обводка текста без пиков
+        id: text_outline_smoke
+        continue-on-error: true
+        shell: pwsh
+        run: node ci/text_outline_smoke.mjs
+
       - name: Quest Graph Playwright smoke
         id: quest_graph_smoke
         continue-on-error: true
