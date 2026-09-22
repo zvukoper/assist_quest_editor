@@ -31,6 +31,52 @@ public sealed class SceneGraphStore
         _value.Choices.FirstOrDefault(choice =>
             choice.Id.Equals(choiceId, StringComparison.OrdinalIgnoreCase));
 
+    public SceneDialogue AddDialogue()
+    {
+        var dialogue = new SceneDialogue(
+            CreateUniqueId("dialogue"),
+            "Персонаж",
+            "Новый текст диалога.");
+
+        Apply(_value with
+        {
+            Dialogues = _value.Dialogues.Append(dialogue).ToArray()
+        });
+
+        return dialogue;
+    }
+
+    public bool RemoveDialogue(string dialogueId, out string? error)
+    {
+        error = null;
+        var dialogue = FindDialogue(dialogueId);
+        if (dialogue is null)
+        {
+            error = "Dialogue resource «" + dialogueId + "» не найден.";
+            return false;
+        }
+
+        var referencedBy = _value.Graph.Nodes.FirstOrDefault(node =>
+            node.NodeType.Equals("Dialogue", StringComparison.OrdinalIgnoreCase) &&
+            node.Parameters.TryGetValue("dialogueId", out var id) &&
+            id.Equals(dialogueId, StringComparison.OrdinalIgnoreCase));
+
+        if (referencedBy is not null)
+        {
+            error = "Нельзя удалить Dialogue resource «" + dialogueId + "»: он используется нодой «" + referencedBy.NodeId + "». Сначала отвяжите ресурс от ноды.";
+            return false;
+        }
+
+        Apply(_value with
+        {
+            Dialogues = _value.Dialogues
+                .Where(item => !item.Id.Equals(dialogueId, StringComparison.OrdinalIgnoreCase))
+                .ToArray()
+        });
+
+        return true;
+    }
+
     public SceneDialogue CreateDialogueForNode(string nodeId)
     {
         var node = FindNode(nodeId)
