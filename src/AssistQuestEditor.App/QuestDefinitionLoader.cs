@@ -104,6 +104,9 @@ public static class QuestDefinitionLoader
     private static QuestDefinitionDocument FallbackDocument()
     {
         var graph = QuestGraphFactory.CreateStarter();
+        // activation намеренно не задаётся (Manual): это стартовый документ для отсутствующего
+        // или повреждённого файла, привязывать его к точке мира наугад нельзя. В отличие от
+        // описания и сцен, здесь null не является потерей данных — файла нет.
         return new QuestDefinitionDocument(
             1,
             "aqquest",
