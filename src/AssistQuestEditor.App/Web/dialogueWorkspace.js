@@ -379,7 +379,12 @@
     ws.querySelector("#dialogueBackToQuest")?.addEventListener("click", () => {
       const navigationBack = getState()?.payload?.navigationBack;
       if (!navigationBack?.nodeId) return;
-      send({ action: "navigate_to_quest_node", nodeId: navigationBack.nodeId });
+      send({
+        action: "navigate_to_quest_node",
+        nodeId: navigationBack.nodeId,
+        questId: navigationBack.questId || "",
+        questPath: navigationBack.questPath || ""
+      });
     });
 
     ws.querySelector("#dialogueOpenScene")?.addEventListener("click", () => {

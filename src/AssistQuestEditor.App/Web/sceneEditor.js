@@ -114,7 +114,12 @@
     ws.querySelector("#openLastScene")?.addEventListener("click", () => send({ action: "scene_open_last" }));
     ws.querySelector("#sceneBackToQuest")?.addEventListener("click", () => {
       if (!sceneNavigationBack?.nodeId) return;
-      send({ action: "navigate_to_quest_node", nodeId: sceneNavigationBack.nodeId });
+      send({
+        action: "navigate_to_quest_node",
+        nodeId: sceneNavigationBack.nodeId,
+        questId: sceneNavigationBack.questId || "",
+        questPath: sceneNavigationBack.questPath || ""
+      });
     });
     ws.querySelector("#saveScene").addEventListener("click", () => send({ action: "scene_save" }));
     ws.querySelector("#saveSceneAs").addEventListener("click", () => send({ action: "scene_save_as" }));

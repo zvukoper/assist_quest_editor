@@ -102,7 +102,12 @@ try {
         documentPath: "data/scenes/ruslan_start.aqscene",
         lastDocumentPath: "data/scenes/ruslan_start.aqscene",
         documentDirty: false,
-        navigationBack: { nodeId: "dialogue-scene", nodeTitle: "Разговор с Русланом" }
+        navigationBack: {
+          nodeId: "dialogue-scene",
+          nodeTitle: "Разговор с Русланом",
+          questId: "tutorial_ruslan_shashlik",
+          questPath: "data/quests/tutorial_ruslan_shashlik.aqquest"
+        }
       }
     }));
   }, sceneDefinition);
@@ -114,8 +119,11 @@ try {
   await page.getByRole("button", { name: /Вернуться в Quest Graph/ }).click();
 
   const backMessage = await page.evaluate(() => window.__messages.filter(item => item.action === "navigate_to_quest_node").pop());
-  if (!backMessage || backMessage.nodeId !== "dialogue-scene")
-    throw new Error("Scene/Dialogue -> Quest node navigation lost NodeId.");
+  if (!backMessage ||
+      backMessage.nodeId !== "dialogue-scene" ||
+      backMessage.questId !== "tutorial_ruslan_shashlik" ||
+      backMessage.questPath !== "data/quests/tutorial_ruslan_shashlik.aqquest")
+    throw new Error("Scene/Dialogue -> Quest node navigation lost source Quest document context.");
   if (errors.length) throw new Error("Resource navigation smoke pageerror: " + errors.join(" | "));
 
   console.log("Resource navigation smoke: OK");

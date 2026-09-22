@@ -465,7 +465,7 @@ public sealed class MainForm : WebViewForm
                 OpenSceneFromQuestNode(e.NodeId);
                 break;
             case "navigate_to_quest_node":
-                OpenQuestNodeFromScene(e.NodeId);
+                OpenQuestNodeFromScene(e.NodeId, e.QuestId, e.QuestPath);
                 break;
         }
     }
@@ -513,7 +513,12 @@ public sealed class MainForm : WebViewForm
 
         try
         {
-            sceneEditor.OpenSceneFromQuestNode(path, node.NodeId, node.Title);
+            sceneEditor.OpenSceneFromQuestNode(
+                path,
+                node.NodeId,
+                node.Title,
+                _questGraph.Value.Id,
+                sender is EditorForm sourceEditor ? sourceEditor.CurrentQuestPath : null);
         }
         catch (Exception ex)
         {
@@ -526,21 +531,58 @@ public sealed class MainForm : WebViewForm
         }
     }
 
-    private void OpenQuestNodeFromScene(string nodeId)
+    private void OpenQuestNodeFromScene(string nodeId, string? questId, string? questPath)
     {
-        var node = _questGraph.FindNode(nodeId);
-        if (node is null)
-        {
-            MessageBox.Show(this, "Связанная Quest Graph нода больше не существует: " + nodeId,
-                "Возврат в Quest Graph", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-            return;
-        }
-
         const string editorKey = "editor.html#graph";
         OpenEditor("graph");
 
-        if (_editors.TryGetValue(editorKey, out var graphEditor) && !graphEditor.IsDisposed)
-            graphEditor.FocusQuestNode(node.NodeId);
+        if (!_editors.TryGetValue(editorKey, out var graphEditor) || graphEditor.IsDisposed)
+            return;
+
+        try
+        {
+            if (!string.IsNullOrWhiteSpace(questPath) && File.Exists(questPath))
+            {
+                if (!graphEditor.OpenQuestResourceAndSelectNode(questPath, nodeId))
+                    return;
+
+                return;
+            }
+
+            if (!string.IsNullOrWhiteSpace(questId) &&
+                !_questGraph.Value.Id.Equals(questId, StringComparison.OrdinalIgnoreCase))
+            {
+                MessageBox.Show(
+                    this,
+                    "Исходный Quest resource «" + questId + "» больше недоступен.",
+                    "Возврат в Quest Graph",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Warning);
+                return;
+            }
+
+            if (_questGraph.FindNode(nodeId) is null)
+            {
+                MessageBox.Show(
+                    this,
+                    "Связанная Quest Graph нода больше не существует: " + nodeId,
+                    "Возврат в Quest Graph",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Warning);
+                return;
+            }
+
+            graphEditor.FocusQuestNode(nodeId);
+        }
+        catch (Exception ex)
+        {
+            AppLogger.Error(
+                "Не удалось вернуться из Scene в исходный Quest node.",
+                ex,
+                "quest=" + (questId ?? "<current>") + "; path=" + (questPath ?? "<none>") + "; node=" + nodeId);
+            MessageBox.Show(this, ex.Message, "Возврат в Quest Graph",
+                MessageBoxButtons.OK, MessageBoxIcon.Error);
+        }
     }
 
     private void OpenSimulator()

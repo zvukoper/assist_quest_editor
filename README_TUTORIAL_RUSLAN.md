@@ -156,7 +156,7 @@ Quest 3 не зависит от Quest 2 graph connection. Он становит
 В правой панели Simulator есть табы «Персонаж» и «Репутация»: во вкладке
 репутации видны только те НПЦ, с которыми контакт уже состоялся.
 
-Версия 1.0.40.145-INDEPENDENT-QUEST-LIFECYCLE использует каталог независимых Quest Definition.
+Версия 1.0.40.147-QUEST-NAVIGATION-CONTEXT использует каталог независимых Quest Definition.
 
 1. Перемести игрока к city:ekat — Екатеринбург.
 2. Войди в радиус точки. Должен автоматически активироваться Quest tutorial_ruslan_shashlik.

@@ -31,6 +31,8 @@ public sealed class EditorForm : WebViewForm
     private string? _lastDefinitionPath;
     private bool _documentDirty;
     private bool _loadingScene;
+    private string? _navigationBackQuestId;
+    private string? _navigationBackQuestPath;
     private string? _pendingQuestNodeSelection;
     private string? _navigationBackQuestNodeId;
     private string? _navigationBackQuestNodeTitle;
@@ -57,6 +59,9 @@ public sealed class EditorForm : WebViewForm
     public event EventHandler<string>? RecentFileUnavailable;
 
     public string WindowKey { get; }
+
+    public string? CurrentQuestPath =>
+        _isGraphEditor ? _currentDefinitionPath : null;
 
     public EditorForm(
         string title,
@@ -127,6 +132,34 @@ public sealed class EditorForm : WebViewForm
         PostRecentFiles();
     }
 
+    public bool OpenQuestResourceAndSelectNode(string path, string nodeId)
+    {
+        if (!_isGraphEditor)
+            throw new InvalidOperationException("Возврат из Scene доступен только в Quest Graph editor.");
+
+        if (string.IsNullOrWhiteSpace(path) || !File.Exists(path))
+            return false;
+
+        if (!ResourceFileTypes.TryGet(Path.GetExtension(path), out var resource) ||
+            !resource.Kind.Equals("Quest", StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidOperationException("Исходный ресурс не является .aqquest: " + path);
+        }
+
+        var sameDocument =
+            !string.IsNullOrWhiteSpace(_currentDefinitionPath) &&
+            string.Equals(
+                Path.GetFullPath(_currentDefinitionPath),
+                Path.GetFullPath(path),
+                StringComparison.OrdinalIgnoreCase);
+
+        if (!sameDocument && !OpenGraphResource(path))
+            return false;
+
+        FocusQuestNode(nodeId);
+        return true;
+    }
+
     public void FocusQuestNode(string nodeId)
     {
         if (!_isGraphEditor)
@@ -144,7 +177,12 @@ public sealed class EditorForm : WebViewForm
         }
     }
 
-    public bool OpenSceneFromQuestNode(string path, string nodeId, string nodeTitle)
+    public bool OpenSceneFromQuestNode(
+        string path,
+        string nodeId,
+        string nodeTitle,
+        string? questId,
+        string? questPath)
     {
         if (!_isSceneEditor)
             throw new InvalidOperationException("Переход в Scene доступен только в Scene Editor.");
@@ -155,7 +193,7 @@ public sealed class EditorForm : WebViewForm
         if (!ConfirmSceneSwitch())
             return false;
 
-        LoadSceneFromPath(path, nodeId, nodeTitle);
+        LoadSceneFromPath(path, nodeId, nodeTitle, questId, questPath);
         return true;
     }
 
@@ -341,9 +379,16 @@ public sealed class EditorForm : WebViewForm
             case "navigate_to_quest_node":
             {
                 var nodeId = Required(root, "nodeId");
+                var questId = OptionalString(root, "questId");
+                var questPath = OptionalString(root, "questPath");
                 NavigationRequested?.Invoke(
                     this,
-                    new EditorNavigationRequestEventArgs("navigate_to_quest_node", nodeId));
+                    new EditorNavigationRequestEventArgs(
+                        "navigate_to_quest_node",
+                        nodeId,
+                        null,
+                        questId,
+                        questPath));
                 break;
             }
 
@@ -773,7 +818,12 @@ public sealed class EditorForm : WebViewForm
                 var sceneId = OptionalString(root, "sceneId");
                 NavigationRequested?.Invoke(
                     this,
-                    new EditorNavigationRequestEventArgs("graph_open_scene", nodeId, sceneId));
+                    new EditorNavigationRequestEventArgs(
+                        "graph_open_scene",
+                        nodeId,
+                        sceneId,
+                        _questGraph.Value.Id,
+                        _currentDefinitionPath));
                 break;
             }
 
@@ -1105,7 +1155,9 @@ public sealed class EditorForm : WebViewForm
     private void LoadSceneFromPath(
         string path,
         string? navigationBackQuestNodeId = null,
-        string? navigationBackQuestNodeTitle = null)
+        string? navigationBackQuestNodeTitle = null,
+        string? navigationBackQuestId = null,
+        string? navigationBackQuestPath = null)
     {
         var document = JsonSerializer.Deserialize<SceneDefinitionDocument>(
             File.ReadAllText(path),
@@ -1131,6 +1183,8 @@ public sealed class EditorForm : WebViewForm
         _sceneDocument.Opened(document.Definition.Id, path);
         _navigationBackQuestNodeId = navigationBackQuestNodeId;
         _navigationBackQuestNodeTitle = navigationBackQuestNodeTitle;
+        _navigationBackQuestId = navigationBackQuestId;
+        _navigationBackQuestPath = navigationBackQuestPath;
         SaveLastScenePath();
         UpdateWindowTitle();
         PostSceneCatalog();
@@ -1316,7 +1370,9 @@ public sealed class EditorForm : WebViewForm
                 : new
                 {
                     nodeId = _navigationBackQuestNodeId,
-                    nodeTitle = _navigationBackQuestNodeTitle
+                    nodeTitle = _navigationBackQuestNodeTitle,
+                    questId = _navigationBackQuestId,
+                    questPath = _navigationBackQuestPath
                 }
         }, WebJsonOptions));
     }
