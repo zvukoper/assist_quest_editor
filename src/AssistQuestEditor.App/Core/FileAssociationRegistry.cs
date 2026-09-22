@@ -1,11 +1,10 @@
-using System.Text.Json;
 using Microsoft.Win32;
 
 namespace AssistQuestEditor.App;
 
 public static class FileAssociationRegistry
 {
-    private const string ClassesRoot = @"Software\Classes";
+    private const string ClassesRoot = @"SoftwareClasses";
     private const string ApplicationName = "AssistQuestEditor";
 
     public static void Register()
@@ -53,9 +52,7 @@ public static class FileAssociationRegistry
                 {
                     if (extensionKey?.GetValue(null) is string current &&
                         current.Equals(progId, StringComparison.OrdinalIgnoreCase))
-                    {
                         extensionKey.DeleteValue(null, throwOnMissingValue: false);
-                    }
 
                     extensionKey?.OpenSubKey("OpenWithProgids", writable: true)
                         ?.DeleteValue(progId, throwOnMissingValue: false);
@@ -73,29 +70,24 @@ public static class FileAssociationRegistry
         }
     }
 
-    private static void RegisterType(
-        ResourceFileType resource,
-        string exePath,
-        string iconDirectory)
+    private static void RegisterType(ResourceFileType resource, string exePath, string iconDirectory)
     {
         var progId = BuildProgId(resource);
-        var extensionKeyPath = ClassesRoot + "\\" + resource.Extension;
-        var progIdKeyPath = ClassesRoot + "\\" + progId;
 
-        using (var extensionKey = Registry.CurrentUser.CreateSubKey(extensionKeyPath))
+        using (var extensionKey = Registry.CurrentUser.CreateSubKey(ClassesRoot + "\\" + resource.Extension))
         {
             if (extensionKey is null)
                 return;
 
-            var current = extensionKey.GetValue(null) as string;
-            if (string.IsNullOrWhiteSpace(current))
+            // Не забираем ассоциацию, которую пользователь уже выбрал вручную.
+            if (string.IsNullOrWhiteSpace(extensionKey.GetValue(null) as string))
                 extensionKey.SetValue(null, progId, RegistryValueKind.String);
 
             using var openWith = extensionKey.CreateSubKey("OpenWithProgids");
             openWith?.SetValue(progId, string.Empty, RegistryValueKind.None);
         }
 
-        using (var progIdKey = Registry.CurrentUser.CreateSubKey(progIdKeyPath))
+        using (var progIdKey = Registry.CurrentUser.CreateSubKey(ClassesRoot + "\\" + progId))
         {
             if (progIdKey is null)
                 return;
@@ -108,7 +100,7 @@ public static class FileAssociationRegistry
                 icon?.SetValue(null, QuotePath(Path.Combine(iconDirectory, resource.IconFileName) + ",0"), RegistryValueKind.String);
 
             using var shell = progIdKey.CreateSubKey(@"shellopencommand");
-            shell?.SetValue(null, QuotePath(exePath) + " "%1"", RegistryValueKind.String);
+            shell?.SetValue(null, QuotePath(exePath) + " \"%1\"", RegistryValueKind.String);
         }
     }
 
@@ -124,34 +116,124 @@ public static class FileAssociationRegistry
 
         Directory.CreateDirectory(directory);
 
-        var source = Path.Combine(AppContext.BaseDirectory, "Assets", "FileIcons", "file-icons.json");
-        if (!File.Exists(source))
-            return directory;
-
-        using var document = JsonDocument.Parse(File.ReadAllText(source));
-        var icons = document.RootElement.GetProperty("icons");
-
         foreach (var resource in ResourceFileTypes.All)
         {
-            var key = resource.ProgIdPart.ToLowerInvariant();
-            if (!icons.TryGetProperty(key, out var encoded))
-                continue;
-
-            var bytes = Convert.FromBase64String(encoded.GetString() ?? string.Empty);
-            if (bytes.Length == 0)
-                continue;
-
             var target = Path.Combine(directory, resource.IconFileName);
             var temp = target + ".tmp";
-            File.WriteAllBytes(temp, bytes);
+            File.WriteAllBytes(temp, CreateIcon(resource));
             File.Move(temp, target, true);
         }
 
         return directory;
     }
 
+    // Generates a tiny self-contained ICO package at first registration.
+    // This keeps the project free of binary icon dependencies while still
+    // giving every registered resource type its own stable Explorer icon.
+    private static byte[] CreateIcon(ResourceFileType resource)
+    {
+        const int width = 32;
+        const int height = 32;
+
+        var (r, g, b) = resource.ProgIdPart switch
+        {
+            "Quest" => (210, 70, 70),
+            "Scene" => (70, 120, 220),
+            "Dialogue" => (150, 80, 210),
+            "Campaign" => (220, 140, 40),
+            "Point" => (50, 160, 110),
+            "City" => (40, 150, 170),
+            "Item" => (80, 160, 170),
+            "Localization" => (200, 90, 150),
+            "NodeRegistry" => (110, 90, 170),
+            "RuntimeSnapshot" => (120, 120, 120),
+            _ => (90, 90, 90)
+        };
+
+        var letter = resource.ProgIdPart switch
+        {
+            "NodeRegistry" => 'N',
+            "RuntimeSnapshot" => 'R',
+            _ => resource.ProgIdPart[0]
+        };
+
+        var pixels = new byte[width * height * 4];
+        var glyph = Glyphs.GetValueOrDefault(letter, Glyphs['R']);
+
+        for (var y = 0; y < height; y++)
+        for (var x = 0; x < width; x++)
+        {
+            var border = x < 2 || y < 2 || x >= width - 2 || y >= height - 2;
+            var gx = (x - 7) / 4;
+            var gy = (y - 5) / 4;
+            var glyphPixel = gx is >= 0 and < 5 &&
+                             gy is >= 0 and < 7 &&
+                             glyph[gy][gx] == '1';
+
+            var index = ((height - 1 - y) * width + x) * 4;
+            pixels[index] = (byte)(glyphPixel ? 255 : b);
+            pixels[index + 1] = (byte)(glyphPixel ? 255 : g);
+            pixels[index + 2] = (byte)(glyphPixel ? 255 : r);
+            pixels[index + 3] = 255;
+
+            if (border)
+                pixels[index] = pixels[index + 1] = pixels[index + 2] = 255;
+        }
+
+        using var image = new MemoryStream();
+        using var writer = new BinaryWriter(image);
+
+        writer.Write((ushort)0);
+        writer.Write((ushort)1);
+        writer.Write((ushort)1);
+
+        const int imageOffset = 22;
+        const int dibSize = 40;
+        const int pixelBytes = width * height * 4;
+        const int maskBytes = ((width + 31) / 32) * 4 * height;
+        const int imageSize = dibSize + pixelBytes + maskBytes;
+
+        writer.Write((byte)width);
+        writer.Write((byte)height);
+        writer.Write((byte)0);
+        writer.Write((byte)0);
+        writer.Write((ushort)1);
+        writer.Write((ushort)32);
+        writer.Write(imageSize);
+        writer.Write(imageOffset);
+
+        writer.Write(dibSize);
+        writer.Write(width);
+        writer.Write(height * 2);
+        writer.Write((ushort)1);
+        writer.Write((ushort)32);
+        writer.Write(0);
+        writer.Write(pixelBytes);
+        writer.Write(0);
+        writer.Write(0);
+        writer.Write(0);
+        writer.Write(0);
+        writer.Write(pixels);
+        writer.Write(new byte[maskBytes]);
+
+        return image.ToArray();
+    }
+
+    private static readonly Dictionary<char, string[]> Glyphs = new()
+    {
+        ['Q'] = ["01110", "10001", "10001", "10001", "10101", "10010", "01101"],
+        ['S'] = ["01111", "10000", "10000", "01110", "00001", "00001", "11110"],
+        ['D'] = ["11110", "10001", "10001", "10001", "10001", "10001", "11110"],
+        ['C'] = ["01111", "10000", "10000", "10000", "10000", "10000", "01111"],
+        ['P'] = ["11110", "10001", "10001", "11110", "10000", "10000", "10000"],
+        ['I'] = ["11111", "00100", "00100", "00100", "00100", "00100", "11111"],
+        ['L'] = ["10000", "10000", "10000", "10000", "10000", "10000", "11111"],
+        ['N'] = ["10001", "11001", "10101", "10011", "10001", "10001", "10001"],
+        ['R'] = ["11110", "10001", "10001", "11110", "10100", "10010", "10001"]
+    };
+
     private static string QuotePath(string path) =>
-        """ + path.Replace(""", "\"", StringComparison.Ordinal) + """;
+        "\"" + path.Replace("\"", "\\\"", StringComparison.Ordinal) + "\"";
 
     private static class NativeMethods
     {
