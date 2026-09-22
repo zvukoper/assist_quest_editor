@@ -228,10 +228,14 @@ Scene Editor R1 переведён с UI-заглушки на canonical pipelin
 - `.aqquest` — Quest;
 - `.aqscene` — Scene;
 - `.aqdialogue` — Dialogue;
+- `.aqchoice` — Choice;
 - `.aqcampaign` — Campaign;
+- `.aqworld` — World;
 - `.aqpoint` — World Point;
 - `.aqcity` — City;
 - `.aqitem` — Item definition;
+- `.aqcondition` — reusable Condition;
+- `.aqeffect` — reusable Effect;
 - `.aqloc` — Localization;
 - `.aqregistry` — Node Registry;
 - `.aqsnapshot` — Runtime Snapshot;
