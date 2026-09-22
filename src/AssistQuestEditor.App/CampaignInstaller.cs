@@ -184,8 +184,11 @@ public static class CampaignInstaller
         {
             CopyNonQuestFiles(source.FolderPath, destinationFolder);
             changed = true;
-            logOnly.Add(
-                $"Обновлена кампания «{source.Definition.Name}»: v{localDefinition.Version} → v{source.Definition.Version}.");
+
+            var campaignMessage =
+                $"Обновлена кампания «{source.Definition.Name}»: v{localDefinition.Version} → v{source.Definition.Version}.";
+            visible.Add(campaignMessage);
+            AppLogger.Info("CampaignInstaller: Campaign version обновлена.", campaignMessage);
         }
 
         if (!SequenceEqual(localDefinition.Quests, merged) ||
