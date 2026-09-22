@@ -9,6 +9,57 @@ public static class SceneGraphValidator
         var diagnostics = new List<GraphDiagnostic>();
         var graph = definition.Graph;
 
+        var dialogueIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var dialogue in definition.Dialogues)
+        {
+            if (string.IsNullOrWhiteSpace(dialogue.Id))
+                diagnostics.Add(new GraphDiagnostic("SCENE_CONTENT001", GraphDiagnosticSeverity.Error, "У Dialogue resource пустой Id."));
+            else if (!dialogueIds.Add(dialogue.Id))
+                diagnostics.Add(new GraphDiagnostic("SCENE_CONTENT002", GraphDiagnosticSeverity.Error, "Dialogue Id не уникален: «" + dialogue.Id + "»."));
+
+            if (string.IsNullOrWhiteSpace(dialogue.Speaker))
+                diagnostics.Add(new GraphDiagnostic("SCENE_DIALOGUE001", GraphDiagnosticSeverity.Warning, "У Dialogue не задан Speaker.", dialogue.Id));
+            if (string.IsNullOrWhiteSpace(dialogue.Text))
+                diagnostics.Add(new GraphDiagnostic("SCENE_DIALOGUE002", GraphDiagnosticSeverity.Warning, "У Dialogue не задан текст.", dialogue.Id));
+        }
+
+        var choiceIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var choice in definition.Choices)
+        {
+            if (string.IsNullOrWhiteSpace(choice.Id))
+                diagnostics.Add(new GraphDiagnostic("SCENE_CONTENT003", GraphDiagnosticSeverity.Error, "У Choice resource пустой Id."));
+            else if (!choiceIds.Add(choice.Id))
+                diagnostics.Add(new GraphDiagnostic("SCENE_CONTENT004", GraphDiagnosticSeverity.Error, "Choice Id не уникален: «" + choice.Id + "»."));
+
+            if (string.IsNullOrWhiteSpace(choice.Title))
+                diagnostics.Add(new GraphDiagnostic("SCENE_CHOICE001", GraphDiagnosticSeverity.Warning, "У Choice не задано название.", choice.Id));
+            if (string.IsNullOrWhiteSpace(choice.Speaker))
+                diagnostics.Add(new GraphDiagnostic("SCENE_CHOICE002", GraphDiagnosticSeverity.Warning, "У Choice не задан Speaker.", choice.Id));
+            if (string.IsNullOrWhiteSpace(choice.Text))
+                diagnostics.Add(new GraphDiagnostic("SCENE_CHOICE003", GraphDiagnosticSeverity.Warning, "У Choice не задан текст.", choice.Id));
+            if (choice.Options.Count == 0)
+                diagnostics.Add(new GraphDiagnostic("SCENE_CHOICE004", GraphDiagnosticSeverity.Error, "Choice должен содержать хотя бы один вариант.", choice.Id));
+
+            var optionIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var outputSocketIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var option in choice.Options)
+            {
+                if (string.IsNullOrWhiteSpace(option.Id))
+                    diagnostics.Add(new GraphDiagnostic("SCENE_CHOICE005", GraphDiagnosticSeverity.Error, "У Choice option пустой Id.", choice.Id));
+                else if (!optionIds.Add(option.Id))
+                    diagnostics.Add(new GraphDiagnostic("SCENE_CHOICE006", GraphDiagnosticSeverity.Error, "Option Id не уникален внутри Choice: «" + option.Id + "».", choice.Id));
+
+                if (string.IsNullOrWhiteSpace(option.OutputSocketId))
+                    diagnostics.Add(new GraphDiagnostic("SCENE_CHOICE007", GraphDiagnosticSeverity.Error, "У Choice option не задан Output socket.", choice.Id, option.Id));
+                else if (!outputSocketIds.Add(option.OutputSocketId))
+                    diagnostics.Add(new GraphDiagnostic("SCENE_CHOICE008", GraphDiagnosticSeverity.Error, "Output socket используется более одного раза внутри Choice: «" + option.OutputSocketId + "».", choice.Id, option.Id));
+
+                if (string.IsNullOrWhiteSpace(option.Text))
+                    diagnostics.Add(new GraphDiagnostic("SCENE_CHOICE009", GraphDiagnosticSeverity.Warning, "У Choice option не задан текст.", choice.Id, option.Id));
+            }
+        }
+
+
         if (string.IsNullOrWhiteSpace(definition.Id))
             diagnostics.Add(new GraphDiagnostic("SCENE001", GraphDiagnosticSeverity.Error, "У Scene Definition не задан Id."));
 
