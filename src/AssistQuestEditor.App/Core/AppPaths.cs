@@ -16,4 +16,20 @@ public static class AppPaths
         ResourceRootResolver.Resolve(
             ResourceRootResolver.ExecutableDirectory(Environment.ProcessPath),
             AppContext.BaseDirectory);
+
+    /// <summary>
+    /// Постоянное пользовательское хранилище кампаний и квестов.
+    /// Оно не зависит от каталога публикации и переживает обновление EXE.
+    /// </summary>
+    public static string UserQuestRoot
+    {
+        get
+        {
+            var localAppData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+            if (string.IsNullOrWhiteSpace(localAppData))
+                localAppData = AppContext.BaseDirectory;
+
+            return Path.Combine(localAppData, "Assist Quest Editor", "quests");
+        }
+    }
 }
