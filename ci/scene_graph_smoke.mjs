@@ -51,6 +51,28 @@ try {
           ]
         },
         {
+          nodeId: "dialogue",
+          nodeType: "Dialogue",
+          title: "Диалог",
+          x: 320, y: 80,
+          parameters: { dialogueId: "fixture.dialogue" },
+          sockets: [
+            { socketId: "dialogue.in", name: "Вход", direction: "Input", flowKind: "Normal" },
+            { socketId: "dialogue.out", name: "Далее", direction: "Output", flowKind: "Normal" }
+          ]
+        },
+        {
+          nodeId: "dialogue-empty",
+          nodeType: "Dialogue",
+          title: "Пустой диалог",
+          x: 80, y: 500,
+          parameters: { dialogueId: "" },
+          sockets: [
+            { socketId: "dialogue-empty.in", name: "Вход", direction: "Input", flowKind: "Normal" },
+            { socketId: "dialogue-empty.out", name: "Далее", direction: "Output", flowKind: "Normal" }
+          ]
+        },
+        {
           nodeId: "choice",
           nodeType: "Choice",
           title: "Выбор",
@@ -78,7 +100,9 @@ try {
         { fromNodeId: "start", fromSocketId: "start.out", toNodeId: "choice", toSocketId: "choice.in" }
       ]
     },
-    dialogues: [],
+    dialogues: [
+      { id: "fixture.dialogue", speaker: "A", text: "Исходный диалог." }
+    ],
     choices: [
       {
         id: "fixture.choice",
@@ -121,6 +145,42 @@ try {
   // механикой Quest Graph. Проверка ждала старое имя и падала по таймауту ещё до
   // начала сценария, поэтому не ловила ни одного реального дефекта.
   await page.locator("#sceneGraphEditTitle").waitFor();
+
+
+  // Dialogue authoring: linked resource is shown with speaker/text and can be saved.
+  await page.locator("[data-node-id='dialogue']").click();
+  await page.locator("#sceneDialogueResource").waitFor();
+  if (await page.locator("#sceneDialogueSpeaker").inputValue() !== "A")
+    throw new Error("Dialogue Speaker не загружен из Scene resource.");
+  if (await page.locator("#sceneDialogueText").inputValue() !== "Исходный диалог.")
+    throw new Error("Dialogue Text не загружен из Scene resource.");
+
+  await page.locator("#sceneDialogueSpeaker").fill("Новый A");
+  await page.locator("#sceneDialogueText").fill("Новый текст диалога.");
+  await page.getByRole("button", { name: "Сохранить диалог" }).click();
+  const dialogueUpdate = await page.evaluate(() =>
+    window.__messages.slice().reverse().find(message =>
+      message.action === "scene_update_dialogue" &&
+      message.dialogueId === "fixture.dialogue"
+    )
+  );
+  if (!dialogueUpdate ||
+      dialogueUpdate.speaker !== "Новый A" ||
+      dialogueUpdate.text !== "Новый текст диалога.") {
+    throw new Error("Редактор Dialogue не отправил корректный scene_update_dialogue.");
+  }
+
+  // Empty Dialogue node can create a canonical content resource and link it to the node.
+  await page.locator("[data-node-id='dialogue-empty']").click();
+  await page.locator("#createSceneDialogue").waitFor();
+  await page.getByRole("button", { name: "Создать диалог для ноды" }).click();
+  if (!await page.evaluate(() =>
+    window.__messages.some(message =>
+      message.action === "scene_create_dialogue_for_node" &&
+      message.nodeId === "dialogue-empty"
+    ))) {
+    throw new Error("Создание Dialogue resource для ноды не отправило корректное действие.");
+  }
 
   if (errors.length) throw new Error("Scene Editor pageerror при инициализации: " + errors.join(" | "));
 
@@ -194,6 +254,51 @@ try {
   await page.mouse.move(5, 5);
   if (await page.locator("#sceneGraphSvg .socketGroup.hovered").count())
     throw new Error("Hover socket не очищается при уходе указателя.");
+
+
+  // Choice authoring: text fields and option texts are content, not generic node parameters.
+  await page.locator("[data-node-id='choice']").click();
+  await page.locator("#sceneChoiceResource").waitFor();
+  if (await page.locator("#sceneChoiceSpeaker").inputValue() !== "A")
+    throw new Error("Choice Speaker не загружен.");
+  if (await page.locator("#sceneChoiceText").inputValue() !== "B")
+    throw new Error("Choice Text не загружен.");
+
+  const optionRows = page.locator("[data-choice-option-row]");
+  if (await optionRows.count() !== 3)
+    throw new Error("Количество Choice options в редакторе не совпадает с ресурсом.");
+
+  const firstOptionText = optionRows.nth(0).locator("[data-choice-option-text]");
+  await firstOptionText.fill("Первый обновлённый");
+  await page.locator("#sceneChoiceTitle").fill("Обновлённый выбор");
+  await page.locator("#sceneChoiceSpeaker").fill("Новый A");
+  await page.locator("#sceneChoiceText").fill("Новый вопрос");
+  await page.getByRole("button", { name: "Сохранить выбор" }).click();
+
+  const choiceUpdate = await page.evaluate(() =>
+    window.__messages.slice().reverse().find(message =>
+      message.action === "scene_update_choice" &&
+      message.choiceId === "fixture.choice"
+    )
+  );
+  if (!choiceUpdate ||
+      choiceUpdate.title !== "Обновлённый выбор" ||
+      choiceUpdate.speaker !== "Новый A" ||
+      choiceUpdate.text !== "Новый вопрос" ||
+      choiceUpdate.options?.[0]?.id !== "one" ||
+      choiceUpdate.options?.[0]?.text !== "Первый обновлённый") {
+    throw new Error("Редактор Choice не отправил корректный scene_update_choice.");
+  }
+
+  await page.getByRole("button", { name: "Добавить вариант" }).click();
+  if (!await page.evaluate(() =>
+    window.__messages.some(message =>
+      message.action === "scene_add_choice_option" &&
+      message.nodeId === "choice" &&
+      message.choiceId === "fixture.choice"
+    ))) {
+    throw new Error("Добавление Choice option не отправило корректное действие.");
+  }
 
   // Inspector + dirty.
   await page.locator("[data-node-id='choice']").click();
