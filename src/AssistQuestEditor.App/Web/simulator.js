@@ -21,7 +21,7 @@
   let selectedPointId = null;
   let hoveredPointId = null;
   let questGraph = null;
-  let campaigns = [];
+
   let questActivations = [];
   let simulationRunning = false;
   let camera = { cx: 0, cz: 0, mpp: 50 };
@@ -1283,67 +1283,6 @@
     });
   }
 
-  function renderQuestCatalog() {
-    if (!campaigns.length) {
-      return "<div class='notice'>Установленных кампаний нет.</div>";
-    }
-
-    const statusEntries = new Map(
-      (snapshot?.questStatuses?.quests || []).map(item => [item.questId, item]));
-
-    return campaigns.map(campaign => {
-      const campaignChecked = !!campaign.active;
-      const questRows = (campaign.quests || []).map(quest => {
-        const enabled = String(quest.status || "").toLowerCase() === "enabled";
-        const runtimeEntry = statusEntries.get(quest.questId);
-        const runtimeStatus = runtimeEntry?.status || "Available";
-        const runtimeLabel = runtimeStatusName(runtimeStatus);
-
-        const effectiveEnabled = enabled && campaignChecked;
-        const activationLabel = !enabled
-          ? "Отключён"
-          : (campaignChecked ? "Активен" : "Кампания выкл.");
-
-        return "<div class='campaignQuestRow'>" +
-          "<label class='campaignQuestMain'>" +
-            "<input type='checkbox' data-quest-enabled='1' " +
-              "data-campaign-id='" + escapeHtml(campaign.id) + "' " +
-              "data-quest-id='" + escapeHtml(quest.questId) + "' " +
-              (enabled ? "checked" : "") + ">" +
-            "<span class='campaignQuestText'>" +
-              "<strong>" + escapeHtml(quest.title || quest.questId) + "</strong>" +
-              "<small>v" + Number(quest.version || 1) + " · " +
-                escapeHtml(runtimeLabel) + "</small>" +
-            "</span>" +
-          "</label>" +
-          "<span class='campaignQuestStatus " + (effectiveEnabled ? "enabled" : "disabled") + "'>" +
-            activationLabel +
-          "</span>" +
-          "<button class='microButton' type='button' " +
-            "data-open-quest='" + escapeHtml(quest.fullPath || "") + "'>Ред.</button>" +
-        "</div>";
-      }).join("");
-
-      return "<section class='campaignBlock'>" +
-        "<div class='campaignHeader'>" +
-          "<label class='campaignMainLabel'>" +
-            "<input type='checkbox' data-campaign-active='1' " +
-              "data-campaign-id='" + escapeHtml(campaign.id) + "' " +
-              (campaignChecked ? "checked" : "") + ">" +
-            "<span>" +
-              "<strong>" + escapeHtml(campaign.name || campaign.id) + "</strong>" +
-              "<small>v" + Number(campaign.version || 1) + "</small>" +
-            "</span>" +
-          "</label>" +
-          "<button class='microButton' type='button' " +
-            "data-open-campaign='" + escapeHtml(campaign.id) + "' " +
-            "title='Открыть папку кампании'>↗</button>" +
-        "</div>" +
-        "<div class='campaignQuestList'>" + questRows + "</div>" +
-      "</section>";
-    }).join("");
-  }
-
   function renderRuntimeSidebar() {
     if (!runtimeSide || !snapshot) return;
 
@@ -1362,14 +1301,6 @@
           "</div>" +
         "</div>" +
       "</div>" +
-      "<section class='questCatalog'>" +
-        "<div class='questCatalogHeader'>" +
-          "<div class='miniLabel'>Кампании и доступные квесты</div>" +
-          "<div class='miniLabel'>" + campaigns.reduce((sum, x) => sum + (x.quests?.length || 0), 0) +
-            "</div>" +
-        "</div>" +
-        "<div class='campaignList'>" + renderQuestCatalog() + "</div>" +
-      "</section>" +
       "<div class='runtimeControls'>" +
         "<button class='smallButton' id='fitWorldSide'>Все СДО</button>" +
       "</div>" +
@@ -1436,40 +1367,6 @@
       send({ action: "emit_event", eventType: "HornPressed", source: "Simulator", payload: {} });
     });
 
-    runtimeSide.querySelectorAll("[data-quest-enabled]").forEach(input => {
-      input.addEventListener("change", () => {
-        send({
-          action: "set_quest_enabled",
-          campaignId: input.dataset.campaignId,
-          questId: input.dataset.questId,
-          enabled: input.checked
-        });
-      });
-    });
-
-    runtimeSide.querySelectorAll("[data-campaign-active]").forEach(input => {
-      input.addEventListener("change", () => {
-        send({
-          action: "set_campaign_active",
-          campaignId: input.dataset.campaignId,
-          active: input.checked
-        });
-      });
-    });
-
-    runtimeSide.querySelectorAll("[data-open-quest]").forEach(button => {
-      button.addEventListener("click", () => {
-        const path = button.dataset.openQuest;
-        if (path) send({ action: "open_quest_editor", path });
-      });
-    });
-
-    runtimeSide.querySelectorAll("[data-open-campaign]").forEach(button => {
-      button.addEventListener("click", () => {
-        const campaignId = button.dataset.openCampaign;
-        if (campaignId) send({ action: "open_campaign_folder", campaignId });
-      });
-    });
   }
 
   function drawHud() {
@@ -1848,7 +1745,6 @@
       window.__assistItemCatalog = Array.isArray(message.itemCatalog) ? message.itemCatalog : [];
       runtime = message.runtime || null;
       simulationRunning = !!message.simulationRunning;
-      campaigns = Array.isArray(message.campaigns) ? message.campaigns : [];
       questActivations = Array.isArray(message.questActivations) ? message.questActivations : [];
       questGraph = message.questGraph || questGraph;
       journalDetached = !!message.journalDetached;
@@ -2134,6 +2030,10 @@
     const related = event.relatedTarget;
     if (target && related && target.contains(related)) return;
     if (activeTooltip) activeTooltip.style.display = "none";
+  });
+
+  document.getElementById("openCampaigns")?.addEventListener("click", () => {
+    send({ action: "open_campaigns" });
   });
 
   document.getElementById("simulationToggle")?.addEventListener("click", () => {

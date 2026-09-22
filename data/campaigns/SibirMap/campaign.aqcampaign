@@ -28,7 +28,7 @@
       {
         "questId": "sibirmap_city_cache",
         "relativePath": "quests/sibirmap_city_cache.aqquest",
-        "version": 1,
+        "version": 2,
         "status": "Disabled"
       }
     ],

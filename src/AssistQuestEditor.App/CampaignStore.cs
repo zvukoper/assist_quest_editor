@@ -36,11 +36,25 @@ public sealed class CampaignStore
 
     private readonly Dictionary<string, CampaignRecord> _records =
         new(StringComparer.OrdinalIgnoreCase);
+    private readonly string _root;
+    private readonly bool _readOnly;
 
     public CampaignStore()
+        : this(AppPaths.UserQuestRoot, readOnly: false)
     {
+    }
+
+    public CampaignStore(string root, bool readOnly)
+    {
+        if (string.IsNullOrWhiteSpace(root))
+            throw new ArgumentException("Campaign root не задан.", nameof(root));
+
+        _root = Path.GetFullPath(root);
+        _readOnly = readOnly;
         Reload();
     }
+
+    public bool IsReadOnly => _readOnly;
 
     public IReadOnlyList<CampaignRecord> Records =>
         _records.Values
@@ -207,10 +221,18 @@ public sealed class CampaignStore
     public void Reload()
     {
         _records.Clear();
-        Directory.CreateDirectory(AppPaths.UserQuestRoot);
+        if (!_readOnly)
+            Directory.CreateDirectory(_root);
+
+        if (!Directory.Exists(_root))
+        {
+            AppLogger.Info("CampaignStore: каталог отсутствует.",
+                $"root={_root}; readOnly={_readOnly}");
+            return;
+        }
 
         foreach (var campaignFile in Directory.EnumerateFiles(
-                     AppPaths.UserQuestRoot,
+                     _root,
                      CampaignFileName,
                      SearchOption.AllDirectories)
                  .OrderBy(path => path, StringComparer.OrdinalIgnoreCase))
@@ -239,7 +261,7 @@ public sealed class CampaignStore
             }
         }
 
-        AppLogger.Info("CampaignStore: каталог загружен.", $"campaigns={_records.Count}; root={AppPaths.UserQuestRoot}");
+        AppLogger.Info("CampaignStore: каталог загружен.", $"campaigns={_records.Count}; root={_root}; readOnly={_readOnly}");
     }
 
     private CampaignRecord GetRecord(string campaignId)
@@ -295,8 +317,15 @@ public sealed class CampaignStore
             Definition = definition;
     }
 
-    private static void Save(CampaignRecord record)
+    private void Save(CampaignRecord record)
     {
+        if (_readOnly)
+        {
+            AppLogger.Info("CampaignStore: изменение только в памяти (read-only).",
+                $"campaignId={record.Definition.Id}");
+            return;
+        }
+
         Directory.CreateDirectory(record.FolderPath);
         var document = new CampaignDefinitionDocument(1, "aqcampaign", record.Definition);
         File.WriteAllText(

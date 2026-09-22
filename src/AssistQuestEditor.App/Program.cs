@@ -7,8 +7,13 @@ internal static class Program
     [STAThread]
     private static void Main(string[] args)
     {
+        var ciTest = StartupOptions.IsCiTest(args);
+
         AppLogger.Info("=== Assist Quest Editor START ===",
-            $"Version={VersionInfo.InformationalVersion}; BaseDirectory={AppContext.BaseDirectory}; CurrentDirectory={Environment.CurrentDirectory}; LogPath={AppLogger.LogPath}");
+            $"Version={VersionInfo.InformationalVersion}; Mode={(ciTest ? "CI test" : "User")}; BaseDirectory={AppContext.BaseDirectory}; CurrentDirectory={Environment.CurrentDirectory}; LogPath={AppLogger.LogPath}");
+
+        if (ciTest)
+            AppLogger.Info("Startup: режим=CI test.", "Установочные сценарии отключены.");
 
         SplashForm? splash = null;
         MainForm? mainForm = null;
@@ -35,7 +40,7 @@ internal static class Program
             }
 
             var startupFile = args.FirstOrDefault(arg =>
-                !arg.StartsWith("--", StringComparison.Ordinal) &&
+                !StartupOptions.IsApplicationSwitch(arg) &&
                 File.Exists(arg));
 
             // Единственный экземпляр. Если приложение уже запущено, второй процесс
@@ -66,14 +71,20 @@ internal static class Program
                 return;
             }
 
-            // До создания MainForm синхронизируем bundled campaign store с
-            // постоянным пользовательским хранилищем. Это гарантирует, что
-            // Runtime и редакторы увидят одну и ту же установленную версию.
-            var campaignSync = CampaignInstaller.Synchronize();
-            if (campaignSync.UserVisibleChanges.Count > 0)
+            // Установочные сценарии разрешены только в пользовательском режиме.
+            // CI test читает bundled Campaign store напрямую и ничего не меняет в AppData.
+            if (!ciTest)
             {
-                using var notice = new CampaignSyncNoticeForm(campaignSync.UserVisibleChanges);
-                notice.ShowDialog();
+                var campaignSync = CampaignInstaller.Synchronize();
+                if (campaignSync.UserVisibleChanges.Count > 0)
+                {
+                    using var notice = new CampaignSyncNoticeForm(campaignSync.UserVisibleChanges);
+                    notice.ShowDialog();
+                }
+            }
+            else
+            {
+                AppLogger.Info("Startup: CampaignInstaller пропущен.", "Причина: режим CI test.");
             }
 
             AppLogger.Info("Загрузка СДО world data.");
@@ -87,7 +98,7 @@ internal static class Program
             AppLogger.Info("Создан SimulatorDataSourceAdapter.",
                 $"channels={simulatorAdapter.Channels.Describe().Count}; points={worldCount}");
 
-            mainForm = new MainForm(simulatorAdapter.Channels)
+            mainForm = new MainForm(simulatorAdapter.Channels, ciTest)
             {
                 Opacity = 0
             };

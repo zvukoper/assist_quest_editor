@@ -5,7 +5,7 @@
     "id": "sibirmap_city_cache",
     "title": "Тайник в Челябинске",
     "description": "Небольшой независимый тайник для проверки Campaign activation. Квест отключён в Campaign store до ручной активации.",
-    "version": 1,
+    "version": 2,
     "sceneIds": [],
     "activation": {
       "mode": "Proximity",
@@ -18,8 +18,6 @@
       "name": "Тайник в Челябинске",
       "nodes": [
         {
-          "id": "start",
-          "type": "Start",
           "title": "01. Начало",
           "x": 80,
           "y": 230,
@@ -31,11 +29,11 @@
               "flowKind": "Normal"
             }
           ],
-          "parameters": {}
+          "parameters": {},
+          "nodeId": "start",
+          "nodeType": "Start"
         },
         {
-          "id": "cache-trigger",
-          "type": "Interaction",
           "title": "02. Войти в радиус тайника",
           "x": 340,
           "y": 230,
@@ -56,11 +54,11 @@
           "parameters": {
             "worldPointId": "city:chelyabinsk",
             "triggerRadius": "750"
-          }
+          },
+          "nodeId": "cache-trigger",
+          "nodeType": "Interaction"
         },
         {
-          "id": "cache-found",
-          "type": "Notify",
           "title": "03. Тайник найден",
           "x": 600,
           "y": 230,
@@ -80,11 +78,11 @@
           ],
           "parameters": {
             "message": "Ты нашёл тайник! Получено 5 000 ₽ и +50 к навыку «Разведчик»."
-          }
+          },
+          "nodeId": "cache-found",
+          "nodeType": "Notify"
         },
         {
-          "id": "cache-money",
-          "type": "AddMoney",
           "title": "04. Получить 5 000 ₽",
           "x": 860,
           "y": 180,
@@ -104,11 +102,11 @@
           ],
           "parameters": {
             "amount": "5000"
-          }
+          },
+          "nodeId": "cache-money",
+          "nodeType": "AddMoney"
         },
         {
-          "id": "cache-scout",
-          "type": "AddSkill",
           "title": "05. Разведчик +50",
           "x": 1120,
           "y": 180,
@@ -133,11 +131,11 @@
             "kind": "Levelled",
             "amount": "50",
             "maxLevel": "100"
-          }
+          },
+          "nodeId": "cache-scout",
+          "nodeType": "AddSkill"
         },
         {
-          "id": "end",
-          "type": "End",
           "title": "06. Тайник завершён",
           "x": 1380,
           "y": 180,
@@ -149,7 +147,9 @@
               "flowKind": "Normal"
             }
           ],
-          "parameters": {}
+          "parameters": {},
+          "nodeId": "end",
+          "nodeType": "End"
         }
       ],
       "connections": [

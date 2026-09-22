@@ -22,6 +22,7 @@ public sealed class SimulatorForm : WebViewForm
     private string _lastQuestSnapshotLogKey = string.Empty;
     private readonly List<SimulatorJournalEntry> _journalEntries = new();
     private JournalForm? _journalForm;
+    private CampaignsForm? _campaignsForm;
     private bool _journalDetached;
     private bool _snapshotRequestScheduled;
     private bool _journalRefreshScheduled;
@@ -60,6 +61,17 @@ public sealed class SimulatorForm : WebViewForm
         {
             _journalForm?.Close();
             _journalForm = null;
+
+            if (_campaignsForm is not null)
+            {
+                _campaignsForm.CampaignActiveChanged -= CampaignsForm_CampaignActiveChanged;
+                _campaignsForm.QuestEnabledChanged -= CampaignsForm_QuestEnabledChanged;
+                _campaignsForm.QuestOpenRequested -= CampaignsForm_QuestOpenRequested;
+                _campaignsForm.CampaignFolderOpenRequested -= CampaignsForm_CampaignFolderOpenRequested;
+                _campaignsForm.Close();
+                _campaignsForm = null;
+            }
+
             _runtimeTimer.Stop();
             _runtimeTimer.Dispose();
             _runtime.Published -= Runtime_Published;
@@ -89,6 +101,9 @@ public sealed class SimulatorForm : WebViewForm
             return;
         }
 
+        if (_campaignsForm is not null && !_campaignsForm.IsDisposed)
+            _campaignsForm.SetCatalog(_campaignStore.BuildSimulatorCatalog());
+
         var snapshot = _hub.GetSnapshot();
         var pointCount = snapshot.World.Points.Count;
         AppLogger.Info("SimulatorForm: формирование snapshot.",
@@ -113,7 +128,6 @@ public sealed class SimulatorForm : WebViewForm
             runtime = _runtime.State,
             simulationRunning = _runtime.SimulationRunning,
             enabledQuestIds = _runtime.EnabledQuestIds,
-            campaigns = _campaignStore.BuildSimulatorCatalog(),
             questActivations = BuildQuestActivationMarkers(snapshot),
             questGraph = _runtime.ActiveGraph ?? _questGraph.Value,
             journalDetached = _journalDetached
@@ -214,6 +228,10 @@ public sealed class SimulatorForm : WebViewForm
 
                 case "open_journal":
                     OpenJournalWindow();
+                    break;
+
+                case "open_campaigns":
+                    OpenCampaignsWindow();
                     break;
 
                 case "return_journal_to_sidebar":
@@ -342,34 +360,28 @@ public sealed class SimulatorForm : WebViewForm
         _hub.Get<RuntimeStatesState>("states").Set(state with { Variables = variables }, "Редактор состояний");
     }
 
-    private void SetQuestEnabled(JsonElement root)
+    private void SetQuestEnabled(JsonElement root) =>
+        SetQuestEnabled(Required(root, "campaignId"), Required(root, "questId"),
+            root.GetProperty("enabled").GetBoolean());
+
+    private void SetQuestEnabled(string campaignId, string questId, bool enabled)
     {
-        var campaignId = Required(root, "campaignId");
-        var questId = Required(root, "questId");
-        var enabled = root.GetProperty("enabled").GetBoolean();
-
         _campaignStore.SetQuestEnabled(campaignId, questId, enabled);
-
         var campaign = _campaignStore.BuildSimulatorCatalog()
             .FirstOrDefault(item => item.Id.Equals(campaignId, StringComparison.OrdinalIgnoreCase));
-
-        _runtime.SetQuestEnabled(
-            questId,
-            enabled && campaign?.Active == true);
+        _runtime.SetQuestEnabled(questId, enabled && campaign?.Active == true);
     }
 
-    private void SetCampaignActive(JsonElement root)
+    private void SetCampaignActive(JsonElement root) =>
+        SetCampaignActive(Required(root, "campaignId"),
+            root.GetProperty("active").GetBoolean());
+
+    private void SetCampaignActive(string campaignId, bool active)
     {
-        var campaignId = Required(root, "campaignId");
-        var active = root.GetProperty("active").GetBoolean();
-
         _campaignStore.SetCampaignActive(campaignId, active);
-
         var campaign = _campaignStore.BuildSimulatorCatalog()
             .FirstOrDefault(item => item.Id.Equals(campaignId, StringComparison.OrdinalIgnoreCase));
-
-        if (campaign is null)
-            return;
+        if (campaign is null) return;
 
         foreach (var quest in campaign.Quests)
         {
@@ -387,12 +399,13 @@ public sealed class SimulatorForm : WebViewForm
         BeginInvoke(() => _openQuestEditor(path));
     }
 
-    private void OpenCampaignFolder(JsonElement root)
+    private void OpenCampaignFolder(JsonElement root) =>
+        OpenCampaignFolder(Required(root, "campaignId"));
+
+    private void OpenCampaignFolder(string campaignId)
     {
-        var campaignId = Required(root, "campaignId");
         var campaign = _campaignStore.BuildSimulatorCatalog()
             .FirstOrDefault(item => item.Id.Equals(campaignId, StringComparison.OrdinalIgnoreCase));
-
         if (campaign is null || !Directory.Exists(campaign.FolderPath))
             throw new InvalidOperationException("Папка кампании не найдена: " + campaignId);
 
@@ -402,6 +415,48 @@ public sealed class SimulatorForm : WebViewForm
             UseShellExecute = true
         });
     }
+
+    private void OpenCampaignsWindow()
+    {
+        if (_campaignsForm is not null && !_campaignsForm.IsDisposed)
+        {
+            _campaignsForm.SetCatalog(_campaignStore.BuildSimulatorCatalog());
+            _campaignsForm.WindowState = FormWindowState.Normal;
+            _campaignsForm.BringToFront();
+            _campaignsForm.Activate();
+            return;
+        }
+
+        _campaignsForm = new CampaignsForm();
+        _campaignsForm.SetCatalog(_campaignStore.BuildSimulatorCatalog());
+        _campaignsForm.CampaignActiveChanged += CampaignsForm_CampaignActiveChanged;
+        _campaignsForm.QuestEnabledChanged += CampaignsForm_QuestEnabledChanged;
+        _campaignsForm.QuestOpenRequested += CampaignsForm_QuestOpenRequested;
+        _campaignsForm.CampaignFolderOpenRequested += CampaignsForm_CampaignFolderOpenRequested;
+        _campaignsForm.FormClosed += (_, _) => _campaignsForm = null;
+        _campaignsForm.Show(this);
+    }
+
+    private void CampaignsForm_CampaignActiveChanged(object? sender, CampaignActiveChangedEventArgs e)
+    {
+        SetCampaignActive(e.CampaignId, e.Active);
+        RequestSnapshot("campaign window: campaign active changed");
+    }
+
+    private void CampaignsForm_QuestEnabledChanged(object? sender, QuestEnabledChangedEventArgs e)
+    {
+        SetQuestEnabled(e.CampaignId, e.QuestId, e.Enabled);
+        RequestSnapshot("campaign window: quest enabled changed");
+    }
+
+    private void CampaignsForm_QuestOpenRequested(object? sender, QuestOpenRequestedEventArgs e)
+    {
+        if (File.Exists(e.Path))
+            BeginInvoke(() => _openQuestEditor(e.Path));
+    }
+
+    private void CampaignsForm_CampaignFolderOpenRequested(object? sender, CampaignFolderOpenRequestedEventArgs e) =>
+        OpenCampaignFolder(e.CampaignId);
 
     private object[] BuildQuestActivationMarkers(SimulatorSnapshot snapshot)
     {

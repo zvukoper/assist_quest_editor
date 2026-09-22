@@ -20,7 +20,7 @@ public sealed class MainForm : WebViewForm
     private SimulatorForm? _simulator;
     private SettingsForm? _settings;
 
-    public MainForm(IDataChannelHub hub)
+    public MainForm(IDataChannelHub hub, bool ciTest = false)
         : base(
             "Assist Quest Editor — Редактор",
             "main.html",
@@ -33,7 +33,9 @@ public sealed class MainForm : WebViewForm
         }
 
         _hub = hub;
-        _campaignStore = new CampaignStore();
+        _campaignStore = ciTest
+            ? new CampaignStore(Path.Combine(AppPaths.ResourceRoot, "campaigns"), readOnly: true)
+            : new CampaignStore();
         _questGraph = new QuestGraphStore(QuestDefinitionLoader.LoadDocumentOrFallback().Definition);
         _sceneCatalog = SceneCatalogLoader.Load();
         var initialScene = _sceneCatalog.TryGetScene("ruslan_start", out var ruslanStart)

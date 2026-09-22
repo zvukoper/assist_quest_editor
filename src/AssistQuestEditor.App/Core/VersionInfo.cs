@@ -2,6 +2,6 @@ namespace AssistQuestEditor.App;
 
 public static class VersionInfo
 {
-    public const string NumericVersion = "1.0.40.149";
-    public const string InformationalVersion = "1.0.40.149-CAMPAIGN-SIMULATION";
+    public const string NumericVersion = "1.0.40.150";
+    public const string InformationalVersion = "1.0.40.150-CAMPAIGN-WINDOW-CITEST";
 }

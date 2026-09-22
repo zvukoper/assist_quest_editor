@@ -41,6 +41,17 @@ for (const file of files) {
 
     if (!["Enabled", "Disabled"].includes(entry.status))
       problems.push("invalid quest status " + entry.questId);
+
+    const nodes = quest.definition?.graph?.nodes;
+    if (!Array.isArray(nodes))
+      problems.push("missing graph nodes " + entry.questId);
+    else {
+      for (const node of nodes) {
+        if (!node?.nodeId || !node?.nodeType)
+          problems.push("non-canonical node identity " + entry.questId +
+            ": expected nodeId/nodeType");
+      }
+    }
   }
 
   for (const relative of definition?.files || []) {

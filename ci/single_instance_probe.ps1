@@ -98,14 +98,22 @@ $script:LogOffset = Get-AppLogLength
 $failures = New-Object System.Collections.Generic.List[string]
 
 try {
-    # Первый экземпляр: обычный запуск.
-    $first = Start-Process -FilePath $ExePath -PassThru
+    # Первый экземпляр: CI test; установочный сценарий не должен выполняться.
+    $first = Start-Process -FilePath $ExePath -ArgumentList @('-citest') -PassThru
     if (-not (Wait-ForLogMarker -Pattern 'Single instance: экземпляр первый')) {
         $failures.Add('Первый экземпляр не зафиксировал захват мьютекса.')
     }
 
+    if (-not (Wait-ForLogMarker -Pattern 'Startup: режим=CI test')) {
+        $failures.Add('Приложение не зафиксировало режим -citest.')
+    }
+
+    if (Get-NewAppLogLines | Select-String -Pattern 'CampaignInstaller:' -Quiet) {
+        $failures.Add('В режиме -citest был запущен CampaignInstaller.')
+    }
+
     # Второй экземпляр с путём к файлу: должен передать путь и завершиться.
-    $second = Start-Process -FilePath $ExePath -ArgumentList "`"$target`"" -PassThru
+    $second = Start-Process -FilePath $ExePath -ArgumentList @('-citest', ('"' + $target + '"')) -PassThru
     if (-not $second.WaitForExit(30000)) {
         $failures.Add('Второй экземпляр не завершился: ожидалась передача запроса.')
         try { $second.Kill() } catch { }
