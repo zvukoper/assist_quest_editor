@@ -20,7 +20,12 @@ try {
   page.on("pageerror", error => errors.push(String(error)));
 
   await page.setContent(
-    "<!doctype html><html lang='ru'><body><main>" +
+    "<!doctype html><html lang='ru'><head><style>" +
+    "html,body{height:100%;margin:0;overflow:hidden}" +
+    "main{height:100%;min-height:0;display:grid;" +
+      "grid-template-columns:minmax(0,1fr) 330px;gap:14px}" +
+    "#workspace,#inspector{overflow:auto;min-height:0}" +
+    "</style></head><body><main>" +
     "<div id='workspace'></div><div id='inspector'></div>" +
     "</main></body></html>"
   );

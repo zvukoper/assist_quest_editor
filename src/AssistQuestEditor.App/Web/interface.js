@@ -57,7 +57,7 @@
         (isDialogue
           ? "<div class='interfaceChoices'>" +
               "<button class='interfaceChoice interfaceDialogueContinue' data-interface-dialogue-continue>" +
-                "<span class='interfaceChoiceIndex'>▶</span>" +
+                "<span class='interfaceChoiceIndex' aria-hidden='true'>▶</span>" +
                 "<span>Продолжить</span>" +
               "</button>" +
             "</div>" +
@@ -139,7 +139,15 @@
     render();
   }
 
-  window.chrome?.webview?.addEventListener("message", event => {
+  /**
+   * Единый обработчик входящих сообщений.
+   *
+   * Подписка ниже идёт и на `window`, и на `chrome.webview`: так делают
+   * editor.js, sceneEditor.js, main.js и simulator.js. Только webview-подписка
+   * делала интерфейс нерабочим вне реального WebView2 (Playwright-смоук и
+   * синтетические MessageEvent), из-за чего состояние интерфейса не обновлялось.
+   */
+  const handleInterfaceMessage = event => {
     try {
       const data = typeof event.data === "string" ? JSON.parse(event.data) : event.data;
       receive(data);
@@ -148,7 +156,14 @@
         error: String(error)
       });
     }
-  });
+  };
+
+  window.addEventListener("message", handleInterfaceMessage);
+
+  const webview = window.chrome?.webview;
+  if (typeof webview?.addEventListener === "function") {
+    webview.addEventListener("message", handleInterfaceMessage);
+  }
 
   document.addEventListener("keydown", event => {
     if (!active) return;

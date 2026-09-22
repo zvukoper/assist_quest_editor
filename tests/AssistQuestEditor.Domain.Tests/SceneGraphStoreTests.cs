@@ -1,4 +1,5 @@
 using AssistQuestEditor.Domain;
+using System.Linq;
 using Xunit;
 
 namespace AssistQuestEditor.Domain.Tests;
@@ -223,6 +224,15 @@ public sealed class SceneGraphStoreTests
     {
         var scene = SceneCatalogFactory.CreateStarter().Scenes.Single();
         var store = new SceneGraphStore(scene);
+
+        // Decline-ветка подключена в starter-сцене (choice.decline -> decline.in),
+        // а удалять подключённый Output запрещено контрактом. Поэтому сначала
+        // разрываем связь, и только потом проверяем удаление и сохранность
+        // остальных sockets.
+        var declineConnection = store.Value.Graph.Connections.Single(connection =>
+            connection.FromNodeId.Equals("choice", StringComparison.OrdinalIgnoreCase) &&
+            connection.FromSocketId.Equals("choice.decline", StringComparison.OrdinalIgnoreCase));
+        Assert.True(store.Disconnect(declineConnection));
 
         Assert.True(store.RemoveChoiceOption(
             "choice",

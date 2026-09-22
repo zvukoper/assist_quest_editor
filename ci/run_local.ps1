@@ -6,7 +6,8 @@
     Повторяет шаги CI на этой машине без GitHub Actions:
         Playwright install / Chromium install / Playwright smoke /
         Simulator <-> Editor contract / Quest Graph UI smoke /
-        Scene Graph UI smoke / Quest Graph layout / Pan follows cursor /
+        Scene Graph UI smoke / Scene interface UI smoke /
+        Quest Graph layout / Pan follows cursor /
         Web JavaScript syntax / .NET SDK / .NET build / domain tests /
         single-file publish.
 
@@ -77,7 +78,8 @@ $script:HeartbeatPath = Join-Path $script:StateDir 'monitor.heartbeat'
 # Общее число проверок в прогоне — нужно для процента выполнения.
 # Значение фиксировано: publish присутствует всегда (как «пропущено»), поэтому
 # число не зависит от -IncludePublish.
-$script:TotalChecks = 11
+# Держать в актуальном состоянии при добавлении/удалении Invoke-Check.
+$script:TotalChecks = 17
 
 # Подавление уведомления скрипта. Вызывающий скрипт может взять уведомление на
 # себя: pull.ps1 показывает одно уведомление с учётом признака активности
@@ -514,6 +516,12 @@ Invoke-Check -Name 'Перестроение нод Quest Graph' -Body {
 # (ждала переименованный #sceneEditTitle) и падала ещё до сценария.
 Invoke-Check -Name 'Scene Graph UI smoke' -Body {
     node ci/scene_graph_smoke.mjs
+}
+
+# Шаг 5.2.1: интерфейсный слой Scene Runtime (Dialogue Continue + Choice).
+# Та же причина, что и у проверки выше: она была только в GitHub Actions.
+Invoke-Check -Name 'Scene interface UI smoke' -Body {
+    node ci/scene_interface_smoke.mjs
 }
 
 # Шаг 5.3: pan средней кнопкой следует за курсором в обоих нодовых редакторах.

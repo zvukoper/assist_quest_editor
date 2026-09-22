@@ -4,7 +4,7 @@ namespace AssistQuestEditor.App;
 
 public static class FileAssociationRegistry
 {
-    private const string ClassesRoot = "Software" + (char)92 + "Classes";
+    private const string ClassesRoot = @"Software\Classes";
     private const string ApplicationName = "AssistQuestEditor";
 
     public static void Register()
@@ -52,7 +52,7 @@ public static class FileAssociationRegistry
                 {
                     if (extensionKey?.GetValue(null) is string current &&
                         current.Equals(progId, StringComparison.OrdinalIgnoreCase))
-                        extensionKey.DeleteValue(null, throwOnMissingValue: false);
+                        extensionKey.DeleteValue(string.Empty, throwOnMissingValue: false);
 
                     extensionKey?.OpenSubKey("OpenWithProgids", writable: true)
                         ?.DeleteValue(progId, throwOnMissingValue: false);
