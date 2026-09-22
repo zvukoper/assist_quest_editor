@@ -99,7 +99,7 @@ public static class FileAssociationRegistry
             using (var icon = progIdKey.CreateSubKey("DefaultIcon"))
                 icon?.SetValue(null, QuotePath(Path.Combine(iconDirectory, resource.IconFileName) + ",0"), RegistryValueKind.String);
 
-            using var shell = progIdKey.CreateSubKey(@"shellopencommand");
+            using var shell = progIdKey.CreateSubKey("shell\\open\\command");
             shell?.SetValue(null, QuotePath(exePath) + " \"%1\"", RegistryValueKind.String);
         }
     }
