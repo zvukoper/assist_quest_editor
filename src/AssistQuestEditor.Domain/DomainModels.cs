@@ -18,6 +18,12 @@ public enum QuestStartMode
     Proximity
 }
 
+public enum SkillKind
+{
+    Static,
+    Levelled
+}
+
 public sealed record QuestActivation(
     QuestStartMode Mode = QuestStartMode.Manual,
     string? WorldPointId = null,
@@ -147,7 +153,12 @@ public sealed record CharacterSkillState(
     string Name,
     string Description,
     bool Unlocked,
-    string LevelLabel);
+    string LevelLabel)
+{
+    public SkillKind Kind { get; init; } = SkillKind.Static;
+    public int Level { get; init; }
+    public int MaxLevel { get; init; } = 1;
+}
 
 public sealed record CharacterState(
     IReadOnlyDictionary<string, int> Stats,
@@ -227,7 +238,8 @@ public sealed record QuestDefinition(
     string Description,
     QuestGraph Graph,
     IReadOnlyList<string> SceneIds,
-    QuestActivation? Activation = null);
+    QuestActivation? Activation = null,
+    int Version = 1);
 
 public sealed record QuestDefinitionDocument(
     [property: JsonPropertyOrder(0)] int SchemaVersion,
