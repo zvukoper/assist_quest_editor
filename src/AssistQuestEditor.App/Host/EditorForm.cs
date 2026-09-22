@@ -24,6 +24,7 @@ public sealed class EditorForm : WebViewForm
     private readonly HashSet<string> _executedNodeIds = new(StringComparer.OrdinalIgnoreCase);
     private readonly bool _isGraphEditor;
     private readonly bool _isSceneEditor;
+    private readonly bool _isDialogueWorkspace;
     private string? _currentDefinitionPath;
     private string? _lastDefinitionPath;
     private string? _currentScenePath;
@@ -54,7 +55,10 @@ public sealed class EditorForm : WebViewForm
         _lastDefinitionPath = preferences.LastQuestDefinitionPath;
         _lastScenePath = preferences.LastSceneDefinitionPath;
         _isGraphEditor = page.EndsWith("#graph", StringComparison.OrdinalIgnoreCase);
-        _isSceneEditor = page.EndsWith("#scene", StringComparison.OrdinalIgnoreCase);
+        _isSceneEditor =
+            page.EndsWith("#scene", StringComparison.OrdinalIgnoreCase) ||
+            page.EndsWith("#dialogue", StringComparison.OrdinalIgnoreCase);
+        _isDialogueWorkspace = page.EndsWith("#dialogue", StringComparison.OrdinalIgnoreCase);
 
         _player.Changed += Player_Changed;
         _selection.Changed += Selection_Changed;
@@ -1035,7 +1039,10 @@ public sealed class EditorForm : WebViewForm
             var fileName = string.IsNullOrWhiteSpace(_currentScenePath)
                 ? "Новый документ"
                 : Path.GetFileName(_currentScenePath);
-            Text = $"Assist Quest Editor — Редактор сцен — {fileName}" + (_sceneDocumentDirty ? " *" : string.Empty);
+            var prefix = _isDialogueWorkspace
+                ? "Рабочее пространство диалогов"
+                : "Редактор сцен";
+            Text = $"Assist Quest Editor — {prefix} — {fileName}" + (_sceneDocumentDirty ? " *" : string.Empty);
         }
     }
 
