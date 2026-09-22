@@ -252,6 +252,7 @@ public sealed class MainForm : WebViewForm
         {
             "graph" => ("Нодовый редактор", "editor.html#graph"),
             "scene" => ("Редактор сцен", "editor.html#scene"),
+            "dialogue" => ("Рабочее пространство диалогов", "editor.html#dialogue"),
             "world" => ("Редактор мира", "editor.html#world"),
             "channels" => ("Инспектор каналов", "editor.html#channels"),
             "conditions" => ("Редактор условий и действий", "editor.html#conditions"),
