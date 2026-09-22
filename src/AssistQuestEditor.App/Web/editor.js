@@ -43,7 +43,11 @@
 
   const configs = {
     graph: { title: "Нодовый редактор квестов", draw: renderGraph },
-    scene: { title: "Редактор сцен и диалогов", draw: renderScene },
+    scene: { title: "Редактор сцен", draw: renderScene },
+    dialogue: {
+      title: "Рабочее пространство диалогов",
+      draw: (ws, ins) => window.__assistDialogueWorkspace?.render?.(ws, ins)
+    },
     world: { title: "Редактор мира и координат", draw: renderWorld },
     channels: { title: "Инспектор Data Channels", draw: renderChannels },
     conditions: { title: "Редактор условий и действий", draw: renderConditions },
@@ -1567,6 +1571,11 @@
         pendingGraphFit = false;
         fitGraph();
       }
+      return;
+    }
+
+    if (data?.type === "host_error") {
+      window.alert(data.message || "Ошибка редактора.");
       return;
     }
 
