@@ -673,6 +673,7 @@
       "worldPointId": "city:ekat",
       "radius": 1500,
       "repeatable": false
-    }
+    },
+    "version": 2
   }
 }
