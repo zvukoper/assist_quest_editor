@@ -161,6 +161,20 @@ public sealed class MainForm : WebViewForm
             return;
         }
 
+        if (resource.Kind.Equals("Campaign", StringComparison.OrdinalIgnoreCase))
+        {
+            var folder = Path.GetDirectoryName(path);
+            if (!string.IsNullOrWhiteSpace(folder) && Directory.Exists(folder))
+            {
+                Process.Start(new ProcessStartInfo
+                {
+                    FileName = folder,
+                    UseShellExecute = true
+                });
+            }
+            return;
+        }
+
         var editorKey = resource.Kind switch
         {
             "Quest" => "editor.html#graph",
