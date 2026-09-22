@@ -6,6 +6,7 @@ namespace AssistQuestEditor.App;
 public sealed class MainForm : WebViewForm
 {
     private readonly IDataChannelHub _hub;
+    private readonly CampaignStore _campaignStore;
     private readonly QuestGraphStore _questGraph;
     private readonly SceneCatalog _sceneCatalog;
     private readonly SceneGraphStore _sceneGraph;
@@ -31,6 +32,7 @@ public sealed class MainForm : WebViewForm
         }
 
         _hub = hub;
+        _campaignStore = new CampaignStore();
         _questGraph = new QuestGraphStore(QuestDefinitionLoader.LoadDocumentOrFallback().Definition);
         _sceneCatalog = SceneCatalogLoader.Load();
         var initialScene = _sceneCatalog.TryGetScene("ruslan_start", out var ruslanStart)
@@ -47,8 +49,20 @@ public sealed class MainForm : WebViewForm
         _runtime = new QuestRuntimeCoordinator(
             _hub,
             _sceneRuntime,
-            QuestDefinitionLoader.LoadAllOrFallback,
+            _campaignStore.LoadEnabledQuestDefinitions,
             "tutorial_ruslan_shashlik");
+
+        foreach (var campaign in _campaignStore.BuildSimulatorCatalog())
+        {
+            foreach (var quest in campaign.Quests)
+            {
+                _runtime.SetQuestEnabled(
+                    quest.QuestId,
+                    quest.CampaignActive &&
+                    quest.Status == CampaignQuestStatus.Enabled);
+            }
+        }
+
         _sceneRuntime.Published += SceneRuntime_Published;
 
         // История последних открытых ресурсов: список читается здесь один раз и
@@ -403,12 +417,10 @@ public sealed class MainForm : WebViewForm
         WindowGeometryStore.ClearSavedGeometry();
     }
 
-    private static string? ResolveScenePath(string sceneId)
+    private string? ResolveScenePath(string sceneId)
     {
-        // Каталог ресурсов, а не BaseDirectory: в single-file публикации базовый
-        // каталог — это кэш распаковки, где могут лежать файлы прошлых сборок.
-        var path = Path.Combine(AppPaths.ResourceRoot, "scenes", sceneId + ".aqscene");
-        return File.Exists(path) ? path : null;
+        return _campaignStore.FindScenePath(sceneId)
+            ?? Path.Combine(AppPaths.ResourceRoot, "scenes", sceneId + ".aqscene");
     }
 
     private void OpenEditor(string editor)
@@ -595,7 +607,12 @@ public sealed class MainForm : WebViewForm
             return;
         }
 
-        _simulator = new SimulatorForm(_hub, _runtime, _questGraph);
+        _simulator = new SimulatorForm(
+            _hub,
+            _runtime,
+            _questGraph,
+            _campaignStore,
+            path => OpenStartupResource(path));
         _simulator.FormClosed += (_, _) => _simulator = null;
         PlaceOnSecondaryScreen(_simulator);
         _simulator.Show(this);
