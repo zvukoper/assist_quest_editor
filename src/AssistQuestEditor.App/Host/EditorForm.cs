@@ -264,6 +264,12 @@ public sealed class EditorForm : WebViewForm
                     "Scene Content: создан Dialogue resource.",
                     "dialogue=" + dialogue.Id);
                 PostSceneGraph();
+                PostJson(JsonSerializer.Serialize(new
+                {
+                    type = "scene_content_selected",
+                    kind = "dialogue",
+                    id = dialogue.Id
+                }, WebJsonOptions));
                 break;
             }
 
