@@ -67,6 +67,10 @@ public sealed class MainForm : WebViewForm
         }
 
         _sceneRuntime.Published += SceneRuntime_Published;
+        // Индикатор «Симулятор: активен» зависит от запущенной симуляции, а не от
+        // открытого окна, поэтому состояние подписывается на те же события
+        // Runtime, что видит окно симулятора.
+        _runtime.Published += Runtime_Published;
 
         // История последних открытых ресурсов: список читается здесь один раз и
         // дальше живёт в памяти, чтобы клик по нему не ходил на диск.
@@ -83,6 +87,7 @@ public sealed class MainForm : WebViewForm
         {
             BrowserReady -= MainForm_BrowserReady;
             _sceneRuntime.Published -= SceneRuntime_Published;
+            _runtime.Published -= Runtime_Published;
             _sceneCatalog.Changed -= SceneCatalog_Changed;
             _runtime.Dispose();
             _recentQuestFiles.Changed -= RecentQuestFiles_Changed;
@@ -100,6 +105,9 @@ public sealed class MainForm : WebViewForm
 
     private void MainForm_BrowserReady(object? sender, EventArgs e)
     {
+        // Начальное состояние чипа: симуляция не запускается автоматически, но
+        // после перезагрузки страницы web-сторона снова ждёт актуальное значение.
+        PostSimulatorState();
         OpenSimulator();
 
         var startupPath = FileActivationRequest.Consume();
@@ -310,6 +318,49 @@ public sealed class MainForm : WebViewForm
             state,
             message
         }));
+    }
+
+    /// <summary>
+    /// Пересылает в web-сторону факт запуска/остановки симуляции.
+    ///
+    /// Подписка на события Runtime нужна потому, что «Запустить симуляцию»
+    /// нажимается в окне симулятора, а индикатор живёт в шапке главного окна.
+    /// Обрабатываются только события смены режима: они публикуются исключительно
+    /// при реальном изменении, а остальные события приходят постоянно и рассылать
+    /// их было бы лишней работой.
+    /// </summary>
+    private void Runtime_Published(object? sender, QuestRuntimeEvent e)
+    {
+        if (!e.EventType.Equals("SimulationStarted", StringComparison.OrdinalIgnoreCase) &&
+            !e.EventType.Equals("SimulationStopped", StringComparison.OrdinalIgnoreCase))
+        {
+            return;
+        }
+
+        PostSimulatorState();
+    }
+
+    private void PostSimulatorState()
+    {
+        if (IsDisposed || !IsHandleCreated)
+        {
+            return;
+        }
+
+        try
+        {
+            PostJson(JsonSerializer.Serialize(new
+            {
+                type = "simulator_state",
+                // Состояние читается у Runtime: он единственный источник истины,
+                // поэтому чип совпадает с кнопкой в окне симулятора даже после
+                // перезагрузки страницы.
+                running = _runtime.SimulationRunning
+            }));
+        }
+        catch (InvalidOperationException)
+        {
+        }
     }
 
     private void SceneCatalog_Changed(object? sender, EventArgs e)

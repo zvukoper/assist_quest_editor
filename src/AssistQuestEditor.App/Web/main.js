@@ -45,7 +45,23 @@
     if (data?.type === "logs_push_state") {
       setPushState(data.state, data.message);
     }
+    if (data?.type === "simulator_state") {
+      setSimulatorState(data.running);
+    }
   };
+
+  // Чип показывает не «открыто ли окно симулятора», а «идёт ли симуляция»:
+  // окно живёт отдельно и может быть закрыто или свёрнуто.
+  const simulatorState = document.getElementById("simulatorState");
+
+  function setSimulatorState(running) {
+    if (!simulatorState) return;
+    const active = running === true;
+    simulatorState.textContent = active ? "Симулятор: активен" : "Симулятор: остановлен";
+    // Акцентный цвет только у работающей симуляции — так состояние читается
+    // без чтения текста.
+    simulatorState.classList.toggle("accent", active);
+  }
 
   if (typeof window.chrome?.webview?.addEventListener === "function") {
     window.chrome.webview.addEventListener("message", handleWebviewMessage);
