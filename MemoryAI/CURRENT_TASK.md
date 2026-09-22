@@ -375,3 +375,10 @@ Regression:
 - `data/quests` очищен от четырёх legacy `.json` экспортов: старые копии `Разговор с Русланом`, `Разговор с Русланом2`, старого учебного квеста и `demo_all_node_types`. Поиск репозитория не нашёл действующих ссылок на них; canonical resource set теперь использует `.aqquest` и `.aqscene`.
 - В `data/scenes` оставлены только три canonical `.aqscene`: `ruslan_start`, `gosha_meat`, `ruslan_finish`; все три нужны tutorial quest.
 - Scene selector при Cancel теперь принудительно получает обратно фактический `scene_definition`, чтобы визуальный выбор не расходился с текущим документом.
+
+## 2026-09-22 — 1.0.40.139 Scene Persistence R2
+
+- Исправлен cache-busting WebView2: `main.html`, `editor.html` и `simulator.html` больше не содержат устаревший query version `1.0.40.137`; все вложенные web assets получают текущую версию сборки.
+- В Dialogue/Scene UI текст «Последняя JSON» заменён на «Последняя сцена», потому что canonical ресурс сцены — `.aqscene`.
+- Версия приложения и отображаемая версия повышены до `1.0.40.139` перед следующим физическим тестом.
+- В GitHub CI исправлен final gate: результат `Scene interface Playwright smoke` теперь действительно передаётся в итоговую проверку.
