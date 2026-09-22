@@ -11,10 +11,10 @@
     <Prefer32Bit>false</Prefer32Bit>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
 
-    <Version>1.0.40.139</Version>
-    <AssemblyVersion>1.0.40.139</AssemblyVersion>
-    <FileVersion>1.0.40.139</FileVersion>
-    <AssemblyInformationalVersion>1.0.40.139-QUEST-SCENE-PERSISTENCE-R2</AssemblyInformationalVersion>
+    <Version>1.0.40.140</Version>
+    <AssemblyVersion>1.0.40.140</AssemblyVersion>
+    <FileVersion>1.0.40.140</FileVersion>
+    <AssemblyInformationalVersion>1.0.40.140-WINDOWS-FILE-ASSOCIATIONS</AssemblyInformationalVersion>
     <PublishSingleFile>true</PublishSingleFile>
     <SelfContained>true</SelfContained>
     <RuntimeIdentifier>win-x64</RuntimeIdentifier>
@@ -50,7 +50,7 @@
       <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
     </None>
     <None Include="../../data/world/cities.json" Link="data/world/cities.json">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToOutputDirectory>PreserveNewest</CopyToPublishDirectory>
       <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
     </None>
     <None Include="../../data/quests/*.aqquest" LinkBase="data/quests">

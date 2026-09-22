@@ -16,25 +16,32 @@
 
     bin\Release\net10.0-windows\win-x64\publish\AssistQuestEditor.exe
 
-HTML/CSS/JavaScript включаются в single-file публикацию. При запуске .NET извлекает содержимое, необходимое приложению и WebView2. Это соответствует режиму single-file с IncludeAllContentForSelfExtract. citeturn623619search1
+HTML/CSS/JavaScript включаются в single-file публикацию.
 
-Для обновления исходников и сборки:
+## Регистрация файлов проекта в Windows
 
-    powershell -ExecutionPolicy Bypass -File .\pull.ps1
+Откройте **Настройки** (шестерёнка в основном окне) и нажмите **«Зарегистрировать расширения»**.
 
-`pull.ps1` выполняет три шага: обновляет исходники (`git pull --ff-only`), запускает локальные проверки CI и **только при их успехе** запускает `compile.ps1`. Если проверки не прошли, сборка не выполняется, печатается список упавших проверок и показывается уведомление Windows.
+Сейчас регистрируются только реальные standalone resources прототипа:
 
-Параметры `pull.ps1`:
-
-| Параметр | Назначение |
+| Расширение | Редактор |
 |---|---|
-| `-SkipChecks` | Собрать сразу после `git pull`, без локальных проверок |
-| `-NoLaunch` | Собрать, но не запускать приложение |
-| `-NoNotify` | Не показывать уведомление Windows |
+| `.aqquest` | Нодовый редактор |
+| `.aqscene` | Редактор сцен и диалогов |
 
-Для проверки публикации без запуска приложения:
+Регистрация выполняется для текущего пользователя в `HKCU\Software\Classes`, без прав администратора. Для каждого типа создаётся отдельный versioned ProgID, `OpenWithProgids`, команда открытия и `DefaultIcon`. citeturn802462search0turn802462search1turn802462search4
 
-    powershell -ExecutionPolicy Bypass -File .\compile.ps1 -NoLaunch
+Файлы иконок хранятся постоянно в:
+
+    %LOCALAPPDATA%\AssistQuestEditor\FileIcons
+
+Приложение создаёт многобитные `.ico` с несколькими размерами (16–256 px) при регистрации и обновляет Shell через `SHChangeNotify(SHCNE_ASSOCCHANGED)`. Если другое приложение уже выбрано пользователем по умолчанию, регистрация не перехватывает этот выбор — новый тип лишь добавляется в `Open with`, что соответствует рекомендациям Windows по user-driven default applications. citeturn802462search0turn802462search2turn802462search7
+
+Аргумент:
+
+    AssistQuestEditor.exe --unregister-file-associations
+
+удаляет созданные приложением ProgID и ссылки из `OpenWithProgids`, не ломая чужую ассоциацию, если пользователь уже выбрал другое приложение.
 
 ## Проверки
 
@@ -46,16 +53,8 @@ HTML/CSS/JavaScript включаются в single-file публикацию. П
 
 **Это основной барьер перед сборкой:** `pull.ps1` вызывает его автоматически и запускает `compile.ps1` только при успехе.
 
-Автозапуск GitHub Actions по push отключён. Workflow `Проверки` запускается вручную (`workflow_dispatch`) и нужен для того, чего локально получить нельзя: чистой среды `windows-latest` без локальных кешей и untracked-файлов и зафиксированного Node.js 22 вместо версии с текущей машины.
+Автозапуск GitHub Actions по push отключён. Workflow `Проверки` запускается вручную (`workflow_dispatch`) и нужен для чистой среды `windows-latest`.
 
-Шаг публикации single-file в локальный прогон не входит: он останавливает запущенный AssistQuestEditor и удаляет `bin`, `obj`, `publish` и профиль WebView2. Чтобы выполнить полный цикл:
+Каждый прогон перезаписывает отчёт `MemoryAI/LOGS/CI_errors.md`.
 
-    powershell -ExecutionPolicy Bypass -File .\ci\run_local.ps1 -IncludePublish
-
-Локальная проверка требует Node.js 22+, .NET SDK 10 и PowerShell 5.1+; скрипт сам ставит Playwright и Chromium, если их нет.
-
-При неудачных проверках показывается уведомление Windows через `ci/WindowsToast.ps1` (WinRT `Windows.UI.Notifications`, без сторонних модулей и прав администратора). Уведомление можно отключить флагом `-NoNotify`.
-
-Каждый прогон перезаписывает отчёт `MemoryAI/LOGS/CI_errors.md`: сводка по всем проверкам, причина каждой ошибки и полный вывод упавших проверок. При успешном прогоне отчёт фиксирует это явно.
-
-После публикации `compile.ps1` очищает `MemoryAI/LOGS` — как и в CI. Если диагностические логи были зафиксированы в git, локальный прогон с `-IncludePublish` пометит их как удалённые.
+После публикации `compile.ps1` очищает `MemoryAI/LOGS`.

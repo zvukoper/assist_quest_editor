@@ -17,13 +17,12 @@ internal static class Program
         {
             ApplicationConfiguration.Initialize();
 
-            if (args.Any(arg => string.Equals(arg, "--unregister-file-associations", StringComparison.OrdinalIgnoreCase)))
+            if (args.Any(arg =>
+                    string.Equals(arg, "--unregister-file-associations", StringComparison.OrdinalIgnoreCase)))
             {
                 FileAssociationRegistry.Unregister();
                 return;
             }
-
-            FileAssociationRegistry.Register();
 
             var startupFile = args.FirstOrDefault(arg =>
                 !arg.StartsWith("--", StringComparison.Ordinal) &&
@@ -58,16 +57,12 @@ internal static class Program
             void RevealMainWindow(string reason)
             {
                 if (mainForm.IsDisposed)
-                {
                     return;
-                }
 
                 mainForm.BeginInvoke(() =>
                 {
                     if (mainForm.IsDisposed)
-                    {
                         return;
-                    }
 
                     mainForm.Opacity = 1;
                     mainForm.Activate();
