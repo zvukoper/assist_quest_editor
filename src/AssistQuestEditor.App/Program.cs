@@ -66,6 +66,16 @@ internal static class Program
                 return;
             }
 
+            // До создания MainForm синхронизируем bundled campaign store с
+            // постоянным пользовательским хранилищем. Это гарантирует, что
+            // Runtime и редакторы увидят одну и ту же установленную версию.
+            var campaignSync = CampaignInstaller.Synchronize();
+            if (campaignSync.UserVisibleChanges.Count > 0)
+            {
+                using var notice = new CampaignSyncNoticeForm(campaignSync.UserVisibleChanges);
+                notice.ShowDialog();
+            }
+
             AppLogger.Info("Загрузка СДО world data.");
             var sdoPoints = SdoWorldDataLoader.Load();
             var cityPoints = CityWorldDataLoader.Load();
