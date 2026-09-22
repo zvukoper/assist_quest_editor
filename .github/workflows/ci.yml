@@ -78,6 +78,12 @@ jobs:
         shell: pwsh
         run: node ci/scene_graph_smoke.mjs
 
+      - name: Scene interface Playwright smoke
+        id: scene_interface_smoke
+        continue-on-error: true
+        shell: pwsh
+        run: node ci/scene_interface_smoke.mjs
+
       - name: Pan следует за курсором
         id: pan_smoke
         continue-on-error: true
@@ -187,6 +193,7 @@ jobs:
             @{ Name = 'Simulator ↔ Editor contract'; Outcome = $env:SELECTION_SMOKE_OUTCOME },
             @{ Name = 'Quest Graph UI smoke'; Outcome = $env:QUEST_GRAPH_SMOKE_OUTCOME },
             @{ Name = 'Scene Graph UI smoke'; Outcome = $env:SCENE_GRAPH_SMOKE_OUTCOME },
+            @{ Name = 'Scene interface UI smoke'; Outcome = $env:SCENE_INTERFACE_SMOKE_OUTCOME },
             @{ Name = 'Pan follows cursor'; Outcome = $env:PAN_SMOKE_OUTCOME },
             @{ Name = 'Web JavaScript syntax'; Outcome = $env:WEB_SYNTAX_OUTCOME },
             @{ Name = '.NET SDK'; Outcome = $env:DOTNET_SDK_OUTCOME },
