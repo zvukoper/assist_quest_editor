@@ -19,10 +19,14 @@ The extension is deliberately not abbreviated (`.aqsn`, `.aqqs`) so a file remai
 | `.aqquest` | Quest | Canonical Quest Definition / Quest Graph | **Implemented** |
 | `.aqscene` | Scene | Canonical Scene Definition / Scene Graph | **Implemented** |
 | `.aqdialogue` | Dialogue | Reusable dialogue content referenced by scenes | Reserved |
+| `.aqchoice` | Choice | Reusable choice/options resource | Reserved |
 | `.aqcampaign` | Campaign | High-level collection/description of a story campaign | Reserved |
+| `.aqworld` | World | Authoring world container | Reserved |
 | `.aqpoint` | World Point | Authoring point with world coordinates and metadata | Reserved |
 | `.aqcity` | City | World-city reference resource | Reserved |
 | `.aqitem` | Item | Item definition used by inventory/actions | Reserved |
+| `.aqcondition` | Condition | Reusable condition definition | Reserved |
+| `.aqeffect` | Effect | Reusable gameplay action/effect definition | Reserved |
 | `.aqloc` | Localization | Localized strings/resource table | Reserved |
 | `.aqregistry` | Node Registry | Node schemas, metadata and authoring registry | Reserved |
 | `.aqsnapshot` | Runtime Snapshot | Simulator/runtime state snapshot, not an authoring resource | Reserved |
