@@ -138,6 +138,47 @@ public sealed class SceneGraphStoreTests
     }
 
     [Fact]
+    public void AddDialogueCreatesUnlinkedResourceAndUndoRestores()
+    {
+        var scene = SceneCatalogFactory.CreateStarter().Scenes.Single();
+        var store = new SceneGraphStore(scene);
+        var before = store.Value.Dialogues.Count;
+
+        var dialogue = store.AddDialogue();
+
+        Assert.Equal(before + 1, store.Value.Dialogues.Count);
+        Assert.StartsWith("dialogue.", dialogue.Id);
+        Assert.Null(store.FindNode("dialogue-empty"));
+
+        Assert.True(store.Undo());
+        Assert.Equal(before, store.Value.Dialogues.Count);
+    }
+
+    [Fact]
+    public void ReferencedDialogueCannotBeRemoved()
+    {
+        var scene = SceneCatalogFactory.CreateStarter().Scenes.Single();
+        var store = new SceneGraphStore(scene);
+
+        Assert.False(store.RemoveDialogue("ruslan.greeting", out var error));
+        Assert.Contains("используется", error, StringComparison.OrdinalIgnoreCase);
+        Assert.NotNull(store.FindDialogue("ruslan.greeting"));
+    }
+
+    [Fact]
+    public void UnreferencedDialogueCanBeRemoved()
+    {
+        var scene = SceneCatalogFactory.CreateStarter().Scenes.Single();
+        var store = new SceneGraphStore(scene);
+        var dialogue = store.AddDialogue();
+
+        Assert.True(store.RemoveDialogue(dialogue.Id, out var error), error);
+        Assert.Null(store.FindDialogue(dialogue.Id));
+        Assert.True(store.Undo());
+        Assert.NotNull(store.FindDialogue(dialogue.Id));
+    }
+
+    [Fact]
     public void UpdateDialogueIsUndoable()
     {
         var scene = SceneCatalogFactory.CreateStarter().Scenes.Single();
