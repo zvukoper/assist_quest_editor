@@ -487,3 +487,9 @@ Regression:
 - Три canonical sandbox Scene (`ruslan_start`, `gosha_meat`, `ruslan_finish`) не удалялись: они валидны и используются `tutorial_ruslan_shashlik.aqquest`. Ранее ошибочно размещённый `.aqscene` в `data/quests` уже удалён отдельным предыдущим commit.
 - Текущая версия: `1.0.40.138-QUEST-SCENE-DOCUMENT-CONTEXT-R1`.
 - Физическая сборка/publish после этих изменений здесь не выполнялись; текущие проверки базовой ветки до этой серии изменений были указаны в commit `cd1f616710b1d8fe8ee278403a0c91301f9c9293`.
+
+## 2026-09-22 — Final cleanup for 1.0.40.138
+
+- `data/quests` очищен от четырёх legacy `.json` экспортов: старые копии `Разговор с Русланом`, `Разговор с Русланом2`, старого учебного квеста и `demo_all_node_types`. Поиск репозитория не нашёл действующих ссылок на них; canonical resource set теперь использует `.aqquest` и `.aqscene`.
+- В `data/scenes` оставлены только три canonical `.aqscene`: `ruslan_start`, `gosha_meat`, `ruslan_finish`; все три нужны tutorial quest.
+- Scene selector при Cancel теперь принудительно получает обратно фактический `scene_definition`, чтобы визуальный выбор не расходился с текущим документом.
