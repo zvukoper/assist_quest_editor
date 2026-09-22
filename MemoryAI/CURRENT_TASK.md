@@ -285,3 +285,20 @@ SimulatorForm принимает `interface_dialogue_continue` и перевод
 Regression в `QuestRuntimeTests` обновлён для реальной цепочки Dialogue → Choice → End и добавлен тест на stale Dialogue request.
 
 Итог: в эталонном `.aqquest` все три разговорных участка остаются `DialogueScene` и используют canonical `.aqscene`; прямого Quest-level Dialogue UI больше не требуется для основного пути.
+
+
+## 2026-09-22 — Quest ↔ Scene integration checkpoint
+
+После Scene Dialogue R1 завершён ещё один обязательный стык authoring:
+
+- Quest Graph получает canonical Scene catalog от Host;
+- параметр `DialogueScene.sceneId` в Quest Editor отображается как selector существующих Scene resources, а не свободный текст;
+- неизвестная текущая ссылка всё равно отображается отдельно, чтобы её нельзя было тихо потерять;
+- SceneCatalog получил `Changed` event;
+- MainForm рассылает обновлённый catalog всем открытым EditorForm, поэтому сохранение/загрузка Scene в одном окне сразу обновляет selector в Quest Graph;
+- `OpenResourcePath` поддерживает открытие `.aqquest`/ `.aqscene` через их canonical editor.
+
+Итоговый canonical runtime/authoring контракт:
+`Quest → DialogueScene(sceneId) → SceneDefinition → SceneStart → Dialogue → Choice → SceneEnd → Quest`.
+
+Текущий физический тестовый выпуск: `1.0.40.135-QUEST-SCENE-INTEGRATION-R1`.
