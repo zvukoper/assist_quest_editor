@@ -78,6 +78,7 @@ public sealed class QuestRuntimeCoordinator : IQuestRuntimeController
 
         _simulationRunning = running;
         _activeRuntime?.SetSimulationRunning(running);
+        SetClockRunning(running);
 
         PublishSynthetic(
             running ? "SimulationStarted" : "SimulationStopped",
@@ -86,6 +87,26 @@ public sealed class QuestRuntimeCoordinator : IQuestRuntimeController
 
         if (running)
             EvaluateAutomaticStart();
+    }
+
+    /// <summary>
+    /// Синхронизирует признак «часы идут» с состоянием симуляции.
+    ///
+    /// Флаг в канале времени — это ЗЕРКАЛО состояния симуляции, а не отдельное
+    /// состояние с собственной жизнью. Раньше он выставлялся только в
+    /// <see cref="AdvanceWorldClock"/>, поэтому первое мгновение после запуска
+    /// симуляции часы сообщали «пауза» (до первого Tick), а загрузка сохранения
+    /// и вовсе гасила флаг принудительно. UI по такому флагу показывал «(пауза)»
+    /// при работающей симуляции.
+    /// </summary>
+    private void SetClockRunning(bool running)
+    {
+        var channel = _hub.Get<WorldClockState>("sim-time");
+        var clock = channel.Value;
+        if (clock.Running == running)
+            return;
+
+        channel.Set(clock with { Running = running }, "Симуляция");
     }
 
     public void SetQuestEnabled(string questId, bool enabled)
@@ -183,7 +204,10 @@ public sealed class QuestRuntimeCoordinator : IQuestRuntimeController
         }
 
         _lastClockTick = now;
-        channel.Set(clock with { Running = true }, "Игровое время");
+        // Running не выставляется здесь: он уже зеркалит состояние симуляции
+        // (см. SetClockRunning). Иначе признак зависел бы от того, успел ли
+        // пройти первый Tick, и часы сообщали бы «пауза» сразу после запуска.
+        channel.Set(clock, "Игровое время");
     }
 
     private bool StartQuest(string questId, bool ignoreLifecycle)

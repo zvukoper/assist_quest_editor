@@ -445,6 +445,24 @@ public sealed class SimulatorDataChannelHub : IDataChannelHub
         {
             environment.Changed += (_, args) => PublishTransition("environment", args.Source, "Изменено окружение");
         }
+        else if (channel is DataChannel<WorldClockState> clock)
+        {
+            // Игровое время меняется каждые 250 мс, поэтому событие публикуется
+            // только на СМЕНУ признака «идёт/пауза» и на правку снаружи. Без
+            // подписки вообще UI не получал бы нового снимка и показывал
+            // устаревшее время, а с подпиской на каждое изменение — захлебнулся бы
+            // событиями (в снимке вся карта мира).
+            clock.Changed += (_, args) =>
+            {
+                if (args.PreviousValue.Running != args.CurrentValue.Running)
+                {
+                    PublishTransition(
+                        "sim-time",
+                        args.Source,
+                        args.CurrentValue.Running ? "Игровое время идёт" : "Игровое время на паузе");
+                }
+            };
+        }
         else if (channel is DataChannel<WorldState> world)
         {
             world.Changed += (_, args) => PublishTransition("world", args.Source, "Изменён мир");

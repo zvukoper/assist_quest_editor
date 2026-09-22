@@ -55,6 +55,10 @@
   // Индикатор светового дня и игровое время из снимка. Живут отдельной
   // переменной: они нужны боковой панели и HUD одновременно.
   let daylight = null;
+  // Свойства мира из кампании (гео, стартовая дата, режим только для чтения).
+  // Нужны блоку «Окружение»: без них он не знал бы, к какому миру относится
+  // астрономия и можно ли писать в файл кампании.
+  let worldSettings = null;
   // Список сохранений приходит отдельным сообщением только при открытии панели:
   // пересылать его в каждом снимке значило бы читать заголовки файлов на каждую
   // перерисовку карты.
@@ -870,36 +874,46 @@
     return true;
   }
 
+  /**
+   * Подпись точки — по центру НАД точкой.
+   *
+   * Единая геометрия для всех точек (и СДО, и городов, и игрока): подпись
+   * привязана к центру фигуры, поэтому её положение однозначно читается на
+   * карте. Раньше СДО подписывались сбоку справа снизу, и связь подписи с
+   * точкой приходилось угадывать.
+   *
+   * <paramref name="weight"/> и <paramref name="size"/> задают шрифт: игрок
+   * подписан жирным белым, чтобы его было видно среди подписей СДО.
+   */
   function drawPointLabel(ctx, point, q, selected, isCity = point.isCity === true) {
     const text = point.name || point.category || "СДО";
+    const isPlayer = point.isPlayer === true;
+
     ctx.save();
     ctx.textBaseline = "middle";
+    ctx.textAlign = "center";
     // Тень под названием удваивается вместе с тенью точки: подпись должна
     // оставаться читаемой поверх светлой плашки квеста.
     ctx.lineWidth = selected ? 5.5 : (isCity ? 5 : 4.5);
     ctx.strokeStyle = "rgba(0,0,0,.98)";
-    ctx.fillStyle = isCity ? CITY_COLOR : darkenColor(point.color || "#78c8f0");
+    ctx.fillStyle = isPlayer
+      ? "#ffffff"
+      : (isCity ? CITY_COLOR : darkenColor(point.color || "#78c8f0"));
 
-    if (isCity) {
-      // Название города — строго по центру НАД точкой. Ориентация в мире
-      // важнее, чем компактность списка, поэтому город не участвует в
-      // раскладке подписей по сетке (shouldLabel) и рисуется всегда, когда
-      // видна сама точка: центр над точкой однозначно привязан к ней.
-      ctx.font = "600 11px Open Sans, Arial, sans-serif";
-      ctx.textAlign = "center";
-      const baseline = q.y - 10;
-      strokeTextOutline(ctx, text, q.x, baseline);
-      ctx.fillText(text, q.x, baseline);
-      ctx.restore();
-      return;
-    }
+    ctx.font = isPlayer
+      ? "800 12px Open Sans, Arial, sans-serif"
+      : (selected
+        ? "700 12px Open Sans, Arial, sans-serif"
+        : (isCity ? "600 11px Open Sans, Arial, sans-serif" : "600 10px Open Sans, Arial, sans-serif"));
 
-    ctx.font = selected
-      ? "700 12px Open Sans, Arial, sans-serif"
-      : "600 10px Open Sans, Arial, sans-serif";
-    ctx.textAlign = "left";
-    strokeTextOutline(ctx, text, q.x + 10, q.y - 10);
-    ctx.fillText(text, q.x + 10, q.y - 10);
+    // Отступ подбирается от РАДИУСА фигуры, чтобы текст не пересекался с ней:
+    // у игрока маркер крупнее (7.5 плюс внешняя обводка), поэтому отступ больше.
+    // Половина высоты строки плюс запас гарантируют, что baseline выше края точки.
+    const gap = isPlayer ? 20 : (isCity ? 10 : 9);
+    const baseline = q.y - gap;
+
+    strokeTextOutline(ctx, text, q.x, baseline);
+    ctx.fillText(text, q.x, baseline);
     ctx.restore();
   }
 
@@ -1001,6 +1015,11 @@
     }
 
     ctx.restore();
+
+    // Подпись игрока: жирным белым, по центру над маркером. Маркер крупнее
+    // точки СДО, поэтому отступ больше, чтобы текст не пересекался с обводками.
+    // Точка передаётся как псевдо-точка: геометрия подписи общая для всех.
+    drawPointLabel(ctx, { name: "Игрок", isPlayer: true, color: ACCENT_COLOR }, q, false, false);
   }
 
   function currentPlayerForDraw() {
@@ -2029,6 +2048,157 @@
     if (notice) notice.textContent = text || "";
   }
 
+  /**
+   * Собирает ISO-момент игрового мира из отображаемых даты и времени.
+   *
+   * Нужен обмен с Host: дата в интерфейсе показана как «дд.мм.гггг», но передавать
+   * её строкой такого вида значило бы заставить Host угадывать формат. Собираем
+   * ISO здесь, где формат поля уже известен.
+   *
+   * Смещение не указывается (мир живёт в «наивном» времени): часовой пояс машины
+   * к игровому календарю отношения не имеет.
+   */
+  function toIsoMoment(source) {
+    const dateText = String(source?.gameDateLabel || "").trim();
+    const timeText = String(source?.gameTimeLabel || "").trim();
+
+    const dateMatch = dateText.match(/^(\d{2})\.(\d{2})\.(\d{4})$/);
+    const timeMatch = timeText.match(/^(\d{2}):(\d{2})$/);
+    if (!dateMatch || !timeMatch) return "";
+
+    return dateMatch[3] + "-" + dateMatch[2] + "-" + dateMatch[1] +
+      "T" + timeMatch[1] + ":" + timeMatch[2] + ":00";
+  }
+
+  /**
+   * Разбирает введённые дату и время в интерфейсе блока «Окружение».
+   *
+   * Возвращает ISO-строку или null, если формат не распознан: молча отправить
+   * пустое значение значило бы обнулить игровое время без объяснения.
+   */
+  function parseWorldMoment(dateText, timeText) {
+    const date = String(dateText || "").trim();
+    const time = String(timeText || "").trim() || "00:00";
+
+    const dateMatch = date.match(/^(\d{1,2})\.(\d{1,2})\.(\d{4})$/);
+    if (!dateMatch) return null;
+
+    const timeMatch = time.match(/^(\d{1,2}):(\d{1,2})$/);
+    if (!timeMatch) return null;
+
+    const day = dateMatch[1].padStart(2, "0");
+    const month = dateMatch[2].padStart(2, "0");
+    const year = dateMatch[3];
+    const hour = timeMatch[1].padStart(2, "0");
+    const minute = timeMatch[2].padStart(2, "0");
+
+    if (Number(hour) > 23 || Number(minute) > 59) return null;
+
+    return year + "-" + month + "-" + day + "T" + hour + ":" + minute + ":00";
+  }
+
+  function setWorldNotice(text) {
+    const notice = document.getElementById("worldNotice");
+    if (notice) notice.textContent = text || "";
+  }
+
+  /**
+   * Игровое время, обновляемое локально между снимками.
+   *
+   * Снимок тяжёлый (в нём вся карта мира — тысячи точек), поэтому приходит редко,
+   * а часы должны идти заметно для пользователя. Поэтому время досчитывается в
+   * web-слое от момента последнего снимка: снимок даёт точку отсчёта, а дальше
+   * прибавляется реально прошедшее время.
+   *
+   * Это только ОТОБРАЖЕНИЕ: canonical время живёт в канале `sim-time`, и правка
+   * через интерфейс уходит в Host. Иначе браузер и Domain разошлись бы.
+   */
+  let clockAnchor = null;
+
+  function syncClockAnchor() {
+    const moment = daylight ? toIsoMoment(daylight) : "";
+    if (!moment) {
+      clockAnchor = null;
+      return;
+    }
+
+    clockAnchor = {
+      moment: new Date(moment + "Z"),
+      syncedAt: Date.now(),
+      dateLabel: daylight.gameDateLabel,
+      timeLabel: daylight.gameTimeLabel
+    };
+  }
+
+  /** Текущее игровое время: снимок плюс прошедшее реальное время. */
+  function currentGameMoment() {
+    if (!clockAnchor) return null;
+    if (!simulationRunning) {
+      return { date: clockAnchor.moment, text: clockAnchor.timeLabel };
+    }
+
+    const advanced = new Date(clockAnchor.moment.getTime() + (Date.now() - clockAnchor.syncedAt));
+    const pad = value => String(value).padStart(2, "0");
+    return {
+      date: advanced,
+      text: pad(advanced.getUTCHours()) + ":" + pad(advanced.getUTCMinutes())
+    };
+  }
+
+  /**
+   * Периодическое обновление отображения времени и индикатора светового дня.
+   *
+   * Индикатор тоже обновляется: доля светового дня меняется медленно, но
+   * положение серпа должно следовать за временем, иначе оно «замирает» между
+   * снимками.
+   */
+  function startClockTicker() {
+    window.setInterval(() => {
+      if (!simulationRunning || !clockAnchor) return;
+
+      const current = currentGameMoment();
+      if (!current) return;
+
+      const hudTime = document.getElementById("hudGameTime");
+      if (hudTime) hudTime.textContent = current.text;
+
+      const simTimeInput = side.querySelector("#simTime");
+      // Поле времени не перезаписывается, пока пользователь его правит: иначе
+      // ввод затирался бы каждую секунду.
+      if (simTimeInput && document.activeElement !== simTimeInput) {
+        simTimeInput.value = current.text;
+      }
+
+      updateDaylightPhase(current);
+    }, 1000);
+  }
+
+  /**
+   * Пересчитывает индикатор светового дня по текущему игровому времени.
+   *
+   * Восход и закат берутся из снимка (их считает домен), а доля дня
+   * интерполируется линейно между ними: полноценная астрономия в браузере
+   * дублировала бы Domain и расходилась бы с ним.
+   */
+  function updateDaylightPhase(current) {
+    if (!daylight || !clockAnchor) return;
+
+    const parseTime = text => {
+      const match = String(text || "").match(/^(\d{1,2}):(\d{2})$/);
+      return match ? Number(match[1]) * 60 + Number(match[2]) : null;
+    };
+
+    const sunrise = parseTime(daylight.sunriseLabel);
+    const sunset = parseTime(daylight.sunsetLabel);
+    if (sunrise === null || sunset === null || sunset <= sunrise) return;
+
+    const minutes = current.date.getUTCHours() * 60 + current.date.getUTCMinutes();
+    const dayFraction = (minutes - sunrise) / (sunset - sunrise);
+
+    daylight = { ...daylight, dayFraction, isDay: dayFraction >= 0 && dayFraction <= 1 };
+    renderDaylight();
+  }
+
   function drawHud() {
     const p = snapshot.player.position;
     const selected = snapshot.selection?.point;
@@ -2039,6 +2209,9 @@
     const simulationButton = document.getElementById("simulationToggle");
     if (simulationButton) {
       simulationButton.textContent = simulationRunning ? "Остановить симуляцию" : "Запустить симуляцию";
+      // Запущенная симуляция — LIME с белым текстом и чёрной обводкой: состояние
+      // «идёт» должно читаться сразу, а акцентный оранжевый занят квестами.
+      simulationButton.classList.toggle("simRunning", simulationRunning);
       simulationButton.classList.toggle("primary", !simulationRunning);
     }
 
@@ -2047,8 +2220,9 @@
         (simulationRunning ? "Симуляция: ВКЛ" : "Симуляция: ВЫКЛ") + "</span>",
       daylight
         ? "<span class='badge " + (daylight.isDay ? "accent" : "blue") + "'>" +
-            escapeHtml(daylight.gameDateLabel) + " · " + escapeHtml(daylight.gameTimeLabel) +
-            (daylight.running ? "" : " (пауза)") + "</span>"
+            escapeHtml(daylight.gameDateLabel) + " · <span id='hudGameTime'>" +
+            escapeHtml(currentGameMoment()?.text || daylight.gameTimeLabel) + "</span>" +
+            (simulationRunning ? "" : " (пауза)") + "</span>"
         : "",
       daylight
         ? "<span class='badge blue' title='Восход и закат по геокоординате кампании'>" +
@@ -2298,12 +2472,64 @@
 
     if (id === "environment") {
       const e = snapshot.environment;
+      const settings = worldSettings || {};
+      const clock = daylight || {};
+      const running = simulationRunning;
+
+      // Блок «Окружение» — это мир целиком: погода (канал симуляции) плюс
+      // игровое время, дата и астрономия. Игровое время живёт в отдельном канале,
+      // но по смыслу относится к окружению, поэтому редактируется здесь.
       return [
-        "<div class='field'><label>Погода</label><input id='weather' value='" + escapeHtml(e.weather) + "'></div>",
-        "<div class='field' style='margin-top:6px'><label>Дождь %</label><input id='rain' value='" + e.rainPercent + "'></div>",
-        "<div class='field' style='margin-top:6px'><label>Игровое время</label><input id='gameTime' value='" + escapeHtml(e.gameTime) + "'></div>",
-        "<div class='field' style='margin-top:6px'><label>Видимость, м</label><input id='visibility' value='" + e.visibilityMeters + "'></div>",
-        "<button class='smallButton primary' id='applyEnvironment' style='margin-top:8px'>Применить</button>"
+        "<div class='miniLabel'>Мир</div>",
+        "<div class='field' style='margin-top:6px'><label>Кампания</label><input value='" +
+          escapeHtml(settings.campaignName || "—") + "' disabled></div>",
+        "<div class='fieldGrid' style='margin-top:6px'>" +
+          "<div class='field'><label>Широта</label><input id='worldLatitude' value='" +
+            escapeHtml(String(settings.latitude ?? "")) + "' placeholder='55.1644'></div>" +
+          "<div class='field'><label>Долгота</label><input id='worldLongitude' value='" +
+            escapeHtml(String(settings.longitude ?? "")) + "' placeholder='61.4368'></div>" +
+        "</div>",
+
+        "<div class='miniLabel' style='margin-top:12px'>Игровое время</div>",
+        "<div class='kv'><span>Идёт</span><span id='clockState'>" +
+          (running ? "да" : "нет (симуляция выключена)") + "</span></div>",
+        "<div class='fieldGrid' style='margin-top:6px'>" +
+          "<div class='field'><label>Дата</label><input id='simDate' value='" +
+            escapeHtml(clock.gameDateLabel || "") + "' placeholder='01.01.2026'></div>" +
+          "<div class='field'><label>Время</label><input id='simTime' value='" +
+            escapeHtml(clock.gameTimeLabel || "") + "' placeholder='12:00'></div>" +
+        "</div>",
+        // Скрытое поле задаёт формат передачи: Host получает ISO-строку, а не
+        // разбирает «дд.мм.гггг» — формат уже определён интерфейсом.
+        "<input type='hidden' id='simMoment' value='" + escapeHtml(toIsoMoment(clock)) + "'>",
+        "<div class='kv'><span>Сезон</span><span>" + escapeHtml(clock.seasonLabel || "—") + "</span></div>",
+        "<div class='kv'><span>Световой день</span><span>" +
+          escapeHtml(clock.dayLengthLabel || "—") + "</span></div>",
+        "<div class='kv'><span>Восход / закат</span><span>" +
+          escapeHtml(clock.sunriseLabel || "—") + " / " + escapeHtml(clock.sunsetLabel || "—") + "</span></div>",
+        "<div class='kv'><span>Высота солнца</span><span>" +
+          escapeHtml(String(clock.sunAltitude ?? "—")) + "°</span></div>",
+        (clock.isPolarDay ? "<div class='notice' style='margin-top:6px'>Полярный день</div>" : "") +
+        (clock.isPolarNight ? "<div class='notice' style='margin-top:6px'>Полярная ночь</div>" : "") +
+
+        "<div class='miniLabel' style='margin-top:12px'>Погода</div>",
+        "<div class='field' style='margin-top:6px'><label>Погода</label><input id='weather' value='" +
+          escapeHtml(e.weather) + "'></div>",
+        "<div class='field' style='margin-top:6px'><label>Дождь %</label><input id='rain' value='" +
+          e.rainPercent + "'></div>",
+        "<div class='field' style='margin-top:6px'><label>Видимость, м</label><input id='visibility' value='" +
+          e.visibilityMeters + "'></div>",
+
+        "<button class='smallButton primary' id='applyEnvironment' style='margin-top:8px'>Применить</button>",
+        "<div class='inline' style='margin-top:8px;gap:6px'>" +
+          "<button class='smallButton' id='saveWorldToCampaign'" +
+            (settings.readOnly ? " disabled" : "") + ">Сохранить в кампании</button>" +
+          "<button class='smallButton' id='loadWorldFromCampaign'>Загрузить из кампании</button>" +
+        "</div>" +
+        "<div class='miniLabel' id='worldNotice' style='margin-top:6px'>" +
+          (settings.readOnly
+            ? "Кампания только для чтения (режим CI test)."
+            : "В кампанию пишутся гео-координата, дата старта мира и погода.") + "</div>"
       ].join("");
     }
 
@@ -2454,14 +2680,48 @@
       send({ action: "emit_event", eventType: "HornPressed", source: "Simulator", payload: {} });
     });
 
+    // «Применить» записывает и погоду, и игровое время, а затем просит свежий
+    // снимок: без него индикатор светового дня и подписи на карте остались бы
+    // от прежнего момента до следующего события.
     side.querySelector("#applyEnvironment")?.addEventListener("click", () => {
+      const dateText = side.querySelector("#simDate")?.value || "";
+      const timeText = side.querySelector("#simTime")?.value || "";
+      const moment = parseWorldMoment(dateText, timeText);
+
+      if (moment === null) {
+        setWorldNotice("Дата и время в формате дд.мм.гггг и чч:мм.");
+        return;
+      }
+
+      setWorldNotice("Применено.");
       send({
         action: "set_environment",
         weather: side.querySelector("#weather").value,
         rain: Number(side.querySelector("#rain").value),
-        gameTime: side.querySelector("#gameTime").value,
         visibility: Number(side.querySelector("#visibility").value)
       });
+      send({ action: "set_world_time", moment });
+      // Явный запрос снимка: изменения времени и погоды должны быть видны сразу.
+      send({ action: "request_snapshot", reason: "environment applied" });
+    });
+
+    side.querySelector("#saveWorldToCampaign")?.addEventListener("click", () => {
+      const latitude = Number(side.querySelector("#worldLatitude")?.value);
+      const longitude = Number(side.querySelector("#worldLongitude")?.value);
+
+      if (!Number.isFinite(latitude) || !Number.isFinite(longitude) ||
+          latitude < -90 || latitude > 90 || longitude < -180 || longitude > 180) {
+        setWorldNotice("Широта от -90 до 90, долгота от -180 до 180.");
+        return;
+      }
+
+      setWorldNotice("Сохранение в кампанию…");
+      send({ action: "save_world_to_campaign", latitude, longitude });
+    });
+
+    side.querySelector("#loadWorldFromCampaign")?.addEventListener("click", () => {
+      setWorldNotice("Загрузка из кампании…");
+      send({ action: "load_world_from_campaign" });
     });
 
 
@@ -2557,6 +2817,7 @@
       questGraph = message.questGraph || questGraph;
       journalDetached = !!message.journalDetached;
       daylight = message.daylight || null;
+      worldSettings = message.worldSettings || worldSettings;
       selectedPointId = snapshot.selection?.point?.id || null;
 
       window.assistQuestLog?.("INFO", "Quest UI: snapshot загружен.", {
@@ -2592,6 +2853,8 @@
         version: message.version
       });
       if (!hadSnapshot) fitWorld();
+      // Точка отсчёта локальных часов: снимок приходит редко, а время должно идти.
+      syncClockAnchor();
       scheduleUiRender();
       renderSide();
       return;
@@ -2621,6 +2884,11 @@
     if (message.type === "save_error") {
       saveBusy = false;
       setSavesNotice(message.message || "Не удалось выполнить действие.");
+      return;
+    }
+
+    if (message.type === "world_settings") {
+      setWorldNotice(message.message || "");
       return;
     }
 
@@ -2961,4 +3229,8 @@
   window.addEventListener("resize", () => {
     drawMap();
   });
+
+  // Часы отображения стартуют один раз: интервал сам проверяет, идёт ли
+  // симуляция, поэтому перезапускать его при каждом изменении не нужно.
+  startClockTicker();
 })();

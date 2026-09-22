@@ -574,6 +574,18 @@ input,select,textarea{padding:4px 5px;border-radius:4px;font-size:10px}textarea{
 .daylightSlot{display:inline-flex;align-items:center;justify-content:center;width:42px;height:42px;flex:0 0 auto}
 .daylightSlot svg{display:block}
 
+/* Кнопка запущенной симуляции: LIME фон, белый текст с чёрной обводкой.
+   Обводка сделана через text-shadow, а не через -webkit-text-stroke: последний
+   «съедает» тонкие штрихи букв на тёмном фоне и не наследуется в WebView2
+   одинаково во всех сборках. Четыре смещённые тени дают ровный контур. */
+.toolButton.simRunning{
+  background:var(--lime);color:#fff;border-color:rgba(0,0,0,.55);
+  text-shadow:
+    -1px -1px 0 #000, 1px -1px 0 #000,
+    -1px 1px 0 #000, 1px 1px 0 #000;
+}
+.toolButton.simRunning:hover{background:#3cff31;color:#fff}
+
 /* Панель сохранений: модальный слой поверх карты.
    Список снимков — действие над миром, а не часть карты, поэтому он не должен
    сдвигать раскладку симулятора. */

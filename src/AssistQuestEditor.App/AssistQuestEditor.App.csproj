@@ -11,10 +11,10 @@
     <Prefer32Bit>false</Prefer32Bit>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
 
-    <Version>1.0.40.159</Version>
-    <AssemblyVersion>1.0.40.159</AssemblyVersion>
-    <FileVersion>1.0.40.159</FileVersion>
-    <AssemblyInformationalVersion>1.0.40.159-SIM-SAVES-R7</AssemblyInformationalVersion>
+    <Version>1.0.40.160</Version>
+    <AssemblyVersion>1.0.40.160</AssemblyVersion>
+    <FileVersion>1.0.40.160</FileVersion>
+    <AssemblyInformationalVersion>1.0.40.160-ENV-CLOCK-R8</AssemblyInformationalVersion>
     <PublishSingleFile>true</PublishSingleFile>
     <SelfContained>true</SelfContained>
     <RuntimeIdentifier>win-x64</RuntimeIdentifier>

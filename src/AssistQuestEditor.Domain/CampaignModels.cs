@@ -22,6 +22,21 @@ public sealed record CampaignQuestEntry(
     int Order = 0);
 
 /// <summary>
+/// Стартовые условия игрового мира.
+///
+/// Это то, что кампания задаёт о мире «на входе»: погода, дождь, видимость.
+/// Отдельная запись, а не поля рядом с <see cref="GeoCoordinate"/>: их всегда
+/// читают и пишут вместе, и так «мир на старте» виден одним блоком.
+///
+/// Null-поля означают «не задано» и заменяются значениями симулятора: кампания
+/// не обязана описывать погоду, и пустой объект не должен её обнулять.
+/// </summary>
+public sealed record WorldStartConditions(
+    string? Weather = null,
+    double? RainPercent = null,
+    double? VisibilityMeters = null);
+
+/// <summary>
 /// Campaign в песочнице: набор квестов плюс свойства игрового мира.
 ///
 /// <see cref="Geo"/> — реальная географическая координата мира. Она НЕ связана
@@ -33,6 +48,8 @@ public sealed record CampaignQuestEntry(
 /// <see cref="GameCalendar.DefaultStartDate"/> (01.01.2026): значение по
 /// умолчанию задаётся кодом, а не проставляется в файл при первом чтении,
 /// иначе чтение молча переписывало бы чужой документ.
+///
+/// <see cref="StartConditions"/> — погода, дождь и видимость на старте мира.
 /// </summary>
 public sealed record CampaignDefinition(
     string Id,
@@ -42,7 +59,8 @@ public sealed record CampaignDefinition(
     IReadOnlyList<CampaignQuestEntry> Quests,
     IReadOnlyList<string> Files,
     GeoCoordinate? Geo = null,
-    DateTimeOffset? StartDate = null);
+    DateTimeOffset? StartDate = null,
+    WorldStartConditions? StartConditions = null);
 
 public sealed record CampaignDefinitionDocument(
     int SchemaVersion,

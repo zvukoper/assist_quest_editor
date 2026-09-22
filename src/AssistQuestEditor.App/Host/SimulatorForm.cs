@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Globalization;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using AssistQuestEditor.Domain;
@@ -142,7 +143,10 @@ public sealed class SimulatorForm : WebViewForm
             questGraph = _runtime.ActiveGraph ?? _questGraph.Value,
             journalDetached = _journalDetached,
             // Индикатор светового дня: астрономию считает домен, UI только рисует.
-            daylight = BuildDaylight(snapshot)
+            daylight = BuildDaylight(snapshot),
+            // Свойства мира из кампании: блок «Окружение» показывает их и умеет
+            // записывать обратно в файл кампании.
+            worldSettings = BuildWorldSettings()
         }, SnapshotJsonOptions);
 
         AppLogger.Info("SimulatorForm: отправляю snapshot в WebView2.", $"jsonChars={payload.Length}; points={pointCount}");
@@ -220,6 +224,24 @@ public sealed class SimulatorForm : WebViewForm
 
                 case "set_environment":
                     SetEnvironment(root);
+                    break;
+
+                case "set_world_time":
+                    SetWorldTime(root);
+                    break;
+
+                case "save_world_to_campaign":
+                    SaveWorldToCampaign(root);
+                    break;
+
+                case "load_world_from_campaign":
+                    LoadWorldFromCampaign();
+                    break;
+
+                // Явный запрос свежего снимка: правка игрового времени и погоды
+                // должна быть видна сразу, а не после следующего события канала.
+                case "request_snapshot":
+                    RequestSnapshot("web action request_snapshot");
                     break;
 
                 case "emit_event":
@@ -816,6 +838,154 @@ public sealed class SimulatorForm : WebViewForm
                 VisibilityMeters = Number(root, "visibility", old.VisibilityMeters)
             },
             "Редактор окружения");
+    }
+
+    /// <summary>
+    /// Устанавливает игровые дату и время.
+    ///
+    /// Дата и время в интерфейсе — это одно значение, а канал времени хранит
+    /// стартовую дату и прошедшее время. Приводим одно к другому: стартовая дата
+    /// остаётся, а прошедшее время пересчитывается так, чтобы «сейчас» совпало
+    /// с введённым моментом. Если введённое время раньше стартовой даты, старт
+    /// сдвигается — иначе прошедшее время было бы отрицательным.
+    ///
+    /// Дата передаётся строкой ISO: разбирать «31.12.2026» на стороне Host
+    /// значило бы дублировать формат, который уже задан в интерфейсе.
+    /// </summary>
+    private void SetWorldTime(JsonElement root)
+    {
+        var text = String(root, "moment", string.Empty);
+        if (string.IsNullOrWhiteSpace(text) ||
+            !DateTimeOffset.TryParse(text, null, DateTimeStyles.None, out var moment))
+        {
+            PostSaveError("Не удалось разобрать игровую дату и время: " + text);
+            return;
+        }
+
+        var channel = _hub.Get<WorldClockState>("sim-time");
+        var clock = channel.Value;
+
+        // Момент трактуется как «настенное» время мира без часового пояса:
+        // пояс машины к игровому календарю отношения не имеет.
+        var target = new DateTimeOffset(moment.DateTime, TimeSpan.Zero);
+        var start = clock.StartDate;
+        var elapsed = target - start;
+
+        if (elapsed < TimeSpan.Zero)
+        {
+            start = target;
+            elapsed = TimeSpan.Zero;
+        }
+
+        channel.Set(clock with { StartDate = start, Elapsed = elapsed }, "Редактор игрового времени");
+
+        AppLogger.Info("SimulatorForm: установлено игровое время.",
+            $"moment={target:yyyy-MM-dd HH:mm}; startDate={start:yyyy-MM-dd HH:mm}; elapsed={elapsed}");
+    }
+
+    /// <summary>
+    /// Сохраняет стартовые условия мира в файл кампании.
+    ///
+    /// В кампанию попадают только свойства МИРА: геокоордината для астрономии,
+    /// дата старта и погода с видимостью. Текущее прохождение (факты, инвентарь,
+    /// позиция игрока) в кампанию не пишется: для этого есть сохранения.
+    /// </summary>
+    private void SaveWorldToCampaign(JsonElement root)
+    {
+        if (_campaignStore.IsReadOnly)
+        {
+            PostSaveError("Кампания открыта только для чтения (режим CI test).");
+            return;
+        }
+
+        var campaign = _campaignStore.ActiveRecord();
+        if (campaign is null)
+        {
+            PostSaveError("Активная кампания не найдена.");
+            return;
+        }
+
+        var clock = _hub.Get<WorldClockState>("sim-time").Value;
+        var environment = _hub.Get<EnvironmentState>("environment").Value;
+
+        var latitude = Number(root, "latitude", campaign.Definition.Geo?.Latitude ?? GeoCoordinate.CreateDefault().Latitude);
+        var longitude = Number(root, "longitude", campaign.Definition.Geo?.Longitude ?? GeoCoordinate.CreateDefault().Longitude);
+
+        var world = campaign.Definition with
+        {
+            Geo = new GeoCoordinate(latitude, longitude),
+            // Стартовая дата мира, а не текущий момент: кампания описывает, с чего
+            // начинается прохождение. Текущее время хранится в сохранениях.
+            StartDate = clock.StartDate,
+            StartConditions = new WorldStartConditions(
+                environment.Weather,
+                environment.RainPercent,
+                environment.VisibilityMeters)
+        };
+
+        _campaignStore.SaveWorldSettings(campaign.Definition.Id, world);
+        PostWorldSettings("saved", "Стартовые условия мира сохранены в кампанию «" + campaign.Definition.Name + "».");
+    }
+
+    /// <summary>
+    /// Загружает стартовые условия мира из кампании в симуляцию.
+    ///
+    /// Загружаются они БЕЗ старта прохождения: симуляция может быть выключена, и
+    /// это нормально — пользователь проверяет настройки мира. Время при этом
+    /// ставится на стартовую дату кампании, чтобы увидеть мир «с начала».
+    /// </summary>
+    private void LoadWorldFromCampaign()
+    {
+        var campaign = _campaignStore.ActiveRecord();
+        if (campaign is null)
+        {
+            PostSaveError("Активная кампания не найдена.");
+            return;
+        }
+
+        var definition = campaign.Definition;
+        var conditions = definition.StartConditions;
+
+        if (conditions is not null)
+        {
+            var environment = _hub.Get<EnvironmentState>("environment").Value;
+            _hub.Get<EnvironmentState>("environment").Set(
+                environment with
+                {
+                    Weather = conditions.Weather ?? environment.Weather,
+                    RainPercent = conditions.RainPercent ?? environment.RainPercent,
+                    VisibilityMeters = conditions.VisibilityMeters ?? environment.VisibilityMeters
+                },
+                "Кампания");
+        }
+
+        var clock = _hub.Get<WorldClockState>("sim-time").Value;
+        var start = definition.StartDate ?? GameCalendar.DefaultStartDate;
+        _hub.Get<WorldClockState>("sim-time").Set(
+            clock with { StartDate = start, Elapsed = TimeSpan.Zero },
+            "Кампания");
+
+        AppLogger.Info("SimulatorForm: стартовые условия мира загружены из кампании.",
+            $"campaignId={definition.Id}; startDate={start:yyyy-MM-dd HH:mm}; weather={conditions?.Weather}");
+
+        PostWorldSettings("loaded", "Стартовые условия загружены из кампании «" + definition.Name + "».");
+        RequestSnapshot("world settings loaded");
+    }
+
+    private void PostWorldSettings(string action, string message)
+    {
+        var campaign = _campaignStore.ActiveRecord();
+        PostJson(JsonSerializer.Serialize(new
+        {
+            type = "world_settings",
+            action,
+            message,
+            campaignId = campaign?.Definition.Id ?? string.Empty,
+            campaignName = campaign?.Definition.Name ?? string.Empty,
+            latitude = campaign?.Definition.Geo?.Latitude,
+            longitude = campaign?.Definition.Geo?.Longitude,
+            readOnly = _campaignStore.IsReadOnly
+        }, SnapshotJsonOptions));
     }
 
     private void InterfaceDialogueContinue(JsonElement root)
@@ -1487,6 +1657,32 @@ public sealed class SimulatorForm : WebViewForm
             ?? _campaignStore.Records.FirstOrDefault();
 
         return campaign?.Definition.Geo ?? GeoCoordinate.CreateDefault();
+    }
+
+    /// <summary>
+    /// Свойства мира из кампании для блока «Окружение».
+    ///
+    /// Геокоордината и дата старта нужны интерфейсу, чтобы показать, к какому
+    /// миру относится астрономия, а не только результат расчёта.
+    /// </summary>
+    private object BuildWorldSettings()
+    {
+        var campaign = _campaignStore.ActiveRecord();
+        var geo = campaign?.Definition.Geo;
+
+        return new
+        {
+            campaignId = campaign?.Definition.Id ?? string.Empty,
+            campaignName = campaign?.Definition.Name ?? string.Empty,
+            readOnly = _campaignStore.IsReadOnly,
+            latitude = geo?.Latitude,
+            longitude = geo?.Longitude,
+            hasGeo = geo is not null,
+            startDateLabel = (campaign?.Definition.StartDate ?? GameCalendar.DefaultStartDate)
+                .ToString("dd.MM.yyyy"),
+            startTimeLabel = (campaign?.Definition.StartDate ?? GameCalendar.DefaultStartDate)
+                .ToString("HH:mm")
+        };
     }
 
     private void LogQuestSnapshot(string stage)

@@ -108,8 +108,13 @@ public static class SimulationSaveMapper
             BuildCharacter(hub, state),
             LoadSource);
 
+        // Признак «часы идут» НЕ берётся из снимка: он зеркалит состояние
+        // симуляции, которым управляет координатор. Если записать сюда false,
+        // индикатор показывал бы «пауза» при работающей симуляции (это и был
+        // баг), а если true — время шло бы при выключенной.
+        var currentClock = hub.Get<WorldClockState>("sim-time").Value;
         hub.Get<WorldClockState>("sim-time").Set(
-            state.Clock with { Running = false },
+            state.Clock with { Running = currentClock.Running },
             LoadSource);
 
         // Погода — часть Environment, поэтому остальные поля кадра сохраняются

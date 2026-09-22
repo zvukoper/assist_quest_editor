@@ -53,6 +53,11 @@
       "latitude": 55.1644,
       "longitude": 61.4368
     },
-    "startDate": "2026-01-01T00:00:00+00:00"
+    "startDate": "2026-01-01T00:00:00+00:00",
+    "startConditions": {
+      "weather": "Ясно",
+      "rainPercent": 0,
+      "visibilityMeters": 5000
+    }
   }
 }

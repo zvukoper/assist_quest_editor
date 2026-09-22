@@ -192,6 +192,40 @@ public sealed class CampaignStore
             $"campaignId={campaignId}; active={active}");
     }
 
+    /// <summary>
+    /// Активная кампания или первая доступная.
+    ///
+    /// Нужна всем действиям с миром (гео, стартовые условия, время): у песочницы
+    /// один активный мир, и определять его должен один метод, а не каждый вызов
+    /// по-своему.
+    /// </summary>
+    public CampaignRecord? ActiveRecord() =>
+        Records.FirstOrDefault(record => record.Definition.Active)
+        ?? Records.FirstOrDefault();
+
+    /// <summary>
+    /// Записывает стартовые условия мира в кампанию.
+    ///
+    /// Это часть ФАЙЛА кампании, а не симуляции: сохраняются геокоордината (для
+    /// астрономии), дата старта мира и погода с видимостью. Действие осознанное,
+    /// поэтому пользователь вызывает его кнопкой «Сохранить в кампании».
+    /// </summary>
+    public void SaveWorldSettings(string campaignId, CampaignDefinition world)
+    {
+        var record = GetRecord(campaignId);
+        record.Replace(record.Definition with
+        {
+            Geo = world.Geo,
+            StartDate = world.StartDate,
+            StartConditions = world.StartConditions
+        });
+        Save(record);
+
+        AppLogger.Info("CampaignStore: стартовые условия мира сохранены.",
+            $"campaignId={campaignId}; geo={world.Geo}; startDate={world.StartDate:O}; " +
+            $"weather={world.StartConditions?.Weather}");
+    }
+
     public void SetQuestEnabled(string campaignId, string questId, bool enabled)
     {
         var record = GetRecord(campaignId);
