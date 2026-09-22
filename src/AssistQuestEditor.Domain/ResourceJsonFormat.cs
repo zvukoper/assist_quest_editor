@@ -5,7 +5,7 @@ using System.Text.Json.Serialization;
 namespace AssistQuestEditor.Domain;
 
 /// <summary>
-/// Канонический формат записи resource-файлов (.aqquest/.aqscene).
+/// Канонический формат записи resource-файлов (.aqquest/.aqscene/.aqcampaign).
 ///
 /// Файлы лежат в репозитории и читаются человеком в диффах и ревью, поэтому
 /// сохранение из приложения не должно переписывать документ целиком другим
