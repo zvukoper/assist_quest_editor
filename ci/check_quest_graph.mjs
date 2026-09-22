@@ -3,8 +3,30 @@ import fs from "node:fs";
 import path from "node:path";
 
 const args = process.argv.slice(2);
-const files = args.length ? args : fs.readdirSync("data/quests").filter(name => name.endsWith(".aqquest")).sort().map(name => path.join("data/quests", name));
-if (!files.length) throw new Error("В data/quests нет .aqquest.");
+const files = args.length
+  ? args
+  : [
+      ...fs.readdirSync("data/quests")
+        .filter(name => name.endsWith(".aqquest"))
+        .sort()
+        .map(name => path.join("data/quests", name)),
+      ...findFiles("data/campaigns", file => file.endsWith(".aqquest"))
+    ];
+if (!files.length) throw new Error("В data/quests и data/campaigns нет .aqquest.");
+
+function findFiles(root, predicate) {
+  if (!fs.existsSync(root)) return [];
+  const result = [];
+  const walk = current => {
+    for (const entry of fs.readdirSync(current, { withFileTypes: true })) {
+      const full = path.join(current, entry.name);
+      if (entry.isDirectory()) walk(full);
+      else if (predicate(full)) result.push(full);
+    }
+  };
+  walk(root);
+  return result.sort();
+}
 
 function validate(filePath) {
   const doc = JSON.parse(fs.readFileSync(filePath, "utf8"));
@@ -64,7 +86,17 @@ function validate(filePath) {
   for (const node of graph.nodes.filter(n => n.nodeType === "DialogueScene")) {
     const sceneId = node.parameters?.sceneId;
     usedScenes.add(sceneId);
-    if (!fs.existsSync(path.join("data","scenes",sceneId + ".aqscene"))) problems.push("missing scene " + sceneId);
+
+    const campaignRoot = filePath.replace(/\\/g, "/").includes("/data/campaigns/")
+      ? path.dirname(path.dirname(filePath))
+      : null;
+    const sceneCandidates = [
+      campaignRoot ? path.join(campaignRoot, "scenes", sceneId + ".aqscene") : null,
+      path.join("data", "scenes", sceneId + ".aqscene")
+    ].filter(Boolean);
+
+    if (!sceneCandidates.some(fs.existsSync))
+      problems.push("missing scene " + sceneId);
   }
   for (const id of usedScenes) if (!declaredScenes.has(id)) problems.push("scene not declared " + id);
   for (const id of declaredScenes) if (!usedScenes.has(id)) problems.push("scene declared but unused " + id);
