@@ -21,6 +21,9 @@
   let selectedPointId = null;
   let hoveredPointId = null;
   let questGraph = null;
+  let campaigns = [];
+  let questActivations = [];
+  let simulationRunning = false;
   let camera = { cx: 0, cz: 0, mpp: 50 };
   let eventHistory = [];
   let runtimeTargetKey = "";
@@ -156,6 +159,7 @@
     ctx.fillStyle = "#0d1014";
     ctx.fillRect(0, 0, width, height);
     drawGrid(ctx, width, height);
+    drawQuestActivations(ctx, width, height);
 
     const points = snapshot.world?.points || [];
     const showAllLabels = camera.mpp < 24;
@@ -794,6 +798,78 @@
     return parsed.toLocaleTimeString("ru-RU");
   }
 
+  function drawQuestActivations(ctx, width, height) {
+    if (!questActivations?.length) return;
+
+    for (const marker of questActivations) {
+      if (!marker?.position) continue;
+
+      const center = worldToScreen(marker.position.x, marker.position.z);
+      const radius = Number(marker.radius);
+      const radiusPx = Number.isFinite(radius) ? radius / camera.mpp : 0;
+      const available = marker.available !== false;
+
+      if (radiusPx >= 2) {
+        ctx.save();
+        ctx.beginPath();
+        ctx.arc(center.x, center.y, radiusPx, 0, Math.PI * 2);
+        ctx.setLineDash([7, 5]);
+        ctx.lineWidth = available ? 2 : 1.5;
+        ctx.strokeStyle = available
+          ? "rgba(250,176,3,.72)"
+          : "rgba(140,150,165,.42)";
+        ctx.fillStyle = available
+          ? "rgba(250,176,3,.045)"
+          : "rgba(140,150,165,.018)";
+        ctx.fill();
+        ctx.stroke();
+        ctx.restore();
+      }
+
+      const pulse = 8 + Math.sin(Date.now() / 320) * 1.5;
+      ctx.save();
+      ctx.beginPath();
+      ctx.moveTo(center.x, center.y - pulse);
+      ctx.lineTo(center.x + pulse, center.y);
+      ctx.lineTo(center.x, center.y + pulse);
+      ctx.lineTo(center.x - pulse, center.y);
+      ctx.closePath();
+      ctx.fillStyle = available ? "#fab003" : "#707b89";
+      ctx.fill();
+      ctx.lineWidth = 2.5;
+      ctx.strokeStyle = "rgba(0,0,0,.95)";
+      ctx.stroke();
+
+      ctx.font = "900 9px Open Sans, Arial, sans-serif";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillStyle = "#101319";
+      ctx.fillText("Q", center.x, center.y + 0.5);
+
+      const label = (marker.questTitle || marker.questId || "Квест") +
+        (available ? "" : " · условие не выполнено");
+      const maxLabelWidth = 240;
+      const measured = Math.min(maxLabelWidth, ctx.measureText(label).width + 12);
+      const x = Math.max(6, Math.min(width - measured - 6, center.x - measured / 2));
+      const y = Math.max(6, Math.min(height - 24, center.y + pulse + 8));
+
+      ctx.fillStyle = "rgba(10,12,16,.9)";
+      ctx.fillRect(x, y, measured, 18);
+      ctx.strokeStyle = available ? "rgba(250,176,3,.45)" : "rgba(140,150,165,.28)";
+      ctx.lineWidth = 1;
+      ctx.strokeRect(x, y, measured, 18);
+      ctx.fillStyle = available ? "#f4c04d" : "#aab2bd";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.font = "700 9px Open Sans, Arial, sans-serif";
+      ctx.fillText(
+        label.length > 38 ? label.slice(0, 35) + "…" : label,
+        x + measured / 2,
+        y + 9);
+      ctx.restore();
+    }
+  }
+
   function drawRuntimeTarget(ctx, playerPosition = null) {
     if (!snapshot || runtimeStatusName(runtime?.status) !== "Waiting" || !questGraph) return;
     const info = runtimeTargetInfo();
@@ -1203,10 +1279,66 @@
     });
   }
 
+  function renderQuestCatalog() {
+    if (!campaigns.length) {
+      return "<div class='notice'>Установленных кампаний нет.</div>";
+    }
+
+    const statusEntries = new Map(
+      (snapshot?.questStatuses?.quests || []).map(item => [item.questId, item]));
+
+    return campaigns.map(campaign => {
+      const campaignChecked = !!campaign.active;
+      const questRows = (campaign.quests || []).map(quest => {
+        const enabled = String(quest.status || "").toLowerCase() === "enabled";
+        const runtimeEntry = statusEntries.get(quest.questId);
+        const runtimeStatus = runtimeEntry?.status || "Available";
+        const runtimeLabel = runtimeStatusName(runtimeStatus);
+
+        return "<div class='campaignQuestRow'>" +
+          "<label class='campaignQuestMain'>" +
+            "<input type='checkbox' data-quest-enabled='1' " +
+              "data-campaign-id='" + escapeHtml(campaign.id) + "' " +
+              "data-quest-id='" + escapeHtml(quest.questId) + "' " +
+              (enabled ? "checked" : "") + ">" +
+            "<span class='campaignQuestText'>" +
+              "<strong>" + escapeHtml(quest.title || quest.questId) + "</strong>" +
+              "<small>v" + Number(quest.version || 1) + " · " +
+                escapeHtml(runtimeLabel) + "</small>" +
+            "</span>" +
+          "</label>" +
+          "<span class='campaignQuestStatus " + (enabled ? "enabled" : "disabled") + "'>" +
+            (enabled ? "Активен" : "Отключён") +
+          "</span>" +
+          "<button class='microButton' type='button' " +
+            "data-open-quest='" + escapeHtml(quest.fullPath || "") + "'>Ред.</button>" +
+        "</div>";
+      }).join("");
+
+      return "<section class='campaignBlock'>" +
+        "<div class='campaignHeader'>" +
+          "<label class='campaignMainLabel'>" +
+            "<input type='checkbox' data-campaign-active='1' " +
+              "data-campaign-id='" + escapeHtml(campaign.id) + "' " +
+              (campaignChecked ? "checked" : "") + ">" +
+            "<span>" +
+              "<strong>" + escapeHtml(campaign.name || campaign.id) + "</strong>" +
+              "<small>v" + Number(campaign.version || 1) + "</small>" +
+            "</span>" +
+          "</label>" +
+          "<button class='microButton' type='button' " +
+            "data-open-campaign='" + escapeHtml(campaign.id) + "' " +
+            "title='Открыть папку кампании'>↗</button>" +
+        "</div>" +
+        "<div class='campaignQuestList'>" + questRows + "</div>" +
+      "</section>";
+    }).join("");
+  }
+
   function renderRuntimeSidebar() {
     if (!runtimeSide || !snapshot) return;
 
-    const status = runtimeStatusName(runtime?.status || (snapshot?.system?.runtimeRunning ? "Running" : "Stopped"));
+    const status = runtimeStatusName(runtime?.status || "Stopped");
     const node = getRuntimeNode();
     const info = runtimeTargetInfo();
     const expectedEvent = runtimeExpectedEvent();
@@ -1215,29 +1347,45 @@
     runtimeSide.innerHTML =
       "<div class='runtimeSideHeader'>" +
         "<div>" +
-          "<div class='panelTitle'>Quest Runtime</div>" +
-          "<div class='runtimeQuestName'>" + escapeHtml(questGraph?.name || runtime?.questId || "Квест") + "</div>" +
+          "<div class='panelTitle'>Квесты</div>" +
+          "<div class='runtimeQuestName'>" +
+            (simulationRunning ? "Симуляция запущена" : "Симуляция остановлена") +
+          "</div>" +
         "</div>" +
       "</div>" +
+      "<section class='questCatalog'>" +
+        "<div class='questCatalogHeader'>" +
+          "<div class='miniLabel'>Кампании и доступные квесты</div>" +
+          "<div class='miniLabel'>" + campaigns.reduce((sum, x) => sum + (x.quests?.length || 0), 0) +
+            "</div>" +
+        "</div>" +
+        "<div class='campaignList'>" + renderQuestCatalog() + "</div>" +
+      "</section>" +
       "<div class='runtimeControls'>" +
-        "<button class='smallButton primary' id='runtimeStartSide'>Запустить квест</button>" +
-        "<button class='smallButton' id='runtimeStopSide'>Остановить</button>" +
         "<button class='smallButton' id='fitWorldSide'>Все СДО</button>" +
       "</div>" +
-      "<div class='miniLabel' style='margin-top:8px'>СДО на карте: " + pointCount.toLocaleString("ru-RU") + "</div>" +
+      "<div class='miniLabel' style='margin-top:8px'>СДО на карте: " +
+        pointCount.toLocaleString("ru-RU") + "</div>" +
       "<div class='runtimeStatusCard' data-status='" + escapeHtml(String(status).toLowerCase()) + "'>" +
-        "<span class='statusDot'></span><strong>" + escapeHtml(runtimeStatusLabel(status)) + "</strong>" +
+        "<span class='statusDot'></span><strong>" +
+          escapeHtml(runtimeStatusLabel(status)) + "</strong>" +
       "</div>" +
       "<section class='runtimeBlock'>" +
         "<div class='miniLabel'>Текущая нода</div>" +
         (node
           ? "<div class='runtimeNodeName'>" + escapeHtml(node.title || node.nodeType) + "</div>" +
             "<div class='runtimeNodeType'>" + escapeHtml(node.nodeType) + " · " + escapeHtml(node.nodeId) + "</div>"
-          : "<div class='notice' style='margin-top:6px'>Запусти квест, чтобы Runtime выбрал Start.</div>") +
+          : "<div class='notice' style='margin-top:6px'>" +
+              (simulationRunning
+                ? "Сейчас ни один квест не выполняется."
+                : "Запусти симуляцию, чтобы Runtime начал реагировать.") +
+            "</div>") +
       "</section>" +
       "<section class='runtimeBlock'>" +
         "<div class='miniLabel'>Что сейчас происходит</div>" +
-        "<div class='runtimeTransition'>" + escapeHtml(runtime?.lastTransition || snapshot?.system?.lastTransition || "—") + "</div>" +
+        "<div class='runtimeTransition'>" +
+          escapeHtml(runtime?.lastTransition || snapshot?.system?.lastTransition || "—") +
+        "</div>" +
       "</section>" +
       "<section class='runtimeBlock runtimeTargetBlock'>" +
         "<div class='miniLabel'>Цель ожидания</div>" +
@@ -1245,8 +1393,10 @@
       "</section>" +
       "<section class='runtimeBlock'>" +
         "<div class='miniLabel'>Последнее событие</div>" +
-        "<div class='kv'><span>Runtime</span><span>" + escapeHtml(runtime?.lastEvent || snapshot?.system?.lastEvent || "—") + "</span></div>" +
-        "<div class='kv'><span>Ожидание</span><span>" + escapeHtml(runtime?.waitingFor || "—") + "</span></div>" +
+        "<div class='kv'><span>Runtime</span><span>" +
+          escapeHtml(runtime?.lastEvent || snapshot?.system?.lastEvent || "—") + "</span></div>" +
+        "<div class='kv'><span>Ожидание</span><span>" +
+          escapeHtml(runtime?.waitingFor || "—") + "</span></div>" +
       "</section>" +
       "<section class='runtimeBlock'>" +
         "<div class='runtimeBlockHeader'><div class='miniLabel'>События теста</div>" +
@@ -1265,8 +1415,6 @@
 
     runtimeSide.querySelector("#detachJournal")?.addEventListener("click", () => send({ action: "detach_journal" }));
     runtimeSide.querySelector("#openJournal")?.addEventListener("click", () => send({ action: "open_journal" }));
-    runtimeSide.querySelector("#runtimeStartSide")?.addEventListener("click", () => send({ action: "runtime_start" }));
-    runtimeSide.querySelector("#runtimeStopSide")?.addEventListener("click", () => send({ action: "runtime_stop" }));
     runtimeSide.querySelector("#fitWorldSide")?.addEventListener("click", () => {
       fitWorld();
       drawMap();
@@ -1278,6 +1426,41 @@
     runtimeSide.querySelector("#hornEventSide")?.addEventListener("click", () => {
       send({ action: "emit_event", eventType: "HornPressed", source: "Simulator", payload: {} });
     });
+
+    runtimeSide.querySelectorAll("[data-quest-enabled]").forEach(input => {
+      input.addEventListener("change", () => {
+        send({
+          action: "set_quest_enabled",
+          campaignId: input.dataset.campaignId,
+          questId: input.dataset.questId,
+          enabled: input.checked
+        });
+      });
+    });
+
+    runtimeSide.querySelectorAll("[data-campaign-active]").forEach(input => {
+      input.addEventListener("change", () => {
+        send({
+          action: "set_campaign_active",
+          campaignId: input.dataset.campaignId,
+          active: input.checked
+        });
+      });
+    });
+
+    runtimeSide.querySelectorAll("[data-open-quest]").forEach(button => {
+      button.addEventListener("click", () => {
+        const path = button.dataset.openQuest;
+        if (path) send({ action: "open_quest_editor", path });
+      });
+    });
+
+    runtimeSide.querySelectorAll("[data-open-campaign]").forEach(button => {
+      button.addEventListener("click", () => {
+        const campaignId = button.dataset.openCampaign;
+        if (campaignId) send({ action: "open_campaign_folder", campaignId });
+      });
+    });
   }
 
   function drawHud() {
@@ -1286,7 +1469,15 @@
     const points = snapshot.world?.points || [];
     const sdoCount = points.filter(point => !point.isCity).length;
     const cityCount = points.filter(point => point.isCity).length;
+    const simulationButton = document.getElementById("simulationToggle");
+    if (simulationButton) {
+      simulationButton.textContent = simulationRunning ? "Остановить симуляцию" : "Запустить симуляцию";
+      simulationButton.classList.toggle("primary", !simulationRunning);
+    }
+
     hud.innerHTML = [
+      "<span class='badge " + (simulationRunning ? "accent" : "blue") + "'>" +
+        (simulationRunning ? "Симуляция: ВКЛ" : "Симуляция: ВЫКЛ") + "</span>",
       "<span class='badge blue'>СДО " + sdoCount.toLocaleString("ru-RU") + "</span>",
       "<span class='badge blue'>Города " + cityCount.toLocaleString("ru-RU") + "</span>",
       "<span class='badge blue'>X " + Math.round(p.x) + "</span>",
@@ -1473,11 +1664,10 @@
 
     if (id === "system") {
       return [
-        "<div class='toolbar'>" +
-          "<button class='smallButton primary' id='runtimeStartSide'>Запустить квест</button>" +
-          "<button class='smallButton' id='runtimeStopSide'>Остановить</button>" +
-        "</div>",
-        "<div class='kv'><span>Runtime</span><span>" + (runtime?.status || (snapshot.system.runtimeRunning ? "Running" : "Stopped")) + "</span></div>",
+        "<div class='notice'><strong>" +
+          (simulationRunning ? "Симуляция запущена." : "Симуляция остановлена.") +
+          "</strong><br>Квесты реагируют на мир только после запуска симуляции.</div>",
+        "<div class='kv'><span>Runtime</span><span>" + (runtime?.status || "Stopped") + "</span></div>",
         "<div class='kv'><span>Текущая нода</span><span>" + escapeHtml(runtime?.currentNodeId || "—") + "</span></div>",
         "<div class='kv'><span>Ожидание</span><span>" + escapeHtml(runtime?.waitingFor || "—") + "</span></div>",
         "<div class='kv'><span>Режим</span><span>" + escapeHtml(snapshot.system.runtimeMode) + "</span></div>",
@@ -1650,6 +1840,9 @@
       snapshot = message.snapshot;
       window.__assistItemCatalog = Array.isArray(message.itemCatalog) ? message.itemCatalog : [];
       runtime = message.runtime || null;
+      simulationRunning = !!message.simulationRunning;
+      campaigns = Array.isArray(message.campaigns) ? message.campaigns : [];
+      questActivations = Array.isArray(message.questActivations) ? message.questActivations : [];
       questGraph = message.questGraph || questGraph;
       journalDetached = !!message.journalDetached;
       selectedPointId = snapshot.selection?.point?.id || null;
@@ -1934,6 +2127,10 @@
     const related = event.relatedTarget;
     if (target && related && target.contains(related)) return;
     if (activeTooltip) activeTooltip.style.display = "none";
+  });
+
+  document.getElementById("simulationToggle")?.addEventListener("click", () => {
+    send({ action: simulationRunning ? "simulation_stop" : "simulation_start" });
   });
 
   document.getElementById("reset")?.addEventListener("click", () => send({ action: "reset" }));
