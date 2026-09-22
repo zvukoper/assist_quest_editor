@@ -5,7 +5,7 @@ namespace AssistQuestEditor.App;
 internal static class Program
 {
     [STAThread]
-    private static void Main()
+    private static void Main(string[] args)
     {
         AppLogger.Info("=== Assist Quest Editor START ===",
             $"Version={VersionInfo.InformationalVersion}; BaseDirectory={AppContext.BaseDirectory}; CurrentDirectory={Environment.CurrentDirectory}; LogPath={AppLogger.LogPath}");
@@ -16,6 +16,21 @@ internal static class Program
         try
         {
             ApplicationConfiguration.Initialize();
+
+            if (args.Any(arg => string.Equals(arg, "--unregister-file-associations", StringComparison.OrdinalIgnoreCase)))
+            {
+                FileAssociationRegistry.Unregister();
+                return;
+            }
+
+            FileAssociationRegistry.Register();
+
+            var startupFile = args.FirstOrDefault(arg =>
+                !arg.StartsWith("--", StringComparison.Ordinal) &&
+                File.Exists(arg));
+
+            if (startupFile is not null)
+                FileActivationRequest.Set(startupFile);
 
             var splashPath = Path.Combine(AppContext.BaseDirectory, "Assets", "SplashScreen.png");
             AppLogger.Info("Splash: подготовка.", $"path={splashPath}; exists={File.Exists(splashPath)}");
