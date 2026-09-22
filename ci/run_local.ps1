@@ -79,7 +79,7 @@ $script:HeartbeatPath = Join-Path $script:StateDir 'monitor.heartbeat'
 # Значение фиксировано: publish присутствует всегда (как «пропущено»), поэтому
 # число не зависит от -IncludePublish.
 # Держать в актуальном состоянии при добавлении/удалении Invoke-Check.
-$script:TotalChecks = 17
+$script:TotalChecks = 18
 
 # Подавление уведомления скрипта. Вызывающий скрипт может взять уведомление на
 # себя: pull.ps1 показывает одно уведомление с учётом признака активности
@@ -518,6 +518,12 @@ Invoke-Check -Name 'Scene Graph UI smoke' -Body {
     node ci/scene_graph_smoke.mjs
 }
 
+# Шаг 5.2: отдельное workspace для Dialogue/Choice content.
+Invoke-Check -Name 'Dialogue Workspace UI smoke' -Body {
+    node ci/dialogue_workspace_smoke.mjs
+}
+
+
 # Шаг 5.2.1: интерфейсный слой Scene Runtime (Dialogue Continue + Choice).
 # Та же причина, что и у проверки выше: она была только в GitHub Actions.
 Invoke-Check -Name 'Scene interface UI smoke' -Body {
@@ -537,6 +543,8 @@ Invoke-Check -Name 'Синтаксис web JavaScript' -Body {
     $files = @(
         '.\src\AssistQuestEditor.App\Web\main.js',
         '.\src\AssistQuestEditor.App\Web\editor.js',
+        '.\src\AssistQuestEditor.App\Web\sceneEditor.js',
+        '.\src\AssistQuestEditor.App\Web\dialogueWorkspace.js',
         '.\src\AssistQuestEditor.App\Web\simulator.js'
     )
 
