@@ -69,11 +69,13 @@ export interface BadgeInput {
   /** Текст последней ошибки опроса, если была. */
   error: string | null;
   /**
-   * Процент завершения локального прогона (0–100).
-   * `null` или не задано — процент неизвестен и не показывается; GitHub-режим
-   * это поле не заполняет, поэтому вид плашки там не меняется.
+   * Пройдено проверок локального прогона.
+   * `null` или не задано — прогресс неизвестен и не показывается; GitHub-режим
+   * эти поля не заполняет, поэтому вид плашки там не меняется.
    */
-  progressPercent?: number | null;
+  passedChecks?: number | null;
+  /** Всего проверок локального прогона; 0 или не задано — число неизвестно. */
+  totalChecks?: number | null;
   /**
    * Прогон выполнен локально (`ci/run_local.ps1`).
    * У такого прогона нет URL запуска и страницы Actions, зато есть отчёт об ошибках.
@@ -205,9 +207,9 @@ function buildLocalTooltip(run: CiRun, appearance: Appearance, input: BadgeInput
   lines.push(`### Локальный прогон #${run.runNumber}: ${appearance.label}`);
   lines.push('');
 
-  const percent = computePercent(input.progressPercent);
+  const progress = formatProgress(input.passedChecks, input.totalChecks);
   const parts: string[] = [];
-  if (percent !== null) parts.push(`прогресс ${percent}%`);
+  if (progress !== null) parts.push(`пройдено ${progress}`);
   if (run.duration) parts.push(`длительность ${run.duration}`);
   const relative = formatRelative(run.startedAt, now);
   if (relative) parts.push(relative);
@@ -247,11 +249,30 @@ function buildLocalTooltip(run: CiRun, appearance: Appearance, input: BadgeInput
   return lines.join('\n');
 }
 
-/** Ограничение и нормализация процента: значения вне 0–100 отбрасываются. */
-function computePercent(value: number | null | undefined): number | null {
+/** Неотрицательное целое число проверок; `null` — значение непригодно. */
+function normalizeCount(value: number | null | undefined): number | null {
   if (value === null || value === undefined) return null;
   if (!Number.isFinite(value)) return null;
-  return Math.max(0, Math.min(100, Math.round(value)));
+  const rounded = Math.round(value);
+  return rounded >= 0 ? rounded : null;
+}
+
+/**
+ * Прогресс числом проверок: «5/24».
+ *
+ * Проценты намеренно не показываются: по «45%» не видно, сколько проверок
+ * осталось, а по «5/24» — видно. Пройденное число не превышает общее, иначе
+ * плашка показала бы «99/11». Без общего числа показывать нечего — `null`.
+ */
+function formatProgress(
+  passed: number | null | undefined,
+  total: number | null | undefined
+): string | null {
+  const totalCount = normalizeCount(total);
+  if (totalCount === null || totalCount === 0) return null;
+
+  const passedCount = normalizeCount(passed) ?? 0;
+  return `${Math.min(passedCount, totalCount)}/${totalCount}`;
 }
 
 /** Сборка строки подсказки. */
@@ -335,11 +356,11 @@ export function buildBadge(input: BadgeInput, now: Date = new Date()): BadgePres
   const run = input.run;
   const appearance = APPEARANCE[run.status] ?? APPEARANCE.unknown;
   const withChip = input.style === 'square';
-  const percent = computePercent(input.progressPercent);
+  const progress = formatProgress(input.passedChecks, input.totalChecks);
 
-  // Процент добавляется только между значком и номером и только когда он
-  // известен. Так GitHub-режим (progressPercent не задан) сохраняет прежний вид.
-  const progressSuffix = percent === null ? '' : ` ${percent}%`;
+  // Прогресс добавляется только между значком и номером и только когда он
+  // известен. Так GitHub-режим (числа проверок не заданы) сохраняет прежний вид.
+  const progressSuffix = progress === null ? '' : ` ${progress}`;
   const text = `${withChip ? `${appearance.chip} ` : ''}${appearance.icon}${progressSuffix} #${run.runNumber}`;
 
   // В режиме theme фон задаёт тема и сама подбирает контрастный цвет текста,
@@ -351,7 +372,7 @@ export function buildBadge(input: BadgeInput, now: Date = new Date()): BadgePres
   const localPrefix = input.local ? 'Локальный прогон' : 'Проверка';
   const accessibleText =
     `${localPrefix} #${run.runNumber} — ${appearance.label}. ${run.workflowName}.` +
-    (percent === null ? '' : ` Прогресс ${percent}%.`);
+    (progress === null ? '' : ` Пройдено проверок: ${progress}.`);
 
   return {
     visible: true,

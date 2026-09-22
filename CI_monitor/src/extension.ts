@@ -11,8 +11,8 @@
  *   - **Локальный** — показывает прогон `ci/run_local.ps1` из файла состояния
  *     `.ci-state/local-run.json`. Номер проверки и статусы задаёт скрипт
  *     (или команды расширения), поэтому состоянием можно управлять вручную.
- *     У локального режима есть процент выполнения: его считает скрипт по числу
- *     пройденных проверок.
+ *     У локального режима есть прогресс выполнения: скрипт пишет, сколько
+ *     проверок уже пройдено и сколько всего.
  *
  * В режиме `auto` локальный прогон показывается, пока он идёт, и ещё некоторое
  * время после завершения, после чего плашка сама возвращается к GitHub.
@@ -32,7 +32,6 @@ import { buildBadge, BadgePresentation } from './badge';
 import { CiLogger } from './logger';
 import {
   createLocalRun,
-  formatProgress,
   isFinished,
   parseMode,
   selectSource,
@@ -99,7 +98,7 @@ export function activate(context: vscode.ExtensionContext): void {
    *
    * Оба режима сходятся в одном типе `CiRun`, поэтому внешний вид (цвет,
    * значок, квадрат-подложка) полностью общий — отдельной ветки отрисовки нет.
-   * Локальный режим дополнительно передаёт процент и данные прогона.
+   * Локальный режим дополнительно передаёт число пройденных и всех проверок.
    */
   const buildPresentation = (): BadgePresentation => {
     const styleSetting = config().get<string>('badgeStyle', 'square');
@@ -121,9 +120,8 @@ export function activate(context: vscode.ExtensionContext): void {
         });
       }
 
-      const percent = localRun.totalChecks > 0
-        ? Math.round((localRun.completedChecks / localRun.totalChecks) * 100)
-        : null;
+      const passed = localRun.completedChecks;
+      const total = localRun.totalChecks;
 
       return buildBadge({
         run: toCiRun(localRun),
@@ -133,7 +131,8 @@ export function activate(context: vscode.ExtensionContext): void {
         showIdle: true,
         style,
         error: null,
-        progressPercent: percent,
+        passedChecks: passed,
+        totalChecks: total,
         local: true,
         failedChecks: localRun.failedChecks,
         reportPath: localRun.reportPath,

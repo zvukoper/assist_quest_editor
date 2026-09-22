@@ -15,9 +15,11 @@
  * ## Прогресс
  *
  * GitHub показывает ход проверки только числом завершённых шагов. Локальный
- * прогон знает и общее число проверок, и текущую, поэтому процент считается как
- * `completedChecks / totalChecks`. Если общее число неизвестно, процент не
- * показывается — лучше не показывать ничего, чем выдуманное значение.
+ * прогон знает и общее число проверок, и текущую, поэтому прогресс показывается
+ * как `completedChecks/totalChecks`. Проценты намеренно не используются: по
+ * «45%» не видно, сколько проверок осталось, а по «5/24» — видно. Если общее
+ * число неизвестно, прогресс не показывается — лучше ничего, чем выдуманное
+ * значение.
  */
 
 import { CiRun, CiRunStatus } from './types';
@@ -115,7 +117,7 @@ export function parseLocalRunState(raw: string): LocalRun | null {
     ? (normalized as LocalRunStatus)
     : 'in_progress';
 
-  // Отрицательные и превышающие значения обрезаем: они попали бы в процент.
+  // Отрицательные и превышающие значения обрезаем: они попали бы в прогресс.
   const totalChecks = Math.max(0, toInt(source.totalChecks, 0));
   const completedRaw = Math.max(0, toInt(source.completedChecks, 0));
   const completedChecks = totalChecks > 0 ? Math.min(completedRaw, totalChecks) : completedRaw;
@@ -138,21 +140,17 @@ export function parseLocalRunState(raw: string): LocalRun | null {
 }
 
 /**
- * Процент завершения прогона.
- * `null` — процент неизвестен (нет общего числа проверок либо прогон не начат).
+ * Прогресс прогона числом проверок: «5/24».
+ * `null` — прогресс неизвестен (нет общего числа проверок).
+ *
+ * Пройденное число не превышает общее: иначе плашка показала бы «99/11».
+ * Проценты намеренно не используются — по «45%» не видно, сколько проверок
+ * осталось, а по «5/24» видно.
  */
-export function computeProgress(run: LocalRun): number | null {
-  if (run.totalChecks <= 0) return null;
-  if (run.status === 'queued') return 0;
-
-  const ratio = run.completedChecks / run.totalChecks;
-  return Math.max(0, Math.min(100, Math.round(ratio * 100)));
-}
-
-/** Процент как строка для плашки: «42%». `null` — показывать нечего. */
 export function formatProgress(run: LocalRun): string | null {
-  const percent = computeProgress(run);
-  return percent === null ? null : `${percent}%`;
+  if (run.totalChecks <= 0) return null;
+  const passed = Math.max(0, Math.min(run.completedChecks, run.totalChecks));
+  return `${passed}/${run.totalChecks}`;
 }
 
 /** Длительность прогона текстом: «1m 12s». */

@@ -1,5 +1,5 @@
 /**
- * Проверки локального режима: разбор состояния, процент прогресса,
+ * Проверки локального режима: разбор состояния, прогресс числом проверок,
  * перевод в общий тип проверки и выбор источника данных.
  *
  * Логика не зависит от `vscode`, поэтому проверяется в обычном Node — так же,
@@ -10,7 +10,6 @@ import { strict as assert } from 'node:assert';
 import { test } from 'node:test';
 
 import {
-  computeProgress,
   createLocalRun,
   formatDuration,
   formatProgress,
@@ -103,27 +102,39 @@ test('разбор файла состояния: completed не превыша�
 
   assert.ok(parsed);
   assert.equal(parsed.completedChecks, 5);
-  assert.equal(computeProgress(parsed), 100);
+  assert.equal(formatProgress(parsed), '5/5');
 });
 
-test('процент прогресса считается по завершённым проверкам', () => {
-  assert.equal(computeProgress(run({ completedChecks: 0 })), 0);
-  assert.equal(computeProgress(run({ completedChecks: 4 })), 40);
-  assert.equal(computeProgress(run({ completedChecks: 10, status: 'success' })), 100);
-  assert.equal(formatProgress(run({ completedChecks: 4 })), '40%');
+test('прогресс показывается числом пройденных проверок, а не процентами', () => {
+  assert.equal(formatProgress(run({ totalChecks: 90, completedChecks: 0 })), '0/90');
+  assert.equal(formatProgress(run({ totalChecks: 70, completedChecks: 5 })), '5/70');
+  assert.equal(formatProgress(run({ completedChecks: 4 })), '4/10');
+  assert.doesNotMatch(formatProgress(run({ completedChecks: 4 }))!, /%/, 'проценты не возвращаются');
 });
 
-test('процент не выдумывается, когда общее число проверок неизвестно', () => {
+test('пройденных больше общего не показывается', () => {
+  const parsed = parseLocalRunState(JSON.stringify({
+    runNumber: 3,
+    status: 'in_progress',
+    totalChecks: 11,
+    completedChecks: 40,
+  }));
+
+  assert.ok(parsed);
+  assert.equal(parsed.completedChecks, 11, 'разбор уже обрезает значение по общему числу');
+  assert.equal(formatProgress(parsed), '11/11');
+});
+
+test('прогресс не выдумывается, когда общее число проверок неизвестно', () => {
   const unknown = run({ totalChecks: 0, completedChecks: 0 });
-  assert.equal(computeProgress(unknown), null);
   assert.equal(formatProgress(unknown), null, 'лучше пусто, чем выдуманное значение');
 
   const local = createLocalRun(1);
-  assert.equal(computeProgress(local), null);
+  assert.equal(formatProgress(local), null);
 });
 
-test('в очереди процент равен нулю даже без данных о шагах', () => {
-  assert.equal(computeProgress(run({ status: 'queued', totalChecks: 11, completedChecks: 0 })), 0);
+test('в очереди прогресс показывает ноль пройденных', () => {
+  assert.equal(formatProgress(run({ status: 'queued', totalChecks: 11, completedChecks: 0 })), '0/11');
 });
 
 test('перевод в общий тип проверки: префикс runId отделяет локальные прогоны', () => {

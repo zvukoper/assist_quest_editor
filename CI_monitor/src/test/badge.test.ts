@@ -1,5 +1,5 @@
 /**
- * Проверки внешнего вида плашки (цвет фона, значок, номер проверки).
+ * Проверки внешнего вида плашки (цвет фона, значок, номер проверки, прогресс).
  */
 
 import { strict as assert } from 'node:assert';
@@ -106,6 +106,33 @@ test('текст плашки не содержит управляющих си�
     const badge = buildBadge(input({ run: run('in_progress'), style }));
     assert.doesNotMatch(badge.text, /\u001b/, `ANSI попал в текст (${style})`);
   }
+});
+
+test('локальный прогон показывает пройденные и все проверки, без процентов', () => {
+  const badge = buildBadge(
+    input({ run: run('in_progress'), local: true, passedChecks: 5, totalChecks: 70 })
+  );
+
+  assert.ok(badge.text.includes('5/70'), `нет числа проверок: ${badge.text}`);
+  assert.doesNotMatch(badge.text, /%/, 'проценты больше не показываются');
+  assert.ok(badge.accessibleText.includes('5/70'));
+  assert.ok(badge.tooltip.includes('пройдено 5/70'));
+});
+
+test('нулевой прогресс показывается как 0/N', () => {
+  const badge = buildBadge(input({ run: run('queued'), local: true, passedChecks: 0, totalChecks: 90 }));
+  assert.ok(badge.text.includes('0/90'), `нет числа проверок: ${badge.text}`);
+});
+
+test('без общего числа проверок прогресс не показывается', () => {
+  const badge = buildBadge(input({ run: run('in_progress'), local: true, passedChecks: 4, totalChecks: 0 }));
+  assert.ok(!badge.text.includes('/'), `лишний прогресс: ${badge.text}`);
+  assert.ok(!badge.accessibleText.includes('/'), 'прогресс не выдумывается');
+});
+
+test('GitHub-режим не получает прогресс: числа проверок не заданы', () => {
+  const badge = buildBadge(input({ run: run('in_progress') }));
+  assert.ok(!badge.text.includes('/'), `лишний прогресс: ${badge.text}`);
 });
 
 test('подсказка содержит номер, workflow, ветку и ссылки', () => {

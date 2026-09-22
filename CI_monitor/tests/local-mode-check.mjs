@@ -2,8 +2,11 @@
  * Диагностика: плашка в локальном режиме и правило одного уведомления.
  *
  * Проверяет то, что нельзя проверить юнит-тестами: как реальный файл состояния
- * из ci/run_local.ps1 превращается в текст плашки, и совпадает ли процент
- * с числом завершённых проверок.
+ * из ci/run_local.ps1 превращается в текст плашки, и совпадает ли прогресс
+ * с числом пройденных проверок.
+ *
+ * Прогресс показывается числом проверок («5/70»), а не процентами: по «45%»
+ * не видно, сколько проверок осталось, а по «5/70» — видно.
  *
  * Запуск: node tests/local-mode-check.mjs
  */
@@ -18,7 +21,7 @@ const outDir = path.join(process.cwd(), 'out');
 // спецификатор модуля (.\file:\F:\...), и импорт падает.
 const load = (name) => import(pathToFileURL(path.join(outDir, name)).href);
 
-const { parseLocalRunState, computeProgress, toCiRun, selectSource, isStale } = await load('localRun.js');
+const { parseLocalRunState, formatProgress, toCiRun, selectSource, isStale } = await load('localRun.js');
 const { buildBadge } = await load('badge.js');
 
 const statePath = path.join(process.cwd(), '..', '.ci-state', 'local-run.json');
@@ -37,13 +40,13 @@ if (!run) {
   process.exit(1);
 }
 
-const percent = computeProgress(run);
+const progress = formatProgress(run);
 const ci = toCiRun(run);
 const stale = isStale(run);
 
 console.log('--- Файл состояния ---');
 console.log(`runNumber=${run.runNumber} status=${run.status}`);
-console.log(`checks=${run.completedChecks}/${run.totalChecks} => ${percent === null ? 'н/д' : percent + '%'}`);
+console.log(`checks=${run.completedChecks}/${run.totalChecks} => ${progress ?? 'н/д'}`);
 console.log(`title=${run.title ?? '—'} branch=${run.branch ?? '—'} commit=${run.commit ?? '—'}`);
 console.log(`stale=${stale}`);
 
@@ -55,7 +58,8 @@ const badge = buildBadge({
   showIdle: true,
   style: 'square',
   error: null,
-  progressPercent: percent,
+  passedChecks: run.completedChecks,
+  totalChecks: run.totalChecks,
   local: true,
   failedChecks: run.failedChecks,
   reportPath: run.reportPath,
@@ -71,17 +75,23 @@ console.log(`a11y      = ${badge.accessibleText}`);
 console.log('tooltip:');
 for (const line of badge.tooltip.split('\n')) console.log('  ' + line);
 
-// Процент обязан совпадать с числом завершённых проверок — иначе плашка врёт.
-if (percent !== null) {
-  const expected = Math.round((run.completedChecks / run.totalChecks) * 100);
-  if (percent !== expected) {
-    console.error(`\nОШИБКА: процент ${percent} не совпадает с ожидаемым ${expected}.`);
+// Прогресс обязан совпадать с числом проверок — иначе плашка врёт.
+if (progress !== null) {
+  const expected = `${Math.min(run.completedChecks, run.totalChecks)}/${run.totalChecks}`;
+  if (progress !== expected) {
+    console.error(`\nОШИБКА: прогресс ${progress} не совпадает с ожидаемым ${expected}.`);
     process.exit(1);
   }
-  if (!badge.text.includes(`${percent}%`)) {
-    console.error(`\nОШИБКА: процент ${percent}% не показан в тексте плашки.`);
+  if (!badge.text.includes(progress)) {
+    console.error(`\nОШИБКА: прогресс ${progress} не показан в тексте плашки.`);
     process.exit(1);
   }
+}
+
+// Проценты не должны вернуться в текст плашки.
+if (badge.text.includes('%')) {
+  console.error('\nОШИБКА: в тексте плашки появились проценты.');
+  process.exit(1);
 }
 
 if (badge.text.includes('#undefined')) {
