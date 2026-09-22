@@ -575,7 +575,7 @@ public sealed class EditorForm : WebViewForm
         using var dialog = new OpenFileDialog
         {
             Title = "Открыть Quest Definition",
-            Filter = "Quest Definition (*.json)|*.json|JSON (*.json)|*.json|Все файлы (*.*)|*.*",
+            Filter = ResourceFileTypes.Filter(ResourceFileTypes.Get(".aqquest")),
             Multiselect = false
         };
 
@@ -642,10 +642,10 @@ public sealed class EditorForm : WebViewForm
             {
                 Title = "Сохранить Quest Definition",
                 Filter = "Quest Definition (*.json)|*.json|JSON (*.json)|*.json",
-                DefaultExt = "json",
+                DefaultExt = "aqquest",
                 AddExtension = true,
                 FileName = string.IsNullOrWhiteSpace(path)
-                    ? $"{SanitizeFileName(_questGraph.Value.Name)}.json"
+                    ? $"{SanitizeFileName(_questGraph.Value.Name)}.aqquest"
                     : Path.GetFileName(path)
             };
 
@@ -687,7 +687,7 @@ public sealed class EditorForm : WebViewForm
         using var dialog = new OpenFileDialog
         {
             Title = "Открыть Scene Definition",
-            Filter = "Scene Definition (*.json)|*.json|JSON (*.json)|*.json|Все файлы (*.*)|*.*",
+            Filter = ResourceFileTypes.Filter(ResourceFileTypes.Get(".aqscene")),
             Multiselect = false
         };
 
@@ -747,10 +747,10 @@ public sealed class EditorForm : WebViewForm
             {
                 Title = "Сохранить Scene Definition",
                 Filter = "Scene Definition (*.json)|*.json|JSON (*.json)|*.json",
-                DefaultExt = "json",
+                DefaultExt = "aqscene",
                 AddExtension = true,
                 FileName = string.IsNullOrWhiteSpace(path)
-                    ? SanitizeFileName(_sceneGraph.Value.Title) + ".json"
+                    ? SanitizeFileName(_sceneGraph.Value.Title) + ".aqscene"
                     : Path.GetFileName(path)
             };
 
@@ -786,7 +786,7 @@ public sealed class EditorForm : WebViewForm
 
     private string ResolveScenePath(string sceneId)
     {
-        var path = Path.Combine(AppContext.BaseDirectory, "data", "scenes", sceneId + ".json");
+        var path = Path.Combine(AppContext.BaseDirectory, "data", "scenes", sceneId + ".aqscene");
         return File.Exists(path) ? path : string.Empty;
     }
 
