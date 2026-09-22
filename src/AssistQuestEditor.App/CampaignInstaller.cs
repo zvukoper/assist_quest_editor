@@ -39,9 +39,6 @@ public static class CampaignInstaller
         }
 
         var sourceRecords = EnumerateCampaigns(sourceRoot);
-        var sourceIds = sourceRecords
-            .Select(item => item.Definition.Id)
-            .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
         foreach (var source in sourceRecords)
         {
@@ -58,8 +55,6 @@ public static class CampaignInstaller
                 logOnly.Add($"Ошибка обновления кампании «{source.Definition.Name}»: {ex.Message}");
             }
         }
-
-        DisableRemovedCampaigns(userRoot, sourceIds, visible, logOnly);
 
         AppLogger.Info(
             "CampaignInstaller: синхронизация завершена.",
@@ -216,49 +211,6 @@ public static class CampaignInstaller
             AppLogger.Info(
                 "CampaignInstaller: Campaign синхронизирована.",
                 $"campaignId={source.Definition.Id}; version={Math.Max(localDefinition.Version, source.Definition.Version)}");
-        }
-    }
-
-    private static void DisableRemovedCampaigns(
-        string userRoot,
-        HashSet<string> sourceIds,
-        ICollection<string> visible,
-        ICollection<string> logOnly)
-    {
-        foreach (var file in Directory.EnumerateFiles(
-                     userRoot,
-                     CampaignStore.CampaignFileName,
-                     SearchOption.AllDirectories))
-        {
-            try
-            {
-                var document = ResourceJsonFormat.Deserialize<CampaignDefinitionDocument>(File.ReadAllText(file));
-                var definition = document?.Definition;
-                if (definition is null ||
-                    sourceIds.Contains(definition.Id) ||
-                    !document!.Format.Equals("aqcampaign", StringComparison.OrdinalIgnoreCase))
-                    continue;
-
-                if (!definition.Active)
-                    continue;
-
-                var disabled = definition with
-                {
-                    Active = false,
-                    Quests = definition.Quests
-                        .Select(item => item with { Status = CampaignQuestStatus.Disabled })
-                        .ToArray()
-                };
-
-                WriteCampaign(file, disabled);
-                var message = $"Отключена удалённая кампания «{definition.Name}» и все её квесты.";
-                visible.Add(message);
-                AppLogger.Warn("CampaignInstaller: удалённая Campaign отключена.", message);
-            }
-            catch (Exception ex)
-            {
-                logOnly.Add($"Не удалось проверить удалённую кампанию: {file}: {ex.Message}");
-            }
         }
     }
 
