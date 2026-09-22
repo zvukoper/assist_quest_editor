@@ -20,6 +20,7 @@ public sealed class EditorForm : WebViewForm
     private readonly QuestGraphStore _questGraph;
     private readonly SceneGraphStore _sceneGraph;
     private readonly SceneCatalog _sceneCatalog;
+    private readonly SceneDocumentSession _sceneDocument;
     private readonly QuestRuntime _runtime;
     private readonly HashSet<string> _executedNodeIds = new(StringComparer.OrdinalIgnoreCase);
     private readonly bool _isGraphEditor;
@@ -27,10 +28,8 @@ public sealed class EditorForm : WebViewForm
     private readonly bool _isDialogueWorkspace;
     private string? _currentDefinitionPath;
     private string? _lastDefinitionPath;
-    private string? _currentScenePath;
-    private string? _lastScenePath;
     private bool _documentDirty;
-    private bool _sceneDocumentDirty;
+    private bool _loadingScene;
 
     public string WindowKey { get; }
 
@@ -41,6 +40,7 @@ public sealed class EditorForm : WebViewForm
         QuestGraphStore questGraph,
         SceneGraphStore sceneGraph,
         SceneCatalog sceneCatalog,
+        SceneDocumentSession sceneDocument,
         QuestRuntime runtime)
         : base($"Assist Quest Editor — {title}", page, new Size(1380, 900), "editor:" + page)
     {
@@ -50,10 +50,10 @@ public sealed class EditorForm : WebViewForm
         _questGraph = questGraph;
         _sceneGraph = sceneGraph;
         _sceneCatalog = sceneCatalog;
+        _sceneDocument = sceneDocument;
         _runtime = runtime;
         var preferences = AppUiPreferencesStore.Load();
         _lastDefinitionPath = preferences.LastQuestDefinitionPath;
-        _lastScenePath = preferences.LastSceneDefinitionPath;
         _isGraphEditor = page.EndsWith("#graph", StringComparison.OrdinalIgnoreCase);
         _isSceneEditor =
             page.EndsWith("#scene", StringComparison.OrdinalIgnoreCase) ||
@@ -64,6 +64,7 @@ public sealed class EditorForm : WebViewForm
         _selection.Changed += Selection_Changed;
         _questGraph.Changed += QuestGraph_Changed;
         _sceneGraph.Changed += SceneGraph_Changed;
+        _sceneDocument.Changed += SceneDocument_Changed;
         _runtime.Published += Runtime_Published;
         UpdateWindowTitle();
 
@@ -73,6 +74,7 @@ public sealed class EditorForm : WebViewForm
             _selection.Changed -= Selection_Changed;
             _questGraph.Changed -= QuestGraph_Changed;
             _sceneGraph.Changed -= SceneGraph_Changed;
+            _sceneDocument.Changed -= SceneDocument_Changed;
             _runtime.Published -= Runtime_Published;
         };
     }
@@ -140,7 +142,7 @@ public sealed class EditorForm : WebViewForm
             }
         }
 
-        if (_isSceneEditor && _sceneDocumentDirty)
+        if (_isSceneEditor && _sceneDocument.IsDirty)
         {
             var result = MessageBox.Show(
                 this,
@@ -225,9 +227,20 @@ public sealed class EditorForm : WebViewForm
         switch (action)
         {
             case "scene_new":
-                _sceneGraph.Replace(SceneCatalogFactory.CreateStarter().Scenes.First());
-                _currentScenePath = null;
-                _sceneDocumentDirty = false;
+                if (!ConfirmSceneSwitch())
+                    break;
+
+                _loadingScene = true;
+                try
+                {
+                    _sceneGraph.Replace(SceneCatalogFactory.CreateStarter().Scenes.First());
+                }
+                finally
+                {
+                    _loadingScene = false;
+                }
+
+                _sceneDocument.MarkNew(_sceneGraph.Value.Id);
                 UpdateWindowTitle();
                 PostSceneCatalog();
                 PostSceneGraph();
@@ -248,9 +261,27 @@ public sealed class EditorForm : WebViewForm
                 if (!_sceneCatalog.TryGetScene(sceneId, out var scene))
                     throw new InvalidOperationException("Scene «" + sceneId + "» не найдена.");
 
-                _sceneGraph.Replace(scene);
-                _currentScenePath = ResolveScenePath(scene.Id);
-                _sceneDocumentDirty = false;
+                if (string.Equals(_sceneDocument.CurrentSceneId, scene.Id, StringComparison.OrdinalIgnoreCase))
+                    break;
+
+                if (!ConfirmSceneSwitch())
+                    break;
+
+                _loadingScene = true;
+                try
+                {
+                    _sceneGraph.Replace(scene);
+                }
+                finally
+                {
+                    _loadingScene = false;
+                }
+
+                var scenePath = ResolveScenePath(scene.Id);
+                if (string.IsNullOrWhiteSpace(scenePath))
+                    throw new InvalidOperationException("Для Scene «" + scene.Id + "» не найден исходный .aqscene файл.");
+
+                _sceneDocument.Opened(scene.Id, scenePath);
                 UpdateWindowTitle();
                 PostSceneGraph();
                 break;
@@ -858,25 +889,26 @@ public sealed class EditorForm : WebViewForm
             Multiselect = false
         };
 
-        if (!string.IsNullOrWhiteSpace(_lastScenePath) && File.Exists(_lastScenePath))
+        if (!string.IsNullOrWhiteSpace(_sceneDocument.LastPath) && File.Exists(_sceneDocument.LastPath))
         {
-            dialog.InitialDirectory = Path.GetDirectoryName(_lastScenePath);
-            dialog.FileName = Path.GetFileName(_lastScenePath);
+            dialog.InitialDirectory = Path.GetDirectoryName(_sceneDocument.LastPath);
+            dialog.FileName = Path.GetFileName(_sceneDocument.LastPath);
         }
 
-        if (dialog.ShowDialog(this) == DialogResult.OK)
+        if (dialog.ShowDialog(this) == DialogResult.OK && ConfirmSceneSwitch())
             LoadSceneFromPath(dialog.FileName);
     }
 
     private void OpenLastScene()
     {
-        if (string.IsNullOrWhiteSpace(_lastScenePath) || !File.Exists(_lastScenePath))
+        if (string.IsNullOrWhiteSpace(_sceneDocument.LastPath) || !File.Exists(_sceneDocument.LastPath))
         {
             OpenScene();
             return;
         }
 
-        LoadSceneFromPath(_lastScenePath);
+        if (ConfirmSceneSwitch())
+            LoadSceneFromPath(_sceneDocument.LastPath);
     }
 
     private void LoadSceneFromPath(string path)
@@ -892,11 +924,18 @@ public sealed class EditorForm : WebViewForm
                 document.Format + "; schema=" + document.SchemaVersion + ".");
 
         _sceneCatalog.Upsert(document.Definition);
-        _sceneGraph.Replace(document.Definition);
-        _currentScenePath = path;
-        _lastScenePath = path;
+        _loadingScene = true;
+        try
+        {
+            _sceneGraph.Replace(document.Definition);
+        }
+        finally
+        {
+            _loadingScene = false;
+        }
+
+        _sceneDocument.Opened(document.Definition.Id, path);
         SaveLastScenePath();
-        _sceneDocumentDirty = false;
         UpdateWindowTitle();
         PostSceneCatalog();
         PostSceneGraph();
@@ -907,7 +946,7 @@ public sealed class EditorForm : WebViewForm
 
     private bool SaveScene(bool saveAs)
     {
-        var path = _currentScenePath;
+        var path = _sceneDocument.CurrentPath;
 
         if (saveAs || string.IsNullOrWhiteSpace(path))
         {
@@ -933,29 +972,56 @@ public sealed class EditorForm : WebViewForm
         var output = JsonSerializer.Serialize(document, WebJsonOptions);
         File.WriteAllText(path!, output);
 
-        _currentScenePath = path;
-        _lastScenePath = path;
+        _sceneDocument.Saved(_sceneGraph.Value.Id, path!);
         SaveLastScenePath();
-        _sceneDocumentDirty = false;
         UpdateWindowTitle();
         PostSceneCatalog();
         PostSceneGraph();
         AppLogger.Info(
             "Scene Editor: документ сохранён.",
-            "path=" + _currentScenePath + "; scene=" + _sceneGraph.Value.Id + "; bytes=" + output.Length);
+            "path=" + _sceneDocument.CurrentPath + "; scene=" + _sceneGraph.Value.Id + "; bytes=" + output.Length);
         return true;
     }
 
     private void SaveLastScenePath()
     {
+        if (string.IsNullOrWhiteSpace(_sceneDocument.LastPath))
+            return;
+
         var preferences = AppUiPreferencesStore.Load();
-        AppUiPreferencesStore.Save(preferences with { LastSceneDefinitionPath = _lastScenePath });
+        AppUiPreferencesStore.Save(preferences with { LastSceneDefinitionPath = _sceneDocument.LastPath });
     }
 
-    private string ResolveScenePath(string sceneId)
+    private string? ResolveScenePath(string sceneId)
     {
         var path = Path.Combine(AppContext.BaseDirectory, "data", "scenes", sceneId + ".aqscene");
-        return File.Exists(path) ? path : string.Empty;
+        return File.Exists(path) ? path : null;
+    }
+
+    private bool ConfirmSceneSwitch()
+    {
+        if (!_sceneDocument.IsDirty)
+            return true;
+
+        var result = MessageBox.Show(
+            this,
+            "В текущей Scene есть несохранённые изменения.\r\n\r\n" +
+            "Да — сохранить текущую Scene.\r\n" +
+            "Нет — отбросить изменения и продолжить.\r\n" +
+            "Отмена — остаться в текущей Scene.",
+            "Несохранённые изменения Scene",
+            MessageBoxButtons.YesNoCancel,
+            MessageBoxIcon.Warning,
+            MessageBoxDefaultButton.Button1);
+
+        if (result == DialogResult.Cancel)
+            return false;
+
+        if (result == DialogResult.Yes)
+            return SaveScene(saveAs: false);
+
+        _sceneDocument.DiscardChanges();
+        return true;
     }
 
     private void PostSceneCatalog()
@@ -987,9 +1053,9 @@ public sealed class EditorForm : WebViewForm
             canUndo = _sceneGraph.CanUndo,
             canRedo = _sceneGraph.CanRedo,
             validation = SceneGraphValidator.Validate(_sceneGraph.Value),
-            documentPath = _currentScenePath ?? string.Empty,
-            lastDocumentPath = _lastScenePath ?? string.Empty,
-            documentDirty = _sceneDocumentDirty
+            documentPath = _sceneDocument.CurrentPath ?? string.Empty,
+            lastDocumentPath = _sceneDocument.LastPath ?? string.Empty,
+            documentDirty = _sceneDocument.IsDirty
         }, WebJsonOptions));
     }
 
@@ -998,7 +1064,22 @@ public sealed class EditorForm : WebViewForm
         if (!_isSceneEditor)
             return;
 
-        _sceneDocumentDirty = true;
+        if (!_loadingScene)
+        {
+            _sceneDocument.ObserveScene(
+                _sceneGraph.Value.Id,
+                ResolveScenePath(_sceneGraph.Value.Id));
+        }
+
+        UpdateWindowTitle();
+        PushSceneGraphOnUiThread();
+    }
+
+    private void SceneDocument_Changed(object? sender, EventArgs e)
+    {
+        if (!_isSceneEditor)
+            return;
+
         UpdateWindowTitle();
         PushSceneGraphOnUiThread();
     }
@@ -1068,13 +1149,13 @@ public sealed class EditorForm : WebViewForm
 
         if (_isSceneEditor)
         {
-            var fileName = string.IsNullOrWhiteSpace(_currentScenePath)
+            var fileName = string.IsNullOrWhiteSpace(_sceneDocument.CurrentPath)
                 ? "Новый документ"
-                : Path.GetFileName(_currentScenePath);
+                : Path.GetFileName(_sceneDocument.CurrentPath);
             var prefix = _isDialogueWorkspace
                 ? "Рабочее пространство диалогов"
                 : "Редактор сцен";
-            Text = $"Assist Quest Editor — {prefix} — {fileName}" + (_sceneDocumentDirty ? " *" : string.Empty);
+            Text = $"Assist Quest Editor — {prefix} — {fileName}" + (_sceneDocument.IsDirty ? " *" : string.Empty);
         }
     }
 
