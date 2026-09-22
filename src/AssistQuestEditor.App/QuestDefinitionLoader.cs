@@ -6,7 +6,7 @@ namespace AssistQuestEditor.App;
 
 public static class QuestDefinitionLoader
 {
-    private const string RelativePath = "data/quests/tutorial_ruslan_shashlik.json";
+    private const string RelativePath = "data/quests/tutorial_ruslan_shashlik.aqquest";
 
     public static QuestGraph LoadOrFallback()
     {
@@ -25,7 +25,7 @@ public static class QuestDefinitionLoader
             options.Converters.Add(new JsonStringEnumConverter());
             var document = JsonSerializer.Deserialize<QuestDefinitionDocument>(File.ReadAllText(path), options);
 
-            if (document?.Definition?.Graph is null || document.SchemaVersion != 1)
+            if (document?.Definition?.Graph is null || document.SchemaVersion != 1 || !document.Format.Equals("aqquest", StringComparison.OrdinalIgnoreCase))
             {
                 AppLogger.Warn("Учебный Quest Definition имеет неподдерживаемый формат.", $"path={path}; schema={document?.SchemaVersion}");
                 return QuestGraphFactory.CreateStarter();
