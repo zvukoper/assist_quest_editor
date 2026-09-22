@@ -1206,8 +1206,12 @@
             skills.map(skill =>
               "<div class='characterSkill' data-game-tooltip='" + escapeHtml(skill.description || skill.name) + "'>" +
                 "<span class='characterSkillName'>" + escapeHtml(skill.name) + "</span>" +
-                "<span class='characterSkillLevel'>" + escapeHtml(skill.levelLabel || (skill.unlocked ? "Получен" : "Не изучен")) + "</span>" +
-                "<div class='characterSkillDesc'>" + escapeHtml(skill.description || "") + "</div>" +
+                "<span class='characterSkillLevel'>" +
+                  escapeHtml(skill.kind === "Levelled"
+                    ? ("Уровень " + Number(skill.level || 0) + "/" + Number(skill.maxLevel || 100))
+                    : (skill.unlocked ? "Получен" : "Не изучен")) +
+                "</span>" +
+                "<div class='characterSkillDesc'>" + escapeHtml(skill.description || "") +
               "</div>"
             ).join("") +
           "</div>" +
@@ -1798,8 +1802,6 @@
       });
     });
 
-    side.querySelector("#runtimeStartSide")?.addEventListener("click", () => send({ action: "runtime_start" }));
-    side.querySelector("#runtimeStopSide")?.addEventListener("click", () => send({ action: "runtime_stop" }));
 
     side.querySelector("#emitExpectedEvent")?.addEventListener("click", () => {
       const expected = runtimeExpectedEvent();
