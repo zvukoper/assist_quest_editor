@@ -598,7 +598,7 @@ public sealed class EditorForm : WebViewForm
             using var dialog = new OpenFileDialog
             {
                 Title = "Открыть последний Quest Definition",
-                Filter = "Quest Definition (*.json)|*.json|JSON (*.json)|*.json|Все файлы (*.*)|*.*",
+                Filter = ResourceFileTypes.Filter(ResourceFileTypes.Get(".aqquest")),
                 Multiselect = false
             };
 
