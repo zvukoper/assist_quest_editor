@@ -58,6 +58,9 @@ public sealed class QuestRuntime : IQuestRuntimeController
 
     public QuestRuntimeState State { get; private set; }
     public QuestGraph ActiveGraph => _graphStore.Value;
+    public bool SimulationRunning { get; private set; } = true;
+
+    public void SetSimulationRunning(bool running) => SimulationRunning = running;
     public event EventHandler<QuestRuntimeEvent>? Published;
 
     public void Start()
@@ -112,7 +115,7 @@ public sealed class QuestRuntime : IQuestRuntimeController
 
     public void Tick()
     {
-        if (State.Status != QuestRuntimeStatus.Waiting)
+        if (!SimulationRunning || State.Status != QuestRuntimeStatus.Waiting)
         {
             return;
         }
@@ -153,7 +156,7 @@ public sealed class QuestRuntime : IQuestRuntimeController
 
     public void HandleEvent(SimulatorEvent value)
     {
-        if (State.Status != QuestRuntimeStatus.Waiting)
+        if (!SimulationRunning || State.Status != QuestRuntimeStatus.Waiting)
         {
             return;
         }
@@ -250,7 +253,8 @@ public sealed class QuestRuntime : IQuestRuntimeController
 
     private void SceneRuntime_Published(object? sender, SceneRuntimeEvent e)
     {
-        if (!e.EventType.Equals("SceneCompleted", StringComparison.OrdinalIgnoreCase) ||
+        if (!SimulationRunning ||
+            !e.EventType.Equals("SceneCompleted", StringComparison.OrdinalIgnoreCase) ||
             !string.Equals(State.WaitingFor, "Scene", StringComparison.OrdinalIgnoreCase))
         {
             return;
@@ -475,6 +479,11 @@ public sealed class QuestRuntime : IQuestRuntimeController
 
                 case "addreputation":
                     ApplyReputation(node, +1);
+                    MoveToFirstOutput(node);
+                    break;
+
+                case "addskill":
+                    ApplySkill(node);
                     MoveToFirstOutput(node);
                     break;
 
@@ -943,6 +952,73 @@ public sealed class QuestRuntime : IQuestRuntimeController
         var current = _hub.Get<PlayerProgressState>("player-progress").Value;
         _hub.Get<PlayerProgressState>("player-progress").Set(
             current with { Reserve = amount },
+            "QuestRuntime");
+    }
+
+    private void ApplySkill(QuestNode node)
+    {
+        var skillId = GetParameter(node, "skillId").Trim();
+        if (string.IsNullOrWhiteSpace(skillId))
+        {
+            Publish("SkillSkipped", "QuestRuntime", node.NodeId, "AddSkill не содержит skillId.");
+            return;
+        }
+
+        var name = GetParameter(node, "name", skillId).Trim();
+        var description = GetParameter(node, "description", string.Empty).Trim();
+        var kindText = GetParameter(node, "kind", "Levelled");
+        var kind = Enum.TryParse<SkillKind>(kindText, true, out var parsedKind)
+            ? parsedKind
+            : SkillKind.Levelled;
+        var amount = Math.Max(0, ParseInt(GetParameter(node, "amount"), 1));
+        var maxLevel = Math.Max(1, ParseInt(GetParameter(node, "maxLevel"), 100));
+
+        var current = _hub.Get<CharacterState>("character").Value;
+        var skills = current.Skills.ToList();
+        var index = skills.FindIndex(item =>
+            item.Id.Equals(skillId, StringComparison.OrdinalIgnoreCase));
+
+        if (index < 0)
+        {
+            var level = kind == SkillKind.Levelled ? Math.Min(amount, maxLevel) : 0;
+            skills.Add(new CharacterSkillState(
+                skillId,
+                string.IsNullOrWhiteSpace(name) ? skillId : name,
+                description,
+                true,
+                kind == SkillKind.Levelled ? $"Уровень {level}/{maxLevel}" : "Получен")
+            {
+                Kind = kind,
+                Level = level,
+                MaxLevel = kind == SkillKind.Levelled ? maxLevel : 1
+            });
+        }
+        else
+        {
+            var existing = skills[index];
+            if (kind == SkillKind.Levelled || existing.Kind == SkillKind.Levelled)
+            {
+                var effectiveMax = Math.Max(1, existing.MaxLevel > 1 ? existing.MaxLevel : maxLevel);
+                var nextLevel = Math.Clamp(existing.Level + amount, 0, effectiveMax);
+                skills[index] = existing with
+                {
+                    Unlocked = true,
+                    Kind = SkillKind.Levelled,
+                    Level = nextLevel,
+                    MaxLevel = effectiveMax,
+                    LevelLabel = $"Уровень {nextLevel}/{effectiveMax}",
+                    Name = string.IsNullOrWhiteSpace(existing.Name) ? name : existing.Name,
+                    Description = string.IsNullOrWhiteSpace(existing.Description) ? description : existing.Description
+                };
+            }
+            else
+            {
+                skills[index] = existing with { Unlocked = true };
+            }
+        }
+
+        _hub.Get<CharacterState>("character").Set(
+            current with { Skills = skills },
             "QuestRuntime");
     }
 
