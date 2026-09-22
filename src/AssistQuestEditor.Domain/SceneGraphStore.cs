@@ -1,3 +1,5 @@
+using System.Globalization;
+
 namespace AssistQuestEditor.Domain;
 
 public sealed record SceneGraphConnectionResult(bool Added, SceneConnection? Connection, string? Error)
@@ -19,6 +21,370 @@ public sealed class SceneGraphStore
     public bool CanUndo => _undo.Count > 0;
     public bool CanRedo => _redo.Count > 0;
     public event EventHandler? Changed;
+
+
+    public SceneDialogue? FindDialogue(string dialogueId) =>
+        _value.Dialogues.FirstOrDefault(dialogue =>
+            dialogue.Id.Equals(dialogueId, StringComparison.OrdinalIgnoreCase));
+
+    public SceneChoice? FindChoice(string choiceId) =>
+        _value.Choices.FirstOrDefault(choice =>
+            choice.Id.Equals(choiceId, StringComparison.OrdinalIgnoreCase));
+
+    public SceneDialogue CreateDialogueForNode(string nodeId)
+    {
+        var node = FindNode(nodeId)
+            ?? throw new InvalidOperationException("Нода не найдена: " + nodeId);
+
+        if (!node.NodeType.Equals("Dialogue", StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException("Нода «" + nodeId + "» не является Dialogue.");
+
+        if (node.Parameters.TryGetValue("dialogueId", out var existingId) &&
+            !string.IsNullOrWhiteSpace(existingId))
+        {
+            var existing = FindDialogue(existingId);
+            if (existing is not null)
+                return existing;
+        }
+
+        var dialogue = new SceneDialogue(
+            CreateUniqueId("dialogue"),
+            "Персонаж",
+            "Новый текст диалога.");
+
+        var parameters = NormalizeParameters(node.Parameters);
+        parameters["dialogueId"] = dialogue.Id;
+
+        var nodes = _value.Graph.Nodes
+            .Select(item => item.NodeId.Equals(node.NodeId, StringComparison.OrdinalIgnoreCase)
+                ? item with { Parameters = parameters }
+                : item)
+            .ToArray();
+
+        Apply(_value with
+        {
+            Graph = _value.Graph with { Nodes = nodes },
+            Dialogues = _value.Dialogues.Append(dialogue).ToArray()
+        });
+
+        return dialogue;
+    }
+
+    public bool UpdateDialogue(string dialogueId, string speaker, string text)
+    {
+        var dialogue = FindDialogue(dialogueId);
+        if (dialogue is null)
+            return false;
+
+        var updated = dialogue with
+        {
+            Speaker = speaker ?? string.Empty,
+            Text = text ?? string.Empty
+        };
+
+        Apply(_value with
+        {
+            Dialogues = _value.Dialogues
+                .Select(item => item.Id.Equals(dialogueId, StringComparison.OrdinalIgnoreCase) ? updated : item)
+                .ToArray()
+        });
+
+        return true;
+    }
+
+    public SceneChoice CreateChoiceForNode(string nodeId)
+    {
+        var node = FindNode(nodeId)
+            ?? throw new InvalidOperationException("Нода не найдена: " + nodeId);
+
+        if (!node.NodeType.Equals("Choice", StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException("Нода «" + nodeId + "» не является Choice.");
+
+        if (node.Parameters.TryGetValue("choiceId", out var existingId) &&
+            !string.IsNullOrWhiteSpace(existingId))
+        {
+            var existing = FindChoice(existingId);
+            if (existing is not null)
+                return existing;
+        }
+
+        var outputSockets = node.Sockets
+            .Where(socket => socket.Direction == SocketDirection.Output)
+            .ToList();
+
+        while (outputSockets.Count < 2)
+        {
+            var socketId = node.NodeId + ".option." + ShortToken();
+            var socket = new SocketDefinition(
+                socketId,
+                "Вариант " + (outputSockets.Count + 1),
+                SocketDirection.Output);
+            outputSockets.Add(socket);
+        }
+
+        var choiceId = CreateUniqueId("choice");
+        var options = outputSockets
+            .Select((socket, index) => new SceneChoiceOption(
+                choiceId + ".option." + (index + 1),
+                "Вариант " + (index + 1),
+                socket.SocketId))
+            .ToArray();
+
+        var choice = new SceneChoice(
+            choiceId,
+            "Новый выбор",
+            "Персонаж",
+            "Текст вопроса выбора.",
+            options);
+
+        var parameters = NormalizeParameters(node.Parameters);
+        parameters["choiceId"] = choice.Id;
+        parameters["outputCount"] = outputSockets.Count.ToString(CultureInfo.InvariantCulture);
+
+        var sockets = node.Sockets
+            .Concat(
+                outputSockets
+                    .Where(expected => !node.Sockets.Any(existing =>
+                        existing.SocketId.Equals(expected.SocketId, StringComparison.OrdinalIgnoreCase))))
+            .Select(socket =>
+            {
+                var optionIndex = outputSockets.FindIndex(item =>
+                    item.SocketId.Equals(socket.SocketId, StringComparison.OrdinalIgnoreCase));
+                return optionIndex >= 0
+                    ? socket with { Name = "Вариант " + (optionIndex + 1) }
+                    : socket;
+            })
+            .ToArray();
+
+        var nodes = _value.Graph.Nodes
+            .Select(item => item.NodeId.Equals(node.NodeId, StringComparison.OrdinalIgnoreCase)
+                ? item with { Parameters = parameters, Sockets = sockets }
+                : item)
+            .ToArray();
+
+        Apply(_value with
+        {
+            Graph = _value.Graph with { Nodes = nodes },
+            Choices = _value.Choices.Append(choice).ToArray()
+        });
+
+        return choice;
+    }
+
+    public bool UpdateChoice(
+        string choiceId,
+        string title,
+        string speaker,
+        string text,
+        IReadOnlyDictionary<string, string> optionTexts,
+        out string? error)
+    {
+        error = null;
+        var choice = FindChoice(choiceId);
+        if (choice is null)
+        {
+            error = "Choice resource «" + choiceId + "» не найден.";
+            return false;
+        }
+
+        var existingIds = choice.Options
+            .Select(option => option.Id)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var optionId in optionTexts.Keys)
+        {
+            if (!existingIds.Contains(optionId))
+            {
+                error = "В Choice resource «" + choiceId + "» нет варианта «" + optionId + "».";
+                return false;
+            }
+        }
+
+        var updatedOptions = choice.Options
+            .Select(option => optionTexts.TryGetValue(option.Id, out var value)
+                ? option with { Text = value ?? string.Empty }
+                : option)
+            .ToArray();
+
+        var updated = choice with
+        {
+            Title = title ?? string.Empty,
+            Speaker = speaker ?? string.Empty,
+            Text = text ?? string.Empty,
+            Options = updatedOptions
+        };
+
+        var nodes = _value.Graph.Nodes.Select(node =>
+        {
+            if (!node.NodeType.Equals("Choice", StringComparison.OrdinalIgnoreCase) ||
+                !node.Parameters.TryGetValue("choiceId", out var nodeChoiceId) ||
+                !nodeChoiceId.Equals(choiceId, StringComparison.OrdinalIgnoreCase))
+                return node;
+
+            var outputIndex = 0;
+            var sockets = node.Sockets.Select(socket =>
+            {
+                if (socket.Direction != SocketDirection.Output)
+                    return socket;
+
+                var option = updatedOptions.FirstOrDefault(item =>
+                    item.OutputSocketId.Equals(socket.SocketId, StringComparison.OrdinalIgnoreCase));
+                if (option is null)
+                    return socket;
+
+                outputIndex++;
+                var suffix = string.IsNullOrWhiteSpace(option.Text) ? "Вариант " + outputIndex : option.Text.Trim();
+                return socket with { Name = "Вариант " + outputIndex + " · " + TrimSocketLabel(suffix) };
+            }).ToArray();
+
+            return node with { Sockets = sockets };
+        }).ToArray();
+
+        Apply(_value with
+        {
+            Graph = _value.Graph with { Nodes = nodes },
+            Choices = _value.Choices
+                .Select(item => item.Id.Equals(choiceId, StringComparison.OrdinalIgnoreCase) ? updated : item)
+                .ToArray()
+        });
+
+        return true;
+    }
+
+    public SceneChoiceOption AddChoiceOption(string nodeId, string choiceId)
+    {
+        var node = FindNode(nodeId)
+            ?? throw new InvalidOperationException("Нода не найдена: " + nodeId);
+
+        if (!node.NodeType.Equals("Choice", StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException("Нода «" + nodeId + "» не является Choice.");
+
+        var choice = FindChoice(choiceId)
+            ?? throw new InvalidOperationException("Choice resource «" + choiceId + "» не найден.");
+
+        var socketId = node.NodeId + ".option." + ShortToken();
+        var optionId = choice.Id + ".option." + ShortToken();
+        var optionNumber = choice.Options.Count + 1;
+        var option = new SceneChoiceOption(
+            optionId,
+            "Вариант " + optionNumber,
+            socketId);
+
+        var socket = new SocketDefinition(
+            socketId,
+            "Вариант " + optionNumber,
+            SocketDirection.Output);
+
+        var parameters = NormalizeParameters(node.Parameters);
+        parameters["choiceId"] = choice.Id;
+        parameters["outputCount"] = (choice.Options.Count + 1).ToString(CultureInfo.InvariantCulture);
+
+        var updatedNode = node with
+        {
+            Parameters = parameters,
+            Sockets = node.Sockets.Append(socket).ToArray()
+        };
+
+        var updatedChoice = choice with
+        {
+            Options = choice.Options.Append(option).ToArray()
+        };
+
+        Apply(_value with
+        {
+            Graph = _value.Graph with
+            {
+                Nodes = _value.Graph.Nodes
+                    .Select(item => item.NodeId.Equals(node.NodeId, StringComparison.OrdinalIgnoreCase) ? updatedNode : item)
+                    .ToArray()
+            },
+            Choices = _value.Choices
+                .Select(item => item.Id.Equals(choice.Id, StringComparison.OrdinalIgnoreCase) ? updatedChoice : item)
+                .ToArray()
+        });
+
+        return option;
+    }
+
+    public bool RemoveChoiceOption(
+        string nodeId,
+        string choiceId,
+        string optionId,
+        out string? error)
+    {
+        error = null;
+        var node = FindNode(nodeId);
+        if (node is null)
+        {
+            error = "Нода не найдена: " + nodeId;
+            return false;
+        }
+
+        var choice = FindChoice(choiceId);
+        if (choice is null)
+        {
+            error = "Choice resource «" + choiceId + "» не найден.";
+            return false;
+        }
+
+        var option = choice.Options.FirstOrDefault(item =>
+            item.Id.Equals(optionId, StringComparison.OrdinalIgnoreCase));
+        if (option is null)
+        {
+            error = "Вариант «" + optionId + "» не найден.";
+            return false;
+        }
+
+        if (_value.Graph.Connections.Any(connection =>
+            connection.FromNodeId.Equals(nodeId, StringComparison.OrdinalIgnoreCase) &&
+            connection.FromSocketId.Equals(option.OutputSocketId, StringComparison.OrdinalIgnoreCase)))
+        {
+            error = "Нельзя удалить вариант, пока его Output socket подключён. Сначала разорвите связь.";
+            return false;
+        }
+
+        var updatedChoice = choice with
+        {
+            Options = choice.Options
+                .Where(item => !item.Id.Equals(optionId, StringComparison.OrdinalIgnoreCase))
+                .ToArray()
+        };
+
+        var updatedNode = node with
+        {
+            Sockets = node.Sockets
+                .Where(socket => !socket.SocketId.Equals(option.OutputSocketId, StringComparison.OrdinalIgnoreCase))
+                .ToArray(),
+            Parameters = NormalizeParameters(node.Parameters)
+        };
+
+        if (updatedNode.Parameters.ContainsKey("outputCount"))
+            updatedNode.Parameters["outputCount"] = updatedChoice.Options.Count.ToString(CultureInfo.InvariantCulture);
+
+        Apply(_value with
+        {
+            Graph = _value.Graph with
+            {
+                Nodes = _value.Graph.Nodes
+                    .Select(item => item.NodeId.Equals(nodeId, StringComparison.OrdinalIgnoreCase) ? updatedNode : item)
+                    .ToArray()
+            },
+            Choices = _value.Choices
+                .Select(item => item.Id.Equals(choiceId, StringComparison.OrdinalIgnoreCase) ? updatedChoice : item)
+                .ToArray()
+        });
+
+        return true;
+    }
+
+    private static string CreateUniqueId(string prefix) =>
+        prefix + "." + ShortToken();
+
+    private static string ShortToken() =>
+        Guid.NewGuid().ToString("N")[..10];
+
+    private static string TrimSocketLabel(string value) =>
+        value.Length <= 34 ? value : value[..33] + "…";
 
     public SceneNode? FindNode(string nodeId) =>
         _value.Graph.Nodes.FirstOrDefault(node =>
