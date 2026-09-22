@@ -641,7 +641,7 @@ public sealed class EditorForm : WebViewForm
             using var dialog = new SaveFileDialog
             {
                 Title = "Сохранить Quest Definition",
-                Filter = "Quest Definition (*.json)|*.json|JSON (*.json)|*.json",
+                Filter = ResourceFileTypes.Filter(ResourceFileTypes.Get(".aqquest")),
                 DefaultExt = "aqquest",
                 AddExtension = true,
                 FileName = string.IsNullOrWhiteSpace(path)
@@ -746,7 +746,7 @@ public sealed class EditorForm : WebViewForm
             using var dialog = new SaveFileDialog
             {
                 Title = "Сохранить Scene Definition",
-                Filter = "Scene Definition (*.json)|*.json|JSON (*.json)|*.json",
+                Filter = ResourceFileTypes.Filter(ResourceFileTypes.Get(".aqscene")),
                 DefaultExt = "aqscene",
                 AddExtension = true,
                 FileName = string.IsNullOrWhiteSpace(path)
