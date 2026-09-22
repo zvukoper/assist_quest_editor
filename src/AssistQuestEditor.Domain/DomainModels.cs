@@ -95,8 +95,15 @@ public sealed record InterfaceChoiceDialog(
     string Text,
     IReadOnlyList<InterfaceChoiceOption> Options);
 
+public sealed record InterfaceDialogue(
+    string RequestId,
+    string Title,
+    string Speaker,
+    string Text);
+
 public sealed record InterfaceState(
-    InterfaceChoiceDialog? ActiveDialog);
+    InterfaceChoiceDialog? ActiveDialog,
+    InterfaceDialogue? ActiveDialogue = null);
 
 public sealed record InventoryState
 {
