@@ -73,6 +73,12 @@ public sealed class EditorForm : WebViewForm
         };
     }
 
+    public void RefreshSceneCatalog()
+    {
+        if (_isGraphEditor || _isSceneEditor)
+            PostSceneCatalog();
+    }
+
     public bool OpenResourcePath(string path)
     {
         if (string.IsNullOrWhiteSpace(path) || !File.Exists(path))
