@@ -463,8 +463,18 @@ public sealed class SceneGraphStore
             Parameters = parameters
         };
 
-        Apply(_value with { Graph = _value.Graph with { Nodes = _value.Graph.Nodes.Append(node).ToArray() } });
-        return node;
+        var graph = _value.Graph with { Nodes = _value.Graph.Nodes.Append(node).ToArray() };
+        var definition = _value with { Graph = graph };
+        var positions = SceneGraphLayout.Compute(graph);
+        var nodes = graph.Nodes
+            .Select(item => positions.TryGetValue(item.NodeId, out var position)
+                ? item with { X = position.X, Y = position.Y }
+                : item)
+            .ToArray();
+
+        var laidOutNode = nodes.Single(item => item.NodeId.Equals(node.NodeId, StringComparison.OrdinalIgnoreCase));
+        Apply(definition with { Graph = graph with { Nodes = nodes } });
+        return laidOutNode;
     }
 
     public SceneNode? UpdateNode(
