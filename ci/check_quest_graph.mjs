@@ -1,115 +1,87 @@
-// Проверка целостности Quest Graph по правилам QuestGraphValidator.
-// Запуск: node ci/check_quest_graph.mjs data/quests/tutorial_ruslan_shashlik.aqquest
+// Проверка всех canonical Quest Graph resources.
 import fs from "node:fs";
+import path from "node:path";
 
-const path = process.argv[2] || "data/quests/tutorial_ruslan_shashlik.aqquest";
-const document = JSON.parse(fs.readFileSync(path, "utf8"));
-const graph = document.definition.graph;
+const args = process.argv.slice(2);
+const files = args.length ? args : fs.readdirSync("data/quests").filter(name => name.endsWith(".aqquest")).sort().map(name => path.join("data/quests", name));
+if (!files.length) throw new Error("В data/quests нет .aqquest.");
 
-const problems = [];
-const nodes = new Map();
-for (const node of graph.nodes) {
-  if (nodes.has(node.nodeId)) problems.push(`duplicate nodeId ${node.nodeId}`);
-  nodes.set(node.nodeId, node);
-}
+function validate(filePath) {
+  const doc = JSON.parse(fs.readFileSync(filePath, "utf8"));
+  const definition = doc.definition;
+  const graph = definition.graph;
+  const problems = [];
+  const nodes = new Map(graph.nodes.map(node => [node.nodeId, node]));
+  if (nodes.size !== graph.nodes.length) problems.push("duplicate nodeId");
 
-const sockets = new Map();
-for (const node of graph.nodes) {
-  const map = new Map();
-  for (const socket of node.sockets) {
-    if (map.has(socket.socketId)) problems.push(`duplicate socket ${socket.socketId} in ${node.nodeId}`);
-    map.set(socket.socketId, socket);
-  }
-  sockets.set(node.nodeId, map);
-}
-
-const inputs = new Map();
-const exact = new Set();
-const adjacency = new Map([...nodes.keys()].map(id => [id, []]));
-for (const connection of graph.connections) {
-  const from = nodes.get(connection.fromNodeId);
-  const to = nodes.get(connection.toNodeId);
-  if (!from) { problems.push(`unknown from ${connection.fromNodeId}`); continue; }
-  if (!to) { problems.push(`unknown to ${connection.toNodeId}`); continue; }
-
-  const fromSocket = sockets.get(from.nodeId).get(connection.fromSocketId);
-  const toSocket = sockets.get(to.nodeId).get(connection.toSocketId);
-  if (!fromSocket) { problems.push(`missing fromSocket ${connection.fromSocketId} on ${from.nodeId}`); continue; }
-  if (!toSocket) { problems.push(`missing toSocket ${connection.toSocketId} on ${to.nodeId}`); continue; }
-  if (fromSocket.direction !== "Output" || toSocket.direction !== "Input") {
-    problems.push(`wrong direction ${connection.fromSocketId} -> ${connection.toSocketId}`);
+  const socketMap = new Map();
+  for (const node of graph.nodes) {
+    const map = new Map(node.sockets.map(socket => [socket.socketId, socket]));
+    if (map.size !== node.sockets.length) problems.push("duplicate socket in " + node.nodeId);
+    socketMap.set(node.nodeId, map);
   }
 
-  // QuestGraphValidator запрещает только точные дубликаты связи. Несколько
-  // веток в один Input допустимы (иначе не свести несколько отказов в общий
-  // узел), поэтому здесь проверяется лишь полный дубль.
-  const exactKey = [connection.fromNodeId, connection.fromSocketId, connection.toNodeId, connection.toSocketId].join("\u001f");
-  if (exact.has(exactKey)) problems.push(`duplicate connection ${exactKey}`);
-  exact.add(exactKey);
+  const incoming = new Map();
+  const adjacency = new Map(graph.nodes.map(node => [node.nodeId, []]));
+  const exact = new Set();
 
-  const key = `${to.nodeId}\u001f${toSocket.socketId}`;
-  inputs.set(key, (inputs.get(key) || 0) + 1);
-  adjacency.get(from.nodeId).push(to.nodeId);
-}
-
-const starts = graph.nodes.filter(n => n.nodeType === "Start").map(n => n.nodeId);
-const ends = graph.nodes.filter(n => n.nodeType === "End").map(n => n.nodeId);
-if (starts.length !== 1) problems.push(`expected 1 Start, found ${starts.length}`);
-if (ends.length === 0) problems.push("no End node");
-
-const reachable = new Set();
-const queue = [...starts];
-while (queue.length) {
-  const id = queue.shift();
-  if (reachable.has(id)) continue;
-  reachable.add(id);
-  for (const next of adjacency.get(id)) queue.push(next);
-}
-for (const node of graph.nodes) {
-  if (!reachable.has(node.nodeId)) problems.push(`unreachable node ${node.nodeId}`);
-}
-
-// Каждая нода с входом должна иметь входящую связь (кроме Start), иначе
-// Runtime молча зависнет на ней.
-for (const node of graph.nodes) {
-  const hasInput = node.sockets.some(s => s.direction === "Input");
-  if (!hasInput) continue;
-  const connected = node.sockets.some(s =>
-    s.direction === "Input" && inputs.has(`${node.nodeId}\u001f${s.socketId}`));
-  if (!connected) problems.push(`node ${node.nodeId} has an unconnected Input`);
-}
-
-// Один Output socket должен вести ровно в одну ноду: иначе ветвление
-// раздваивается произвольно и результат зависит от порядка связей в файле.
-for (const node of graph.nodes) {
-  const outputs = new Map();
-  for (const connection of graph.connections) {
-    if (connection.fromNodeId !== node.nodeId) continue;
-    outputs.set(connection.fromSocketId, (outputs.get(connection.fromSocketId) || 0) + 1);
+  for (const c of graph.connections) {
+    const from = nodes.get(c.fromNodeId), to = nodes.get(c.toNodeId);
+    if (!from || !to) { problems.push("unknown node in connection"); continue; }
+    const fsocket = socketMap.get(from.nodeId)?.get(c.fromSocketId);
+    const tsocket = socketMap.get(to.nodeId)?.get(c.toSocketId);
+    if (!fsocket || !tsocket) { problems.push("unknown socket in connection"); continue; }
+    if (fsocket.direction !== "Output" || tsocket.direction !== "Input") problems.push("connection direction");
+    const key = [c.fromNodeId,c.fromSocketId,c.toNodeId,c.toSocketId].join("\u001f");
+    if (exact.has(key)) problems.push("duplicate connection");
+    exact.add(key);
+    incoming.set(to.nodeId + "\u001f" + tsocket.socketId, (incoming.get(to.nodeId + "\u001f" + tsocket.socketId) || 0) + 1);
+    adjacency.get(from.nodeId).push(to.nodeId);
   }
-  for (const [socketId, count] of outputs) {
-    if (count > 1) problems.push(`output ${node.nodeId}.${socketId} used by ${count} connections`);
+
+  const starts = graph.nodes.filter(n => n.nodeType === "Start");
+  const ends = graph.nodes.filter(n => n.nodeType === "End");
+  if (starts.length !== 1) problems.push("expected exactly one Start");
+  if (!ends.length) problems.push("no End");
+
+  const reachable = new Set(), queue = starts.map(n => n.nodeId);
+  while (queue.length) {
+    const id = queue.shift();
+    if (reachable.has(id)) continue;
+    reachable.add(id);
+    for (const next of adjacency.get(id) || []) queue.push(next);
   }
+  for (const node of graph.nodes) if (!reachable.has(node.nodeId)) problems.push("unreachable node " + node.nodeId);
+
+  for (const node of graph.nodes) {
+    const inputs = node.sockets.filter(s => s.direction === "Input");
+    if (inputs.length && !inputs.some(s => incoming.has(node.nodeId + "\u001f" + s.socketId)))
+      problems.push("unconnected Input on " + node.nodeId);
+  }
+
+  const declaredScenes = new Set(definition.sceneIds || []);
+  const usedScenes = new Set();
+  for (const node of graph.nodes.filter(n => n.nodeType === "DialogueScene")) {
+    const sceneId = node.parameters?.sceneId;
+    usedScenes.add(sceneId);
+    if (!fs.existsSync(path.join("data","scenes",sceneId + ".aqscene"))) problems.push("missing scene " + sceneId);
+  }
+  for (const id of usedScenes) if (!declaredScenes.has(id)) problems.push("scene not declared " + id);
+  for (const id of declaredScenes) if (!usedScenes.has(id)) problems.push("scene declared but unused " + id);
+
+  if (definition.activation?.mode === "Proximity") {
+    if (!definition.activation.worldPointId) problems.push("Proximity activation missing worldPointId");
+    if (!(Number(definition.activation.radius) > 0)) problems.push("Proximity activation invalid radius");
+  }
+
+  if (problems.length) {
+    console.log(path.basename(filePath) + ": FAIL");
+    problems.forEach(p => console.log(" - " + p));
+    return false;
+  }
+  console.log(path.basename(filePath) + ": OK nodes=" + graph.nodes.length + " connections=" + graph.connections.length);
+  return true;
 }
 
-// Каждая ссылка на sceneId должна существовать в data/scenes.
-for (const node of graph.nodes) {
-  if (node.nodeType !== "DialogueScene") continue;
-  const sceneId = node.parameters?.sceneId;
-  const scenePath = `data/scenes/${sceneId}.aqscene`;
-  if (!fs.existsSync(scenePath)) problems.push(`scene ${sceneId} missing (${scenePath})`);
-}
-
-// sceneIds документа должны совпадать с используемыми в графе.
-const declared = new Set(document.definition.sceneIds || []);
-const used = new Set(graph.nodes.filter(n => n.nodeType === "DialogueScene").map(n => n.parameters.sceneId));
-for (const id of used) if (!declared.has(id)) problems.push(`sceneId ${id} used but not declared`);
-for (const id of declared) if (!used.has(id)) problems.push(`sceneId ${id} declared but not used`);
-
-console.log(`nodes=${graph.nodes.length} connections=${graph.connections.length}`);
-if (problems.length) {
-  console.log("PROBLEMS:");
-  for (const problem of problems) console.log(" -", problem);
-  process.exit(1);
-}
-console.log("OK");
+if (!files.map(validate).every(Boolean)) process.exit(1);
+console.log("All Quest resources OK");

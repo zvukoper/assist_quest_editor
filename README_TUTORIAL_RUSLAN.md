@@ -4,13 +4,15 @@
 
 ## Файлы
 
-- `data/quests/tutorial_ruslan_shashlik.aqquest` — Quest Graph: общий ход квеста.
-- `data/scenes/ruslan_start.aqscene` — Scene Graph первого разговора.
-- `data/scenes/gosha_meat.aqscene` — Scene Graph Гоши.
-- `data/scenes/ruslan_finish.aqscene` — Scene Graph финала.
-- `data/scenes/gosha_shop.aqscene` — Scene Graph покупки домашней колбасы.
-- `data/scenes/ruslan_delivery.aqscene` — Scene Graph заказа на доставку шашлыка.
-- `data/scenes/gosha_delivery.aqscene` — Scene Graph передачи шашлыка Гоше.
+- data/quests/tutorial_ruslan_shashlik.aqquest — основной самостоятельный квест: мясо для Руслана.
+- data/quests/gosha_homemade_sausage.aqquest — независимый repeatable side quest Гоши.
+- data/quests/ruslan_shashlik_delivery.aqquest — независимый одноразовый квест доставки.
+- data/scenes/ruslan_start.aqscene — первая Scene Руслана.
+- data/scenes/gosha_meat.aqscene — Scene Гоши с мясом.
+- data/scenes/ruslan_finish.aqscene — финальная Scene первого квеста.
+- data/scenes/gosha_shop.aqscene — Scene магазина Гоши.
+- data/scenes/ruslan_delivery.aqscene — Scene заказа доставки.
+- data/scenes/gosha_delivery.aqscene — Scene передачи шашлыка.
 
 ## Главное правило
 
@@ -73,63 +75,60 @@ QuestRuntime
 
 ## Полный маршрут
 
-```
+### Quest 1 — Спецмаринад для Руслана
+
+Proximity(city:ekat)
+  ↓
 Start
-  ↓
-SetStatus(Active)
-  ↓
-SetStep(meet_ruslan)
   ↓
 DialogueScene(ruslan_start)
   ↓
-Condition: принято?
-  ├─ Нет → End
-  └─ Да
-      ↓ Interaction(city:chelyabinsk)
-      ↓ DialogueScene(gosha_meat)
-      ↓ Condition: мясо получено?
-          ├─ Нет → End
-          └─ Да
-              ↓ GiveItem(ruslan.raw_meat, 1)
-              ↓ Interaction(city:ekat)
-              ↓ Condition: ItemCount >= 1
-              ↓ DialogueScene(ruslan_finish)
-              ↓ Condition: финал подтверждён?
-                  ├─ Нет → End
-                  └─ Да
-                      ↓ RemoveItem(ruslan.raw_meat, 1)
-              ↓ AddReputation(ruslan, +500)
-              ↓ AddReputation(gosha, +350)
-              ↓ SetStep(gosha_shop)
-              ↓ Interaction(city:chelyabinsk)
-              ↓ DialogueScene(gosha_shop)
-              ↓ Купил колбасу?
-                  ├─ Нет → SetStep(ruslan_delivery)
-                  └─ Да
-                      ↓ RemoveMoney(450)
-                      ↓ GiveItem(gosha.homemade_sausage, 1)
-                      ↓ AddReputation(gosha, +25)
-                      ↓ назад к Interaction(city:chelyabinsk) — цикл покупок
-              ↓ SetStep(ruslan_delivery)
-              ↓ ReputationCompare(gosha >= 400)
-                  ├─ Нет → SetStep(completed)
-                  └─ Да
-                      ↓ Interaction(city:ekat)
-                      ↓ DialogueScene(ruslan_delivery)
-                      ↓ Заказ принят?
-                          ├─ Нет → SetStep(completed)
-                          └─ Да
-                              ↓ Interaction(city:chelyabinsk)
-                              ↓ DialogueScene(gosha_delivery)
-                              ↓ Шашлык передан?
-                                  ├─ Нет → SetStep(completed)
-                                  └─ Да
-                                      ↓ AddReputation(ruslan, +100)
-                                      ↓ AddReputation(gosha, +150)
-                                      ↓ SetStep(completed)
-                                      ↓ End
-```
+получить мясо у Гоши
+  ↓
+DialogueScene(ruslan_finish)
+  ↓
+RemoveItem(мясо)
+  ↓
+AddReputation(ruslan, +500)
+  ↓
+AddReputation(gosha, +350)
+  ↓
+End
 
+После End Quest 1 получает статус Completed и не переходит в другие Quest Definition.
+
+### Quest 2 — Домашняя колбаса у Гоши
+
+Proximity(city:chelyabinsk, gosha >= 350)
+  ↓
+Start
+  ↓
+DialogueScene(gosha_shop)
+  ├─ Купить → -450 ₽ → +1 колбаса → +25 репутации → следующий визит
+  └─ Уйти → End
+
+Это отдельный repeatable Quest. После End игрок свободен. Следующий запуск происходит только при следующем возвращении в область активации.
+
+### Quest 3 — Доставка шашлыка
+
+Proximity(city:ekat, gosha >= 400)
+  ↓
+Start
+  ↓
+DialogueScene(ruslan_delivery)
+  ├─ Отказаться → End
+  └─ Взять заказ
+       ↓
+       Proximity(city:chelyabinsk)
+       ↓
+       DialogueScene(gosha_delivery)
+       ├─ Не передавать → End
+       └─ Передать
+            ↓ +100 Руслану
+            ↓ +150 Гоше
+            ↓ End
+
+Quest 3 не зависит от Quest 2 graph connection. Он становится доступным только по собственному условию активации.
 ## Репутация
 
 Репутация ведётся по каждому НПЦ отдельно (`npcId` — `ruslan` или `gosha`),
@@ -157,7 +156,7 @@ Condition: принято?
 В правой панели Simulator есть табы «Персонаж» и «Репутация»: во вкладке
 репутации видны только те НПЦ, с которыми контакт уже состоялся.
 
-Версия `1.0.40.141-QUEST-REPUTATION-R1` автоматически открывает этот учебный Quest Definition.
+Версия 1.0.40.145-INDEPENDENT-QUEST-LIFECYCLE использует каталог независимых Quest Definition.
 
 1. Перемести игрока к `city:ekat` — Екатеринбург.
 2. Запусти Runtime.

@@ -4,7 +4,7 @@
   "definition": {
     "id": "tutorial_ruslan_shashlik",
     "title": "Спецмаринад для Руслана — учебный квест",
-    "description": "Полный учебный пример Quest Graph + Scene Graph + Interface + World interaction + Inventory + Reputation. Это sandbox-пример архитектуры, а не точная копия игрового квеста.",
+    "description": "Самостоятельный квест: получить мясо и передать его Руслану. После завершения квест заканчивается, игрок свободен.",
     "graph": {
       "id": "tutorial_ruslan_shashlik",
       "name": "Спецмаринад для Руслана — учебный квест",
@@ -14,7 +14,7 @@
           "nodeType": "Start",
           "title": "01. Начало",
           "x": 0,
-          "y": 81,
+          "y": 120,
           "sockets": [
             {
               "socketId": "start.out",
@@ -30,7 +30,7 @@
           "nodeType": "SetStatus",
           "title": "02. Статус: Active",
           "x": 400,
-          "y": 81,
+          "y": 120,
           "sockets": [
             {
               "socketId": "status-active.in",
@@ -54,7 +54,7 @@
           "nodeType": "SetStep",
           "title": "03. Этап: встретить Руслана",
           "x": 800,
-          "y": 81,
+          "y": 120,
           "sockets": [
             {
               "socketId": "step-meet-ruslan.in",
@@ -78,7 +78,7 @@
           "nodeType": "DialogueScene",
           "title": "04. Scene: Руслан",
           "x": 1200,
-          "y": 81,
+          "y": 120,
           "sockets": [
             {
               "socketId": "scene-ruslan-start.in",
@@ -102,7 +102,7 @@
           "nodeType": "SetStep",
           "title": "05. Этап: ответ получен",
           "x": 1600,
-          "y": 81,
+          "y": 120,
           "sockets": [
             {
               "socketId": "step-offer-answered.in",
@@ -126,7 +126,7 @@
           "nodeType": "Condition",
           "title": "06. Принял предложение?",
           "x": 2000,
-          "y": 75,
+          "y": 60,
           "sockets": [
             {
               "socketId": "condition-offer.in",
@@ -159,7 +159,7 @@
           "nodeType": "SetStep",
           "title": "07. Этап: найти Гошу",
           "x": 2400,
-          "y": 6,
+          "y": 120,
           "sockets": [
             {
               "socketId": "step-find-gosha.in",
@@ -183,7 +183,7 @@
           "nodeType": "Interaction",
           "title": "08. Подойти к Гоше",
           "x": 2800,
-          "y": 6,
+          "y": 120,
           "sockets": [
             {
               "socketId": "interaction-gosha.in",
@@ -208,7 +208,7 @@
           "nodeType": "DialogueScene",
           "title": "09. Scene: Гоша",
           "x": 3200,
-          "y": 81,
+          "y": 120,
           "sockets": [
             {
               "socketId": "scene-gosha.in",
@@ -232,7 +232,7 @@
           "nodeType": "SetStep",
           "title": "10. Этап: ответ Гоши",
           "x": 3600,
-          "y": 81,
+          "y": 120,
           "sockets": [
             {
               "socketId": "step-gosha-answered.in",
@@ -256,7 +256,7 @@
           "nodeType": "Condition",
           "title": "11. Гоша отдаёт мясо?",
           "x": 4000,
-          "y": 75,
+          "y": 60,
           "sockets": [
             {
               "socketId": "condition-gosha.in",
@@ -289,7 +289,7 @@
           "nodeType": "GiveItem",
           "title": "12. Получить мясо",
           "x": 4400,
-          "y": 6,
+          "y": 120,
           "sockets": [
             {
               "socketId": "give-meat.in",
@@ -314,7 +314,7 @@
           "nodeType": "SetStep",
           "title": "13. Этап: вернуться к Руслану",
           "x": 4800,
-          "y": 6,
+          "y": 120,
           "sockets": [
             {
               "socketId": "step-return.in",
@@ -338,7 +338,7 @@
           "nodeType": "Interaction",
           "title": "14. Вернуться к Руслану",
           "x": 5200,
-          "y": 81,
+          "y": 120,
           "sockets": [
             {
               "socketId": "interaction-ruslan-return.in",
@@ -363,7 +363,7 @@
           "nodeType": "Condition",
           "title": "15. Проверить мясо",
           "x": 5600,
-          "y": 75,
+          "y": 120,
           "sockets": [
             {
               "socketId": "condition-meat.in",
@@ -396,7 +396,7 @@
           "nodeType": "DialogueScene",
           "title": "16. Scene: финал",
           "x": 6000,
-          "y": 6,
+          "y": 120,
           "sockets": [
             {
               "socketId": "scene-ruslan-finish.in",
@@ -420,7 +420,7 @@
           "nodeType": "Condition",
           "title": "17. Финальное подтверждение?",
           "x": 6400,
-          "y": 0,
+          "y": 60,
           "sockets": [
             {
               "socketId": "condition-finish.in",
@@ -453,7 +453,7 @@
           "nodeType": "RemoveItem",
           "title": "18. Отдать мясо",
           "x": 6800,
-          "y": 6,
+          "y": 120,
           "sockets": [
             {
               "socketId": "remove-meat.in",
@@ -478,7 +478,7 @@
           "nodeType": "AddReputation",
           "title": "19. Репутация Руслана +500",
           "x": 7200,
-          "y": 6,
+          "y": 120,
           "sockets": [
             {
               "socketId": "add-reputation.in",
@@ -503,7 +503,7 @@
           "nodeType": "AddReputation",
           "title": "19a. Репутация Гоши +350",
           "x": 7600,
-          "y": 81,
+          "y": 120,
           "sockets": [
             {
               "socketId": "add-reputation-gosha.in",
@@ -524,655 +524,20 @@
           }
         },
         {
-          "nodeId": "step-shop-gosha",
-          "nodeType": "SetStep",
-          "title": "20. Этап: колбаса у Гоши (можно покупать повторно)",
+          "nodeId": "end-ruslan-meat",
+          "nodeType": "End",
+          "title": "20. Конец — игрок свободен",
           "x": 8000,
-          "y": 81,
+          "y": 120,
+          "parameters": {},
           "sockets": [
             {
-              "socketId": "step-shop-gosha.in",
-              "name": "Вход",
-              "direction": "Input",
-              "flowKind": "Normal"
-            },
-            {
-              "socketId": "step-shop-gosha.out",
-              "name": "Далее",
-              "direction": "Output",
-              "flowKind": "Normal"
-            }
-          ],
-          "parameters": {
-            "step": "gosha_shop"
-          }
-        },
-        {
-          "nodeId": "interaction-gosha-shop",
-          "nodeType": "Interaction",
-          "title": "21. Подойти к Гоше за колбасой",
-          "x": 8477,
-          "y": -176,
-          "sockets": [
-            {
-              "socketId": "interaction-gosha-shop.in",
-              "name": "Вход",
-              "direction": "Input",
-              "flowKind": "Normal"
-            },
-            {
-              "socketId": "interaction-gosha-shop.out",
-              "name": "Далее",
-              "direction": "Output",
-              "flowKind": "Normal"
-            }
-          ],
-          "parameters": {
-            "worldPointId": "city:chelyabinsk",
-            "triggerRadius": "1500"
-          }
-        },
-        {
-          "nodeId": "scene-gosha-shop",
-          "nodeType": "DialogueScene",
-          "title": "22. Scene: покупка колбасы",
-          "x": 8800,
-          "y": 81,
-          "sockets": [
-            {
-              "socketId": "scene-gosha-shop.in",
-              "name": "Вход",
-              "direction": "Input",
-              "flowKind": "Normal"
-            },
-            {
-              "socketId": "scene-gosha-shop.out",
-              "name": "Далее",
-              "direction": "Output",
-              "flowKind": "Normal"
-            }
-          ],
-          "parameters": {
-            "sceneId": "gosha_shop"
-          }
-        },
-        {
-          "nodeId": "condition-shop-buy",
-          "nodeType": "Condition",
-          "title": "23. Купил колбасу?",
-          "x": 9168,
-          "y": 66,
-          "sockets": [
-            {
-              "socketId": "condition-shop-buy.in",
-              "name": "Вход",
-              "direction": "Input",
-              "flowKind": "Normal"
-            },
-            {
-              "socketId": "condition-shop-buy.true",
-              "name": "Да",
-              "direction": "Output",
-              "flowKind": "Normal"
-            },
-            {
-              "socketId": "condition-shop-buy.false",
-              "name": "Нет",
-              "direction": "Output",
-              "flowKind": "Cut"
-            }
-          ],
-          "parameters": {
-            "operator": "VariableEquals",
-            "left": "scene.gosha_shop.lastChoiceId",
-            "comparison": "==",
-            "right": "gosha.shop.buy"
-          }
-        },
-        {
-          "nodeId": "shop-pay",
-          "nodeType": "RemoveMoney",
-          "title": "24. Оплата колбасы: 450 ₽",
-          "x": 7566,
-          "y": -693,
-          "sockets": [
-            {
-              "socketId": "shop-pay.in",
-              "name": "Вход",
-              "direction": "Input",
-              "flowKind": "Normal"
-            },
-            {
-              "socketId": "shop-pay.out",
-              "name": "Далее",
-              "direction": "Output",
-              "flowKind": "Normal"
-            }
-          ],
-          "parameters": {
-            "amount": "450"
-          }
-        },
-        {
-          "nodeId": "shop-receive-sausage",
-          "nodeType": "GiveItem",
-          "title": "25. Получить домашнюю колбасу",
-          "x": 8133,
-          "y": -681,
-          "sockets": [
-            {
-              "socketId": "shop-receive-sausage.in",
-              "name": "Вход",
-              "direction": "Input",
-              "flowKind": "Normal"
-            },
-            {
-              "socketId": "shop-receive-sausage.out",
-              "name": "Далее",
-              "direction": "Output",
-              "flowKind": "Normal"
-            }
-          ],
-          "parameters": {
-            "itemId": "gosha.homemade_sausage",
-            "count": "1"
-          }
-        },
-        {
-          "nodeId": "shop-reputation",
-          "nodeType": "AddReputation",
-          "title": "26. Репутация Гоши +25 за покупку",
-          "x": 8614,
-          "y": -629,
-          "sockets": [
-            {
-              "socketId": "shop-reputation.in",
-              "name": "Вход",
-              "direction": "Input",
-              "flowKind": "Normal"
-            },
-            {
-              "socketId": "shop-reputation.out",
-              "name": "Далее",
-              "direction": "Output",
-              "flowKind": "Normal"
-            }
-          ],
-          "parameters": {
-            "npcId": "gosha",
-            "amount": "25"
-          }
-        },
-        {
-          "nodeId": "step-delivery",
-          "nodeType": "SetStep",
-          "title": "27. Этап: заказ Руслана на доставку",
-          "x": 9600,
-          "y": 156,
-          "sockets": [
-            {
-              "socketId": "step-delivery.in",
-              "name": "Вход",
-              "direction": "Input",
-              "flowKind": "Normal"
-            },
-            {
-              "socketId": "step-delivery.out",
-              "name": "Далее",
-              "direction": "Output",
-              "flowKind": "Normal"
-            }
-          ],
-          "parameters": {
-            "step": "ruslan_delivery"
-          }
-        },
-        {
-          "nodeId": "condition-delivery-available",
-          "nodeType": "ReputationCompare",
-          "title": "28. У Гоши репутация от 400?",
-          "x": 10000,
-          "y": 150,
-          "sockets": [
-            {
-              "socketId": "condition-delivery-available.in",
-              "name": "Вход",
-              "direction": "Input",
-              "flowKind": "Normal"
-            },
-            {
-              "socketId": "condition-delivery-available.true",
-              "name": "Да",
-              "direction": "Output",
-              "flowKind": "Normal"
-            },
-            {
-              "socketId": "condition-delivery-available.false",
-              "name": "Нет",
-              "direction": "Output",
-              "flowKind": "Cut"
-            }
-          ],
-          "parameters": {
-            "operator": "ReputationCompare",
-            "npcId": "gosha",
-            "comparison": ">=",
-            "right": "400"
-          }
-        },
-        {
-          "nodeId": "interaction-ruslan-delivery",
-          "nodeType": "Interaction",
-          "title": "29. Вернуться к Руслану за заказом",
-          "x": 10400,
-          "y": 156,
-          "sockets": [
-            {
-              "socketId": "interaction-ruslan-delivery.in",
-              "name": "Вход",
-              "direction": "Input",
-              "flowKind": "Normal"
-            },
-            {
-              "socketId": "interaction-ruslan-delivery.out",
-              "name": "Далее",
-              "direction": "Output",
-              "flowKind": "Normal"
-            }
-          ],
-          "parameters": {
-            "worldPointId": "city:ekat",
-            "triggerRadius": "1500"
-          }
-        },
-        {
-          "nodeId": "scene-ruslan-delivery",
-          "nodeType": "DialogueScene",
-          "title": "30. Scene: Руслан даёт заказ",
-          "x": 10800,
-          "y": 81,
-          "sockets": [
-            {
-              "socketId": "scene-ruslan-delivery.in",
-              "name": "Вход",
-              "direction": "Input",
-              "flowKind": "Normal"
-            },
-            {
-              "socketId": "scene-ruslan-delivery.out",
-              "name": "Далее",
-              "direction": "Output",
-              "flowKind": "Normal"
-            }
-          ],
-          "parameters": {
-            "sceneId": "ruslan_delivery"
-          }
-        },
-        {
-          "nodeId": "condition-delivery-accepted",
-          "nodeType": "Condition",
-          "title": "31. Заказ принят?",
-          "x": 11200,
-          "y": 75,
-          "sockets": [
-            {
-              "socketId": "condition-delivery-accepted.in",
-              "name": "Вход",
-              "direction": "Input",
-              "flowKind": "Normal"
-            },
-            {
-              "socketId": "condition-delivery-accepted.true",
-              "name": "Да",
-              "direction": "Output",
-              "flowKind": "Normal"
-            },
-            {
-              "socketId": "condition-delivery-accepted.false",
-              "name": "Нет",
-              "direction": "Output",
-              "flowKind": "Cut"
-            }
-          ],
-          "parameters": {
-            "operator": "VariableEquals",
-            "left": "scene.ruslan_delivery.lastChoiceId",
-            "comparison": "==",
-            "right": "ruslan.delivery.accept"
-          }
-        },
-        {
-          "nodeId": "interaction-gosha-delivery",
-          "nodeType": "Interaction",
-          "title": "32. Отвезти шашлык Гоше",
-          "x": 11600,
-          "y": 81,
-          "sockets": [
-            {
-              "socketId": "interaction-gosha-delivery.in",
-              "name": "Вход",
-              "direction": "Input",
-              "flowKind": "Normal"
-            },
-            {
-              "socketId": "interaction-gosha-delivery.out",
-              "name": "Далее",
-              "direction": "Output",
-              "flowKind": "Normal"
-            }
-          ],
-          "parameters": {
-            "worldPointId": "city:chelyabinsk",
-            "triggerRadius": "1500"
-          }
-        },
-        {
-          "nodeId": "scene-gosha-delivery",
-          "nodeType": "DialogueScene",
-          "title": "33. Scene: Гоша принимает шашлык",
-          "x": 12000,
-          "y": 81,
-          "sockets": [
-            {
-              "socketId": "scene-gosha-delivery.in",
-              "name": "Вход",
-              "direction": "Input",
-              "flowKind": "Normal"
-            },
-            {
-              "socketId": "scene-gosha-delivery.out",
-              "name": "Далее",
-              "direction": "Output",
-              "flowKind": "Normal"
-            }
-          ],
-          "parameters": {
-            "sceneId": "gosha_delivery"
-          }
-        },
-        {
-          "nodeId": "condition-delivery-given",
-          "nodeType": "Condition",
-          "title": "34. Шашлык передан?",
-          "x": 12400,
-          "y": 75,
-          "sockets": [
-            {
-              "socketId": "condition-delivery-given.in",
-              "name": "Вход",
-              "direction": "Input",
-              "flowKind": "Normal"
-            },
-            {
-              "socketId": "condition-delivery-given.true",
-              "name": "Да",
-              "direction": "Output",
-              "flowKind": "Normal"
-            },
-            {
-              "socketId": "condition-delivery-given.false",
-              "name": "Нет",
-              "direction": "Output",
-              "flowKind": "Cut"
-            }
-          ],
-          "parameters": {
-            "operator": "VariableEquals",
-            "left": "scene.gosha_delivery.lastChoiceId",
-            "comparison": "==",
-            "right": "gosha.delivery.give"
-          }
-        },
-        {
-          "nodeId": "delivery-reputation-ruslan",
-          "nodeType": "AddReputation",
-          "title": "35. Репутация Руслана +100 за доставку",
-          "x": 12800,
-          "y": 81,
-          "sockets": [
-            {
-              "socketId": "delivery-reputation-ruslan.in",
-              "name": "Вход",
-              "direction": "Input",
-              "flowKind": "Normal"
-            },
-            {
-              "socketId": "delivery-reputation-ruslan.out",
-              "name": "Далее",
-              "direction": "Output",
-              "flowKind": "Normal"
-            }
-          ],
-          "parameters": {
-            "npcId": "ruslan",
-            "amount": "100"
-          }
-        },
-        {
-          "nodeId": "delivery-reputation-gosha",
-          "nodeType": "AddReputation",
-          "title": "36. Репутация Гоши +150 за доставку",
-          "x": 13200,
-          "y": 81,
-          "sockets": [
-            {
-              "socketId": "delivery-reputation-gosha.in",
-              "name": "Вход",
-              "direction": "Input",
-              "flowKind": "Normal"
-            },
-            {
-              "socketId": "delivery-reputation-gosha.out",
-              "name": "Далее",
-              "direction": "Output",
-              "flowKind": "Normal"
-            }
-          ],
-          "parameters": {
-            "npcId": "gosha",
-            "amount": "150"
-          }
-        },
-        {
-          "nodeId": "step-completed",
-          "nodeType": "SetStep",
-          "title": "20. Этап: завершён",
-          "x": 13600,
-          "y": 81,
-          "sockets": [
-            {
-              "socketId": "step-completed.in",
-              "name": "Вход",
-              "direction": "Input",
-              "flowKind": "Normal"
-            },
-            {
-              "socketId": "step-completed.out",
-              "name": "Далее",
-              "direction": "Output",
-              "flowKind": "Normal"
-            }
-          ],
-          "parameters": {
-            "step": "completed"
-          }
-        },
-        {
-          "nodeId": "end-completed",
-          "nodeType": "End",
-          "title": "21. Конец: успех",
-          "x": 14000,
-          "y": 81,
-          "sockets": [
-            {
-              "socketId": "end-completed.in",
+              "socketId": "end-ruslan-meat.in",
               "name": "Вход",
               "direction": "Input",
               "flowKind": "Normal"
             }
-          ],
-          "parameters": {}
-        },
-        {
-          "nodeId": "step-declined",
-          "nodeType": "SetStep",
-          "title": "X1. Этап: отказ",
-          "x": 2400,
-          "y": 156,
-          "sockets": [
-            {
-              "socketId": "step-declined.in",
-              "name": "Вход",
-              "direction": "Input",
-              "flowKind": "Normal"
-            },
-            {
-              "socketId": "step-declined.out",
-              "name": "Далее",
-              "direction": "Output",
-              "flowKind": "Normal"
-            }
-          ],
-          "parameters": {
-            "step": "declined"
-          }
-        },
-        {
-          "nodeId": "end-declined",
-          "nodeType": "End",
-          "title": "X2. Конец: отказ",
-          "x": 2800,
-          "y": 156,
-          "sockets": [
-            {
-              "socketId": "end-declined.in",
-              "name": "Вход",
-              "direction": "Input",
-              "flowKind": "Normal"
-            }
-          ],
-          "parameters": {}
-        },
-        {
-          "nodeId": "step-no-meat",
-          "nodeType": "SetStep",
-          "title": "X3. Этап: мясо не получено",
-          "x": 4400,
-          "y": 156,
-          "sockets": [
-            {
-              "socketId": "step-no-meat.in",
-              "name": "Вход",
-              "direction": "Input",
-              "flowKind": "Normal"
-            },
-            {
-              "socketId": "step-no-meat.out",
-              "name": "Далее",
-              "direction": "Output",
-              "flowKind": "Normal"
-            }
-          ],
-          "parameters": {
-            "step": "meat_not_received"
-          }
-        },
-        {
-          "nodeId": "end-no-meat",
-          "nodeType": "End",
-          "title": "X4. Конец: без мяса",
-          "x": 4800,
-          "y": 156,
-          "sockets": [
-            {
-              "socketId": "end-no-meat.in",
-              "name": "Вход",
-              "direction": "Input",
-              "flowKind": "Normal"
-            }
-          ],
-          "parameters": {}
-        },
-        {
-          "nodeId": "step-missing-meat",
-          "nodeType": "SetStep",
-          "title": "X5. Этап: мясо отсутствует",
-          "x": 6000,
-          "y": 156,
-          "sockets": [
-            {
-              "socketId": "step-missing-meat.in",
-              "name": "Вход",
-              "direction": "Input",
-              "flowKind": "Normal"
-            },
-            {
-              "socketId": "step-missing-meat.out",
-              "name": "Далее",
-              "direction": "Output",
-              "flowKind": "Normal"
-            }
-          ],
-          "parameters": {
-            "step": "missing_meat"
-          }
-        },
-        {
-          "nodeId": "end-missing-meat",
-          "nodeType": "End",
-          "title": "X6. Конец: проверка не пройдена",
-          "x": 6400,
-          "y": 162,
-          "sockets": [
-            {
-              "socketId": "end-missing-meat.in",
-              "name": "Вход",
-              "direction": "Input",
-              "flowKind": "Normal"
-            }
-          ],
-          "parameters": {}
-        },
-        {
-          "nodeId": "step-cancelled",
-          "nodeType": "SetStep",
-          "title": "X7. Этап: финал отменён",
-          "x": 6800,
-          "y": 156,
-          "sockets": [
-            {
-              "socketId": "step-cancelled.in",
-              "name": "Вход",
-              "direction": "Input",
-              "flowKind": "Normal"
-            },
-            {
-              "socketId": "step-cancelled.out",
-              "name": "Далее",
-              "direction": "Output",
-              "flowKind": "Normal"
-            }
-          ],
-          "parameters": {
-            "step": "final_cancelled"
-          }
-        },
-        {
-          "nodeId": "end-cancelled",
-          "nodeType": "End",
-          "title": "X8. Конец: отмена",
-          "x": 7200,
-          "y": 156,
-          "sockets": [
-            {
-              "socketId": "end-cancelled.in",
-              "name": "Вход",
-              "direction": "Input",
-              "flowKind": "Normal"
-            }
-          ],
-          "parameters": {}
+          ]
         }
       ],
       "connections": [
@@ -1213,18 +578,6 @@
           "toSocketId": "step-find-gosha.in"
         },
         {
-          "fromNodeId": "condition-offer",
-          "fromSocketId": "condition-offer.false",
-          "toNodeId": "step-declined",
-          "toSocketId": "step-declined.in"
-        },
-        {
-          "fromNodeId": "step-declined",
-          "fromSocketId": "step-declined.out",
-          "toNodeId": "end-declined",
-          "toSocketId": "end-declined.in"
-        },
-        {
           "fromNodeId": "step-find-gosha",
           "fromSocketId": "step-find-gosha.out",
           "toNodeId": "interaction-gosha",
@@ -1255,18 +608,6 @@
           "toSocketId": "give-meat.in"
         },
         {
-          "fromNodeId": "condition-gosha",
-          "fromSocketId": "condition-gosha.false",
-          "toNodeId": "step-no-meat",
-          "toSocketId": "step-no-meat.in"
-        },
-        {
-          "fromNodeId": "step-no-meat",
-          "fromSocketId": "step-no-meat.out",
-          "toNodeId": "end-no-meat",
-          "toSocketId": "end-no-meat.in"
-        },
-        {
           "fromNodeId": "give-meat",
           "fromSocketId": "give-meat.out",
           "toNodeId": "step-return",
@@ -1291,18 +632,6 @@
           "toSocketId": "scene-ruslan-finish.in"
         },
         {
-          "fromNodeId": "condition-meat",
-          "fromSocketId": "condition-meat.false",
-          "toNodeId": "step-missing-meat",
-          "toSocketId": "step-missing-meat.in"
-        },
-        {
-          "fromNodeId": "step-missing-meat",
-          "fromSocketId": "step-missing-meat.out",
-          "toNodeId": "end-missing-meat",
-          "toSocketId": "end-missing-meat.in"
-        },
-        {
           "fromNodeId": "scene-ruslan-finish",
           "fromSocketId": "scene-ruslan-finish.out",
           "toNodeId": "condition-finish",
@@ -1313,18 +642,6 @@
           "fromSocketId": "condition-finish.true",
           "toNodeId": "remove-meat",
           "toSocketId": "remove-meat.in"
-        },
-        {
-          "fromNodeId": "condition-finish",
-          "fromSocketId": "condition-finish.false",
-          "toNodeId": "step-cancelled",
-          "toSocketId": "step-cancelled.in"
-        },
-        {
-          "fromNodeId": "step-cancelled",
-          "fromSocketId": "step-cancelled.out",
-          "toNodeId": "end-cancelled",
-          "toSocketId": "end-cancelled.in"
         },
         {
           "fromNodeId": "remove-meat",
@@ -1341,150 +658,21 @@
         {
           "fromNodeId": "add-reputation-gosha",
           "fromSocketId": "add-reputation-gosha.out",
-          "toNodeId": "step-shop-gosha",
-          "toSocketId": "step-shop-gosha.in"
-        },
-        {
-          "fromNodeId": "step-shop-gosha",
-          "fromSocketId": "step-shop-gosha.out",
-          "toNodeId": "interaction-gosha-shop",
-          "toSocketId": "interaction-gosha-shop.in"
-        },
-        {
-          "fromNodeId": "interaction-gosha-shop",
-          "fromSocketId": "interaction-gosha-shop.out",
-          "toNodeId": "scene-gosha-shop",
-          "toSocketId": "scene-gosha-shop.in"
-        },
-        {
-          "fromNodeId": "scene-gosha-shop",
-          "fromSocketId": "scene-gosha-shop.out",
-          "toNodeId": "condition-shop-buy",
-          "toSocketId": "condition-shop-buy.in"
-        },
-        {
-          "fromNodeId": "condition-shop-buy",
-          "fromSocketId": "condition-shop-buy.true",
-          "toNodeId": "shop-pay",
-          "toSocketId": "shop-pay.in"
-        },
-        {
-          "fromNodeId": "condition-shop-buy",
-          "fromSocketId": "condition-shop-buy.false",
-          "toNodeId": "step-delivery",
-          "toSocketId": "step-delivery.in"
-        },
-        {
-          "fromNodeId": "shop-pay",
-          "fromSocketId": "shop-pay.out",
-          "toNodeId": "shop-receive-sausage",
-          "toSocketId": "shop-receive-sausage.in"
-        },
-        {
-          "fromNodeId": "shop-receive-sausage",
-          "fromSocketId": "shop-receive-sausage.out",
-          "toNodeId": "shop-reputation",
-          "toSocketId": "shop-reputation.in"
-        },
-        {
-          "fromNodeId": "shop-reputation",
-          "fromSocketId": "shop-reputation.out",
-          "toNodeId": "interaction-gosha-shop",
-          "toSocketId": "interaction-gosha-shop.in"
-        },
-        {
-          "fromNodeId": "step-delivery",
-          "fromSocketId": "step-delivery.out",
-          "toNodeId": "condition-delivery-available",
-          "toSocketId": "condition-delivery-available.in"
-        },
-        {
-          "fromNodeId": "condition-delivery-available",
-          "fromSocketId": "condition-delivery-available.true",
-          "toNodeId": "interaction-ruslan-delivery",
-          "toSocketId": "interaction-ruslan-delivery.in"
-        },
-        {
-          "fromNodeId": "condition-delivery-available",
-          "fromSocketId": "condition-delivery-available.false",
-          "toNodeId": "step-completed",
-          "toSocketId": "step-completed.in"
-        },
-        {
-          "fromNodeId": "interaction-ruslan-delivery",
-          "fromSocketId": "interaction-ruslan-delivery.out",
-          "toNodeId": "scene-ruslan-delivery",
-          "toSocketId": "scene-ruslan-delivery.in"
-        },
-        {
-          "fromNodeId": "scene-ruslan-delivery",
-          "fromSocketId": "scene-ruslan-delivery.out",
-          "toNodeId": "condition-delivery-accepted",
-          "toSocketId": "condition-delivery-accepted.in"
-        },
-        {
-          "fromNodeId": "condition-delivery-accepted",
-          "fromSocketId": "condition-delivery-accepted.true",
-          "toNodeId": "interaction-gosha-delivery",
-          "toSocketId": "interaction-gosha-delivery.in"
-        },
-        {
-          "fromNodeId": "condition-delivery-accepted",
-          "fromSocketId": "condition-delivery-accepted.false",
-          "toNodeId": "step-completed",
-          "toSocketId": "step-completed.in"
-        },
-        {
-          "fromNodeId": "interaction-gosha-delivery",
-          "fromSocketId": "interaction-gosha-delivery.out",
-          "toNodeId": "scene-gosha-delivery",
-          "toSocketId": "scene-gosha-delivery.in"
-        },
-        {
-          "fromNodeId": "scene-gosha-delivery",
-          "fromSocketId": "scene-gosha-delivery.out",
-          "toNodeId": "condition-delivery-given",
-          "toSocketId": "condition-delivery-given.in"
-        },
-        {
-          "fromNodeId": "condition-delivery-given",
-          "fromSocketId": "condition-delivery-given.true",
-          "toNodeId": "delivery-reputation-ruslan",
-          "toSocketId": "delivery-reputation-ruslan.in"
-        },
-        {
-          "fromNodeId": "condition-delivery-given",
-          "fromSocketId": "condition-delivery-given.false",
-          "toNodeId": "step-completed",
-          "toSocketId": "step-completed.in"
-        },
-        {
-          "fromNodeId": "delivery-reputation-ruslan",
-          "fromSocketId": "delivery-reputation-ruslan.out",
-          "toNodeId": "delivery-reputation-gosha",
-          "toSocketId": "delivery-reputation-gosha.in"
-        },
-        {
-          "fromNodeId": "delivery-reputation-gosha",
-          "fromSocketId": "delivery-reputation-gosha.out",
-          "toNodeId": "step-completed",
-          "toSocketId": "step-completed.in"
-        },
-        {
-          "fromNodeId": "step-completed",
-          "fromSocketId": "step-completed.out",
-          "toNodeId": "end-completed",
-          "toSocketId": "end-completed.in"
+          "toNodeId": "end-ruslan-meat",
+          "toSocketId": "end-ruslan-meat.in"
         }
       ]
     },
     "sceneIds": [
       "ruslan_start",
       "gosha_meat",
-      "ruslan_finish",
-      "gosha_shop",
-      "ruslan_delivery",
-      "gosha_delivery"
-    ]
+      "ruslan_finish"
+    ],
+    "activation": {
+      "mode": "Proximity",
+      "worldPointId": "city:ekat",
+      "radius": 1500,
+      "repeatable": false
+    }
   }
 }
