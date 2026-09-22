@@ -239,25 +239,67 @@ try {
       "Заливка маркера игрока должна остаться оранжевой: " + JSON.stringify(fill)
     );
 
-    // 2. Порядок слоёв по радиусу: orange → red → black → фон.
+    // 2. Порядок слоёв по радиусу: orange → black → red → black → фон.
     // Проверяем именно последовательность, а не отдельные цвета: прежний blur
     // тоже давал тёмные пиксели рядом с маркером.
+    //
+    // Вторая чёрная полоса — обводка 2px между красной обводкой и оранжевой
+    // заливкой: она отделяет заливку от красного, поэтому в профиле красный уже
+    // не соседствует с заливкой напрямую.
     const kinds = probe.bands.map(band => band.split(":")[0]);
+    const bandsOf = kind => probe.bands
+      .filter(item => item.startsWith(kind + ":"))
+      .map(item => {
+        const [start, end] = item.split(":")[1].split("-").map(Number);
+        return { start, end, width: end - start };
+      });
+
+    // Полный порядок: оранжевая заливка, затем чёрная (внутренняя), затем
+    // красная, затем чёрная (внешняя). Сверяем позиции по радиусу.
     const orangeIndex = kinds.indexOf("orange");
+    const blackIndices = kinds
+      .map((kind, index) => (kind === "black" ? index : -1))
+      .filter(index => index >= 0);
     const redIndex = kinds.indexOf("red");
-    const blackIndex = kinds.indexOf("black");
 
     check(
       orangeIndex >= 0,
       "Заливка маркера не найдена в радиальном профиле: " + probe.bands.join(", ")
     );
     check(
-      redIndex > orangeIndex,
-      "Красная обводка должна идти сразу после заливки: " + probe.bands.join(", ")
+      blackIndices.length >= 2,
+      "Нужны две чёрные обводки (внутри и снаружи красной): " + probe.bands.join(", ")
     );
     check(
-      blackIndex > redIndex,
-      "Чёрная обводка должна идти снаружи красной: " + probe.bands.join(", ")
+      blackIndices[0] > orangeIndex,
+      "Внутренняя чёрная обводка должна идти сразу после заливки: " + probe.bands.join(", ")
+    );
+    check(
+      redIndex > blackIndices[0],
+      "Красная обводка должна идти снаружи внутренней чёрной: " + probe.bands.join(", ")
+    );
+    check(
+      blackIndices.length >= 2 && blackIndices[1] > redIndex,
+      "Внешняя чёрная обводка должна идти снаружи красной: " + probe.bands.join(", ")
+    );
+    // Разделительная чёрная полоса между красной обводкой и оранжевой заливкой.
+    //
+    // Толщину 2px по профилю измерить нельзя: сглаживание съедает края кольца,
+    // и «чисто чёрным» остаётся ~1px ядра. Проверяем сам факт разделителя —
+    // красная обводка не должна граничить с заливкой напрямую.
+    const orangeBand = bandsOf("orange")[0];
+    const redBand = bandsOf("red")[0];
+    check(
+      orangeBand !== undefined && redBand !== undefined &&
+        redBand.start - orangeBand.end >= 1,
+      "Между заливкой и красной обводкой должна быть чёрная полоса: " + probe.bands.join(", ")
+    );
+    const innerBlack = bandsOf("black")[0];
+    const outerBlack = bandsOf("black")[1];
+    check(
+      innerBlack !== undefined && outerBlack !== undefined &&
+        outerBlack.start - innerBlack.start >= 1.5,
+      "Между внутренней и внешней чёрной должна быть красная обводка: " + probe.bands.join(", ")
     );
 
     // 3. Тень смещена вниз: область под маркером темнее области над ним.

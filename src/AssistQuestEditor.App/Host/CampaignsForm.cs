@@ -63,6 +63,11 @@ public sealed class CampaignsForm : Form
     private static readonly Color AccentColor = Color.FromArgb(250, 176, 3);
     private static readonly Color RowBackColor = Color.FromArgb(27, 30, 34);
     private static readonly Color RowSelectedBackColor = Color.FromArgb(58, 44, 14);
+    // Строка квеста уже плашки кампании: слева остаётся «ступенька», которая
+    // показывает вложенность, а правый край совпадает с плашкой.
+    private const int QuestRowIndent = 18;
+    private const int CampaignHeaderHeight = 48;
+    private const int QuestRowHeight = 43;
 
     private readonly FlowLayoutPanel _list;
     private readonly HashSet<string> _collapsed = new(StringComparer.OrdinalIgnoreCase);
@@ -148,7 +153,7 @@ public sealed class CampaignsForm : Form
         var collapsed = _collapsed.Contains(campaign.Id);
         var activeCount = campaign.Quests.Count(quest => quest.Status == CampaignQuestStatus.Enabled);
         var block = new Panel { BorderStyle = BorderStyle.FixedSingle, BackColor = Color.FromArgb(23, 24, 25), Margin = new Padding(0, 0, 0, 8) };
-        var header = new TableLayoutPanel { Dock = DockStyle.Top, Height = 48, ColumnCount = 4, Padding = new Padding(8, 4, 7, 4), BackColor = Color.FromArgb(20, 32, 38), Cursor = Cursors.Hand };
+        var header = new TableLayoutPanel { Dock = DockStyle.Top, Height = CampaignHeaderHeight, ColumnCount = 4, Padding = new Padding(8, 4, 7, 4), BackColor = Color.FromArgb(20, 32, 38), Cursor = Cursors.Hand };
         header.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize)); header.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100)); header.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize)); header.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
         var active = new CheckBox { AutoSize = true, Checked = campaign.Active, Margin = new Padding(0, 6, 6, 0) };
         active.CheckedChanged += (_, _) => CampaignActiveChanged?.Invoke(this, new CampaignActiveChangedEventArgs(campaign.Id, active.Checked));
@@ -164,7 +169,21 @@ public sealed class CampaignsForm : Form
         text.Click += (_, _) => ToggleCollapsed(campaign.Id);
         block.Controls.Add(header);
 
-        var rows = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.TopDown, WrapContents = false, AutoScroll = false, BackColor = Color.FromArgb(23, 24, 25), Padding = new Padding(8, 0, 8, 4) };
+        // Список квестов живёт в отдельном контейнере с прокруткой, а не в
+        // общем FlowLayoutPanel окна. Высота блока при этом фиксированная: она
+        // складывается из заголовка и строк, поэтому список не «наезжает» на
+        // заголовок следующей кампании и не вылезает под её плашку.
+        var rows = new FlowLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            FlowDirection = FlowDirection.TopDown,
+            WrapContents = false,
+            AutoScroll = true,
+            BackColor = Color.FromArgb(23, 24, 25),
+            // Padding пустой: высота блока считается точно под строки, и лишние
+            // пиксели заставляли бы список показывать полосу прокрутки всегда.
+            Padding = new Padding(0)
+        };
         if (!collapsed)
         {
             foreach (var quest in campaign.Quests)
@@ -173,7 +192,13 @@ public sealed class CampaignsForm : Form
                 rows.Controls.Add(CreateNotice("В кампании нет доступных файлов Quest."));
         }
         block.Controls.Add(rows);
-        block.Height = collapsed ? 48 : 48 + Math.Max(1, campaign.Quests.Count) * 44;
+        rows.BringToFront();
+        // Высота = заголовок + строки (высота строки вместе с нижним отступом).
+        // Небольшой запас в 2px страхует от дробного округления DPI, из-за
+        // которого AutoScroll показал бы полосу прокрутки на пустом месте.
+        block.Height = collapsed
+            ? CampaignHeaderHeight
+            : CampaignHeaderHeight + Math.Max(1, campaign.Quests.Count) * QuestRowHeight + 2;
         return block;
     }
 
@@ -190,10 +215,9 @@ public sealed class CampaignsForm : Form
         var selected = quest.QuestId.Equals(_selectedQuestId, StringComparison.OrdinalIgnoreCase) &&
             campaign.Id.Equals(_selectedCampaignId, StringComparison.OrdinalIgnoreCase);
         var enabled = quest.Status == CampaignQuestStatus.Enabled;
-        var row = new TableLayoutPanel { Height = 40, Width = 520, ColumnCount = 4, Padding = new Padding(4, 2, 4, 2), BackColor = selected ? RowSelectedBackColor : RowBackColor, Margin = new Padding(0, 0, 0, 3), Cursor = Cursors.Hand };
+        var row = new TableLayoutPanel { Height = QuestRowHeight - 3, ColumnCount = 4, CellBorderStyle = TableLayoutPanelCellBorderStyle.None, Padding = new Padding(4, 2, 4, 2), BackColor = selected ? RowSelectedBackColor : RowBackColor, Margin = new Padding(0, 0, 0, 3), Cursor = Cursors.Hand };
         // Выделенный квест подсвечивается оранжевой рамкой: раньше выделение
         // хранилось только на карте, и связать список с картой было нечем.
-        row.CellBorderStyle = TableLayoutPanelCellBorderStyle.None;
         row.Paint += (_, e) =>
         {
             if (!selected) return;
@@ -210,10 +234,18 @@ public sealed class CampaignsForm : Form
             : activation.Mode == QuestStartMode.Proximity
                 ? $"#{quest.Order} · v{quest.Version} · Радиус {activation.Radius:0} м"
                 : $"#{quest.Order} · v{quest.Version} · {activation.Mode}";
-        var name = new Label { Dock = DockStyle.Fill, AutoEllipsis = true, Cursor = Cursors.Hand, Text = quest.Title + Environment.NewLine + details, ForeColor = selected ? AccentColor : Color.FromArgb(231, 237, 244), Font = new Font("Segoe UI", 8.5f), Margin = new Padding(0, 1, 5, 1) };
-        var status = new Label { AutoSize = true, Text = enabled ? "Включён" : "Отключён", ForeColor = enabled ? Color.FromArgb(139, 216, 255) : Color.FromArgb(135, 145, 157), Font = new Font("Segoe UI", 8f), Margin = new Padding(0, 7, 7, 0) };
+        // Отключённый квест гасится курсивом и приглушённо-белым цветом: он
+        // остаётся читаемым, но сразу видно, что в игре его нет.
+        var nameFont = new Font("Segoe UI", 8.5f, enabled ? FontStyle.Regular : FontStyle.Italic);
+        var nameColor = selected
+            ? AccentColor
+            : enabled ? Color.FromArgb(231, 237, 244) : Color.FromArgb(178, 184, 192);
+        var name = new Label { Dock = DockStyle.Fill, AutoEllipsis = true, Cursor = Cursors.Hand, TextAlign = ContentAlignment.MiddleLeft, Text = quest.Title + Environment.NewLine + details, ForeColor = nameColor, Font = nameFont, Margin = new Padding(0, 1, 5, 1) };
+        var status = new Label { AutoSize = true, Text = enabled ? "Включён" : "Отключён", TextAlign = ContentAlignment.MiddleRight, ForeColor = enabled ? Color.FromArgb(139, 216, 255) : Color.FromArgb(165, 172, 182), Font = new Font("Segoe UI", 8f, enabled ? FontStyle.Regular : FontStyle.Italic), Margin = new Padding(0, 7, 7, 0) };
         var edit = CreateMicroButton("Ред.");
         edit.Click += (_, _) => QuestOpenRequested?.Invoke(this, new QuestOpenRequestedEventArgs(quest.FullPath));
+        // Правое выравнивание задаётся TextAlign, а не RightToLeft: RightToLeft.Yes
+        // переставляет знаки в строках вида «#1 · v1» и ломает детали квеста.
         row.Controls.Add(check, 0, 0); row.Controls.Add(name, 1, 0); row.Controls.Add(status, 2, 0); row.Controls.Add(edit, 3, 0);
         // Выделение по ЛКМ на любом элементе строки, кроме галочки и кнопки:
         // клик по ним уже означает другое действие.
@@ -237,8 +269,15 @@ public sealed class CampaignsForm : Form
             block.Width = width;
             if (block is Panel panel && panel.Controls.Count > 0 && panel.Controls[^1] is FlowLayoutPanel rows)
             {
-                var rowWidth = Math.Max(300, width - rows.Padding.Horizontal - SystemInformation.VerticalScrollBarWidth - 2);
-                foreach (Control row in rows.Controls) row.Width = rowWidth;
+                // Строка квеста смещена вправо на QuestRowIndent и выровнена по
+                // правому краю с плашкой кампании: левая «ступенька» показывает
+                // вложенность, правый край образует общую линию.
+                var rowWidth = Math.Max(280, width - QuestRowIndent - 4);
+                foreach (Control row in rows.Controls)
+                {
+                    row.Width = rowWidth;
+                    row.Margin = new Padding(QuestRowIndent, 0, 0, 3);
+                }
             }
         }
     }

@@ -12,6 +12,7 @@
   const characterTabBody = document.getElementById("characterTabBody");
   const inventoryNotifications = document.getElementById("inventoryNotifications");
   const onlyQuestsToggle = document.getElementById("onlyQuestsToggle");
+  const citiesToggle = document.getElementById("citiesToggle");
   const mapStatusHint = document.getElementById("mapStatusHint");
   const send = payload => window.chrome?.webview?.postMessage(payload);
 
@@ -27,7 +28,14 @@
   let questCatalog = [];
   let selectedQuest = { campaignId: "", questId: "" };
   let onlyQuestsFilter = false;
+  // Города гасятся отдельной галочкой: «только квесты» их НЕ отключает, иначе
+  // нельзя было бы показать карту без СДО, но с ориентирами-городами.
+  let citiesFilter = true;
   let questHitAreas = [];
+  // Точки, реально нарисованные в текущем кадре. Клик проверяется только по
+  // ним: иначе можно было бы выбрать точку, которой на карте не видно
+  // (скрытую фильтром или уехавшую за пределы видимой области).
+  let visiblePoints = [];
   // Квест под курсором. Хранится отдельно от СДО-точки: квестовая графика
   // лежит верхним слоем и имеет собственный приоритет подсветки.
   let hoveredQuest = null;
@@ -246,11 +254,19 @@
     const showAllLabels = camera.mpp < 24;
     const labelLimit = camera.mpp < 70 ? 140 : (camera.mpp < 180 ? 55 : 24);
     const occupied = new Set();
-    // Галочка «только квесты» скрывает всё, кроме городов и квестовых точек:
-    // СДО-точки остаются в данных, но не рисуются.
-    const basePoints = onlyQuestsFilter
-      ? points.filter(point => point.isCity === true)
-      : points;
+
+    // Фильтры видимости точек. Две галочки независимы:
+    //   «только квесты» — прячет СДО, но НЕ города (города остаются
+    //     ориентирами, иначе карта превратилась бы в пустое поле);
+    //   «города» — отдельно гасит города, не трогая СДО.
+    // Скрытая точка не попадает ни в отрисовку, ни в зоны попадания.
+    const drawnPoints = points.filter(point => {
+      const isCity = point.isCity === true;
+      if (isCity && !citiesFilter) return false;
+      if (!isCity && onlyQuestsFilter) return false;
+      return true;
+    });
+    visiblePoints = [];
 
     // Порядок слоёв задаётся требованием «вся квестовая графика — самый верхний
     // слой». Внутри квестового слоя сначала рисуются неактивные квесты, затем
@@ -264,8 +280,14 @@
     // камеры, поэтому хранить их между кадрами бессмысленно.
     questHitAreas = [];
 
-    for (const point of basePoints) drawWorldPoint(ctx, point, width, height, occupied, showAllLabels, labelLimit);
+    for (const point of drawnPoints) {
+      drawWorldPoint(ctx, point, width, height, occupied, showAllLabels, labelLimit);
+      visiblePoints.push(point);
+    }
 
+    // Квестовая графика не зависит от галочек видимости точек: «только квесты»
+    // должна ПОКАЗЫВАТЬ квесты, а не прятать их вместе с их СДО. Квест,
+    // привязанный к СДО, остаётся на карте — его ромб и помечают место.
     for (const entry of inactiveQuests) drawQuestMarker(ctx, entry, false);
     for (const entry of activeQuests) drawQuestMarker(ctx, entry, true);
 
@@ -424,7 +446,9 @@
     }
     ctx.restore();
 
-    if (selected || hovered || (isCity && camera.mpp < 220) ||
+    // Город подписывается всегда: его название привязано к точке по центру, а
+    // не раскладывается по сетке подписей. Для СДО действует общий лимит.
+    if (isCity || selected || hovered ||
         shouldLabel(q, showAllLabels, labelLimit, occupied, point)) {
       drawPointLabel(ctx, point, q, selected, isCity);
     }
@@ -445,27 +469,33 @@
 
     const selected = isSelectedQuest(entry);
 
+    // Радиус — статичная геометрия зоны триггера.
+    //
+    // Раньше размер ромба считался от `Date.now()`, то есть квест «пульсировал»
+    // не по времени, а по факту перерисовки: движение мыши по карте вызывает
+    // drawMap(), и ромб дёргался под курсором. Радиус теперь постоянный.
     if (Number.isFinite(radiusPx) && radiusPx >= 2) {
       ctx.save();
       ctx.beginPath();
       ctx.arc(q.x, q.y, radiusPx, 0, Math.PI * 2);
       ctx.setLineDash([7, 5]);
       ctx.lineWidth = active ? 2 : 1.5;
-      // Неактивная зона триггера в два раза прозрачнее и серая.
+      // Активный квест акцентирован тем же оранжевым, что и фон его точки на
+      // карте; неактивный серый и в два раза прозрачнее.
       //
       // Заливка задаётся через globalAlpha с непрозрачным цветом: полупрозрачные
       // rgba-строки на канвасе читаются хуже, а тут видно намерение — «намёк на
       // радиус», а не реальная заливка, которая закрыла бы карту.
-      ctx.strokeStyle = active ? withAlpha(ACCENT_COLOR, .72) : "rgba(120,128,140,.30)";
+      ctx.strokeStyle = active ? ACCENT_COLOR : "rgba(120,128,140,.30)";
       ctx.fillStyle = active ? ACCENT_COLOR : "#78808c";
-      ctx.globalAlpha = active ? 0.045 : 0.012;
+      ctx.globalAlpha = active ? 0.055 : 0.012;
       ctx.fill();
       ctx.globalAlpha = 1;
       ctx.stroke();
       ctx.restore();
     }
 
-    const pulse = 8 + Math.sin(Date.now() / 320) * 1.5;
+    const pulse = 8;
 
     // Точка квеста: ромб с центром в позиции. Зона попадания — ромб
     // (манхэттенское расстояние), чтобы клик мимо углов не срабатывал.
@@ -797,20 +827,34 @@
 
   function drawPointLabel(ctx, point, q, selected, isCity = point.isCity === true) {
     const text = point.name || point.category || "СДО";
-    const offset = isCity ? 9 : 10;
     ctx.save();
-    ctx.font = isCity
-      ? "600 11px Open Sans, Arial, sans-serif"
-      : (selected ? "700 12px Open Sans, Arial, sans-serif" : "600 10px Open Sans, Arial, sans-serif");
-    ctx.textAlign = "left";
     ctx.textBaseline = "middle";
     // Тень под названием удваивается вместе с тенью точки: подпись должна
     // оставаться читаемой поверх светлой плашки квеста.
     ctx.lineWidth = selected ? 5.5 : (isCity ? 5 : 4.5);
     ctx.strokeStyle = "rgba(0,0,0,.98)";
-    ctx.strokeText(text, q.x + 10, q.y - offset);
     ctx.fillStyle = isCity ? CITY_COLOR : darkenColor(point.color || "#78c8f0");
-    ctx.fillText(text, q.x + 10, q.y - offset);
+
+    if (isCity) {
+      // Название города — строго по центру НАД точкой. Ориентация в мире
+      // важнее, чем компактность списка, поэтому город не участвует в
+      // раскладке подписей по сетке (shouldLabel) и рисуется всегда, когда
+      // видна сама точка: центр над точкой однозначно привязан к ней.
+      ctx.font = "600 11px Open Sans, Arial, sans-serif";
+      ctx.textAlign = "center";
+      const baseline = q.y - 10;
+      ctx.strokeText(text, q.x, baseline);
+      ctx.fillText(text, q.x, baseline);
+      ctx.restore();
+      return;
+    }
+
+    ctx.font = selected
+      ? "700 12px Open Sans, Arial, sans-serif"
+      : "600 10px Open Sans, Arial, sans-serif";
+    ctx.textAlign = "left";
+    ctx.strokeText(text, q.x + 10, q.y - 10);
+    ctx.fillText(text, q.x + 10, q.y - 10);
     ctx.restore();
   }
 
@@ -841,18 +885,16 @@
     ctx.save();
 
     // Тень под маркером: мягкое радиальное затемнение со смещением вниз.
-    // Затемнение выходит за чёрную обводку, поэтому маркер «приподнят» над
-    // картой и читается поверх светлых элементов (сетка, кольца, подписи).
-    // Сила тени и смещение удвоены: под маркером теперь лежит квестовая
-    // графика, рисующаяся верхним слоем, и прежней тени не хватало.
-    const shadowOffsetY = 8;
-    const shadowRadius = radius * 4;
+    // Размеры обычные (не удвоенные): квестовая графика читается за счёт
+    // собственного слоя, а не за счёт гигантской тени.
+    const shadowOffsetY = 4;
+    const shadowRadius = radius * 3;
     const shadowGradient = ctx.createRadialGradient(
       q.x, q.y + shadowOffsetY, radius * 0.3,
       q.x, q.y + shadowOffsetY, shadowRadius
     );
-    shadowGradient.addColorStop(0, "rgba(0,0,0,.99)");
-    shadowGradient.addColorStop(0.42, "rgba(0,0,0,.78)");
+    shadowGradient.addColorStop(0, "rgba(0,0,0,.96)");
+    shadowGradient.addColorStop(0.42, "rgba(0,0,0,.62)");
     shadowGradient.addColorStop(1, "rgba(0,0,0,0)");
     ctx.beginPath();
     ctx.arc(q.x, q.y + shadowOffsetY, shadowRadius, 0, Math.PI * 2);
@@ -865,17 +907,34 @@
     ctx.fillStyle = ACCENT_COLOR;
     ctx.fill();
 
-    // Красная обводка.
-    ctx.lineWidth = 3;
-    ctx.strokeStyle = "#d83a3a";
-    ctx.stroke();
-
-    // Чёрная обводка снаружи красной: отделяет маркер от светлых элементов
-    // карты и от линий перекреста, сохраняя ту же толщину, что и красная.
+    // Обводки идут снаружи внутрь, каждая перекрывает половину предыдущей по
+    // нормали радиуса. Порядок от края к центру: чёрная → красная → чёрная →
+    // оранжевая заливка.
+    //
+    // Первая чёрная отделяет маркер от светлых элементов карты и от линий
+    // перекреста. Раньше красная обводка граничила с фоном напрямую, и на
+    // светлых участках (плашки квестов, жёлтые города) маркер сливался.
+    ctx.lineWidth = 4;
+    ctx.strokeStyle = "rgba(0,0,0,.95)";
     ctx.beginPath();
     ctx.arc(q.x, q.y, radius + 3, 0, Math.PI * 2);
+    ctx.stroke();
+
+    // Красная обводка поверх внутренней половины чёрной.
     ctx.lineWidth = 3;
-    ctx.strokeStyle = "rgba(0,0,0,.95)";
+    ctx.strokeStyle = "#d83a3a";
+    ctx.beginPath();
+    ctx.arc(q.x, q.y, radius, 0, Math.PI * 2);
+    ctx.stroke();
+
+    // Чёрная обводка 2px между красной и оранжевой заливкой.
+    //
+    // Цвет непрозрачный: полупрозрачный чёрный поверх оранжевой заливки даёт
+    // коричневатый оттенок, а не чёрный, и разделительная линия «пропадает».
+    ctx.lineWidth = 2;
+    ctx.strokeStyle = "#000000";
+    ctx.beginPath();
+    ctx.arc(q.x, q.y, radius - 2, 0, Math.PI * 2);
     ctx.stroke();
 
     ctx.restore();
@@ -902,13 +961,35 @@
     return Math.hypot(q.x - px, q.y - py) <= 22;
   }
 
+  /**
+   * Проходит ли точка текущие галочки видимости.
+   *
+   * Отдельная проверка нужна в обработчиках галочек: они снимают подсветку и
+   * выделение ДО перерисовки, когда `visiblePoints` ещё содержит прошлый кадр.
+   */
+  function isPointVisible(pointId) {
+    const point = (snapshot?.world?.points || []).find(item =>
+      String(item.id || "") === String(pointId || ""));
+    if (!point) return false;
+    const isCity = point.isCity === true;
+    if (isCity && !citiesFilter) return false;
+    if (!isCity && onlyQuestsFilter) return false;
+    return true;
+  }
+
+  /**
+   * Точка под курсором. Проверяются только точки, нарисованные в этом кадре.
+   *
+   * Список `visiblePoints` заполняет drawMap: он уже учитывает галочки «только
+   * квесты» и «города» и выход за границы видимой области. Без этой проверки
+   * скрытую фильтром СДО можно было бы «выбрать» вслепую — она осталась бы
+   * кликабельной невидимой мишенью.
+   */
   function hitPoint(px, py) {
-    const points = snapshot?.world?.points || [];
     let best = null;
     let bestDistance = Math.min(18, Math.max(8, 10 / Math.sqrt(camera.mpp)));
-    for (const point of points) {
+    for (const point of visiblePoints) {
       const q = worldToScreen(point.position.x, point.position.z);
-      if (q.x < -20 || q.y < -20 || q.x > visibleSize().width + 20 || q.y > visibleSize().height + 20) continue;
       const distance = Math.hypot(q.x - px, q.y - py);
       if (distance <= bestDistance) {
         best = point;
@@ -1791,13 +1872,18 @@
       "<span class='badge accent'>" + (selected ? "Выбрана: " + escapeHtml(selected.name || selected.category) : "Точка не выбрана") + "</span>"
     ].join("");
 
-    // Статус-панель внизу карты: галочка фильтра и краткая сводка.
+    // Статус-панель внизу карты: галочки фильтров и краткая сводка.
     if (onlyQuestsToggle) onlyQuestsToggle.checked = onlyQuestsFilter;
+    if (citiesToggle) citiesToggle.checked = citiesFilter;
     if (mapStatusHint) {
-      const visibleSdo = onlyQuestsFilter ? 0 : sdoCount;
-      mapStatusHint.textContent = onlyQuestsFilter
-        ? "показаны города и квесты · СДО скрыты (" + sdoCount.toLocaleString("ru-RU") + ")"
-        : "показаны города (" + cityCount.toLocaleString("ru-RU") + ") и СДО (" + visibleSdo.toLocaleString("ru-RU") + ")";
+      // Сводка должна описывать именно то, что нарисовано: две галочки
+      // независимы, поэтому считаем по каждому типу отдельно.
+      const parts = [];
+      if (citiesFilter) parts.push("города (" + cityCount.toLocaleString("ru-RU") + ")");
+      else parts.push("города скрыты (" + cityCount.toLocaleString("ru-RU") + ")");
+      if (onlyQuestsFilter) parts.push("СДО скрыты (" + sdoCount.toLocaleString("ru-RU") + ")");
+      else parts.push("СДО (" + sdoCount.toLocaleString("ru-RU") + ")");
+      mapStatusHint.textContent = parts.join(" · ");
     }
 
     renderRuntimeSidebar();
@@ -2521,6 +2607,17 @@
 
   onlyQuestsToggle?.addEventListener("change", () => {
     onlyQuestsFilter = !!onlyQuestsToggle.checked;
+    // Скрытая точка перестаёт быть кликабельной: курсор и подсветка снимаются
+    // вместе с фильтром, иначе под указателем остался бы «призрак» selection.
+    if (hoveredPointId && !isPointVisible(hoveredPointId)) hoveredPointId = null;
+    if (selectedPointId && !isPointVisible(selectedPointId)) selectedPointId = null;
+    drawMap();
+  });
+
+  citiesToggle?.addEventListener("change", () => {
+    citiesFilter = !!citiesToggle.checked;
+    if (hoveredPointId && !isPointVisible(hoveredPointId)) hoveredPointId = null;
+    if (selectedPointId && !isPointVisible(selectedPointId)) selectedPointId = null;
     drawMap();
   });
 
