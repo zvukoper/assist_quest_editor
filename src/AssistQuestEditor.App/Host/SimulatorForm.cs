@@ -181,6 +181,10 @@ public sealed class SimulatorForm : WebViewForm
                     InterfaceChoice(root);
                     break;
 
+                case "interface_dialogue_continue":
+                    InterfaceDialogueContinue(root);
+                    break;
+
                 case "detach_journal":
                     DetachJournal();
                     break;
@@ -437,6 +441,26 @@ public sealed class SimulatorForm : WebViewForm
                 VisibilityMeters = Number(root, "visibility", old.VisibilityMeters)
             },
             "Редактор окружения");
+    }
+
+    private void InterfaceDialogueContinue(JsonElement root)
+    {
+        var dialogue = _hub.Get<InterfaceState>("interfaces").Value.ActiveDialogue;
+        if (dialogue is null)
+            throw new InvalidOperationException("Активный интерфейс диалога отсутствует.");
+
+        var requestId = String(root, "requestId");
+        if (!string.Equals(dialogue.RequestId, requestId, StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException("Запрос интерфейса диалога уже неактуален.");
+
+        _hub.Events.Publish(new SimulatorEvent(
+            "DialogueContinue",
+            DateTimeOffset.UtcNow,
+            "Interface",
+            new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["requestId"] = dialogue.RequestId
+            }));
     }
 
     private void InterfaceChoice(JsonElement root)
