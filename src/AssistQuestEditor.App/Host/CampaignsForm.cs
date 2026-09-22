@@ -63,11 +63,13 @@ public sealed class CampaignsForm : Form
     private static readonly Color AccentColor = Color.FromArgb(250, 176, 3);
     private static readonly Color RowBackColor = Color.FromArgb(27, 30, 34);
     private static readonly Color RowSelectedBackColor = Color.FromArgb(58, 44, 14);
-    // Строка квеста уже плашки кампании: слева остаётся «ступенька», которая
-    // показывает вложенность, а правый край совпадает с плашкой.
-    private const int QuestRowIndent = 18;
+    // Строка квеста идёт от отступа слева до правого края плашки кампании:
+    // отступ показывает вложенность, правый край образует общую линию.
+    private const int QuestRowIndent = 30;
     private const int CampaignHeaderHeight = 48;
-    private const int QuestRowHeight = 43;
+    // Минимальная высота строки: заголовок + строка деталей. Реальная высота
+    // считается по переносу текста в MeasureRowHeight.
+    private const int QuestRowMinHeight = 46;
 
     private readonly FlowLayoutPanel _list;
     private readonly HashSet<string> _collapsed = new(StringComparer.OrdinalIgnoreCase);
@@ -167,6 +169,9 @@ public sealed class CampaignsForm : Form
         // квестов кампании: это позволяет держать длинный каталог компактным.
         header.Click += (_, _) => ToggleCollapsed(campaign.Id);
         text.Click += (_, _) => ToggleCollapsed(campaign.Id);
+        // Порядок докинга в WinForms — обратный z-order: контролы укладываются
+        // от последнего в коллекции к первому. Добавляем сначала заголовок, а
+        // rows поднимаем наверх, поэтому список не уезжает под плашку кампании.
         block.Controls.Add(header);
 
         // Список квестов живёт в отдельном контейнере с прокруткой, а не в
@@ -193,12 +198,12 @@ public sealed class CampaignsForm : Form
         }
         block.Controls.Add(rows);
         rows.BringToFront();
-        // Высота = заголовок + строки (высота строки вместе с нижним отступом).
-        // Небольшой запас в 2px страхует от дробного округления DPI, из-за
-        // которого AutoScroll показал бы полосу прокрутки на пустом месте.
+        // Начальная высота: заголовок + строки минимальной высоты. Точную
+        // высоту выставит ResizeBlocks после раскладки, когда будет известна
+        // ширина колонки и фактический перенос названий.
         block.Height = collapsed
             ? CampaignHeaderHeight
-            : CampaignHeaderHeight + Math.Max(1, campaign.Quests.Count) * QuestRowHeight + 2;
+            : CampaignHeaderHeight + Math.Max(1, campaign.Quests.Count) * QuestRowMinHeight + 7;
         return block;
     }
 
@@ -215,7 +220,7 @@ public sealed class CampaignsForm : Form
         var selected = quest.QuestId.Equals(_selectedQuestId, StringComparison.OrdinalIgnoreCase) &&
             campaign.Id.Equals(_selectedCampaignId, StringComparison.OrdinalIgnoreCase);
         var enabled = quest.Status == CampaignQuestStatus.Enabled;
-        var row = new TableLayoutPanel { Height = QuestRowHeight - 3, ColumnCount = 4, CellBorderStyle = TableLayoutPanelCellBorderStyle.None, Padding = new Padding(4, 2, 4, 2), BackColor = selected ? RowSelectedBackColor : RowBackColor, Margin = new Padding(0, 0, 0, 3), Cursor = Cursors.Hand };
+        var row = new TableLayoutPanel { Height = QuestRowMinHeight - 3, ColumnCount = 4, CellBorderStyle = TableLayoutPanelCellBorderStyle.None, Padding = new Padding(4, 2, 4, 2), BackColor = selected ? RowSelectedBackColor : RowBackColor, Margin = new Padding(0, 0, 0, 3), Cursor = Cursors.Hand, AutoSize = false };
         // Выделенный квест подсвечивается оранжевой рамкой: раньше выделение
         // хранилось только на карте, и связать список с картой было нечем.
         row.Paint += (_, e) =>
@@ -225,8 +230,15 @@ public sealed class CampaignsForm : Form
             var bounds = row.ClientRectangle;
             e.Graphics.DrawRectangle(pen, bounds.X + 1, bounds.Y + 1, bounds.Width - 3, bounds.Height - 3);
         };
-        row.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize)); row.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100)); row.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize)); row.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
-        var check = new CheckBox { AutoSize = true, Checked = enabled, Margin = new Padding(0, 6, 5, 0) };
+        // Колонки: галочка, название (растягивается и переносится по словам),
+        // статус, кнопка. Раньше название стояло в растягивающейся колонке, но
+        // AutoEllipsis резал длинный текст на одной строке — теперь название
+        // занимает две строки (заголовок + детали) и переносит слова по ширине.
+        row.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+        row.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+        row.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+        row.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+        var check = new CheckBox { AutoSize = true, Checked = enabled, Margin = new Padding(0, 8, 5, 0) };
         check.CheckedChanged += (_, _) => QuestEnabledChanged?.Invoke(this, new QuestEnabledChangedEventArgs(campaign.Id, quest.QuestId, check.Checked));
         var activation = quest.Activation;
         var details = activation is null
@@ -240,9 +252,28 @@ public sealed class CampaignsForm : Form
         var nameColor = selected
             ? AccentColor
             : enabled ? Color.FromArgb(231, 237, 244) : Color.FromArgb(178, 184, 192);
-        var name = new Label { Dock = DockStyle.Fill, AutoEllipsis = true, Cursor = Cursors.Hand, TextAlign = ContentAlignment.MiddleLeft, Text = quest.Title + Environment.NewLine + details, ForeColor = nameColor, Font = nameFont, Margin = new Padding(0, 1, 5, 1) };
-        var status = new Label { AutoSize = true, Text = enabled ? "Включён" : "Отключён", TextAlign = ContentAlignment.MiddleRight, ForeColor = enabled ? Color.FromArgb(139, 216, 255) : Color.FromArgb(165, 172, 182), Font = new Font("Segoe UI", 8f, enabled ? FontStyle.Regular : FontStyle.Italic), Margin = new Padding(0, 7, 7, 0) };
+        var name = new Label
+        {
+            Dock = DockStyle.Fill,
+            // AutoSize обязан быть false: по умолчанию Label сам подстраивает
+            // ширину под текст, Dock при этом игнорируется, и перенос по словам
+            // не работает — заголовок просто вылезал бы за строку.
+            AutoSize = false,
+            // Без AutoEllipsis: он обрезает длинный заголовок многоточием вместо
+            // переноса. Текст разбит на две строки, поэтому перенос идёт по
+            // ширине колонки, а не отбрасывается.
+            AutoEllipsis = false,
+            Cursor = Cursors.Hand,
+            TextAlign = ContentAlignment.MiddleLeft,
+            Text = quest.Title + Environment.NewLine + details,
+            ForeColor = nameColor,
+            Font = nameFont,
+            Margin = new Padding(0, 2, 5, 2),
+            UseMnemonic = false
+        };
+        var status = new Label { AutoSize = true, Text = enabled ? "Включён" : "Отключён", TextAlign = ContentAlignment.MiddleRight, ForeColor = enabled ? Color.FromArgb(139, 216, 255) : Color.FromArgb(165, 172, 182), Font = new Font("Segoe UI", 8f, enabled ? FontStyle.Regular : FontStyle.Italic), Margin = new Padding(0, 14, 7, 0) };
         var edit = CreateMicroButton("Ред.");
+        edit.Margin = new Padding(0, 11, 0, 0);
         edit.Click += (_, _) => QuestOpenRequested?.Invoke(this, new QuestOpenRequestedEventArgs(quest.FullPath));
         // Правое выравнивание задаётся TextAlign, а не RightToLeft: RightToLeft.Yes
         // переставляет знаки в строках вида «#1 · v1» и ломает детали квеста.
@@ -267,18 +298,73 @@ public sealed class CampaignsForm : Form
         foreach (Control block in _list.Controls)
         {
             block.Width = width;
-            if (block is Panel panel && panel.Controls.Count > 0 && panel.Controls[^1] is FlowLayoutPanel rows)
+            // Поиск строго по типу, а не по индексу Controls[^1]: индекс — это
+            // z-order, и любой BringToFront или смена порядка добавления ломала
+            // бы выравнивание строк молча.
+            if (block is not Panel panel)
+                continue;
+
+            var rows = panel.Controls.OfType<FlowLayoutPanel>().FirstOrDefault();
+            var header = panel.Controls.OfType<TableLayoutPanel>().FirstOrDefault();
+            if (rows is null)
+                continue;
+
+            // Строка квеста начинается с отступа QuestRowIndent и доходит до
+            // правого края плашки кампании: отступ показывает вложенность,
+            // правый край образует общую линию с заголовком.
+            var rowWidth = Math.Max(280, width - QuestRowIndent - 4);
+            var totalRows = 0;
+            foreach (Control row in rows.Controls)
             {
-                // Строка квеста смещена вправо на QuestRowIndent и выровнена по
-                // правому краю с плашкой кампании: левая «ступенька» показывает
-                // вложенность, правый край образует общую линию.
-                var rowWidth = Math.Max(280, width - QuestRowIndent - 4);
-                foreach (Control row in rows.Controls)
-                {
-                    row.Width = rowWidth;
-                    row.Margin = new Padding(QuestRowIndent, 0, 0, 3);
-                }
+                row.Width = rowWidth;
+                row.Margin = new Padding(QuestRowIndent, 0, 0, 3);
+                // Высота задаётся измеренной, а не константой: заголовок
+                // переносится по словам, и фиксированная высота срезала
+                // длинные названия квестов.
+                row.Height = MeasureRowHeight(row);
+                totalRows += row.Height + row.Margin.Vertical;
+            }
+
+            // Высота плашки считается по фактическим высотам строк, а не по
+            // формуле «строк × константа»: заголовок переносится по словам, и
+            // фиксированная высота срезала длинные названия квестов.
+            if (header is not null)
+            {
+                panel.Height = Math.Max(
+                    CampaignHeaderHeight + 4,
+                    header.Height + totalRows + 4);
             }
         }
+    }
+
+    /// <summary>
+    /// Высота строки квеста по фактическому переносу названия.
+    ///
+    /// Ширина колонки берётся у самого TableLayoutPanel после раскладки: считать
+    /// её «на глаз» нельзя, потому что рядом стоят галочка, статус и кнопка с
+    /// собственными размерами. Без этого замера длинное название обрезалось.
+    /// </summary>
+    private static int MeasureRowHeight(Control row)
+    {
+        if (row is not TableLayoutPanel table || table.Controls.Count < 2 || table.Controls[1] is not Label name)
+        {
+            return QuestRowMinHeight;
+        }
+
+        table.PerformLayout();
+        var widths = table.GetColumnWidths();
+        var available = widths.Length > 1
+            ? Math.Max(80, widths[1] - name.Margin.Horizontal)
+            : Math.Max(80, table.Width - 220);
+
+        var required = TextRenderer.MeasureText(
+            name.Text,
+            name.Font,
+            new Size(available, int.MaxValue),
+            TextFormatFlags.WordBreak | TextFormatFlags.NoPrefix);
+
+        return Math.Max(
+            QuestRowMinHeight,
+            required.Height + table.Padding.Vertical + name.Margin.Vertical);
     }
 }

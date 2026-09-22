@@ -367,7 +367,11 @@
           stepTitle: quest.stepTitle || "",
           status: quest.status || "Available",
           statusLabel: quest.statusLabel || "",
+          // «Активен» = включён в кампании. Так решил Host: Runtime-активность
+          // приходит отдельным полем, иначе при остановленной симуляции все
+          // включённые квесты рисовались бы серыми.
           active: quest.active === true,
+          runtimeActive: quest.runtimeActive === true,
           radius: Math.max(0, Number(quest.radius) || 0),
           order: Number(quest.order) || 0,
           fileName: quest.fileName || "",
@@ -1719,6 +1723,7 @@
     const distance = point ? distanceMeters(player, point.position) : null;
     const radius = Number(quest.radius);
     const active = quest.active === true;
+    const running = quest.runtimeActive === true;
 
     const statusText = [quest.statusLabel, quest.stepTitle || quest.step]
       .filter(part => !!part && String(part).trim().length > 0)
@@ -1730,7 +1735,9 @@
       "<div class='kv'><span>Кампания</span><span>" + escapeHtml(campaign.campaignName || campaign.campaignId) + "</span></div>" +
       "<div class='kv'><span>Порядок</span><span>#" + (Number(quest.order) || 0) + "</span></div>" +
       "<div class='kv'><span>Состояние</span><span>" +
-        (active ? "Активен" : "Неактивен") + (statusText ? " · " + escapeHtml(statusText) : "") + "</span></div>" +
+        (active ? "Включён" : "Отключён") + (statusText ? " · " + escapeHtml(statusText) : "") + "</span></div>" +
+      "<div class='kv'><span>Runtime</span><span>" +
+        (running ? "Выполняется" : "Простаивает") + "</span></div>" +
       "<div class='kv'><span>Точка</span><span>" +
         (point ? escapeHtml(point.name || point.id) : escapeHtml(quest.worldPointId || "—")) + "</span></div>" +
       (point ? "<div class='kv'><span>Координаты</span><span>" + formatPosition(point.position) + "</span></div>" : "") +

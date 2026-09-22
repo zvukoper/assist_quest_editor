@@ -11,6 +11,7 @@ public sealed class QuestGraphStore
     private QuestGraph _value;
     private string _description = string.Empty;
     private IReadOnlyList<string> _sceneIds = Array.Empty<string>();
+    private QuestActivation? _activation;
     private int _version = 1;
     private readonly Stack<QuestGraph> _undo = new();
     private readonly Stack<QuestGraph> _redo = new();
@@ -27,22 +28,27 @@ public sealed class QuestGraphStore
         _value = initial.Graph;
         _description = initial.Description ?? string.Empty;
         _sceneIds = initial.SceneIds ?? Array.Empty<string>();
+        _activation = initial.Activation;
+        _version = Math.Max(1, initial.Version);
     }
 
     public QuestGraph Value => _value;
 
     /// <summary>
-    /// Полный Quest Definition вместе с метаданными документа (Description, SceneIds).
+    /// Полный Quest Definition вместе с метаданными документа
+    /// (Description, SceneIds, Activation).
     ///
     /// Хранится именно здесь, а не в UI: иначе сохранение собирало бы новый
     /// Quest Definition из одного графа и затирало метаданные, которые есть в
     /// файле. По той же причине SceneGraphStore хранит весь SceneDefinition.
     /// </summary>
     public QuestDefinition Definition =>
-        new(_value.Id, _value.Name, _description, _value, _sceneIds, Version: _version);
+        new(_value.Id, _value.Name, _description, _value, _sceneIds, _activation, _version);
 
     public string Description => _description;
     public IReadOnlyList<string> SceneIds => _sceneIds;
+    /// <summary>Политика запуска квеста в игре, прочитанная из файла.</summary>
+    public QuestActivation? Activation => _activation;
     public bool CanUndo => _undo.Count > 0;
     public bool CanRedo => _redo.Count > 0;
     public event EventHandler? Changed;
@@ -233,7 +239,8 @@ public sealed class QuestGraphStore
 
     /// <summary>
     /// Заменяет граф целиком, как новый документ: метаданные Description/SceneIds
-    /// сбрасываются, потому что при замене только графа о них ничего не известно.
+    /// и Activation сбрасываются, потому что при замене только графа о них
+    /// ничего не известно.
     ///
     /// Это fail-safe выбор: унаследованные метаданные прежнего документа
     /// записались бы в файл молча. Загрузка документа идёт через
@@ -246,6 +253,7 @@ public sealed class QuestGraphStore
         _value = graph;
         _description = string.Empty;
         _sceneIds = Array.Empty<string>();
+        _activation = null;
         _version = 1;
         _undo.Clear();
         _redo.Clear();
@@ -253,9 +261,10 @@ public sealed class QuestGraphStore
     }
 
     /// <summary>
-    /// Загружает документ целиком: граф вместе с метаданными Description/SceneIds.
-    /// Загрузка через Replace(QuestGraph) оставила бы метаданные от предыдущего
-    /// документа, и следующее сохранение записало бы их вместо прочитанных из файла.
+    /// Загружает документ целиком: граф вместе с метаданными
+    /// Description/SceneIds/Activation. Загрузка через Replace(QuestGraph)
+    /// оставила бы метаданные от предыдущего документа, и следующее сохранение
+    /// записало бы их вместо прочитанных из файла.
     /// </summary>
     public void Replace(QuestDefinition definition)
     {
@@ -266,9 +275,25 @@ public sealed class QuestGraphStore
         _value = definition.Graph;
         _description = definition.Description ?? string.Empty;
         _sceneIds = definition.SceneIds ?? Array.Empty<string>();
+        _activation = definition.Activation;
         _version = Math.Max(1, definition.Version);
         _undo.Clear();
         _redo.Clear();
+        Changed?.Invoke(this, EventArgs.Empty);
+    }
+
+    /// <summary>
+    /// Меняет политику запуска квеста.
+    ///
+    /// Activation — метаданные документа, а не часть графа, поэтому в стек
+    /// отмены не попадает: Undo/Redo возвращают только ноды и связи.
+    /// </summary>
+    public void UpdateActivation(QuestActivation? activation)
+    {
+        if (Equals(_activation, activation))
+            return;
+
+        _activation = activation;
         Changed?.Invoke(this, EventArgs.Empty);
     }
 

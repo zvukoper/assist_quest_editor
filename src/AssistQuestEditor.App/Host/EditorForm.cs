@@ -956,6 +956,38 @@ public sealed class EditorForm : WebViewForm
                 SaveGraph(saveAs: true);
                 break;
 
+            case "set_activation":
+            {
+                // Политика запуска задаётся в редакторе, а не только в файле:
+                // иначе единственным способом починить квест с пустой
+                // активацией было бы ручное редактирование JSON.
+                var mode = root.TryGetProperty("mode", out var modeNode)
+                    ? Enum.TryParse<QuestStartMode>(modeNode.GetString(), ignoreCase: true, out var parsed)
+                        ? parsed
+                        : QuestStartMode.Manual
+                    : QuestStartMode.Manual;
+
+                QuestActivation? activation = mode == QuestStartMode.Manual
+                    ? null
+                    : new QuestActivation(
+                        mode,
+                        OptionalString(root, "worldPointId"),
+                        OptionalDouble(root, "radius") ?? 35,
+                        OptionalString(root, "requiredReputationNpcId"),
+                        OptionalInt(root, "requiredReputation"),
+                        OptionalBool(root, "repeatable"));
+
+                _questGraph.UpdateActivation(activation);
+                AppLogger.Info(
+                    "Quest Graph: изменена политика запуска.",
+                    $"mode={mode}; worldPointId={activation?.WorldPointId ?? "<none>"}; radius={activation?.Radius}");
+
+                _documentDirty = true;
+                UpdateWindowTitle();
+                PostQuestGraph();
+                break;
+            }
+
             case "graph_validate":
             {
                 AppLogger.Info("Quest Graph: выполнена проверка графа.");
@@ -1495,6 +1527,10 @@ public sealed class EditorForm : WebViewForm
         {
             type = "quest_graph",
             graph = _questGraph.Value,
+            // Политика запуска — метаданные документа, а не часть графа: без неё
+            // UI не мог показать, где квест активируется, и квест «пропадал»
+            // с карты без единого сигнала.
+            activation = _questGraph.Activation,
             selectedNodeId,
             canUndo = _questGraph.CanUndo,
             canRedo = _questGraph.CanRedo,
@@ -1597,6 +1633,41 @@ public sealed class EditorForm : WebViewForm
                element.ValueKind != JsonValueKind.Undefined
             ? element.ToString()
             : fallback ?? string.Empty;
+    }
+
+    /// <summary>Число из сообщения Web UI или null, если поле пустое/нечисловое.</summary>
+    private static double? OptionalDouble(JsonElement root, string name)
+    {
+        if (!root.TryGetProperty(name, out var value) ||
+            value.ValueKind is JsonValueKind.Null or JsonValueKind.Undefined)
+        {
+            return null;
+        }
+
+        return value.ValueKind == JsonValueKind.Number && value.TryGetDouble(out var number)
+            ? number
+            : double.TryParse(value.ToString(), out var parsed)
+                ? parsed
+                : null;
+    }
+
+    private static int? OptionalInt(JsonElement root, string name)
+    {
+        var number = OptionalDouble(root, name);
+        return number is null ? null : (int)Math.Round(number.Value);
+    }
+
+    private static bool OptionalBool(JsonElement root, string name)
+    {
+        if (!root.TryGetProperty(name, out var value) ||
+            value.ValueKind is JsonValueKind.Null or JsonValueKind.Undefined)
+        {
+            return false;
+        }
+
+        return value.ValueKind == JsonValueKind.True ||
+            (value.ValueKind != JsonValueKind.False &&
+             bool.TryParse(value.ToString(), out var parsed) && parsed);
     }
 
 

@@ -14,6 +14,9 @@
     selection: { point: null }
   };
   let questGraph = null;
+  // Политика запуска квеста (Proximity/Manual + WorldPoint). Хранится отдельно
+  // от графа: это метаданные документа, а не ноды со связями.
+  let questActivation = null;
   let sceneCatalog = [];
   let selectedGraphNodeId = null;
   let pendingOutput = null;
@@ -158,6 +161,28 @@
         "<span class='badge accent'>" + questGraph.nodes.length + " нод</span>" +
         "<span class='badge'>" + questGraph.connections.length + " связей</span>" +
         "<span class='badge red'>" + escapeHtml(questGraph.name) + "</span>" +
+        "<span class='badge " + (questActivation ? "blue" : "accent") + "' id='activationBadge' " +
+          "title='Политика запуска квеста в игре. Без Proximity-активации квест не появится на карте Симулятора.'>" +
+          escapeHtml(questActivation
+            ? "Запуск: " + questActivation.mode + (questActivation.worldPointId ? " · " + questActivation.worldPointId : "")
+            : "Запуск не задан") + "</span>" +
+        "<button class='toolButton' id='editActivation'>Активация…</button>" +
+      "</div>" +
+      "<div id='activationPanel' style='display:none;margin-bottom:8px;padding:8px;border:1px solid var(--border);border-radius:8px;background:#111419;flex-wrap:wrap;gap:6px'>" +
+        "<label class='miniLabel' style='display:flex;align-items:center;gap:6px'>Режим" +
+          "<select id='activationMode' class='toolButton'>" +
+            ["Manual", "Proximity"].map(mode =>
+              "<option value='" + mode + "'" +
+              ((questActivation?.mode || "Manual") === mode ? " selected" : "") + ">" + mode + "</option>").join("") +
+          "</select></label>" +
+        "<label class='miniLabel' style='display:flex;align-items:center;gap:6px'>WorldPoint" +
+          "<input id='activationPoint' class='toolButton' style='width:280px' placeholder='sdo:camping:0x... или city:chelyabinsk' value='" +
+            escapeHtml(questActivation?.worldPointId || "") + "'></label>" +
+        "<label class='miniLabel' style='display:flex;align-items:center;gap:6px'>Радиус" +
+          "<input id='activationRadius' class='toolButton' style='width:90px' type='number' min='0' value='" +
+            escapeHtml(String(questActivation?.radius ?? 35)) + "'></label>" +
+        "<button class='toolButton primary' id='applyActivation'>Применить</button>" +
+        "<span class='miniLabel' id='activationHint'></span>" +
       "</div>" +
       "<div style='height:calc(100% - 46px);min-height:560px;border:1px solid var(--border);border-radius:8px;overflow:hidden;background:#111419'>" +
         "<svg id='questGraphSvg' viewBox='" + graphViewport.x + " " + graphViewport.y + " " + graphViewport.width + " " + graphViewport.height + "' xmlns='http://www.w3.org/2000/svg' style='width:100%;height:100%'>" +
@@ -175,6 +200,34 @@
     ws.querySelector("#openLastGraph")?.addEventListener("click", () => send({ action: "graph_open_last" }));
     ws.querySelector("#saveGraph").addEventListener("click", () => send({ action: "graph_save" }));
     ws.querySelector("#saveGraphAs").addEventListener("click", () => send({ action: "graph_save_as" }));
+
+    // Панель активации: без неё единственным способом починить квест с пустой
+    // активацией было бы ручное редактирование JSON.
+    const activationPanel = ws.querySelector("#activationPanel");
+    ws.querySelector("#editActivation").addEventListener("click", () => {
+      activationPanel.style.display = activationPanel.style.display === "none" ? "flex" : "none";
+    });
+    ws.querySelector("#applyActivation").addEventListener("click", () => {
+      const mode = ws.querySelector("#activationMode").value;
+      const worldPointId = ws.querySelector("#activationPoint").value.trim();
+      const radius = Number(ws.querySelector("#activationRadius").value);
+      const hint = ws.querySelector("#activationHint");
+
+      // Proximity без цели бессмысленна: Runtime не сможет стартовать квест, а
+      // на карте нечего рисовать. Лучше не отправлять такое в Host.
+      if (mode === "Proximity" && !worldPointId) {
+        hint.textContent = "Для Proximity нужен WorldPoint.";
+        return;
+      }
+
+      hint.textContent = "";
+      send({
+        action: "set_activation",
+        mode,
+        worldPointId,
+        radius: Number.isFinite(radius) ? radius : 35
+      });
+    });
 
     ws.querySelector("#addGraphNode").addEventListener("click", () => {
       const type = ws.querySelector("#graphNodeType").value;
@@ -1695,6 +1748,7 @@
     }
     if (data?.type === "quest_graph") {
       questGraph = data.graph;
+      questActivation = data.activation || null;
       graphDocument = {
         path: data.documentPath || "",
         lastPath: data.lastDocumentPath || "",

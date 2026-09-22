@@ -218,6 +218,75 @@ public sealed class QuestGraphStoreTests
     }
 
     [Fact]
+    public void DefinitionKeepsActivationAcrossGraphEdits()
+    {
+        var graph = QuestGraphFactory.CreateStarter();
+        // Квест с Proximity-активацией: именно его точка рисуется на карте и
+        // запускает Runtime. Раньше стор не хранил Activation, поэтому первое
+        // же сохранение из Нодового редактора стирало блок из файла, и квест
+        // исчезал с карты Симулятора.
+        var activation = new QuestActivation(
+            QuestStartMode.Proximity,
+            "sdo:camping:0x3f8ed5e434c00000",
+            150);
+
+        var store = new QuestGraphStore(new QuestDefinition(
+            graph.Id,
+            graph.Name,
+            "Описание квеста.",
+            graph,
+            Array.Empty<string>(),
+            activation));
+
+        Assert.Equal(activation, store.Definition.Activation);
+
+        // Правка графа не должна терять политику запуска: без неё квест
+        // становится невидимым на карте после сохранения.
+        store.AddNode("Phase", "Новая фаза", 420, 120);
+
+        Assert.Equal(activation, store.Definition.Activation);
+    }
+
+    [Fact]
+    public void ReplaceWithDefinitionRestoresActivationFromLoadedDocument()
+    {
+        var store = new QuestGraphStore(QuestGraphFactory.CreateStarter());
+
+        var loaded = new QuestGraph("loaded", "Загруженный квест", Array.Empty<QuestNode>(), Array.Empty<QuestConnection>());
+        var activation = new QuestActivation(QuestStartMode.Proximity, "city:chelyabinsk", 750);
+        store.Replace(new QuestDefinition(
+            loaded.Id,
+            loaded.Name,
+            "Загруженное описание.",
+            loaded,
+            new[] { "scene_a" },
+            activation));
+
+        Assert.Equal(activation, store.Definition.Activation);
+    }
+
+    [Fact]
+    public void UpdateActivationPersistsAndReplaceWithGraphOnlyClearsIt()
+    {
+        var graph = QuestGraphFactory.CreateStarter();
+        var store = new QuestGraphStore(new QuestDefinition(
+            graph.Id,
+            graph.Name,
+            "Описание.",
+            graph,
+            Array.Empty<string>()));
+
+        Assert.Null(store.Definition.Activation);
+
+        store.UpdateActivation(new QuestActivation(QuestStartMode.Proximity, "sdo:5ka:0x1", 200));
+        Assert.Equal("sdo:5ka:0x1", store.Definition.Activation!.WorldPointId);
+
+        // Новый документ как замена графа не должен наследовать чужой Activation.
+        store.Replace(new QuestGraph("other", "Другой", Array.Empty<QuestNode>(), Array.Empty<QuestConnection>()));
+        Assert.Null(store.Definition.Activation);
+    }
+
+    [Fact]
     public void UndoAndRedoRestoreGraphSnapshots()
     {
         var store = new QuestGraphStore(QuestGraphFactory.CreateStarter());

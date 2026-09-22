@@ -568,9 +568,6 @@ public sealed class SimulatorForm : WebViewForm
     {
         var statuses = snapshot.QuestStatuses.Quests
             .ToDictionary(item => item.QuestId, StringComparer.OrdinalIgnoreCase);
-        var activeQuestId = _runtime.State.QuestId;
-        var activeStatus = _runtime.State.Status;
-        var runtimeActive = activeStatus is QuestRuntimeStatus.Running or QuestRuntimeStatus.Waiting;
 
         return _campaignStore.BuildSimulatorCatalog()
             .Select(campaign => new
@@ -597,15 +594,38 @@ public sealed class SimulatorForm : WebViewForm
                         statusLabel = QuestStatusLabels.GetValueOrDefault(status, status.ToString()),
                         step,
                         stepTitle = step,
-                        // Квест «активен», если его выполняет Runtime прямо сейчас.
-                        // Он не зависит от доступности Proximity-триггера: активный
-                        // квест должен перекрывать неактивные визуально.
-                        active = runtimeActive &&
-                            quest.QuestId.Equals(activeQuestId, StringComparison.OrdinalIgnoreCase)
+                        // «Активен» = квест включён в кампании, а не «его выполняет
+                        // Runtime прямо сейчас». Раньше здесь стояла проверка на
+                        // активный Runtime, поэтому при остановленной симуляции
+                        // ВСЕ квесты рисовались серыми, хотя включённые должны
+                        // быть акцентно-оранжевыми. Серыми остаются только
+                        // отключённые квесты кампании.
+                        active = campaign.Active && quest.Status == CampaignQuestStatus.Enabled,
+                        // Отдельный признак «Runtime выполняет этот квест»: он
+                        // нужен сайдбару, чтобы отличать включённый квест от
+                        // фактически запущенного.
+                        runtimeActive = IsRuntimeQuest(quest.QuestId)
                     };
                 }).ToArray()
             })
             .ToArray();
+    }
+
+    /// <summary>
+    /// Выполняет ли Runtime этот квест прямо сейчас.
+    ///
+    /// Проверка нужна отдельно от «включён в кампании»: включённый квест может
+    /// просто ждать активации, а панель должна показывать фактическое состояние.
+    /// </summary>
+    private bool IsRuntimeQuest(string questId)
+    {
+        var state = _runtime.State;
+        if (state.Status is not (QuestRuntimeStatus.Running or QuestRuntimeStatus.Waiting))
+        {
+            return false;
+        }
+
+        return state.QuestId.Equals(questId, StringComparison.OrdinalIgnoreCase);
     }
 
     private static readonly IReadOnlyDictionary<QuestStatus, string> QuestStatusLabels =
