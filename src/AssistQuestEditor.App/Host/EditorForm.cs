@@ -73,6 +73,35 @@ public sealed class EditorForm : WebViewForm
         };
     }
 
+    public bool OpenResourcePath(string path)
+    {
+        if (string.IsNullOrWhiteSpace(path) || !File.Exists(path))
+            return false;
+
+        if (!ResourceFileTypes.TryGet(Path.GetExtension(path), out var resource))
+            throw new InvalidOperationException("Неизвестный тип ресурса: " + Path.GetExtension(path));
+
+        return resource.Kind switch
+        {
+            "Quest" when _isGraphEditor => OpenGraphResource(path),
+            "Scene" when _isSceneEditor => OpenSceneResource(path),
+            _ => throw new InvalidOperationException(
+                "Ресурс " + resource.Extension + " пока не поддерживается этим редактором.")
+        };
+    }
+
+    private bool OpenGraphResource(string path)
+    {
+        LoadGraphFromPath(path);
+        return true;
+    }
+
+    private bool OpenSceneResource(string path)
+    {
+        LoadSceneFromPath(path);
+        return true;
+    }
+
     protected override void OnFormClosing(FormClosingEventArgs e)
     {
         if (_isGraphEditor && _documentDirty)
@@ -615,8 +644,10 @@ public sealed class EditorForm : WebViewForm
         var document = JsonSerializer.Deserialize<QuestDefinitionDocument>(json, WebJsonOptions)
             ?? throw new InvalidOperationException("Файл Quest Definition пуст или повреждён.");
 
-        if (document.SchemaVersion != DefinitionSchemaVersion)
-            throw new InvalidOperationException($"Неподдерживаемая версия схемы Quest Definition: {document.SchemaVersion}. Поддерживается {DefinitionSchemaVersion}.");
+        if (document.SchemaVersion != DefinitionSchemaVersion ||
+            !document.Format.Equals("aqquest", StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException(
+                $"Файл не является поддерживаемым Quest resource. Format={document.Format}; schema={document.SchemaVersion}.");
 
         if (document.Definition?.Graph is null)
             throw new InvalidOperationException("В документе отсутствует Quest Graph.");
@@ -718,10 +749,11 @@ public sealed class EditorForm : WebViewForm
             File.ReadAllText(path),
             WebJsonOptions) ?? throw new InvalidOperationException("Файл Scene Definition пуст или повреждён.");
 
-        if (document.SchemaVersion != DefinitionSchemaVersion)
+        if (document.SchemaVersion != DefinitionSchemaVersion ||
+            !document.Format.Equals("aqscene", StringComparison.OrdinalIgnoreCase))
             throw new InvalidOperationException(
-                "Неподдерживаемая версия схемы Scene Definition: " +
-                document.SchemaVersion + ". Поддерживается " + DefinitionSchemaVersion + ".");
+                "Файл не является поддерживаемым Scene resource. Format=" +
+                document.Format + "; schema=" + document.SchemaVersion + ".");
 
         _sceneCatalog.Upsert(document.Definition);
         _sceneGraph.Replace(document.Definition);
