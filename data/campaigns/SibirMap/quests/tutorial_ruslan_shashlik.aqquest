@@ -1,0 +1,679 @@
+{
+  "schemaVersion": 1,
+  "format": "aqquest",
+  "definition": {
+    "id": "tutorial_ruslan_shashlik",
+    "title": "Спецмаринад для Руслана — учебный квест",
+    "description": "Самостоятельный квест: получить мясо и передать его Руслану. После завершения квест заканчивается, игрок свободен.",
+    "graph": {
+      "id": "tutorial_ruslan_shashlik",
+      "name": "Спецмаринад для Руслана — учебный квест",
+      "nodes": [
+        {
+          "nodeId": "start",
+          "nodeType": "Start",
+          "title": "01. Начало",
+          "x": 0,
+          "y": 120,
+          "sockets": [
+            {
+              "socketId": "start.out",
+              "name": "Далее",
+              "direction": "Output",
+              "flowKind": "Normal"
+            }
+          ],
+          "parameters": {}
+        },
+        {
+          "nodeId": "status-active",
+          "nodeType": "SetStatus",
+          "title": "02. Статус: Active",
+          "x": 400,
+          "y": 120,
+          "sockets": [
+            {
+              "socketId": "status-active.in",
+              "name": "Вход",
+              "direction": "Input",
+              "flowKind": "Normal"
+            },
+            {
+              "socketId": "status-active.out",
+              "name": "Далее",
+              "direction": "Output",
+              "flowKind": "Normal"
+            }
+          ],
+          "parameters": {
+            "status": "Active"
+          }
+        },
+        {
+          "nodeId": "step-meet-ruslan",
+          "nodeType": "SetStep",
+          "title": "03. Этап: встретить Руслана",
+          "x": 800,
+          "y": 120,
+          "sockets": [
+            {
+              "socketId": "step-meet-ruslan.in",
+              "name": "Вход",
+              "direction": "Input",
+              "flowKind": "Normal"
+            },
+            {
+              "socketId": "step-meet-ruslan.out",
+              "name": "Далее",
+              "direction": "Output",
+              "flowKind": "Normal"
+            }
+          ],
+          "parameters": {
+            "step": "meet_ruslan"
+          }
+        },
+        {
+          "nodeId": "scene-ruslan-start",
+          "nodeType": "DialogueScene",
+          "title": "04. Scene: Руслан",
+          "x": 1200,
+          "y": 120,
+          "sockets": [
+            {
+              "socketId": "scene-ruslan-start.in",
+              "name": "Вход",
+              "direction": "Input",
+              "flowKind": "Normal"
+            },
+            {
+              "socketId": "scene-ruslan-start.out",
+              "name": "Далее",
+              "direction": "Output",
+              "flowKind": "Normal"
+            }
+          ],
+          "parameters": {
+            "sceneId": "ruslan_start"
+          }
+        },
+        {
+          "nodeId": "step-offer-answered",
+          "nodeType": "SetStep",
+          "title": "05. Этап: ответ получен",
+          "x": 1600,
+          "y": 120,
+          "sockets": [
+            {
+              "socketId": "step-offer-answered.in",
+              "name": "Вход",
+              "direction": "Input",
+              "flowKind": "Normal"
+            },
+            {
+              "socketId": "step-offer-answered.out",
+              "name": "Далее",
+              "direction": "Output",
+              "flowKind": "Normal"
+            }
+          ],
+          "parameters": {
+            "step": "offer_answered"
+          }
+        },
+        {
+          "nodeId": "condition-offer",
+          "nodeType": "Condition",
+          "title": "06. Принял предложение?",
+          "x": 2000,
+          "y": 60,
+          "sockets": [
+            {
+              "socketId": "condition-offer.in",
+              "name": "Вход",
+              "direction": "Input",
+              "flowKind": "Normal"
+            },
+            {
+              "socketId": "condition-offer.true",
+              "name": "Да",
+              "direction": "Output",
+              "flowKind": "Normal"
+            },
+            {
+              "socketId": "condition-offer.false",
+              "name": "Нет",
+              "direction": "Output",
+              "flowKind": "Cut"
+            }
+          ],
+          "parameters": {
+            "operator": "VariableEquals",
+            "left": "scene.ruslan_start.lastChoiceId",
+            "comparison": "==",
+            "right": "ruslan.offer.accept"
+          }
+        },
+        {
+          "nodeId": "step-find-gosha",
+          "nodeType": "SetStep",
+          "title": "07. Этап: найти Гошу",
+          "x": 2400,
+          "y": 120,
+          "sockets": [
+            {
+              "socketId": "step-find-gosha.in",
+              "name": "Вход",
+              "direction": "Input",
+              "flowKind": "Normal"
+            },
+            {
+              "socketId": "step-find-gosha.out",
+              "name": "Далее",
+              "direction": "Output",
+              "flowKind": "Normal"
+            }
+          ],
+          "parameters": {
+            "step": "find_gosha"
+          }
+        },
+        {
+          "nodeId": "interaction-gosha",
+          "nodeType": "Interaction",
+          "title": "08. Подойти к Гоше",
+          "x": 2800,
+          "y": 120,
+          "sockets": [
+            {
+              "socketId": "interaction-gosha.in",
+              "name": "Вход",
+              "direction": "Input",
+              "flowKind": "Normal"
+            },
+            {
+              "socketId": "interaction-gosha.out",
+              "name": "Далее",
+              "direction": "Output",
+              "flowKind": "Normal"
+            }
+          ],
+          "parameters": {
+            "worldPointId": "city:chelyabinsk",
+            "triggerRadius": "1500"
+          }
+        },
+        {
+          "nodeId": "scene-gosha",
+          "nodeType": "DialogueScene",
+          "title": "09. Scene: Гоша",
+          "x": 3200,
+          "y": 120,
+          "sockets": [
+            {
+              "socketId": "scene-gosha.in",
+              "name": "Вход",
+              "direction": "Input",
+              "flowKind": "Normal"
+            },
+            {
+              "socketId": "scene-gosha.out",
+              "name": "Далее",
+              "direction": "Output",
+              "flowKind": "Normal"
+            }
+          ],
+          "parameters": {
+            "sceneId": "gosha_meat"
+          }
+        },
+        {
+          "nodeId": "step-gosha-answered",
+          "nodeType": "SetStep",
+          "title": "10. Этап: ответ Гоши",
+          "x": 3600,
+          "y": 120,
+          "sockets": [
+            {
+              "socketId": "step-gosha-answered.in",
+              "name": "Вход",
+              "direction": "Input",
+              "flowKind": "Normal"
+            },
+            {
+              "socketId": "step-gosha-answered.out",
+              "name": "Далее",
+              "direction": "Output",
+              "flowKind": "Normal"
+            }
+          ],
+          "parameters": {
+            "step": "gosha_answered"
+          }
+        },
+        {
+          "nodeId": "condition-gosha",
+          "nodeType": "Condition",
+          "title": "11. Гоша отдаёт мясо?",
+          "x": 4000,
+          "y": 60,
+          "sockets": [
+            {
+              "socketId": "condition-gosha.in",
+              "name": "Вход",
+              "direction": "Input",
+              "flowKind": "Normal"
+            },
+            {
+              "socketId": "condition-gosha.true",
+              "name": "Да",
+              "direction": "Output",
+              "flowKind": "Normal"
+            },
+            {
+              "socketId": "condition-gosha.false",
+              "name": "Нет",
+              "direction": "Output",
+              "flowKind": "Cut"
+            }
+          ],
+          "parameters": {
+            "operator": "VariableEquals",
+            "left": "scene.gosha_meat.lastChoiceId",
+            "comparison": "==",
+            "right": "gosha.meat.accept"
+          }
+        },
+        {
+          "nodeId": "give-meat",
+          "nodeType": "GiveItem",
+          "title": "12. Получить мясо",
+          "x": 4400,
+          "y": 120,
+          "sockets": [
+            {
+              "socketId": "give-meat.in",
+              "name": "Вход",
+              "direction": "Input",
+              "flowKind": "Normal"
+            },
+            {
+              "socketId": "give-meat.out",
+              "name": "Далее",
+              "direction": "Output",
+              "flowKind": "Normal"
+            }
+          ],
+          "parameters": {
+            "itemId": "ruslan.raw_meat",
+            "count": "1"
+          }
+        },
+        {
+          "nodeId": "step-return",
+          "nodeType": "SetStep",
+          "title": "13. Этап: вернуться к Руслану",
+          "x": 4800,
+          "y": 120,
+          "sockets": [
+            {
+              "socketId": "step-return.in",
+              "name": "Вход",
+              "direction": "Input",
+              "flowKind": "Normal"
+            },
+            {
+              "socketId": "step-return.out",
+              "name": "Далее",
+              "direction": "Output",
+              "flowKind": "Normal"
+            }
+          ],
+          "parameters": {
+            "step": "return_to_ruslan"
+          }
+        },
+        {
+          "nodeId": "interaction-ruslan-return",
+          "nodeType": "Interaction",
+          "title": "14. Вернуться к Руслану",
+          "x": 5200,
+          "y": 120,
+          "sockets": [
+            {
+              "socketId": "interaction-ruslan-return.in",
+              "name": "Вход",
+              "direction": "Input",
+              "flowKind": "Normal"
+            },
+            {
+              "socketId": "interaction-ruslan-return.out",
+              "name": "Далее",
+              "direction": "Output",
+              "flowKind": "Normal"
+            }
+          ],
+          "parameters": {
+            "worldPointId": "city:ekat",
+            "triggerRadius": "1500"
+          }
+        },
+        {
+          "nodeId": "condition-meat",
+          "nodeType": "Condition",
+          "title": "15. Проверить мясо",
+          "x": 5600,
+          "y": 120,
+          "sockets": [
+            {
+              "socketId": "condition-meat.in",
+              "name": "Вход",
+              "direction": "Input",
+              "flowKind": "Normal"
+            },
+            {
+              "socketId": "condition-meat.true",
+              "name": "Есть",
+              "direction": "Output",
+              "flowKind": "Normal"
+            },
+            {
+              "socketId": "condition-meat.false",
+              "name": "Нет",
+              "direction": "Output",
+              "flowKind": "Cut"
+            }
+          ],
+          "parameters": {
+            "operator": "ItemCountCompare",
+            "left": "ruslan.raw_meat",
+            "comparison": ">=",
+            "right": "1"
+          }
+        },
+        {
+          "nodeId": "scene-ruslan-finish",
+          "nodeType": "DialogueScene",
+          "title": "16. Scene: финал",
+          "x": 6000,
+          "y": 120,
+          "sockets": [
+            {
+              "socketId": "scene-ruslan-finish.in",
+              "name": "Вход",
+              "direction": "Input",
+              "flowKind": "Normal"
+            },
+            {
+              "socketId": "scene-ruslan-finish.out",
+              "name": "Далее",
+              "direction": "Output",
+              "flowKind": "Normal"
+            }
+          ],
+          "parameters": {
+            "sceneId": "ruslan_finish"
+          }
+        },
+        {
+          "nodeId": "condition-finish",
+          "nodeType": "Condition",
+          "title": "17. Финальное подтверждение?",
+          "x": 6400,
+          "y": 60,
+          "sockets": [
+            {
+              "socketId": "condition-finish.in",
+              "name": "Вход",
+              "direction": "Input",
+              "flowKind": "Normal"
+            },
+            {
+              "socketId": "condition-finish.true",
+              "name": "Да",
+              "direction": "Output",
+              "flowKind": "Normal"
+            },
+            {
+              "socketId": "condition-finish.false",
+              "name": "Нет",
+              "direction": "Output",
+              "flowKind": "Cut"
+            }
+          ],
+          "parameters": {
+            "operator": "VariableEquals",
+            "left": "scene.ruslan_finish.lastChoiceId",
+            "comparison": "==",
+            "right": "ruslan.finish.complete"
+          }
+        },
+        {
+          "nodeId": "remove-meat",
+          "nodeType": "RemoveItem",
+          "title": "18. Отдать мясо",
+          "x": 6800,
+          "y": 120,
+          "sockets": [
+            {
+              "socketId": "remove-meat.in",
+              "name": "Вход",
+              "direction": "Input",
+              "flowKind": "Normal"
+            },
+            {
+              "socketId": "remove-meat.out",
+              "name": "Далее",
+              "direction": "Output",
+              "flowKind": "Normal"
+            }
+          ],
+          "parameters": {
+            "itemId": "ruslan.raw_meat",
+            "count": "1"
+          }
+        },
+        {
+          "nodeId": "add-reputation",
+          "nodeType": "AddReputation",
+          "title": "19. Репутация Руслана +500",
+          "x": 7200,
+          "y": 120,
+          "sockets": [
+            {
+              "socketId": "add-reputation.in",
+              "name": "Вход",
+              "direction": "Input",
+              "flowKind": "Normal"
+            },
+            {
+              "socketId": "add-reputation.out",
+              "name": "Далее",
+              "direction": "Output",
+              "flowKind": "Normal"
+            }
+          ],
+          "parameters": {
+            "npcId": "ruslan",
+            "amount": "500"
+          }
+        },
+        {
+          "nodeId": "add-reputation-gosha",
+          "nodeType": "AddReputation",
+          "title": "19a. Репутация Гоши +350",
+          "x": 7600,
+          "y": 120,
+          "sockets": [
+            {
+              "socketId": "add-reputation-gosha.in",
+              "name": "Вход",
+              "direction": "Input",
+              "flowKind": "Normal"
+            },
+            {
+              "socketId": "add-reputation-gosha.out",
+              "name": "Далее",
+              "direction": "Output",
+              "flowKind": "Normal"
+            }
+          ],
+          "parameters": {
+            "npcId": "gosha",
+            "amount": "350"
+          }
+        },
+        {
+          "nodeId": "end-ruslan-meat",
+          "nodeType": "End",
+          "title": "20. Конец — игрок свободен",
+          "x": 8000,
+          "y": 120,
+          "parameters": {},
+          "sockets": [
+            {
+              "socketId": "end-ruslan-meat.in",
+              "name": "Вход",
+              "direction": "Input",
+              "flowKind": "Normal"
+            }
+          ]
+        }
+      ],
+      "connections": [
+        {
+          "fromNodeId": "start",
+          "fromSocketId": "start.out",
+          "toNodeId": "status-active",
+          "toSocketId": "status-active.in"
+        },
+        {
+          "fromNodeId": "status-active",
+          "fromSocketId": "status-active.out",
+          "toNodeId": "step-meet-ruslan",
+          "toSocketId": "step-meet-ruslan.in"
+        },
+        {
+          "fromNodeId": "step-meet-ruslan",
+          "fromSocketId": "step-meet-ruslan.out",
+          "toNodeId": "scene-ruslan-start",
+          "toSocketId": "scene-ruslan-start.in"
+        },
+        {
+          "fromNodeId": "scene-ruslan-start",
+          "fromSocketId": "scene-ruslan-start.out",
+          "toNodeId": "step-offer-answered",
+          "toSocketId": "step-offer-answered.in"
+        },
+        {
+          "fromNodeId": "step-offer-answered",
+          "fromSocketId": "step-offer-answered.out",
+          "toNodeId": "condition-offer",
+          "toSocketId": "condition-offer.in"
+        },
+        {
+          "fromNodeId": "condition-offer",
+          "fromSocketId": "condition-offer.true",
+          "toNodeId": "step-find-gosha",
+          "toSocketId": "step-find-gosha.in"
+        },
+        {
+          "fromNodeId": "step-find-gosha",
+          "fromSocketId": "step-find-gosha.out",
+          "toNodeId": "interaction-gosha",
+          "toSocketId": "interaction-gosha.in"
+        },
+        {
+          "fromNodeId": "interaction-gosha",
+          "fromSocketId": "interaction-gosha.out",
+          "toNodeId": "scene-gosha",
+          "toSocketId": "scene-gosha.in"
+        },
+        {
+          "fromNodeId": "scene-gosha",
+          "fromSocketId": "scene-gosha.out",
+          "toNodeId": "step-gosha-answered",
+          "toSocketId": "step-gosha-answered.in"
+        },
+        {
+          "fromNodeId": "step-gosha-answered",
+          "fromSocketId": "step-gosha-answered.out",
+          "toNodeId": "condition-gosha",
+          "toSocketId": "condition-gosha.in"
+        },
+        {
+          "fromNodeId": "condition-gosha",
+          "fromSocketId": "condition-gosha.true",
+          "toNodeId": "give-meat",
+          "toSocketId": "give-meat.in"
+        },
+        {
+          "fromNodeId": "give-meat",
+          "fromSocketId": "give-meat.out",
+          "toNodeId": "step-return",
+          "toSocketId": "step-return.in"
+        },
+        {
+          "fromNodeId": "step-return",
+          "fromSocketId": "step-return.out",
+          "toNodeId": "interaction-ruslan-return",
+          "toSocketId": "interaction-ruslan-return.in"
+        },
+        {
+          "fromNodeId": "interaction-ruslan-return",
+          "fromSocketId": "interaction-ruslan-return.out",
+          "toNodeId": "condition-meat",
+          "toSocketId": "condition-meat.in"
+        },
+        {
+          "fromNodeId": "condition-meat",
+          "fromSocketId": "condition-meat.true",
+          "toNodeId": "scene-ruslan-finish",
+          "toSocketId": "scene-ruslan-finish.in"
+        },
+        {
+          "fromNodeId": "scene-ruslan-finish",
+          "fromSocketId": "scene-ruslan-finish.out",
+          "toNodeId": "condition-finish",
+          "toSocketId": "condition-finish.in"
+        },
+        {
+          "fromNodeId": "condition-finish",
+          "fromSocketId": "condition-finish.true",
+          "toNodeId": "remove-meat",
+          "toSocketId": "remove-meat.in"
+        },
+        {
+          "fromNodeId": "remove-meat",
+          "fromSocketId": "remove-meat.out",
+          "toNodeId": "add-reputation",
+          "toSocketId": "add-reputation.in"
+        },
+        {
+          "fromNodeId": "add-reputation",
+          "fromSocketId": "add-reputation.out",
+          "toNodeId": "add-reputation-gosha",
+          "toSocketId": "add-reputation-gosha.in"
+        },
+        {
+          "fromNodeId": "add-reputation-gosha",
+          "fromSocketId": "add-reputation-gosha.out",
+          "toNodeId": "end-ruslan-meat",
+          "toSocketId": "end-ruslan-meat.in"
+        }
+      ]
+    },
+    "sceneIds": [
+      "ruslan_start",
+      "gosha_meat",
+      "ruslan_finish"
+    ],
+    "activation": {
+      "mode": "Proximity",
+      "worldPointId": "city:ekat",
+      "radius": 1500,
+      "repeatable": false
+    },
+    "version": 2
+  }
+}
