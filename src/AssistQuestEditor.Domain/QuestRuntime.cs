@@ -386,6 +386,15 @@ public sealed class QuestRuntime : IQuestRuntimeController
                     MoveToFirstOutput(node);
                     break;
 
+                case "notify":
+                    Publish(
+                        "QuestNotification",
+                        "QuestRuntime",
+                        node.NodeId,
+                        GetParameter(node, "message", node.Title));
+                    MoveToFirstOutput(node);
+                    break;
+
                 case "dialoguescene":
                     if (_sceneRuntime is null)
                     {
