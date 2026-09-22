@@ -2,6 +2,6 @@ namespace AssistQuestEditor.App;
 
 public static class VersionInfo
 {
-    public const string NumericVersion = "1.0.40.132";
-    public const string InformationalVersion = "1.0.40.132-QUEST-SCENE-EDITOR-R2";
+    public const string NumericVersion = "1.0.40.133";
+    public const string InformationalVersion = "1.0.40.133-RESOURCE-FORMATS-R1";
 }
