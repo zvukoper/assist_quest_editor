@@ -11,10 +11,10 @@
     <Prefer32Bit>false</Prefer32Bit>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
 
-    <Version>1.0.40.132</Version>
-    <AssemblyVersion>1.0.40.132</AssemblyVersion>
-    <FileVersion>1.0.40.132</FileVersion>
-    <AssemblyInformationalVersion>1.0.40.132-QUEST-SCENE-EDITOR-R2</AssemblyInformationalVersion>
+    <Version>1.0.40.133</Version>
+    <AssemblyVersion>1.0.40.133</AssemblyVersion>
+    <FileVersion>1.0.40.133</FileVersion>
+    <AssemblyInformationalVersion>1.0.40.133-RESOURCE-FORMATS-R1</AssemblyInformationalVersion>
     <PublishSingleFile>true</PublishSingleFile>
     <SelfContained>true</SelfContained>
     <RuntimeIdentifier>win-x64</RuntimeIdentifier>
