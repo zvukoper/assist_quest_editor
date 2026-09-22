@@ -154,7 +154,7 @@ public static class FileAssociationRegistry
                 }
             }
 
-            using var shell = progIdKey.CreateSubKey("shell\open\command");
+            using var shell = progIdKey.CreateSubKey(@"shell\open\command");
             shell?.SetValue(
                 null,
                 QuotePath(exePath) + " \"%1\"",
@@ -353,7 +353,7 @@ public static class FileAssociationRegistry
             EndCap = LineCap.Round
         };
         var q = new RectangleF(size - S(23f), size - S(20f), S(10f), S(10f));
-        g.DrawArc(q, 35, 290, qPen);
+        g.DrawArc(qPen, q, 35, 290);
         g.DrawLine(qPen, size - S(16f), size - S(15f), size - S(12f), size - S(11f));
     }
 
@@ -395,8 +395,8 @@ public static class FileAssociationRegistry
         };
         var cx = size - S(16f);
         var cy = size - S(16f);
-        g.DrawArc(new RectangleF(cx - S(8f), cy - S(8f), S(16f), S(16f)), 25, 180, sPen);
-        g.DrawArc(new RectangleF(cx - S(8f), cy - S(8f), S(16f), S(16f)), 205, 170, sPen);
+        g.DrawArc(sPen, new RectangleF(cx - S(8f), cy - S(8f), S(16f), S(16f)), 25, 180);
+        g.DrawArc(sPen, new RectangleF(cx - S(8f), cy - S(8f), S(16f), S(16f)), 205, 170);
 
         using var line = new Pen(Color.FromArgb(170, 180, 192), S(2.3f))
         {
