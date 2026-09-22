@@ -4,7 +4,7 @@ namespace AssistQuestEditor.App;
 
 public static class FileAssociationRegistry
 {
-    private const string ClassesRoot = @"SoftwareClasses";
+    private const string ClassesRoot = "Software" + (char)92 + "Classes";
     private const string ApplicationName = "AssistQuestEditor";
 
     public static void Register()
