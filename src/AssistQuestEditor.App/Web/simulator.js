@@ -66,6 +66,15 @@
   const INACTIVE_PLATE_STROKE = "rgba(150,155,165,.45)";
   const INACTIVE_PLATE_TEXT = "#e6eaee";
   const INACTIVE_POINT_COLOR = "#6d7480";
+  // Активный квест: тёмная непрозрачная плашка и светлый акцентный текст.
+  //
+  // Раньше фон был акцентным оранжевым на 25% прозрачности, а текст чёрным.
+  // Поскольку такой фон смешивается с тёмной картой, на деле плашка выходила
+  // почти чёрной — и чёрный текст на ней не читался, название квеста выглядело
+  // «выключенным». Непрозрачный фон даёт стабильный контраст независимо от
+  // того, что нарисовано под плашкой.
+  const ACTIVE_PLATE_FILL = "rgba(12,15,20,.94)";
+  const ACTIVE_PLATE_TEXT = "#ffce6a";
 
   function formatPosition(position) {
     if (!position) return "—";
@@ -554,8 +563,8 @@
 
   /**
    * Плашка названия квеста: название переносится по словам, затем разделитель,
-   * затем статус и этап. Ширина вдвое меньше прежней, фон — акцентный
-   * оранжевый на 25% прозрачности с чёрным текстом и удвоенной тенью.
+   * затем статус и этап. Фон — тёмный непрозрачный (акцентный оранжевый на нём
+   * читается только по рамке и подписям, см. константы плашки).
    */
   function drawQuestPlate(ctx, entry, centerX, topY, active) {
     const size = visibleSize();
@@ -589,7 +598,7 @@
 
     ctx.beginPath();
     ctx.roundRect(x, y, boxWidth, boxHeight, 5);
-    ctx.fillStyle = active ? withAlpha(ACCENT_COLOR, .25) : INACTIVE_PLATE_FILL;
+    ctx.fillStyle = active ? ACTIVE_PLATE_FILL : INACTIVE_PLATE_FILL;
     ctx.fill();
     ctx.shadowColor = "transparent";
     ctx.shadowBlur = 0;
@@ -618,7 +627,7 @@
     ctx.font = "700 9px Open Sans, Arial, sans-serif";
     for (const line of titleLines) {
       strokeAndFillText(ctx, line, x + QUEST_PLATE_PADDING, cursorY,
-        active ? "#000000" : INACTIVE_PLATE_TEXT, "rgba(0,0,0,.85)");
+        active ? ACTIVE_PLATE_TEXT : INACTIVE_PLATE_TEXT, "rgba(0,0,0,.85)");
       cursorY += QUEST_PLATE_LINE_HEIGHT;
     }
 
@@ -635,7 +644,7 @@
       ctx.font = "600 8px Open Sans, Arial, sans-serif";
       for (const line of statusLines) {
         strokeAndFillText(ctx, line, x + QUEST_PLATE_PADDING, cursorY,
-          active ? "#000000" : INACTIVE_PLATE_TEXT, "rgba(0,0,0,.85)");
+          active ? ACTIVE_PLATE_TEXT : INACTIVE_PLATE_TEXT, "rgba(0,0,0,.85)");
         cursorY += 10;
       }
     }

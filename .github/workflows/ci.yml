@@ -72,6 +72,12 @@ jobs:
         shell: pwsh
         run: node ci/catalog_reload_smoke.mjs
 
+      - name: Читаемость плашки квеста
+        id: quest_plate_smoke
+        continue-on-error: true
+        shell: pwsh
+        run: node ci/quest_plate_smoke.mjs
+
       - name: Quest Graph Playwright smoke
         id: quest_graph_smoke
         continue-on-error: true
