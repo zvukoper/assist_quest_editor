@@ -207,7 +207,8 @@ public sealed record QuestDefinition(
 
 public sealed record QuestDefinitionDocument(
     int SchemaVersion,
-    QuestDefinition Definition);
+    QuestDefinition Definition,
+    string Format = "aqquest");
 
 public sealed record DataChannelDescriptor(
     string Key,
