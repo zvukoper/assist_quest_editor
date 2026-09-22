@@ -28,7 +28,10 @@ public sealed class QuestRuntimeStressTests
 
             Assert.Equal(count, result.WaitingBeforeEvent);
             Assert.Equal(count, result.CompletedAfterMatchingEvent);
-            Assert.Equal(count + 1, result.FinalQuestStatusCount);
+            // Каждый runtime добавляет в канал ровно одну запись о себе, поэтому
+            // итог считается от исходного набора канала, а не от жёсткой единицы:
+            // набор засеян реальными квестами песочницы и может расти.
+            Assert.Equal(count + result.InitialQuestStatusCount, result.FinalQuestStatusCount);
 
             _output.WriteLine(
                 $"N={count}; create={result.CreateMilliseconds:F2} ms; " +
@@ -51,6 +54,7 @@ public sealed class QuestRuntimeStressTests
         var createWatch = Stopwatch.StartNew();
         var adapter = new SimulatorDataSourceAdapter(Array.Empty<WorldPoint>());
         var hub = adapter.Channels;
+        var initialQuestStatusCount = hub.Get<QuestStatusesState>("quest-statuses").Value.Quests.Count;
         var runtimes = new List<QuestRuntime>(runtimeCount);
 
         for (var index = 0; index < runtimeCount; index++)
@@ -110,7 +114,8 @@ public sealed class QuestRuntimeStressTests
             finalQuestStatusCount,
             (GC.GetTotalAllocatedBytes(false) - allocatedBefore) / 1024d / 1024d,
             GC.GetTotalMemory(false) / 1024d / 1024d,
-            process.WorkingSet64 / 1024d / 1024d);
+            process.WorkingSet64 / 1024d / 1024d,
+            initialQuestStatusCount);
     }
 
     private static QuestRuntime CreateWaitingRuntime(IDataChannelHub hub, int index)
@@ -199,5 +204,6 @@ public sealed class QuestRuntimeStressTests
         int FinalQuestStatusCount,
         double ManagedAllocatedMegabytes,
         double ManagedHeapAfterMegabytes,
-        double WorkingSetAfterMegabytes);
+        double WorkingSetAfterMegabytes,
+        int InitialQuestStatusCount);
 }

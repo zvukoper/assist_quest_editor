@@ -97,10 +97,8 @@ public sealed class QuestRuntimeCoordinator : IQuestRuntimeController
         else
             _enabledQuestIds.Remove(questId);
 
-        AppLogger.Info(
-            "Quest Runtime: изменена активация квеста.",
-            $"questId={questId}; enabled={enabled}");
-
+        // Логирование действия выполняет слой приложения: Domain не знает о его
+        // логгере и не должен зависеть от него.
         if (!enabled &&
             _activeRuntime is not null &&
             _activeRuntime.State.QuestId.Equals(questId, StringComparison.OrdinalIgnoreCase))
@@ -191,17 +189,22 @@ public sealed class QuestRuntimeCoordinator : IQuestRuntimeController
             DisposeActiveRuntime();
         }
 
-        _activeRuntime = new QuestRuntime(
+        var runtime = new QuestRuntime(
             new QuestGraphStore(definition.Graph),
             _hub,
             _sceneRuntime);
 
-        _activeRuntime.Published += ActiveRuntime_Published;
-        _activeRuntime.SetSimulationRunning(_simulationRunning);
-        _lastState = _activeRuntime.State;
-        _activeRuntime.Start();
+        _activeRuntime = runtime;
+        runtime.Published += ActiveRuntime_Published;
+        runtime.SetSimulationRunning(_simulationRunning);
+        _lastState = runtime.State;
+        runtime.Start();
 
-        return _activeRuntime.State.Status is
+        // Start() может завершить квест сразу: граф, который идёт из Start прямо в
+        // End, дойдёт до конца в первом же проходе. Обработчик события в этом
+        // случае уже освободил активный runtime, и поле _activeRuntime равно null.
+        // Состояние поэтому читается из локальной ссылки, а не из поля.
+        return runtime.State.Status is
             QuestRuntimeStatus.Running or
             QuestRuntimeStatus.Waiting or
             QuestRuntimeStatus.Completed;
@@ -319,10 +322,13 @@ public sealed class QuestRuntimeCoordinator : IQuestRuntimeController
             }
         }
 
+        // Канал хранит QuestStatusesState, а не массив: без обёртки Set получает
+        // несовместимый тип, и канал нельзя записать.
         _hub.Get<QuestStatusesState>("quest-statuses").Set(
-            current.Values
-                .OrderBy(item => item.QuestId, StringComparer.OrdinalIgnoreCase)
-                .ToArray(),
+            new QuestStatusesState(
+                current.Values
+                    .OrderBy(item => item.QuestId, StringComparer.OrdinalIgnoreCase)
+                    .ToArray()),
             "QuestRuntimeCoordinator");
     }
 

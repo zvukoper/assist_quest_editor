@@ -489,7 +489,9 @@ public sealed class MainForm : WebViewForm
         switch (e.Action)
         {
             case "graph_open_scene":
-                OpenSceneFromQuestNode(e.NodeId);
+                // Источник нужен, чтобы вернуть Scene в тот Quest, из которого ушли:
+                // открытых нодовых редакторов может быть несколько.
+                OpenSceneFromQuestNode(e.NodeId, sender as EditorForm);
                 break;
             case "navigate_to_quest_node":
                 OpenQuestNodeFromScene(e.NodeId, e.QuestId, e.QuestPath);
@@ -497,7 +499,7 @@ public sealed class MainForm : WebViewForm
         }
     }
 
-    private void OpenSceneFromQuestNode(string nodeId)
+    private void OpenSceneFromQuestNode(string nodeId, EditorForm? sourceEditor)
     {
         var node = _questGraph.FindNode(nodeId);
         if (node is null)
@@ -545,7 +547,7 @@ public sealed class MainForm : WebViewForm
                 node.NodeId,
                 node.Title,
                 _questGraph.Value.Id,
-                sender is EditorForm sourceEditor ? sourceEditor.CurrentQuestPath : null);
+                sourceEditor?.CurrentQuestPath);
         }
         catch (Exception ex)
         {
