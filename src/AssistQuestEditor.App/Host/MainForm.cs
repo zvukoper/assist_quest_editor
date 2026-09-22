@@ -34,6 +34,7 @@ public sealed class MainForm : WebViewForm
             ? ruslanStart
             : _sceneCatalog.Scenes.FirstOrDefault() ?? SceneCatalogFactory.CreateStarter().Scenes.First();
         _sceneGraph = new SceneGraphStore(initialScene);
+        _sceneCatalog.Changed += SceneCatalog_Changed;
         _sceneRuntime = new SceneRuntime(_sceneCatalog, _hub);
         _runtime = new QuestRuntime(_questGraph, _hub, _sceneRuntime);
         _sceneRuntime.Published += SceneRuntime_Published;
@@ -42,6 +43,7 @@ public sealed class MainForm : WebViewForm
         {
             BrowserReady -= MainForm_BrowserReady;
             _sceneRuntime.Published -= SceneRuntime_Published;
+            _sceneCatalog.Changed -= SceneCatalog_Changed;
 
             foreach (var editor in _editors.Values.ToArray())
             {
@@ -205,6 +207,15 @@ public sealed class MainForm : WebViewForm
             state,
             message
         }));
+    }
+
+    private void SceneCatalog_Changed(object? sender, EventArgs e)
+    {
+        foreach (var editor in _editors.Values.ToArray())
+        {
+            if (!editor.IsDisposed)
+                editor.RefreshSceneCatalog();
+        }
     }
 
     private void SceneRuntime_Published(object? sender, SceneRuntimeEvent e)
