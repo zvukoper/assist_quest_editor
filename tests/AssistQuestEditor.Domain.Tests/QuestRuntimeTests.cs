@@ -363,6 +363,46 @@ public sealed class QuestRuntimeTests
     }
 
     [Fact]
+    public void SceneDialogueRejectsStaleRequestAndWaitsForValidContinue()
+    {
+        var hub = new SimulatorDataSourceAdapter(Array.Empty<WorldPoint>()).Channels;
+        var sceneRuntime = new SceneRuntime(SceneCatalogFactory.CreateStarter(), hub);
+
+        Assert.True(sceneRuntime.Start("ruslan_start"));
+        var dialogue = hub.Get<InterfaceState>("interfaces").Value.ActiveDialogue;
+        Assert.NotNull(dialogue);
+        Assert.Equal(SceneRuntimeStatus.Waiting, sceneRuntime.State.Status);
+        Assert.Equal("Dialogue", sceneRuntime.State.WaitingFor);
+
+        hub.Events.Publish(new SimulatorEvent(
+            "DialogueContinue",
+            DateTimeOffset.UtcNow,
+            "Interface",
+            new Dictionary<string, string>
+            {
+                ["requestId"] = "stale-request"
+            }));
+
+        Assert.Equal(SceneRuntimeStatus.Waiting, sceneRuntime.State.Status);
+        Assert.Equal("Dialogue", sceneRuntime.State.WaitingFor);
+        Assert.NotNull(hub.Get<InterfaceState>("interfaces").Value.ActiveDialogue);
+
+        hub.Events.Publish(new SimulatorEvent(
+            "DialogueContinue",
+            DateTimeOffset.UtcNow,
+            "Interface",
+            new Dictionary<string, string>
+            {
+                ["requestId"] = dialogue!.RequestId
+            }));
+
+        Assert.Equal(SceneRuntimeStatus.Waiting, sceneRuntime.State.Status);
+        Assert.Equal("Choice", sceneRuntime.State.WaitingFor);
+        Assert.Null(hub.Get<InterfaceState>("interfaces").Value.ActiveDialogue);
+        Assert.NotNull(hub.Get<InterfaceState>("interfaces").Value.ActiveDialog);
+    }
+
+    [Fact]
     public void DialogueSceneOrchestratesSceneRuntimeAndStoresChoice()
     {
         var start = Node("start", "Start");
