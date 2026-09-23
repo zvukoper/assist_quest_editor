@@ -79,7 +79,7 @@ $script:HeartbeatPath = Join-Path $script:StateDir 'monitor.heartbeat'
 # Значение фиксировано: publish присутствует всегда (как «пропущено»), поэтому
 # число не зависит от -IncludePublish.
 # Держать в актуальном состоянии при добавлении/удалении Invoke-Check.
-$script:TotalChecks = 29
+$script:TotalChecks = 30
 
 # Подавление уведомления скрипта. Вызывающий скрипт может взять уведомление на
 # себя: pull.ps1 показывает одно уведомление с учётом признака активности
@@ -560,6 +560,13 @@ Invoke-Check -Name 'Dialogue Workspace UI smoke' -Body {
     node ci/dialogue_workspace_smoke.mjs
 }
 
+# Левый сайдбар выбирает содержимое рабочей области ЭТОГО ЖЕ окна, а не открывает
+# второе окно (концепция File Editor в WolvenKit). Проверка ловит возврат к
+# прежнему поведению, когда клик по сайдбару отправлял open_editor.
+Invoke-Check -Name 'Sidebar pane switch' -Body {
+    node ci/sidebar_pane_smoke.mjs
+}
+
 
 # Шаг 5.2.1: интерфейсный слой Scene Runtime (Dialogue Continue + Choice).
 # Та же причина, что и у проверки выше: она была только в GitHub Actions.
@@ -651,13 +658,21 @@ Invoke-Check -Name 'Синхронизация ресурсов data' -Body {
 }
 
 # Шаг 6: синтаксис web JavaScript.
+# Список обязан покрывать ВСЕ скрипты, которые подключает WebView: пропущенный
+# файл не ловит даже ошибка синтаксиса, и панель просто остаётся пустой
+# (именно так locationEditor.js был сломан с самого создания редактора —
+# лишний `+` перед `:` в тернарном операторе, из-за чего скрипт не загружался
+# целиком и редактор локаций показывал «Ожидание Quest Graph от Host…»).
 Invoke-Check -Name 'Синтаксис web JavaScript' -Body {
     $files = @(
         '.\src\AssistQuestEditor.App\Web\main.js',
         '.\src\AssistQuestEditor.App\Web\editor.js',
         '.\src\AssistQuestEditor.App\Web\sceneEditor.js',
         '.\src\AssistQuestEditor.App\Web\dialogueWorkspace.js',
-        '.\src\AssistQuestEditor.App\Web\simulator.js'
+        '.\src\AssistQuestEditor.App\Web\locationEditor.js',
+        '.\src\AssistQuestEditor.App\Web\interface.js',
+        '.\src\AssistQuestEditor.App\Web\simulator.js',
+        '.\src\AssistQuestEditor.App\Web\web_log.js'
     )
 
     foreach ($file in $files) {

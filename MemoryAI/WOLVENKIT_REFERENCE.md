@@ -232,6 +232,26 @@ WolvenKit решает другую задачу: authoring и исследов�
 
 Следствие для Assist Quest Editor: canonical Scene resource должен быть самостоятельным от Quest Graph; interface adapter получает presentation request/result, а stable option IDs важнее порядкового индекса. Первый SceneRuntime сознательно упрощает screenplay/localization до game-agnostic SceneDialogue/SceneChoiceOption; полноценный localization store не смешивается с этим runtime срезом.
 
+## 9. Navigation reference check — 2026-09-23
+
+Проверено как WolvenKit организует рабочее пространство File Editor (источник:
+https://wiki.redmodding.org/wolvenkit/wolvenkit-app/editor/file-editor).
+
+Подтверждено:
+
+- слева дерево (tree view) ресурсов/документов, справа панель редактора; выбор узла
+  дерева задаёт содержимое правой панели — это селектор, а не «открыть новое окно»;
+- документы открываются вкладками внутри того же окна; вкладки показывают `*` у
+  несохранённого документа («Unsaved files will have an asterisk next to their name
+  in the editor tab»);
+- отдельное плавающее окно — это опция докинга/раскладки, а не основной способ
+  навигации.
+
+Следствие для Assist Quest Editor: левый сайдбар обязан переключать панель в текущем
+окне (`activate_pane` / `active_pane`), а создание новых окон — отдельное явное
+действие пользователя (кнопка «Открыть» в главной форме). Регрессия закреплена
+`ci/sidebar_pane_smoke.mjs`.
+
 ## 7. Первичный набор источников для повторной сверки
 
 - Repository: https://github.com/WolvenKit/WolvenKit

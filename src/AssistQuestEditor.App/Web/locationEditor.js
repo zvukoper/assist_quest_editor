@@ -399,7 +399,7 @@
                   : "<div class='notice' style='margin-top:8px'>Критериев пока нет. Без критериев Sandbox выбирает произвольную точку из WorldState.</div>") +
               "</div>" +
               "<button class='toolButton primary' id='addCriterion' style='margin-top:8px'>Добавить критерий</button>" +
-            "</div>" +
+            "</div>"
           : "<div class='card' style='margin-top:12px'>" +
               "<div class='miniLabel'>Фиксированная точка</div>" +
               "<div class='toolbar' style='margin-top:7px;gap:6px;flex-wrap:wrap'>" +

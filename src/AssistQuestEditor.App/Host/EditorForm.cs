@@ -26,10 +26,33 @@ public sealed class EditorForm : WebViewForm
     private readonly IQuestRuntimeController _runtime;
     private readonly LocationStore _locationStore;
     private readonly HashSet<string> _executedNodeIds = new(StringComparer.OrdinalIgnoreCase);
-    private readonly bool _isGraphEditor;
-    private readonly bool _isSceneEditor;
-    private readonly bool _isDialogueWorkspace;
-    private readonly bool _isLocationEditor;
+
+    /// <summary>
+    /// Активная панель окна. Левый сайдбар — это селектор того, что показано в
+    /// рабочей области, а не переключатель окон (так же устроен File Editor в
+    /// WolvenKit: tree view слева выбирает содержимое правой части).
+    ///
+    /// Раньше окно жёстко принадлежало одному контексту (`_isGraphEditor`,
+    /// `_isSceneEditor`, `_isLocationEditor`), поэтому клик по сайдбару вынужденно
+    /// открывал ВТОРОЕ окно. Сторы всех редакторов и так переданы сюда, поэтому
+    /// контекст можно менять на месте, не теряя состояние документов.
+    /// </summary>
+    private string _activePane;
+
+    private bool IsGraph => _activePane.Equals("graph", StringComparison.OrdinalIgnoreCase);
+
+    private bool IsDialogue => _activePane.Equals("dialogue", StringComparison.OrdinalIgnoreCase);
+
+    private bool IsScene =>
+        _activePane.Equals("scene", StringComparison.OrdinalIgnoreCase) || IsDialogue;
+
+    private bool IsLocation =>
+        _activePane.Equals("locations", StringComparison.OrdinalIgnoreCase) ||
+        _activePane.Equals("location", StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>Страница, которую это окно показывает прямо сейчас.</summary>
+    public string ActivePanePage => "editor.html#" + _activePane;
+
     private string? _currentDefinitionPath;
     private string? _currentLocationPath;
     private LocationDefinition? _currentLocationDefinition;
@@ -78,7 +101,7 @@ public sealed class EditorForm : WebViewForm
     public string WindowKey { get; }
 
     public string? CurrentQuestPath =>
-        _isGraphEditor ? _currentDefinitionPath : null;
+        IsGraph ? _currentDefinitionPath : null;
 
     public EditorForm(
         string title,
@@ -104,14 +127,7 @@ public sealed class EditorForm : WebViewForm
         _locationStore = locationStore ?? throw new ArgumentNullException(nameof(locationStore));
         var preferences = AppUiPreferencesStore.Load();
         _lastDefinitionPath = preferences.LastQuestDefinitionPath;
-        _isGraphEditor = page.EndsWith("#graph", StringComparison.OrdinalIgnoreCase);
-        _isSceneEditor =
-            page.EndsWith("#scene", StringComparison.OrdinalIgnoreCase) ||
-            page.EndsWith("#dialogue", StringComparison.OrdinalIgnoreCase);
-        _isDialogueWorkspace = page.EndsWith("#dialogue", StringComparison.OrdinalIgnoreCase);
-        _isLocationEditor =
-            page.EndsWith("#locations", StringComparison.OrdinalIgnoreCase) ||
-            page.EndsWith("#location", StringComparison.OrdinalIgnoreCase);
+        _activePane = NormalizePane(PaneFromPage(page));
 
         _player.Changed += Player_Changed;
         _selection.Changed += Selection_Changed;
@@ -132,32 +148,181 @@ public sealed class EditorForm : WebViewForm
         };
     }
 
-    public void RefreshSceneCatalog()
+    /// <summary>
+    /// Переключает активную панель окна без открытия второго окна: сайдбар
+    /// выбирает содержимое рабочей области (концепция File Editor в WolvenKit).
+    ///
+    /// Состояние документов не теряется: каждый стор остаётся тем же объектом,
+    /// сюда лишь заново отправляется payload активной панели.
+    /// </summary>
+    /// <returns>false, если панель неизвестна или переключение отменено.</returns>
+    public bool ActivatePane(string pane)
     {
-        if (_isGraphEditor || _isSceneEditor)
-            PostSceneCatalog();
+        var target = NormalizePane(pane);
+        if (string.IsNullOrWhiteSpace(target))
+            return false;
+
+        if (target.Equals(_activePane, StringComparison.OrdinalIgnoreCase))
+        {
+            // Повторный выбор той же панели: подтверждение не нужно, но UI мог
+            // разойтись с Host, поэтому состояние отправляется заново.
+            PostActivePane();
+            return true;
+        }
+
+        // Переключение уводит от текущего документа, поэтому несохранённые
+        // изменения нужно подтвердить так же, как при закрытии окна.
+        if (!ConfirmPaneSwitch())
+        {
+            // Отмена: UI вернётся к фактически активной панели, чтобы вкладка
+            // сайдбара не показывала панель, которую пользователь не получил.
+            PostActivePane();
+            return false;
+        }
+
+        _activePane = target;
+        UpdateWindowTitle();
+        PostActivePane();
+
+        AppLogger.Info(
+            "Editor: переключена активная панель.",
+            "pane=" + _activePane + "; form=" + Text);
+        return true;
     }
 
-    public void RefreshLocationCatalog()
+    /// <summary>Имя панели редактора по странице вида `editor.html#graph`.</summary>
+    private static string PaneFromPage(string page)
     {
-        if (_isGraphEditor)
+        var hashIndex = page.IndexOf('#');
+        return hashIndex >= 0 && hashIndex < page.Length - 1
+            ? page[(hashIndex + 1)..]
+            : "graph";
+    }
+
+    /// <summary>
+    /// Приводит имя панели к известному виду. Панели, которые обслуживаются этим
+    /// же окном, остаются как есть; неизвестное имя не переключает контекст.
+    /// </summary>
+    private static string NormalizePane(string pane) =>
+        pane.Trim().ToLowerInvariant() switch
         {
+            "graph" => "graph",
+            "scene" => "scene",
+            "dialogue" => "dialogue",
+            "locations" or "location" => "locations",
+            var other => other
+        };
+
+    /// <summary>
+    /// Есть ли у панели собственный Host-контекст (стор + payload).
+    /// Информационные панели (channel/conditions/localization/...) живут внутри
+    /// контекста Quest Graph и отдельного окна не требуют.
+    /// </summary>
+    private static bool IsHostedPane(string pane) =>
+        pane is "graph" or "scene" or "dialogue" or "locations";
+
+    private bool ConfirmPaneSwitch()
+    {
+        if (IsGraph && _documentDirty)
+            return ConfirmDiscard("Quest Graph", () => SaveGraph(saveAs: false));
+
+        if (IsScene && _sceneDocument.IsDirty)
+            return ConfirmDiscard("Scene", () => SaveScene(saveAs: false));
+
+        if (IsLocation && _locationDirty)
+            return ConfirmDiscard("Location", () => SaveLocation());
+
+        return true;
+    }
+
+    /// <summary>
+    /// Общий диалог «сохранить/отбросить/отмена» для смены контекста.
+    /// Один метод, а не три копии: иначе ветки легко расходятся по поведению.
+    /// </summary>
+    private bool ConfirmDiscard(string subject, Func<bool> save)
+    {
+        var result = MessageBox.Show(
+            this,
+            "В текущем документе (" + subject + ") есть несохранённые изменения.\r\n\r\n" +
+            "Да — сохранить изменения.\r\n" +
+            "Нет — продолжить без сохранения.\r\n" +
+            "Отмена — остаться в текущем документе.",
+            "Несохранённые изменения",
+            MessageBoxButtons.YesNoCancel,
+            MessageBoxIcon.Warning,
+            MessageBoxDefaultButton.Button1);
+
+        if (result == DialogResult.Cancel)
+            return false;
+
+        return result != DialogResult.Yes || save();
+    }
+
+    /// <summary>Отправляет в UI payload активной панели.</summary>
+    private void PostActivePane()
+    {
+        if (Browser.CoreWebView2 is null)
+            return;
+
+        // Активная панель сообщается явно: hash в UI — только отражение решения
+        // Host. Иначе отказ от переключения (несохранённые изменения) оставил бы
+        // вкладку сайдбара на панели, которую пользователь не получил.
+        PostJson(JsonSerializer.Serialize(new
+        {
+            type = "active_pane",
+            pane = _activePane
+        }, WebJsonOptions));
+
+        if (IsGraph)
+        {
+            // Каталог сцен уходит внутри PostQuestGraph: Reference Picker графа
+            // получает его тем же сообщением.
             PostQuestGraph();
+            PostRuntimeState();
+            PostRecentFiles();
             return;
         }
 
-        if (_isLocationEditor)
+        if (IsScene)
+        {
+            PostSceneCatalog();
+            PostSceneGraph();
+            return;
+        }
+
+        if (IsLocation)
         {
             _locationStore.Reload();
             PostLocationEditorState(includeWorldPoints: true);
         }
     }
 
-    /// <summary>Вид ресурса, историю которого ведёт этот редактор.</summary>
+    public void RefreshSceneCatalog()
+    {
+        if (IsGraph || IsScene)
+            PostSceneCatalog();
+    }
+
+    public void RefreshLocationCatalog()
+    {
+        if (IsGraph)
+        {
+            PostQuestGraph();
+            return;
+        }
+
+        if (IsLocation)
+        {
+            _locationStore.Reload();
+            PostLocationEditorState(includeWorldPoints: true);
+        }
+    }
+
+    /// <summary>Вид ресурса, историю которого ведёт активная панель.</summary>
     public string RecentFileKind =>
-        _isGraphEditor
+        IsGraph
             ? App.RecentFileKind.Quest
-            : _isSceneEditor
+            : IsScene
                 ? App.RecentFileKind.Scene
                 : string.Empty;
 
@@ -177,7 +342,7 @@ public sealed class EditorForm : WebViewForm
 
     public bool OpenQuestResourceAndSelectNode(string path, string nodeId)
     {
-        if (!_isGraphEditor)
+        if (!IsGraph)
             throw new InvalidOperationException("Возврат из Scene доступен только в Quest Graph editor.");
 
         if (string.IsNullOrWhiteSpace(path) || !File.Exists(path))
@@ -205,7 +370,7 @@ public sealed class EditorForm : WebViewForm
 
     public void FocusQuestNode(string nodeId)
     {
-        if (!_isGraphEditor)
+        if (!IsGraph)
             return;
 
         if (_questGraph.FindNode(nodeId) is null)
@@ -227,7 +392,7 @@ public sealed class EditorForm : WebViewForm
         string? questId,
         string? questPath)
     {
-        if (!_isSceneEditor)
+        if (!IsScene)
             throw new InvalidOperationException("Переход в Scene доступен только в Scene Editor.");
 
         if (string.IsNullOrWhiteSpace(nodeId))
@@ -250,9 +415,9 @@ public sealed class EditorForm : WebViewForm
 
         return resource.Kind switch
         {
-            "Quest" when _isGraphEditor => OpenGraphResource(path),
-            "Scene" when _isSceneEditor => OpenSceneResource(path),
-            "Location" when _isLocationEditor => OpenLocationResource(path),
+            "Quest" when IsGraph => OpenGraphResource(path),
+            "Scene" when IsScene => OpenSceneResource(path),
+            "Location" when IsLocation => OpenLocationResource(path),
             _ => throw new InvalidOperationException(
                 "Ресурс " + resource.Extension + " пока не поддерживается этим редактором.")
         };
@@ -278,7 +443,7 @@ public sealed class EditorForm : WebViewForm
 
     protected override void OnFormClosing(FormClosingEventArgs e)
     {
-        if (_isGraphEditor && _documentDirty)
+        if (IsGraph && _documentDirty)
         {
             var result = MessageBox.Show(
                 this,
@@ -304,7 +469,7 @@ public sealed class EditorForm : WebViewForm
             }
         }
 
-        if (_isSceneEditor && _sceneDocument.IsDirty)
+        if (IsScene && _sceneDocument.IsDirty)
         {
             var result = MessageBox.Show(
                 this,
@@ -330,7 +495,7 @@ public sealed class EditorForm : WebViewForm
             }
         }
 
-        if (_isLocationEditor && _locationDirty)
+        if (IsLocation && _locationDirty)
         {
             var result = MessageBox.Show(
                 this,
@@ -362,31 +527,13 @@ public sealed class EditorForm : WebViewForm
     protected override void OnBrowserReady()
     {
         PostSimulatorContext();
-        if (_isGraphEditor)
-        {
-            PostSceneCatalog();
-            PostQuestGraph();
-            PostRuntimeState();
-        }
 
-        if (_isSceneEditor)
-        {
-            PostSceneCatalog();
-            PostSceneGraph();
-        }
+        // Payload активной панели отправляется общим методом: он же используется
+        // при переключении панели через сайдбар, поэтому стартовое и последующее
+        // состояния не могут разойтись.
+        PostActivePane();
 
-        if (_isLocationEditor)
-        {
-            _locationStore.Reload();
-            PostLocationEditorState(includeWorldPoints: true);
-        }
-
-        // История последних файлов нужна обеим вкладкам: у нодового редактора
-        // и у редактора сцен свой список.
-        if (!_isLocationEditor)
-            PostRecentFiles();
-
-        if (_isGraphEditor && !string.IsNullOrWhiteSpace(_pendingQuestNodeSelection))
+        if (IsGraph && !string.IsNullOrWhiteSpace(_pendingQuestNodeSelection))
         {
             var nodeId = _pendingQuestNodeSelection;
             _pendingQuestNodeSelection = null;
@@ -411,7 +558,7 @@ public sealed class EditorForm : WebViewForm
             type = "recent_files",
             kind = RecentFileKind,
             paths,
-            currentPath = _isGraphEditor ? _currentDefinitionPath ?? string.Empty : _sceneDocument.CurrentPath ?? string.Empty
+            currentPath = IsGraph ? _currentDefinitionPath ?? string.Empty : _sceneDocument.CurrentPath ?? string.Empty
         }, WebJsonOptions));
     }
 
@@ -429,15 +576,30 @@ public sealed class EditorForm : WebViewForm
                 return;
             }
 
-            if (_isGraphEditor)
+            // Переключение панели сайдбаром — всегда операция этого окна, поэтому
+            // обрабатывается до диспетчеризации по активному контексту. Второе
+            // окно здесь не открывается никогда: сайдбар выбирает содержимое
+            // рабочей области, а не редактор-окно.
+            //
+            // Отмена переключения (несохранённые изменения) или неизвестная
+            // панель просто не меняют ничего: актуальное состояние вернёт
+            // PostActivePane из ActivatePane.
+            if (string.Equals(action, "activate_pane", StringComparison.OrdinalIgnoreCase))
+            {
+                var pane = root.TryGetProperty("pane", out var paneNode) ? paneNode.GetString() : null;
+                ActivatePane(pane ?? string.Empty);
+                return;
+            }
+
+            if (IsGraph)
             {
                 HandleGraphAction(root, action);
             }
-            else if (_isSceneEditor)
+            else if (IsScene)
             {
                 HandleSceneAction(root, action);
             }
-            else if (_isLocationEditor)
+            else if (IsLocation)
             {
                 HandleLocationAction(root, action);
             }
@@ -1349,7 +1511,7 @@ public sealed class EditorForm : WebViewForm
 
     private void PostLocationEditorState(bool includeWorldPoints)
     {
-        if (!_isLocationEditor || Browser.CoreWebView2 is null)
+        if (!IsLocation || Browser.CoreWebView2 is null)
             return;
 
         PostJson(JsonSerializer.Serialize(new
@@ -1730,7 +1892,7 @@ public sealed class EditorForm : WebViewForm
 
     private void PostSceneCatalog()
     {
-        if (!_isSceneEditor || Browser.CoreWebView2 is null)
+        if (!IsScene || Browser.CoreWebView2 is null)
             return;
 
         PostJson(JsonSerializer.Serialize(new
@@ -1746,7 +1908,7 @@ public sealed class EditorForm : WebViewForm
 
     private void PostSceneGraph(string? selectedNodeId = null)
     {
-        if (!_isSceneEditor || Browser.CoreWebView2 is null)
+        if (!IsScene || Browser.CoreWebView2 is null)
             return;
 
         PostJson(JsonSerializer.Serialize(new
@@ -1774,7 +1936,7 @@ public sealed class EditorForm : WebViewForm
 
     private void SceneGraph_Changed(object? sender, EventArgs e)
     {
-        if (!_isSceneEditor)
+        if (!IsScene)
             return;
 
         if (!_loadingScene)
@@ -1790,7 +1952,7 @@ public sealed class EditorForm : WebViewForm
 
     private void SceneDocument_Changed(object? sender, EventArgs e)
     {
-        if (!_isSceneEditor)
+        if (!IsScene)
             return;
 
         UpdateWindowTitle();
@@ -1813,7 +1975,7 @@ public sealed class EditorForm : WebViewForm
 
     private void Runtime_Published(object? sender, QuestRuntimeEvent e)
     {
-        if (!_isGraphEditor) return;
+        if (!IsGraph) return;
 
         if (e.EventType.Equals("RuntimeStarted", StringComparison.OrdinalIgnoreCase))
             _executedNodeIds.Clear();
@@ -1826,7 +1988,7 @@ public sealed class EditorForm : WebViewForm
 
     private void PostRuntimeState()
     {
-        if (!_isGraphEditor || Browser.CoreWebView2 is null) return;
+        if (!IsGraph || Browser.CoreWebView2 is null) return;
 
         PostJson(JsonSerializer.Serialize(new
         {
@@ -1851,7 +2013,7 @@ public sealed class EditorForm : WebViewForm
 
     private void UpdateWindowTitle()
     {
-        if (_isGraphEditor)
+        if (IsGraph)
         {
             var fileName = string.IsNullOrWhiteSpace(_currentDefinitionPath)
                 ? "Новый документ"
@@ -1860,19 +2022,19 @@ public sealed class EditorForm : WebViewForm
             return;
         }
 
-        if (_isSceneEditor)
+        if (IsScene)
         {
             var fileName = string.IsNullOrWhiteSpace(_sceneDocument.CurrentPath)
                 ? "Новый документ"
                 : Path.GetFileName(_sceneDocument.CurrentPath);
-            var prefix = _isDialogueWorkspace
+            var prefix = IsDialogue
                 ? "Рабочее пространство диалогов"
                 : "Редактор сцен";
             Text = $"{prefix} — {fileName}" + (_sceneDocument.IsDirty ? " *" : string.Empty);
             return;
         }
 
-        if (_isLocationEditor)
+        if (IsLocation)
         {
             var fileName = string.IsNullOrWhiteSpace(_currentLocationPath)
                 ? "Новая локация"
@@ -1890,7 +2052,7 @@ public sealed class EditorForm : WebViewForm
 
     private void PostQuestGraph(string? selectedNodeId = null)
     {
-        if (!_isGraphEditor || Browser.CoreWebView2 is null)
+        if (!IsGraph || Browser.CoreWebView2 is null)
         {
             return;
         }
@@ -1932,7 +2094,7 @@ public sealed class EditorForm : WebViewForm
 
     private void QuestGraph_Changed(object? sender, EventArgs e)
     {
-        if (_isGraphEditor)
+        if (IsGraph)
         {
             _documentDirty = true;
             UpdateWindowTitle();

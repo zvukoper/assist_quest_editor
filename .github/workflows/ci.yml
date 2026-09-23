@@ -156,6 +156,12 @@ jobs:
         shell: pwsh
         run: node ci/reputation_avatar_smoke.mjs
 
+      - name: Sidebar pane switch
+        id: sidebar_pane_smoke
+        continue-on-error: true
+        shell: pwsh
+        run: node ci/sidebar_pane_smoke.mjs
+
       - name: Проверить синтаксис web JavaScript
         id: web_syntax
         continue-on-error: true
@@ -165,7 +171,10 @@ jobs:
           node --check .\src\AssistQuestEditor.App\Web\editor.js
           node --check .\src\AssistQuestEditor.App\Web\sceneEditor.js
           node --check .\src\AssistQuestEditor.App\Web\dialogueWorkspace.js
+          node --check .\src\AssistQuestEditor.App\Web\locationEditor.js
+          node --check .\src\AssistQuestEditor.App\Web\interface.js
           node --check .\src\AssistQuestEditor.App\Web\simulator.js
+          node --check .\src\AssistQuestEditor.App\Web\web_log.js
 
 
       - name: .NET SDK
@@ -266,6 +275,7 @@ jobs:
           REPUTATION_FLOW_OUTCOME: ${{ steps.reputation_flow.outcome }}
           CAMPAIGN_INTEGRITY_OUTCOME: ${{ steps.campaign_integrity.outcome }}
           REPUTATION_AVATAR_OUTCOME: ${{ steps.reputation_avatar_smoke.outcome }}
+          SIDEBAR_PANE_SMOKE_OUTCOME: ${{ steps.sidebar_pane_smoke.outcome }}
           SCENE_INTERFACE_SMOKE_OUTCOME: ${{ steps.scene_interface_smoke.outcome }}
           WEB_SYNTAX_OUTCOME: ${{ steps.web_syntax.outcome }}
           DOTNET_SDK_OUTCOME: ${{ steps.dotnet_sdk.outcome }}
@@ -289,6 +299,7 @@ jobs:
             @{ Name = 'Campaign integrity'; Outcome = $env:CAMPAIGN_INTEGRITY_OUTCOME },
             @{ Name = 'Reputation content rules'; Outcome = $env:REPUTATION_FLOW_OUTCOME },
             @{ Name = 'Reputation avatar loads'; Outcome = $env:REPUTATION_AVATAR_OUTCOME },
+            @{ Name = 'Sidebar pane switch'; Outcome = $env:SIDEBAR_PANE_SMOKE_OUTCOME },
             @{ Name = 'Web JavaScript syntax'; Outcome = $env:WEB_SYNTAX_OUTCOME },
             @{ Name = '.NET SDK'; Outcome = $env:DOTNET_SDK_OUTCOME },
             @{ Name = '.NET build'; Outcome = $env:DOTNET_BUILD_OUTCOME },

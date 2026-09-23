@@ -115,15 +115,16 @@
     button.dataset.id = id;
     button.textContent = item.title;
     button.addEventListener("click", () => {
-      const from = currentId();
-      const hostGroup = editorHostGroup(from);
-      const targetGroup = editorHostGroup(id);
-
-      if (hostGroup !== targetGroup) {
-        send({ action: "open_editor", editor: id });
+      if (isHostedPane(id)) {
+        // Левая панель выбирает содержимое рабочей области ЭТОГО окна, поэтому
+        // панель с собственным Host-контекстом переключается на месте, а не
+        // открывает второе окно (так же устроен File Editor в WolvenKit).
+        send({ action: "activate_pane", pane: id });
         return;
       }
 
+      // Информационные панели рисуются из уже загруженного контекста: им
+      // достаточно собственного hash, Host-payload не нужен.
       location.hash = id;
       render();
     });
@@ -134,14 +135,11 @@
     return location.hash.slice(1).toLowerCase() || "graph";
   }
 
-  // Один WebView обслуживает несколько вспомогательных панелей, но Scene,
-  // Quest Graph и Location являются разными Host-контекстами. При переходе
-  // между ними нужно просить MainForm открыть соответствующее окно, иначе
-  // новый hash увидит старый Host и останется без нужного payload.
-  function editorHostGroup(id) {
-    if (id === "scene" || id === "dialogue") return "scene";
-    if (id === "locations") return "locations";
-    return "graph";
+  // Панели с собственным Host-контекстом: у каждой свой стор и свой payload.
+  // Один WebView показывает любую из них, но данные приходят из Host, поэтому
+  // переключение всегда идёт через activate_pane.
+  function isHostedPane(id) {
+    return id === "graph" || id === "scene" || id === "dialogue" || id === "locations";
   }
 
   function render() {
@@ -154,6 +152,15 @@
     nav.querySelectorAll(".navButton").forEach(button => {
       button.classList.toggle("active", button.dataset.id === id);
     });
+  }
+
+  // Host — источник истины о том, какая панель активна: hash только отражает его
+  // решение. Иначе после отказа от переключения (несохранённые изменения)
+  // вкладка в сайдбаре разошлась бы с содержимым рабочей области.
+  function setActivePane(pane) {
+    if (!pane) return;
+    location.hash = pane;
+    render();
   }
 
   function renderGraph(ws, ins) {
@@ -1925,6 +1932,10 @@
     if (data?.type === "scene_catalog") {
       sceneCatalog = Array.isArray(data.scenes) ? data.scenes : [];
       if (currentId() === "graph") render();
+      return;
+    }
+    if (data?.type === "active_pane") {
+      setActivePane(String(data.pane || "").toLowerCase());
       return;
     }
     if (data?.type === "quest_graph") {

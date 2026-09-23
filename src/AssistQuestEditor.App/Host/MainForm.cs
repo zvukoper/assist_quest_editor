@@ -16,7 +16,14 @@ public sealed class MainForm : WebViewForm
     private readonly LocationStore _locationStore;
     private readonly LocationRuntimeResolver _locationResolver;
     private readonly IQuestRuntimeController _runtime;
-    private readonly Dictionary<string, EditorForm> _editors = new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// Окна редакторов. Список, а не словарь по странице: одно окно может
+    /// переключать активную панель (сайдбар = селектор рабочей области), поэтому
+    /// ключ «страница» перестал быть уникальным идентификатором окна.
+    /// </summary>
+    private readonly List<EditorForm> _editors = new();
+
     private readonly RecentFileList _recentQuestFiles;
     private readonly RecentFileList _recentSceneFiles;
     private SimulatorForm? _simulator;
@@ -100,7 +107,7 @@ public sealed class MainForm : WebViewForm
             _recentQuestFiles.Changed -= RecentQuestFiles_Changed;
             _recentSceneFiles.Changed -= RecentSceneFiles_Changed;
 
-            foreach (var editor in _editors.Values.ToArray())
+            foreach (var editor in _editors.ToArray())
             {
                 editor.Close();
             }
@@ -193,39 +200,35 @@ public sealed class MainForm : WebViewForm
             return;
         }
 
-        var editorKey = resource.Kind switch
+        var pane = resource.Kind switch
         {
-            "Quest" => "editor.html#graph",
-            "Scene" => "editor.html#scene",
-            "Location" => "editor.html#locations",
+            "Quest" => "graph",
+            "Scene" => "scene",
+            "Location" => "locations",
             _ => string.Empty
         };
 
-        if (string.IsNullOrWhiteSpace(editorKey))
+        if (string.IsNullOrWhiteSpace(pane))
         {
             MessageBox.Show(this, resource.FriendlyName + " зарегистрирован в системе, но соответствующий редактор ещё не реализован.",
                 "Открытие ресурса", MessageBoxButtons.OK, MessageBoxIcon.Information);
             return;
         }
 
-        OpenEditor(
-            resource.Kind.Equals("Quest", StringComparison.OrdinalIgnoreCase)
-                ? "graph"
-                : resource.Kind.Equals("Scene", StringComparison.OrdinalIgnoreCase)
-                    ? "scene"
-                    : "locations");
+        // Открытие файла по ассоциации ведёт себя как навигация по ресурсу:
+        // ресурс показывается в подходящем окне, а не в новом поверх него.
+        var editor = EnsureEditorFor(pane);
+        if (editor is null)
+            return;
 
-        if (_editors.TryGetValue(editorKey, out var editor) && !editor.IsDisposed)
+        try
         {
-            try
-            {
-                editor.OpenResourcePath(path);
-            }
-            catch (Exception ex)
-            {
-                AppLogger.Error("Не удалось открыть ресурс через ассоциацию файла.", ex, "path=" + path);
-                MessageBox.Show(this, ex.Message, "Ошибка открытия ресурса", MessageBoxButtons.OK, MessageBoxIcon.Error);
-            }
+            editor.OpenResourcePath(path);
+        }
+        catch (Exception ex)
+        {
+            AppLogger.Error("Не удалось открыть ресурс через ассоциацию файла.", ex, "path=" + path);
+            MessageBox.Show(this, ex.Message, "Ошибка открытия ресурса", MessageBoxButtons.OK, MessageBoxIcon.Error);
         }
     }
 
@@ -378,7 +381,7 @@ public sealed class MainForm : WebViewForm
 
     private void SceneCatalog_Changed(object? sender, EventArgs e)
     {
-        foreach (var editor in _editors.Values.ToArray())
+        foreach (var editor in _editors.ToArray())
         {
             if (!editor.IsDisposed)
                 editor.RefreshSceneCatalog();
@@ -465,7 +468,7 @@ public sealed class MainForm : WebViewForm
     {
         var paths = GetRecentFiles(kind);
 
-        foreach (var editor in _editors.Values.ToArray())
+        foreach (var editor in _editors.ToArray())
         {
             if (!editor.IsDisposed)
                 editor.UpdateRecentFiles(kind, paths);
@@ -504,9 +507,77 @@ public sealed class MainForm : WebViewForm
             ?? Path.Combine(AppPaths.ResourceRoot, "scenes", sceneId + ".aqscene");
     }
 
+    /// <summary>
+    /// Открытие редактора из основной формы (кнопка «Открыть»).
+    ///
+    /// Семантика: каждый редактор открывается СВОИМ окном. Повторный клик по
+    /// тому же редактору поднимает уже открытое окно, а не создаёт второе —
+    /// иначе кнопка плодила бы дубликаты документов одного ресурса.
+    /// </summary>
     private void OpenEditor(string editor)
     {
-        var page = editor.ToLowerInvariant() switch
+        var targetPage = EditorPageFor(editor).Page;
+        var existing = FindEditor(form =>
+            form.ActivePanePage.Equals(targetPage, StringComparison.OrdinalIgnoreCase));
+
+        if (existing is not null)
+        {
+            existing.WindowState = FormWindowState.Normal;
+            existing.BringToFront();
+            existing.Activate();
+            return;
+        }
+
+        CreateEditor(editor);
+    }
+
+    /// <summary>
+    /// Создаёт НОВОЕ окно редактора с указанной активной панелью.
+    ///
+    /// Используется кнопкой «Открыть» и навигацией между ресурсами: одному
+    /// ресурсу нужно своё окно, даже если другое окно уже показывает другую
+    /// панель того же редактора.
+    /// </summary>
+    private EditorForm CreateEditor(string editor)
+    {
+        var page = EditorPageFor(editor);
+        var form = new EditorForm(
+            page.Title,
+            page.Page,
+            _hub,
+            _questGraph,
+            _sceneGraph,
+            _sceneCatalog,
+            _sceneDocument,
+            _runtime,
+            _locationStore);
+
+        _editors.Add(form);
+        form.NavigationRequested += Editor_NavigationRequested;
+        form.RecentFileOpened += (_, path) => NoteRecentFile(form.RecentFileKind, path);
+        form.RecentFileUnavailable += (_, path) => ForgetRecentFile(form.RecentFileKind, path);
+        form.DocumentSaved += Editor_DocumentSaved;
+        form.FormClosed += (_, _) =>
+        {
+            form.NavigationRequested -= Editor_NavigationRequested;
+            form.DocumentSaved -= Editor_DocumentSaved;
+            _editors.Remove(form);
+        };
+        PlaceAuxiliaryWindow(form, _editors.Count);
+        form.Show(this);
+        return form;
+    }
+
+    /// <summary>
+    /// Окно, показывающее нужную панель. Возвращает null, если такого нет.
+    /// Поиск идёт по фактической активной панели, а не по странице создания:
+    /// окно могло переключиться на другую панель через сайдбар.
+    /// </summary>
+    private EditorForm? FindEditor(Func<EditorForm, bool> predicate) =>
+        _editors.FirstOrDefault(editor => !editor.IsDisposed && predicate(editor));
+
+    private static (string Title, string Page) EditorPageFor(string editor) =>
+        editor.ToLowerInvariant() switch
         {
             "graph" => ("Нодовый редактор", "editor.html#graph"),
             "scene" => ("Редактор сцен", "editor.html#scene"),
@@ -521,37 +592,29 @@ public sealed class MainForm : WebViewForm
             _ => ("Редактор", "editor.html#graph")
         };
 
-        if (_editors.TryGetValue(page.Item2, out var existing) && !existing.IsDisposed)
-        {
-            existing.WindowState = FormWindowState.Normal;
-            existing.BringToFront();
-            existing.Activate();
-            return;
-        }
+    /// <summary>
+    /// Возвращает окно, показывающее нужную панель, создавая его при
+    /// необходимости. Существующее окно переключается на панель через
+    /// <see cref="EditorForm.ActivatePane"/>, а не заменяется новым окном:
+    /// навигация между ресурсами продолжает работать в одном окне, пока
+    /// пользователь сам не откроет ещё одно кнопкой «Открыть».
+    /// </summary>
+    private EditorForm? EnsureEditorFor(string pane)
+    {
+        var targetPage = EditorPageFor(pane).Page;
+        var existing = FindEditor(form =>
+            form.ActivePanePage.Equals(targetPage, StringComparison.OrdinalIgnoreCase));
 
-        var form = new EditorForm(
-            page.Item1,
-            page.Item2,
-            _hub,
-            _questGraph,
-            _sceneGraph,
-            _sceneCatalog,
-            _sceneDocument,
-            _runtime,
-            _locationStore);
-        _editors[page.Item2] = form;
-        form.NavigationRequested += Editor_NavigationRequested;
-        form.RecentFileOpened += (_, path) => NoteRecentFile(form.RecentFileKind, path);
-        form.RecentFileUnavailable += (_, path) => ForgetRecentFile(form.RecentFileKind, path);
-        form.DocumentSaved += Editor_DocumentSaved;
-        form.FormClosed += (_, _) =>
-        {
-            form.NavigationRequested -= Editor_NavigationRequested;
-            form.DocumentSaved -= Editor_DocumentSaved;
-            _editors.Remove(page.Item2);
-        };
-        PlaceAuxiliaryWindow(form, _editors.Count);
-        form.Show(this);
+        if (existing is not null)
+            return existing;
+
+        var form = CreateEditor(pane);
+
+        // Окно могло не переключиться (пользователь отменил смену контекста
+        // из-за несохранённых изменений) — тогда навигацию вести некуда.
+        return form.ActivePanePage.Equals(targetPage, StringComparison.OrdinalIgnoreCase)
+            ? form
+            : null;
     }
 
     /// <summary>
@@ -568,7 +631,7 @@ public sealed class MainForm : WebViewForm
         // Имя переменной цикла не может совпадать с pattern-переменной editor
         // ниже: это давало CS0136 (локальная переменная используется во
         // включающей области для определения локальной переменной).
-        foreach (var window in _editors.Values.ToArray())
+        foreach (var window in _editors.ToArray())
         {
             if (!window.IsDisposed)
                 window.RefreshLocationCatalog();
@@ -647,10 +710,8 @@ public sealed class MainForm : WebViewForm
             return;
         }
 
-        const string editorKey = "editor.html#scene";
-        OpenEditor("scene");
-
-        if (!_editors.TryGetValue(editorKey, out var sceneEditor) || sceneEditor.IsDisposed)
+        var sceneEditor = EnsureEditorFor("scene");
+        if (sceneEditor is null)
             return;
 
         try
@@ -675,10 +736,8 @@ public sealed class MainForm : WebViewForm
 
     private void OpenQuestNodeFromScene(string nodeId, string? questId, string? questPath)
     {
-        const string editorKey = "editor.html#graph";
-        OpenEditor("graph");
-
-        if (!_editors.TryGetValue(editorKey, out var graphEditor) || graphEditor.IsDisposed)
+        var graphEditor = EnsureEditorFor("graph");
+        if (graphEditor is null)
             return;
 
         try
