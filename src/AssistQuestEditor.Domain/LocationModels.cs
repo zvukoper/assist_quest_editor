@@ -86,6 +86,12 @@ public interface ILocationUsageHistory
     bool TryGet(string locationId, string candidateId, out LocationUsageRecord record);
 }
 
+/// <summary>Разрешает логический Location в конкретную точку текущего мира.</summary>
+public interface ILocationResolver
+{
+    WorldPoint? Resolve(string locationId);
+}
+
 /// <summary>
 /// Канонический файл standalone location resource.
 /// </summary>
