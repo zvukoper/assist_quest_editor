@@ -178,6 +178,10 @@ public sealed class SimulatorForm : WebViewForm
                         "Карта симулятора");
                     break;
 
+                case "create_temporary_point":
+                    CreateTemporaryPoint(root);
+                    break;
+
                 case "set_fact":
                     SetFact(root);
                     break;
@@ -369,6 +373,26 @@ public sealed class SimulatorForm : WebViewForm
                 message = ex.Message
             }));
         }
+    }
+
+    private void CreateTemporaryPoint(JsonElement root)
+    {
+        var x = root.TryGetProperty("x", out var xNode) && xNode.TryGetDouble(out var xValue) ? xValue : 0;
+        var y = root.TryGetProperty("y", out var yNode) && yNode.TryGetDouble(out var yValue) ? yValue : 0;
+        var z = root.TryGetProperty("z", out var zNode) && zNode.TryGetDouble(out var zValue) ? zValue : 0;
+        var point = new WorldPoint(
+            "temporary:" + Guid.NewGuid().ToString("N"),
+            "Временная точка",
+            "Temporary",
+            new WorldCoordinate(x, y, z))
+        {
+            Color = "#fab003"
+        };
+
+        _hub.Get<WorldSelectionState>("world-selection").Set(
+            new WorldSelectionState(point, "Временная точка Simulator"),
+            "Simulator: создана временная точка");
+        AppLogger.Info("Simulator: создана временная точка.", $"position={point.Position}; id={point.Id}");
     }
 
     private void SetPlayerPosition(JsonElement root)
