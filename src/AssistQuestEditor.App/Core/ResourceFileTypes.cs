@@ -32,6 +32,14 @@ public static class ResourceFileTypes
             "quest.aqquest",
             "Канонический Quest Definition. Открывается в Нодовом редакторе."),
         new(
+            ".aqlocation",
+            "Location",
+            "Assist Quest Location",
+            "Location",
+            "aqlocation.ico",
+            "location.aqlocation",
+            "Канонический Location Definition. Может быть фиксированным или динамически разрешаться по пространственным критериям."),
+        new(
             ".aqscene",
             "Scene",
             "Assist Quest Scene",
