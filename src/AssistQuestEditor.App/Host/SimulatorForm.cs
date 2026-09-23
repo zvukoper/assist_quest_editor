@@ -1801,29 +1801,38 @@ public sealed class SimulatorForm : WebViewForm
         {
             var type = node.NodeType.ToLowerInvariant();
             string? pointId = null;
+            string? locationId = null;
             double? radius = null;
 
             if (type == "interaction")
             {
+                locationId = GetParameter(node, "locationId");
                 pointId = GetParameter(node, "worldPointId");
                 radius = TryGetDouble(GetParameter(node, "triggerRadius"));
             }
             else if ((type is "condition" or "waitforcondition") &&
                      GetParameter(node, "operator").Equals("distancecompare", StringComparison.OrdinalIgnoreCase))
             {
+                locationId = GetParameter(node, "locationId");
                 pointId = GetParameter(node, "worldPointId", GetParameter(node, "right"));
                 radius = TryGetDouble(GetParameter(node, "triggerRadius"));
             }
 
-            if (!string.IsNullOrWhiteSpace(pointId))
+            var point = !string.IsNullOrWhiteSpace(locationId)
+                ? _locationResolver.Resolve(locationId)
+                : string.IsNullOrWhiteSpace(pointId)
+                    ? null
+                    : _hub.Get<WorldState>("world").Value.Points.FirstOrDefault(x =>
+                        x.Id.Equals(pointId, StringComparison.OrdinalIgnoreCase));
+
+            if (point is not null || !string.IsNullOrWhiteSpace(pointId) || !string.IsNullOrWhiteSpace(locationId))
             {
-                var point = _hub.Get<WorldState>("world").Value.Points.FirstOrDefault(x =>
-                    x.Id.Equals(pointId, StringComparison.OrdinalIgnoreCase));
                 var player = _hub.Get<PlayerState>("player").Value.Position;
                 var distance = point is null ? (double?)null : Distance(player, point.Position);
                 target = new
                 {
                     pointId,
+                    locationId,
                     found = point is not null,
                     name = point?.Name,
                     category = point?.Category,
