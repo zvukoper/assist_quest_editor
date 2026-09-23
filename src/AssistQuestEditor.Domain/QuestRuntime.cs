@@ -31,9 +31,14 @@ public sealed class QuestRuntime : IQuestRuntimeController
     private readonly QuestGraphStore _graphStore;
     private readonly IDataChannelHub _hub;
     private readonly SceneRuntime? _sceneRuntime;
+    private readonly ILocationResolver? _locationResolver;
     private DateTimeOffset? _waitUntil;
 
-    public QuestRuntime(QuestGraphStore graphStore, IDataChannelHub hub, SceneRuntime? sceneRuntime = null)
+    public QuestRuntime(
+        QuestGraphStore graphStore,
+        IDataChannelHub hub,
+        SceneRuntime? sceneRuntime = null,
+        ILocationResolver? locationResolver = null)
     {
         _graphStore = graphStore ?? throw new ArgumentNullException(nameof(graphStore));
         _hub = hub ?? throw new ArgumentNullException(nameof(hub));

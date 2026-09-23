@@ -565,10 +565,13 @@ public sealed class MainForm : WebViewForm
     /// </summary>
     private void Editor_DocumentSaved(object? sender, string path)
     {
-        foreach (var editor in _editors.Values.ToArray())
+        // Имя переменной цикла не может совпадать с pattern-переменной editor
+        // ниже: это давало CS0136 (локальная переменная используется во
+        // включающей области для определения локальной переменной).
+        foreach (var window in _editors.Values.ToArray())
         {
-            if (!editor.IsDisposed)
-                editor.RefreshLocationCatalog();
+            if (!window.IsDisposed)
+                window.RefreshLocationCatalog();
         }
 
         if (string.Equals(Path.GetExtension(path), LocationStore.Extension, StringComparison.OrdinalIgnoreCase))

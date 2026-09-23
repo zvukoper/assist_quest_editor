@@ -41,8 +41,19 @@ check(/_campaignStore\.Reload\(\)/.test(simulatorForm),
 // 2. Маркер квеста строится из активации документа, а не из параметра ноды.
 // Параметр worldPointId у ноды Interaction — цель Runtime; если однажды сюда
 // подставят его, квест снова начнёт «не сдвигаться» после правки активации.
-check(/worldPointId\s*=\s*quest\.Activation\?\.WorldPointId/.test(simulatorForm),
+//
+// В присваивании допускается предварительное разрешение Dynamic Location
+// (resolvedPoint), поэтому `quest.Activation` стоит не сразу после `=`.
+// Инвариант тот же и проверяется как «в правой части есть quest.Activation»:
+// подстановка параметра ноды по-прежнему валит проверку.
+check(/worldPointId\s*=[^\n]*quest\.Activation\?\.WorldPointId/.test(simulatorForm),
   "BuildQuestCatalog должен брать точку из quest.Activation?.WorldPointId.");
+
+// Точка маркера обязана разрешаться из активации: Dynamic Location ищется по
+// activation.LocationId, а worldPointId — только резервный путь. Если сюда
+// попадёт параметр ноды, проверка снова упадёт.
+check(/ResolveActivationPoint\(\s*quest\.Activation\s*,/.test(simulatorForm),
+  "BuildQuestCatalog обязан искать точку через ResolveActivationPoint(quest.Activation, ...).");
 
 // 3. Редактор сообщает о записи файла, Host на это подписывается.
 check(/public\s+event\s+EventHandler<string>\?\s+DocumentSaved/.test(editorForm),

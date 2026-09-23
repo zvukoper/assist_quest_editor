@@ -290,10 +290,11 @@ public sealed class LocationResolver
         if (!HasHistoryCriteria(constraints))
             return true;
 
-        var hasRecord = history is not null &&
-            history.TryGet(locationId, candidateId, out var record);
-
-        if (!hasRecord)
+        // out-параметр присваивается только при вызове TryGet, а из-за короткого
+        // замыкания && его может не быть вовсе. Неприсвоенный record давал CS0165,
+        // поэтому присваиваем явно, когда записи истории нет.
+        LocationUsageRecord record;
+        if (history is null || !history.TryGet(locationId, candidateId, out record))
         {
             record = new LocationUsageRecord(locationId, candidateId);
         }
@@ -351,14 +352,20 @@ public sealed class LocationResolver
     private static bool TryGetDouble(
         IReadOnlyDictionary<string, string> parameters,
         string key,
-        out double value) =>
-        parameters.TryGetValue(key, out var raw) &&
-        double.TryParse(
-            raw,
-            System.Globalization.NumberStyles.Float,
-            System.Globalization.CultureInfo.InvariantCulture,
-            out value) &&
-        double.IsFinite(value);
+        out double value)
+    {
+        // out-параметр обязан быть присвоен на всех путях выхода, в том числе
+        // когда параметра нет в словаре (короткое замыкание && в выражении
+        // оставляло value неприсвоенным — CS0177).
+        value = 0d;
+        return parameters.TryGetValue(key, out var raw) &&
+            double.TryParse(
+                raw,
+                System.Globalization.NumberStyles.Float,
+                System.Globalization.CultureInfo.InvariantCulture,
+                out value) &&
+            double.IsFinite(value);
+    }
 
     private static double Distance(WorldCoordinate a, WorldCoordinate b)
     {
