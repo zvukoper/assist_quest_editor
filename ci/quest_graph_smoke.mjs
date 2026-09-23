@@ -799,6 +799,61 @@ try {
   }
 
   console.log("Quest Graph Playwright smoke: OK");
+  // Reference Picker: human-readable catalog value is shown in the editor,
+  // while save must send the stable ID. Unknown references must remain intact.
+  await page.evaluate(() => {
+    window.dispatchEvent(new MessageEvent("message", {
+      data: JSON.stringify({
+        type: "quest_graph",
+        graph: {
+          id: "reference-test",
+          name: "Reference test",
+          nodes: [{
+            nodeId: "interaction",
+            nodeType: "Interaction",
+            title: "Интеракция",
+            x: 100, y: 100,
+            parameters: { worldPointId: "city:chelyabinsk", itemId: "item.test" },
+            sockets: []
+          }],
+          connections: []
+        },
+        selectedNodeId: "interaction",
+        sceneCatalog: [{ id: "scene.test", title: "Тестовая сцена" }],
+        itemCatalog: [{ id: "item.test", name: "Тестовый предмет", category: "Тест" }],
+        npcCatalog: [{ id: "npc.test", name: "Тестовый НПЦ" }],
+        worldPointCatalog: [{ id: "city:chelyabinsk", name: "Челябинск", category: "Город" }]
+      })
+    }));
+  });
+
+  const referenceInput = page.locator("[data-reference-input][data-reference-key='worldPointId']");
+  await referenceInput.waitFor();
+  const referenceValue = await referenceInput.inputValue();
+  if (referenceValue !== "Челябинск") {
+    throw new Error("Reference Picker должен показывать имя WorldPoint, а не технический ID: " + referenceValue);
+  }
+
+  await page.locator("#saveGraphNode").click();
+  const referenceSave = await page.evaluate(() =>
+    window.__messages.find(message => message.action === "graph_update_node")
+  );
+  if (!referenceSave || referenceSave.parameters.worldPointId !== "city:chelyabinsk") {
+    throw new Error("Reference Picker должен сохранять стабильный WorldPoint ID.");
+  }
+
+  await page.evaluate(() => {
+    const input = document.querySelector("[data-reference-input][data-reference-key='worldPointId']");
+    input.value = "future.point.42";
+  });
+  await page.locator("#saveGraphNode").click();
+  const unknownSave = await page.evaluate(() =>
+    [...window.__messages].reverse().find(message => message.action === "graph_update_node")
+  );
+  if (!unknownSave || unknownSave.parameters.worldPointId !== "future.point.42") {
+    throw new Error("Неизвестный Reference ID нельзя очищать при сохранении.");
+  }
+
 } finally {
   await browser.close();
 }
