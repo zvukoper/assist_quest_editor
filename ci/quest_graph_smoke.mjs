@@ -95,6 +95,26 @@ try {
   }
 
   await page.locator("#questGraphSvg .nodeTitle", { hasText: "Start" }).waitFor();
+  // Activation reference bridge: a point selected in Simulator (including a
+  // temporary point) must be directly usable as the quest activation WorldPoint.
+  await page.evaluate(() => {
+    window.dispatchEvent(new MessageEvent("message", {
+      data: JSON.stringify({
+        type: "simulator_context",
+        player: { position: { x: 0, y: 0, z: 0 } },
+        selection: {
+          point: { id: "temporary:test-point", name: "Временная точка", category: "Temporary", position: { x: 123, y: 0, z: 456 } }
+        }
+      })
+    }));
+  });
+  await page.locator("#editActivation").click();
+  await page.locator("#activationFromSimulator").click();
+  const activationPointValue = await page.locator("#activationPoint").inputValue();
+  if (activationPointValue !== "temporary:test-point") {
+    throw new Error("Активация должна получать выбранную временную точку из Simulator.");
+  }
+
   await page.locator("#inspector input#graphEditTitle").waitFor();
 
   // Regression: соединение протяжкой от Output к Input.
