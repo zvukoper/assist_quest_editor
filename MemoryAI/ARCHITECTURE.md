@@ -487,3 +487,43 @@ Player-state quest effects are explicit node types: `SetHealth`, `SetEnergy`, `S
 Backpack, item 'new' beacon, notifications, tooltips and Character panel are Simulator presentation. They are not part of QuestDefinition.
 
 Buff/debuff semantics are documented separately in `MemoryAI/CHARACTER_EFFECTS.md`. In this stage they are reserved only: not displayed and not automatically applied.
+
+
+## 21. World Authoring & Simulation Platform
+
+Проект эволюционирует от узкого Quest Editor к универсальной платформе создания и
+симуляции параллельного интерактивного мира. Пользовательское название Assist Quest
+Editor сохраняется как исторически понятное, но архитектурно Quest не является верхним
+уровнем модели.
+
+Главный инвариант:
+
+> Content и Runtime не знают конкретный World Provider.
+
+Модель слоёв:
+
+- World Provider — Sandbox, ETS2, DayZ и будущие adapters;
+- World State — текущее состояние мира и игрока;
+- Content — Quest, Scene, Dialogue, Interaction, WorldPoint, NPC, Item и будущие
+  Shop/Service/Communication/MiniGame/UserContent;
+- Runtime — Conditions, Events, Actions/Effects, Interaction Resolver, Quest/Scene
+  Runtime и специализированные runtime-подсистемы;
+- Presentation — карта, диалоги, inventory, shop, radio, mini-games и HUD;
+- Authoring — создание canonical Content;
+- Simulation — искусственное управление тем же World State и тем же Runtime.
+
+Authoring, Sandbox и будущий Game mode являются разными способами использовать один
+Runtime, а не тремя реализациями игровой логики.
+
+Sandbox считается полноценным World Provider и должен стать основным инструментом
+первичной проверки новых механик. ETS2 является первым реальным внешним Provider, а
+не владельцем canonical model.
+
+Первая публичная цель — вертикальный demo slice: WorldPoint → Interaction → Condition
+→ Quest → Scene/Dialogue → Choice → State/Item/Money/Reputation → следующий
+Interaction → завершение. Он должен полностью работать в Sandbox до подключения
+реального Provider.
+
+Подробная формулировка цели и границ находится в
+MemoryAI/WORLD_AUTHORING_PLATFORM.md. Authoring UX и Reference/Auto Layout правила
+зафиксированы в MemoryAI/AUTHORING_UX_PLAN.md.
