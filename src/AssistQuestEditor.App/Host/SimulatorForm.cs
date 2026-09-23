@@ -313,6 +313,9 @@ public sealed class SimulatorForm : WebViewForm
                     break;
 
                 case "reset":
+                    if (_locationResolver is ILocationResolutionSession locationSession)
+                        locationSession.Reset();
+
                     if (_hub is SimulatorDataChannelHub simulatorHub)
                     {
                         simulatorHub.Reset();
