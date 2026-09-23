@@ -11,10 +11,10 @@
     <Prefer32Bit>false</Prefer32Bit>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
 
-    <Version>1.0.40.167</Version>
-    <AssemblyVersion>1.0.40.167</AssemblyVersion>
-    <FileVersion>1.0.40.167</FileVersion>
-    <AssemblyInformationalVersion>1.0.40.167-LOCATION-CRITERIA-R15</AssemblyInformationalVersion>
+    <Version>1.0.40.168</Version>
+    <AssemblyVersion>1.0.40.168</AssemblyVersion>
+    <FileVersion>1.0.40.168</FileVersion>
+    <AssemblyInformationalVersion>1.0.40.168-CRITERION-POINT-CAPTURE-R16</AssemblyInformationalVersion>
     <PublishSingleFile>true</PublishSingleFile>
     <SelfContained>true</SelfContained>
     <RuntimeIdentifier>win-x64</RuntimeIdentifier>

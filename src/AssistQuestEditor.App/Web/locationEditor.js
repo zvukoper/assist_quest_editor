@@ -224,6 +224,12 @@
               escapeHtml(referenceName(point)) + "'></option>")
           ).join("") +
         "</datalist>" +
+        // Захват выбранной точки нужен и здесь: точка в критерии — та же точка
+        // мира, что и в Fixed Location, и заставлять автора уходить в другой
+        // режим и вручную искать имя в списке из тысяч точек незачем.
+        "<button class='toolButton' type='button' data-criterion-capture-point='pointId' " +
+          (capturableSelection() ? "" : "disabled") +
+          " title='Подставить точку, выбранную на карте Симулятора'>Взять выбранную из Simulator</button>" +
         "<input class='toolButton' style='width:110px' type='number' min='0' data-criterion-parameter='meters' value='" +
         escapeHtml(p.meters || "") + "' placeholder='метров'>";
     }
@@ -290,6 +296,18 @@
   /** Временная точка живёт только в выборе Simulator; её ID имеет префикс. */
   function isTemporaryPoint(point) {
     return String(point?.id || "").toLowerCase().startsWith("temporary:");
+  }
+
+  /**
+   * Значение для поля точки, взятое из выбора Simulator.
+   *
+   * Поле показывает ИМЯ, а collectLocation переводит имя обратно в ID по списку
+   * мира. Временной точки в списке мира нет, поэтому её приходится показывать
+   * сырым ID: иначе несколько временных точек выглядели бы одинаково как
+   * «Временная точка», и в файл ушло бы имя вместо идентификатора.
+   */
+  function pointCaptureValue(point) {
+    return findWorldPoint(referenceId(point)) ? referenceName(point) : referenceId(point);
   }
 
   /**
@@ -658,6 +676,18 @@
         }));
       row.querySelector("[data-remove-criterion]")?.addEventListener("click", () => {
         row.remove();
+        state.definition = collectLocation();
+        markDirty();
+      });
+      // Захват выбранной точки прямо в критерий. Значение пишется в поле, а не в
+      // определение напрямую: collectLocation читает параметры из DOM, и прямая
+      // запись была бы затёрта следующей же перерисовкой панели.
+      row.querySelector("[data-criterion-capture-point]")?.addEventListener("click", () => {
+        const point = capturableSelection();
+        if (!point) return;
+        const input = row.querySelector("[data-criterion-parameter='pointId']");
+        if (!input) return;
+        input.value = pointCaptureValue(point);
         state.definition = collectLocation();
         markDirty();
       });

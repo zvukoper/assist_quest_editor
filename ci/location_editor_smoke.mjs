@@ -366,6 +366,96 @@ try {
         JSON.stringify(savedCriteria));
   }
 
+  // --- 6. Кнопка захвата выбранной точки у поля «Точка» в критерии ---
+  //
+  // Раньше кнопка была только у Fixed-точки, а в критерии «В радиусе точки»
+  // приходилось выбирать точку из списка на 5000+ пунктов вручную. Точка в
+  // критерии — та же точка мира, поэтому захват должен работать одинаково.
+  {
+    const pointCriterion = { ...definition, mode: "Dynamic",
+      query: { criteria: [{ type: "WithinDistanceOfPoint",
+        parameters: { pointId: "", meters: "500" }, negate: false }], history: {} } };
+
+    // Без выбора в Simulator искать нечего: кнопка обязана быть неактивной.
+    await loadState(pointCriterion, {
+      type: "simulator_context", player: null, selection: { point: null }
+    });
+    const capture = page.locator("[data-criterion-capture-point='pointId']");
+    if (!(await capture.count()))
+      throw new Error("У поля «Точка» в критерии нет кнопки захвата выбранной точки.");
+    if (!(await capture.isDisabled()))
+      throw new Error("Захват точки в критерии активен без выбранной точки Simulator.");
+
+    // Временная точка должна подставляться своим ID: её нет в списке мира, и
+    // имя «Временная точка» у нескольких таких точек ввело бы в заблуждение.
+    await loadState(pointCriterion, {
+      type: "simulator_context",
+      player: null,
+      selection: {
+        point: { id: "temporary:crit", name: "Временная точка", category: "Temporary",
+          position: { x: 50, y: 1, z: 60 }, isCity: false },
+        source: "Временная точка Simulator"
+      }
+    });
+    if (await capture.isDisabled())
+      throw new Error("Захват точки в критерии не активен при выбранной временной точке.");
+
+    await page.evaluate(() => { window.__messages.length = 0; });
+    await capture.click();
+    await page.waitForTimeout(150);
+
+    const captured = await send("location_mark_dirty");
+    const capturedCriteria = captured.at(-1)?.definition?.query?.criteria || [];
+    if (capturedCriteria[0]?.parameters?.pointId !== "temporary:crit")
+      throw new Error("Захват точки в критерии не записал её ID в параметр pointId: " +
+        JSON.stringify(capturedCriteria));
+
+    // Пользователь обязан УВИДЕТЬ подставленное значение, а не только отправку.
+    const shownPoint = await page.evaluate(() =>
+      document.querySelector("[data-criterion-parameter='pointId']")?.value);
+    if (shownPoint !== "temporary:crit")
+      throw new Error("Захваченная в критерий точка не отобразилась в поле: " + shownPoint);
+
+    // Существующая точка мира подставляется ИМЕНЕМ, а в файл всё равно уходит ID —
+    // так поле остаётся читаемым, а параметр стабильным.
+    await loadState(pointCriterion, {
+      type: "simulator_context",
+      player: null,
+      selection: {
+        point: { id: "sdo:test:0x7", name: "Пятёрочка Урал", category: "camping",
+          position: { x: 1, y: 2, z: 3 }, isCity: false },
+        source: "Карта симулятора"
+      }
+    });
+    await page.evaluate(() => { window.__messages.length = 0; });
+    await page.locator("[data-criterion-capture-point='pointId']").click();
+    await page.waitForTimeout(150);
+
+    const named = await page.evaluate(() =>
+      document.querySelector("[data-criterion-parameter='pointId']")?.value);
+    if (named !== "Пятёрочка Урал")
+      throw new Error("Точка мира подставилась не именем: " + named);
+
+    const namedSaved = await send("location_mark_dirty");
+    if (namedSaved.at(-1)?.definition?.query?.criteria?.[0]?.parameters?.pointId !== "sdo:test:0x7")
+      throw new Error("Имя точки мира не перевелось обратно в канонический ID: " +
+        JSON.stringify(namedSaved.at(-1)?.definition?.query?.criteria));
+
+    // Город — справочная точка карты, а не СДО: захвату не подлежит, как и в
+    // режиме Fixed.
+    await loadState(pointCriterion, {
+      type: "simulator_context",
+      player: null,
+      selection: {
+        point: { id: "city:chelyabinsk", name: "Челябинск", category: "Города",
+          position: { x: 0, y: 0, z: 0 }, isCity: true },
+        source: "Карта симулятора"
+      }
+    });
+    if (!(await page.locator("[data-criterion-capture-point='pointId']").isDisabled()))
+      throw new Error("Захват точки в критерии активен для города: город не является СДО.");
+  }
+
   if (errors.length)
     throw new Error("pageerror: " + errors.join(" | "));
 
