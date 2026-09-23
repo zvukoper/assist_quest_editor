@@ -41,6 +41,22 @@ public static class AppPaths
     /// не задев кампании. Не в каталоге публикации: он перезаписывается при
     /// обновлении приложения.
     /// </summary>
+    /// <summary>
+    /// Постоянная пользовательская библиотека Location Resources. Локации
+    /// переиспользуются между квестами и поэтому не принадлежат одному Campaign.
+    /// </summary>
+    public static string UserLocationRoot
+    {
+        get
+        {
+            var localAppData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+            if (string.IsNullOrWhiteSpace(localAppData))
+                localAppData = AppContext.BaseDirectory;
+
+            return Path.Combine(localAppData, "Assist Quest Editor", "locations");
+        }
+    }
+
     public static string SimulationSaveRoot
     {
         get
