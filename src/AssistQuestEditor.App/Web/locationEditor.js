@@ -133,7 +133,13 @@
       } else {
         row.querySelectorAll("[data-criterion-parameter]").forEach(input => {
           const key = input.dataset.criterionParameter;
-          const value = input.value.trim();
+          let value = input.value.trim();
+          if (key === "pointId") {
+            const match = state.worldPoints.find(point =>
+              referenceId(point).toLowerCase() === value.toLowerCase() ||
+              referenceName(point).toLowerCase() === value.toLowerCase());
+            if (match) value = referenceId(match);
+          }
           if (key && value) parameters[key] = value;
         });
       }
@@ -267,11 +273,20 @@
     const svg = document.getElementById("locationMap");
     if (!svg) return;
 
-    const candidates = Array.isArray(result?.candidates) ? result.candidates : [];
-    const points = candidates.map(item => item.position).filter(Boolean);
+    const rawCandidates = Array.isArray(result?.candidates) ? result.candidates : [];
     const current = ensureDefinition();
     const fixed = current.mode === "Fixed" ? findWorldPoint(current.worldPointId) : null;
-    if (fixed?.position) points.push(fixed.position);
+    const candidates = rawCandidates.length
+      ? rawCandidates
+      : (fixed ? [{
+          candidateId: fixed.id,
+          name: fixed.name,
+          category: fixed.category,
+          position: fixed.position,
+          selected: true,
+          message: "Фиксированная точка."
+        }] : []);
+    const points = candidates.map(item => item.position).filter(Boolean);
 
     if (!points.length) {
       svg.innerHTML =
