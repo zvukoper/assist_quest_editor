@@ -97,6 +97,10 @@
 
   function markDirty() {
     state.documentDirty = true;
+    send({
+      action: "location_mark_dirty",
+      definition: state.definition
+    });
     render();
   }
 
