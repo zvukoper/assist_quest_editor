@@ -749,3 +749,29 @@ Sandbox считается полноценным World Provider; ETS2 — бу�
 Проверка среды этого изменения: локальный container не имеет сетевого доступа, поэтому
 raw GitHub/Node smoke из container выполнить не удалось. .NET SDK также должен проверяться
 на машине/CI согласно INSTRUCTIONS.md. Перед физическим тестом требуется обычный bump версии.
+
+## 2026-09-23 — Location Editor и межредакторная навигация
+
+Исправлен переход Scene/Dialogue → Quest Graph: переключение между разными Host-контекстами теперь передаётся в MainForm через open_editor; Scene больше не пытается локально отрисовать Quest Graph без соответствующего Host payload.
+
+Добавлен первый canonical Location resource:
+- .aqlocation;
+- Fixed и Dynamic режимы;
+- пользовательская библиотека %LOCALAPPDATA%/Assist Quest Editor/locations;
+- Location Editor в отдельном Host;
+- Reference Picker для locationId в Quest Graph;
+- Quest Runtime/Simulator умеют разрешать Location в конкретный WorldPoint;
+- Dynamic result кэшируется на текущую Simulation session;
+- Показать точку и многократный Тест;
+- базовые Sandbox spatial criteria и задел под provider-specific criteria;
+- модели History ограничений и тесты Location Resolver.
+
+Сознательно не реализованы полностью:
+- накопление реальных Selection/Visit counters в Runtime;
+- игровое время в History;
+- пользовательские группы точек;
+- ETS2/DayZ-specific spatial predicates (дом/дорога/дрова/полиция и т.п.).
+
+Condition Tree пока не является блокером первого сюжетного вертикального среза.
+
+Проверка: локальный .NET SDK в рабочем окружении отсутствует, поэтому dotnet build/publish здесь не выполнялся. GitHub status для последнего прямого коммита в main не вернул workflow/status entries; это не является доказательством успешной сборки.
