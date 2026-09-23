@@ -11,10 +11,10 @@
     <Prefer32Bit>false</Prefer32Bit>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
 
-    <Version>1.0.40.173</Version>
-    <AssemblyVersion>1.0.40.173</AssemblyVersion>
-    <FileVersion>1.0.40.173</FileVersion>
-    <AssemblyInformationalVersion>1.0.40.173-ROADS-MESSAGE-R21</AssemblyInformationalVersion>
+    <Version>1.0.40.174</Version>
+    <AssemblyVersion>1.0.40.174</AssemblyVersion>
+    <FileVersion>1.0.40.174</FileVersion>
+    <AssemblyInformationalVersion>1.0.40.174-GAPS-R22</AssemblyInformationalVersion>
     <PublishSingleFile>true</PublishSingleFile>
     <SelfContained>true</SelfContained>
     <RuntimeIdentifier>win-x64</RuntimeIdentifier>
