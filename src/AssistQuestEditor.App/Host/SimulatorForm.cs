@@ -12,6 +12,7 @@ public sealed class SimulatorForm : WebViewForm
     private readonly IQuestRuntimeController _runtime;
     private readonly QuestGraphStore _questGraph;
     private readonly CampaignStore _campaignStore;
+    private readonly ILocationResolver _locationResolver;
     private readonly SimulationSaveStore _saveStore = new();
     private readonly Action<string> _openQuestEditor;
     private readonly System.Windows.Forms.Timer _runtimeTimer;
@@ -38,7 +39,8 @@ public sealed class SimulatorForm : WebViewForm
         IQuestRuntimeController runtime,
         QuestGraphStore questGraph,
         CampaignStore campaignStore,
-        Action<string> openQuestEditor)
+        Action<string> openQuestEditor,
+        ILocationResolver locationResolver)
         : base(
             "Симулятор",
             "simulator.html",
@@ -50,6 +52,7 @@ public sealed class SimulatorForm : WebViewForm
         _questGraph = questGraph ?? throw new ArgumentNullException(nameof(questGraph));
         _campaignStore = campaignStore ?? throw new ArgumentNullException(nameof(campaignStore));
         _openQuestEditor = openQuestEditor ?? throw new ArgumentNullException(nameof(openQuestEditor));
+        _locationResolver = locationResolver ?? throw new ArgumentNullException(nameof(locationResolver));
         _journalDetached = AppUiPreferencesStore.Load().JournalDetached;
         Opacity = 0;
         _questGraph.Changed += QuestGraph_Changed;
@@ -676,6 +679,8 @@ public sealed class SimulatorForm : WebViewForm
                         : QuestStatus.Available;
                     var step = entry?.Step ?? "available";
 
+                    var resolvedPoint = ResolveActivationPoint(quest.Activation, snapshot.World.Points);
+
                     return new
                     {
                         questId = quest.QuestId,
@@ -683,7 +688,8 @@ public sealed class SimulatorForm : WebViewForm
                         order = quest.Order,
                         // Имя файла — второй ключ сортировки при равных номерах.
                         fileName = Path.GetFileName(quest.RelativePath),
-                        worldPointId = quest.Activation?.WorldPointId ?? string.Empty,
+                        worldPointId = resolvedPoint?.Id ?? quest.Activation?.WorldPointId ?? string.Empty,
+                        locationId = quest.Activation?.LocationId ?? string.Empty,
                         radius = quest.Activation?.Radius ?? 0,
                         status = status.ToString(),
                         statusLabel = QuestStatusLabels.GetValueOrDefault(status, status.ToString()),
@@ -712,6 +718,26 @@ public sealed class SimulatorForm : WebViewForm
     /// Проверка нужна отдельно от «включён в кампании»: включённый квест может
     /// просто ждать активации, а панель должна показывать фактическое состояние.
     /// </summary>
+    private WorldPoint? ResolveActivationPoint(QuestActivation? activation, IReadOnlyList<WorldPoint> points)
+    {
+        if (activation is null)
+            return null;
+
+        if (!string.IsNullOrWhiteSpace(activation.LocationId))
+        {
+            return _locationResolver.Resolve(activation.LocationId) ??
+                   (string.IsNullOrWhiteSpace(activation.WorldPointId)
+                       ? null
+                       : points.FirstOrDefault(item =>
+                           item.Id.Equals(activation.WorldPointId, StringComparison.OrdinalIgnoreCase)));
+        }
+
+        return string.IsNullOrWhiteSpace(activation.WorldPointId)
+            ? null
+            : points.FirstOrDefault(item =>
+                item.Id.Equals(activation.WorldPointId, StringComparison.OrdinalIgnoreCase));
+    }
+
     private bool IsRuntimeQuest(string questId)
     {
         var state = _runtime.State;
