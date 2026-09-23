@@ -1080,7 +1080,10 @@
           const name = referenceName(entry);
           const category = referenceCategory(entry);
           const label = [id, category].filter(Boolean).join(" · ");
-          return "<option value='" + escapeHtml(name) + "' label='" + escapeHtml(label) + "'></option>";
+          return "<option value='" + escapeHtml(name) + "' label='" + escapeHtml(label) + "'></option>" +
+            (id.toLowerCase() === name.toLowerCase()
+              ? ""
+              : "<option value='" + escapeHtml(id) + "' label='" + escapeHtml(name + (category ? " · " + category : "")) + "'></option>");
         }).join("") +
       "</datalist>" +
       (key === "sceneId" && resolved.entry
