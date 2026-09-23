@@ -13,6 +13,8 @@ public sealed class MainForm : WebViewForm
     private readonly SceneGraphStore _sceneGraph;
     private readonly SceneDocumentSession _sceneDocument;
     private readonly SceneRuntime _sceneRuntime;
+    private readonly LocationStore _locationStore;
+    private readonly LocationRuntimeResolver _locationResolver;
     private readonly IQuestRuntimeController _runtime;
     private readonly Dictionary<string, EditorForm> _editors = new(StringComparer.OrdinalIgnoreCase);
     private readonly RecentFileList _recentQuestFiles;
@@ -42,6 +44,10 @@ public sealed class MainForm : WebViewForm
             ? ruslanStart
             : _sceneCatalog.Scenes.FirstOrDefault() ?? SceneCatalogFactory.CreateStarter().Scenes.First();
         _sceneGraph = new SceneGraphStore(initialScene);
+        _locationStore = ciTest
+            ? new LocationStore(Path.Combine(Path.GetTempPath(), "AssistQuestEditor-CI-Locations"), readOnly: true)
+            : new LocationStore(AppPaths.UserLocationRoot);
+        _locationResolver = new LocationRuntimeResolver(_locationStore, _hub);
         var preferences = AppUiPreferencesStore.Load();
         _sceneDocument = new SceneDocumentSession(
             initialScene.Id,
@@ -53,7 +59,8 @@ public sealed class MainForm : WebViewForm
             _hub,
             _sceneRuntime,
             _campaignStore.LoadEnabledQuestDefinitions,
-            "tutorial_ruslan_shashlik");
+            "tutorial_ruslan_shashlik",
+            _locationResolver);
 
         foreach (var campaign in _campaignStore.BuildSimulatorCatalog())
         {
@@ -190,6 +197,7 @@ public sealed class MainForm : WebViewForm
         {
             "Quest" => "editor.html#graph",
             "Scene" => "editor.html#scene",
+            "Location" => "editor.html#locations",
             _ => string.Empty
         };
 
@@ -200,7 +208,12 @@ public sealed class MainForm : WebViewForm
             return;
         }
 
-        OpenEditor(resource.Kind.Equals("Quest", StringComparison.OrdinalIgnoreCase) ? "graph" : "scene");
+        OpenEditor(
+            resource.Kind.Equals("Quest", StringComparison.OrdinalIgnoreCase)
+                ? "graph"
+                : resource.Kind.Equals("Scene", StringComparison.OrdinalIgnoreCase)
+                    ? "scene"
+                    : "locations");
 
         if (_editors.TryGetValue(editorKey, out var editor) && !editor.IsDisposed)
         {
@@ -499,6 +512,7 @@ public sealed class MainForm : WebViewForm
             "scene" => ("Редактор сцен", "editor.html#scene"),
             "dialogue" => ("Рабочее пространство диалогов", "editor.html#dialogue"),
             "world" => ("Редактор мира", "editor.html#world"),
+            "locations" or "location" => ("Редактор локаций", "editor.html#locations"),
             "channels" => ("Инспектор каналов", "editor.html#channels"),
             "conditions" => ("Редактор условий и действий", "editor.html#conditions"),
             "localization" => ("Редактор локализации", "editor.html#localization"),
@@ -523,7 +537,8 @@ public sealed class MainForm : WebViewForm
             _sceneGraph,
             _sceneCatalog,
             _sceneDocument,
-            _runtime);
+            _runtime,
+            _locationStore);
         _editors[page.Item2] = form;
         form.NavigationRequested += Editor_NavigationRequested;
         form.RecentFileOpened += (_, path) => NoteRecentFile(form.RecentFileKind, path);
@@ -550,6 +565,12 @@ public sealed class MainForm : WebViewForm
     /// </summary>
     private void Editor_DocumentSaved(object? sender, string path)
     {
+        foreach (var editor in _editors.Values.ToArray())
+        {
+            if (!editor.IsDisposed)
+                editor.RefreshLocationCatalog();
+        }
+
         if (_simulator is null || _simulator.IsDisposed)
         {
             return;
