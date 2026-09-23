@@ -168,6 +168,12 @@ jobs:
         shell: pwsh
         run: node ci/location_editor_smoke.mjs
 
+      - name: Location visualisation smoke
+        id: location_visualisation_smoke
+        continue-on-error: true
+        shell: pwsh
+        run: node ci/location_visualisation_smoke.mjs
+
       - name: Проверить синтаксис web JavaScript
         id: web_syntax
         continue-on-error: true
@@ -283,6 +289,7 @@ jobs:
           REPUTATION_AVATAR_OUTCOME: ${{ steps.reputation_avatar_smoke.outcome }}
           SIDEBAR_PANE_SMOKE_OUTCOME: ${{ steps.sidebar_pane_smoke.outcome }}
           LOCATION_EDITOR_SMOKE_OUTCOME: ${{ steps.location_editor_smoke.outcome }}
+          LOCATION_VISUALISATION_SMOKE_OUTCOME: ${{ steps.location_visualisation_smoke.outcome }}
           SCENE_INTERFACE_SMOKE_OUTCOME: ${{ steps.scene_interface_smoke.outcome }}
           WEB_SYNTAX_OUTCOME: ${{ steps.web_syntax.outcome }}
           DOTNET_SDK_OUTCOME: ${{ steps.dotnet_sdk.outcome }}
@@ -308,6 +315,7 @@ jobs:
             @{ Name = 'Reputation avatar loads'; Outcome = $env:REPUTATION_AVATAR_OUTCOME },
             @{ Name = 'Sidebar pane switch'; Outcome = $env:SIDEBAR_PANE_SMOKE_OUTCOME },
             @{ Name = 'Location editor smoke'; Outcome = $env:LOCATION_EDITOR_SMOKE_OUTCOME },
+            @{ Name = 'Location visualisation smoke'; Outcome = $env:LOCATION_VISUALISATION_SMOKE_OUTCOME },
             @{ Name = 'Web JavaScript syntax'; Outcome = $env:WEB_SYNTAX_OUTCOME },
             @{ Name = '.NET SDK'; Outcome = $env:DOTNET_SDK_OUTCOME },
             @{ Name = '.NET build'; Outcome = $env:DOTNET_BUILD_OUTCOME },

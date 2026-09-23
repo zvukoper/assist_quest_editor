@@ -535,8 +535,13 @@
                 "<button class='toolButton primary' id='showLocation'>Показать точку</button>" +
                 "<input class='toolButton' id='locationRounds' type='number' min='1' max='128' value='8' style='width:80px' title='Количество раундов'>" +
                 "<button class='toolButton primary' id='testLocation'>Тест</button>" +
+                "<button class='toolButton' id='showLocationInSimulator'>Показать в симуляторе</button>" +
               "</div>" +
               "<div class='miniLabel' style='margin-top:6px'>Тест каждый раз заново выбирает точки. Результаты показываются на карте ниже.</div>" +
+              "<div class='notice' style='margin-top:6px'>" +
+                "«Показать в симуляторе» открывает набор на ОСНОВНОЙ карте: там есть города и другие " +
+                "ориентиры, поэтому видно, ГДЕ именно оказались точки. Карта ниже — только форма набора." +
+              "</div>" +
             "</div>"
           : "<div class='card' style='margin-top:12px'><div class='miniLabel'>Проверка результата</div>" +
               "<div class='toolbar' style='margin-top:7px'><button class='toolButton primary' id='showLocation'>Показать точку</button></div>" +
@@ -679,6 +684,11 @@
       state.definition = collectLocation();
       const rounds = Math.max(1, Math.min(128, Number(document.getElementById("locationRounds")?.value) || 8));
       send({ action: "location_test", definition: state.definition, rounds });
+    });
+    document.getElementById("showLocationInSimulator")?.addEventListener("click", () => {
+      state.definition = collectLocation();
+      const rounds = Math.max(1, Math.min(128, Number(document.getElementById("locationRounds")?.value) || 8));
+      send({ action: "location_show_in_simulator", definition: state.definition, rounds });
     });
   }
 

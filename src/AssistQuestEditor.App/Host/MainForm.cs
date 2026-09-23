@@ -557,10 +557,12 @@ public sealed class MainForm : WebViewForm
         form.RecentFileOpened += (_, path) => NoteRecentFile(form.RecentFileKind, path);
         form.RecentFileUnavailable += (_, path) => ForgetRecentFile(form.RecentFileKind, path);
         form.DocumentSaved += Editor_DocumentSaved;
+        form.LocationVisualisationRequested += Editor_LocationVisualisationRequested;
         form.FormClosed += (_, _) =>
         {
             form.NavigationRequested -= Editor_NavigationRequested;
             form.DocumentSaved -= Editor_DocumentSaved;
+            form.LocationVisualisationRequested -= Editor_LocationVisualisationRequested;
             _editors.Remove(form);
         };
         PlaceAuxiliaryWindow(form, _editors.Count);
@@ -673,6 +675,20 @@ public sealed class MainForm : WebViewForm
                 OpenQuestNodeFromScene(e.NodeId, e.QuestId, e.QuestPath);
                 break;
         }
+    }
+
+    /// <summary>
+    /// Показывает набор точек Location в режиме визуализации на основной карте.
+    ///
+    /// Редактор локаций не знает про окно Симулятора (событие вместо ссылки),
+    /// поэтому именно здесь решается, кто покажет точки. Окно Симулятора
+    /// открывается/поднимается само: иначе режим выглядел бы как «кнопка ничего
+    /// не делает» при закрытом симуляторе.
+    /// </summary>
+    private void Editor_LocationVisualisationRequested(object? sender, LocationVisualisationRequest request)
+    {
+        OpenSimulator();
+        _simulator?.ShowLocationVisualisation(request);
     }
 
     private void OpenSceneFromQuestNode(string nodeId, EditorForm? sourceEditor)

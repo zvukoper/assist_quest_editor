@@ -34,6 +34,11 @@ public sealed class SimulatorForm : WebViewForm
     private string _selectedCampaignId = string.Empty;
     private string _selectedQuestId = string.Empty;
 
+    // Активный режим визуализации Location. Хранится в Host, чтобы снимок
+    // (который перерисовывает всю карту) не сбрасывал показанный набор: снимки
+    // приходят часто, и режим исчезал бы через доли секунды после нажатия.
+    private LocationVisualisationRequest? _locationVisualisation;
+
     public SimulatorForm(
         IDataChannelHub hub,
         IQuestRuntimeController runtime,
@@ -145,6 +150,10 @@ public sealed class SimulatorForm : WebViewForm
             },
             questGraph = _runtime.ActiveGraph ?? _questGraph.Value,
             journalDetached = _journalDetached,
+            // Режим визуализации Location едет вместе со снимком: снимок
+            // перерисовывает всю карту, и без этого набор точек исчезал бы
+            // через доли секунды после нажатия «Показать в симуляторе».
+            locationVisualisation = _locationVisualisation,
             // Индикатор светового дня: астрономию считает домен, UI только рисует.
             daylight = BuildDaylight(snapshot),
             // Свойства мира из кампании: блок «Окружение» показывает их и умеет
@@ -249,6 +258,14 @@ public sealed class SimulatorForm : WebViewForm
                 // должна быть видна сразу, а не после следующего события канала.
                 case "request_snapshot":
                     RequestSnapshot("web action request_snapshot");
+                    break;
+
+                // Выход из режима визуализации Location. Режим живёт в Host и
+                // едет вместе с каждым снимком, поэтому сброса в UI недостаточно:
+                // без этого сообщения режим вернулся бы на первом же обновлении.
+                case "clear_location_visualisation":
+                    _locationVisualisation = null;
+                    AppLogger.Info("SimulatorForm: режим визуализации Location выключен.");
                     break;
 
                 case "emit_event":
@@ -1456,6 +1473,47 @@ public sealed class SimulatorForm : WebViewForm
 
         AppLogger.Info("SimulatorForm: каталог квестов перечитан.", $"reason={reason}");
         RequestSnapshot("reload catalog: " + reason);
+    }
+
+    /// <summary>
+    /// Включает режим визуализации Location: набор отобранных точек рисуется
+    /// поверх основной карты, а все прочие точки приглушаются.
+    ///
+    /// Зачем на основной карте: собственная карта редактора локаций не содержит
+    /// ориентиров (городов, дорог, признаков мира), поэтому по ней нельзя понять,
+    /// ГДЕ оказались точки. Здесь они ложатся на знакомую карту мира, а камера
+    /// вписывается в отобранный набор.
+    /// </summary>
+    public void ShowLocationVisualisation(LocationVisualisationRequest request)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+
+        if (IsDisposed || Browser.CoreWebView2 is null)
+        {
+            return;
+        }
+
+        _locationVisualisation = request;
+
+        if (WindowState == FormWindowState.Minimized)
+            WindowState = FormWindowState.Normal;
+
+        BringToFront();
+        Activate();
+
+        AppLogger.Info(
+            "SimulatorForm: режим визуализации Location включён.",
+            $"title={request.Title}; points={request.Points.Count}; " +
+            $"diagnostics={request.Diagnostics.Count}");
+
+        BeginInvoke((Action)(() =>
+            PostJson(JsonSerializer.Serialize(new
+            {
+                type = "location_visualisation",
+                title = request.Title,
+                points = request.Points,
+                diagnostics = request.Diagnostics
+            }, SnapshotJsonOptions))));
     }
 
     /// <summary>

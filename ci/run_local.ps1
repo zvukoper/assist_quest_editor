@@ -79,7 +79,7 @@ $script:HeartbeatPath = Join-Path $script:StateDir 'monitor.heartbeat'
 # Значение фиксировано: publish присутствует всегда (как «пропущено»), поэтому
 # число не зависит от -IncludePublish.
 # Держать в актуальном состоянии при добавлении/удалении Invoke-Check.
-$script:TotalChecks = 31
+$script:TotalChecks = 32
 
 # Подавление уведомления скрипта. Вызывающий скрипт может взять уведомление на
 # себя: pull.ps1 показывает одно уведомление с учётом признака активности
@@ -584,6 +584,12 @@ Invoke-Check -Name 'Resource navigation smoke' -Body {
 # «Нет точек» (SVG-текст через CSS color вместо fill).
 Invoke-Check -Name 'Location editor smoke' -Body {
     node ci/location_editor_smoke.mjs
+}
+
+# Режим визуализации Location на основной карте Симулятора: обычные точки
+# приглушаются, отобранные рисуются поверх, камера вписывается в набор.
+Invoke-Check -Name 'Location visualisation smoke' -Body {
+    node ci/location_visualisation_smoke.mjs
 }
 
 # Шаг 5.3: pan средней кнопкой следует за курсором в обоих нодовых редакторах.

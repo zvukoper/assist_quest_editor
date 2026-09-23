@@ -70,6 +70,13 @@
   let uiRenderScheduled = false;
   const DISTANCE_RINGS = [25, 50, 100, 250, 500, 1000, 1500, 2000];
 
+  // Режим визуализации Location: { title, points: [{ pointId, index }], diagnostics }.
+  //
+  // Живёт отдельной переменной, а не вычисляется из снимка: набор отобранных
+  // точек приходит отдельным сообщением, а снимки карты идут постоянно и не
+  // должны его сбрасывать.
+  let locationVisualisation = null;
+
   // Акцентный оранжевый приложения. Квестовая графика и подсветка выделения
   // обязаны совпадать с цветом в C#-окне кампаний, поэтому значение задано
   // строкой, а не вычисляется из темы: canvas не читает CSS-переменные.
@@ -307,9 +314,22 @@
     // камеры, поэтому хранить их между кадрами бессмысленно.
     questHitAreas = [];
 
+    // В режиме визуализации Location обычные точки приглушаются (прозрачность
+    // вдвое), чтобы отобранный набор читался поверх карты. Сами точки остаются
+    // на месте и остаются кликабельными: режим показывает отобранное В КОНТЕКСТЕ
+    // мира, а не вместо него.
+    if (locationVisualisation) {
+      ctx.save();
+      ctx.globalAlpha = 0.5;
+    }
+
     for (const point of drawnPoints) {
       drawWorldPoint(ctx, point, width, height, occupied, showAllLabels, labelLimit);
       visiblePoints.push(point);
+    }
+
+    if (locationVisualisation) {
+      ctx.restore();
     }
 
     const temporaryPoint = getTemporaryPoint();
@@ -323,6 +343,12 @@
     // привязанный к СДО, остаётся на карте — его ромб и помечают место.
     for (const entry of inactiveQuests) drawQuestMarker(ctx, entry, false);
     for (const entry of activeQuests) drawQuestMarker(ctx, entry, true);
+
+    // Отобранные точки рисуются поверх карты и квестов, но под игроком:
+    // положение игрока остаётся главным ориентиром даже в этом режиме.
+    if (locationVisualisation) {
+      drawLocationVisualisation(ctx, width, height);
+    }
 
     const playerForDraw = currentPlayerForDraw();
     drawDistanceRings(ctx, width, height, playerForDraw?.position);
@@ -1103,6 +1129,111 @@
     ctx.restore();
 
     drawPointLabel(ctx, { name: "Временная точка", isPlayer: false, color: ACCENT_COLOR }, q, selected, false);
+  }
+
+  /**
+   * Точки режима визуализации Location, найденные в текущем мире.
+   *
+   * Режим приходит из редактора локаций по стабильному ID, поэтому точка
+   * ищется в мире, а не копируется целиком: так подпись и категория всегда
+   * актуальны, а исчезнувшая из мира точка не превратится в призрак.
+   */
+  function locationVisualisationEntries() {
+    if (!locationVisualisation || !snapshot) return [];
+
+    const wanted = Array.isArray(locationVisualisation.points) ? locationVisualisation.points : [];
+    const byId = new Map();
+    for (const point of snapshot.world?.points || []) {
+      byId.set(String(point.id || "").toLowerCase(), point);
+    }
+
+    return wanted
+      .map(item => ({ item, point: byId.get(String(item.pointId || "").toLowerCase()) }))
+      .filter(entry => !!entry.point);
+  }
+
+  /**
+   * Вписывает камеру в отобранный набор точек.
+   *
+   * Вписывание обязательно: набор может лежать в любой части мира, а режим
+   * включается на текущем положении камеры — без вписывания пользователь увидел
+   * бы знакомую карту без единой отобранной точки.
+   */
+  function fitLocationVisualisation() {
+    const points = locationVisualisationEntries().map(entry => entry.point.position);
+    if (!points.length) return;
+
+    const xs = points.map(p => Number(p.x) || 0);
+    const zs = points.map(p => Number(p.z) || 0);
+    const minX = Math.min(...xs), maxX = Math.max(...xs);
+    const minZ = Math.min(...zs), maxZ = Math.max(...zs);
+    const s = visibleSize();
+
+    camera.cx = (minX + maxX) / 2;
+    camera.cz = (minZ + maxZ) / 2;
+    camera.mpp = Math.max(
+      1,
+      Math.max(maxX - minX, 100) / Math.max(1, s.width - 80),
+      Math.max(maxZ - minZ, 100) / Math.max(1, s.height - 80)
+    );
+  }
+
+  /**
+   * Режим визуализации: отобранные точки поверх приглушённой карты.
+   *
+   * Рисуется ПОСЛЕ обычных точек и квестов, но ДО игрока: набор Location важен
+   * целиком, однако положение игрока остаётся главным ориентиром.
+   *
+   * Обычные точки при этом не исчезают (приглушение, а не удаление): смысл
+   * режима — увидеть отобранное В КОНТЕКСТЕ известного мира, а не вместо него.
+   */
+  function drawLocationVisualisation(ctx, width, height) {
+    const entries = locationVisualisationEntries();
+    if (!entries.length) return;
+
+    for (const { item, point } of entries) {
+      const q = worldToScreen(point.position.x, point.position.z);
+      if (q.x < -40 || q.y < -40 || q.x > width + 40 || q.y > height + 40) continue;
+
+      // Точка набора: оранжевый круг с белой рамкой — тот же язык, что и на
+      // тестовой карте, поэтому нумерация читается одинаково в обоих местах.
+      ctx.save();
+      ctx.beginPath();
+      ctx.arc(q.x, q.y, 9, 0, Math.PI * 2);
+      ctx.fillStyle = ACCENT_COLOR;
+      ctx.shadowColor = "rgba(250,176,3,.9)";
+      ctx.shadowBlur = 12;
+      ctx.fill();
+      ctx.shadowColor = "transparent";
+      ctx.shadowBlur = 0;
+      ctx.lineWidth = 2;
+      ctx.strokeStyle = "#ffffff";
+      ctx.stroke();
+
+      // Номер отбора: совпадает с нумерацией на тестовой карте редактора.
+      ctx.font = "700 10px Open Sans, Arial, sans-serif";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillStyle = "#111419";
+      ctx.fillText(String(item.index || 0), q.x, q.y + 0.5);
+      ctx.restore();
+
+      // Подпись — имя точки и её категория: набор без подписей не отличить от
+      // случайных точек, а категория объясняет, почему точка попала в отбор.
+      const label = String(point.name || point.category || point.id);
+      ctx.save();
+      ctx.font = "800 11px Open Sans, Arial, sans-serif";
+      ctx.textAlign = "left";
+      ctx.textBaseline = "middle";
+      ctx.fillStyle = ACCENT_COLOR;
+      ctx.lineWidth = 4;
+      ctx.strokeStyle = "rgba(0,0,0,.95)";
+      ctx.lineJoin = "round";
+      ctx.miterLimit = 2;
+      strokeTextOutline(ctx, label, q.x + 14, q.y - 12);
+      ctx.fillText(label, q.x + 14, q.y - 12);
+      ctx.restore();
+    }
   }
 
   function hitPoint(px, py) {
@@ -2299,8 +2430,31 @@
       "<span class='badge blue'>X " + Math.round(p.x) + "</span>",
       "<span class='badge blue'>Y " + Math.round(p.y) + "</span>",
       "<span class='badge blue'>Z " + Math.round(p.z) + "</span>",
-      "<span class='badge accent'>" + (selected ? "Выбрана: " + escapeHtml(selected.name || selected.category) : "Точка не выбрана") + "</span>"
+      "<span class='badge accent'>" + (selected ? "Выбрана: " + escapeHtml(selected.name || selected.category) : "Точка не выбрана") + "</span>",
+      // Режим визуализации — состояние карты, а не отдельное окно, поэтому он
+      // заявляет о себе прямо в HUD и там же выключается: иначе пользователь не
+      // поймёт ни почему точки приглушены, ни как вернуть обычный вид.
+      (locationVisualisation
+        ? "<span class='badge accent' id='locationVisBadge' title='" +
+            escapeHtml((locationVisualisation.diagnostics || []).join(" ") || "Набор Location") + "'>" +
+            "Location: " + escapeHtml(locationVisualisation.title || "набор") +
+            " · " + locationVisualisationEntries().length + " из " +
+            (locationVisualisation.points || []).length + "</span>" +
+          "<button class='chip' id='locationVisExit' type='button' " +
+            "title='Вернуть обычный вид карты'>Выйти из режима</button>"
+        : "")
     ].join("");
+
+    // Кнопка выхода ищется каждый раз: HUD перерисовывается целиком.
+    document.getElementById("locationVisExit")?.addEventListener("click", () => {
+      locationVisualisation = null;
+      // Сообщение уходит и в Host: режим живёт в его состоянии и едет вместе с
+      // каждым снимком, поэтому локального сброса мало — режим вернулся бы на
+      // первом же обновлении (снимки приходят постоянно).
+      send({ action: "clear_location_visualisation" });
+      drawMap();
+      renderSide();
+    });
 
     // Статус-панель внизу карты: галочки фильтров и краткая сводка.
     if (onlyQuestsToggle) onlyQuestsToggle.checked = onlyQuestsFilter;
@@ -2892,6 +3046,12 @@
       };
       questGraph = message.questGraph || questGraph;
       journalDetached = !!message.journalDetached;
+      // Режим визуализации Location едет вместе со снимком: снимок перерисовывает
+      // всю карту, поэтому хранить режим только в UI значило бы гасить его на
+      // каждом обновлении (они идут постоянно). Пустой набор — не режим.
+      locationVisualisation = message.locationVisualisation?.points?.length
+        ? message.locationVisualisation
+        : null;
       daylight = message.daylight || null;
       worldSettings = message.worldSettings || worldSettings;
       selectedPointId = snapshot.selection?.point?.id || null;
@@ -2932,6 +3092,27 @@
       // Точка отсчёта локальных часов: снимок приходит редко, а время должно идти.
       syncClockAnchor();
       scheduleUiRender();
+      renderSide();
+      return;
+    }
+
+    // Режим визуализации включается отдельным сообщением, чтобы карта сразу
+    // вписалась в отобранный набор: снимок придёт следом, но вписывание должно
+    // произойти один раз по факту запроса, а не на каждом снимке.
+    if (message.type === "location_visualisation") {
+      const points = Array.isArray(message.points) ? message.points : [];
+      // Пустой набор — это НЕ режим: гасить всю карту ради ничего не показанного
+      // бессмысленно, а пользователь решил бы, что карта сломалась. Режим
+      // выключается так же, как кнопкой «Выйти из режима».
+      locationVisualisation = points.length
+        ? {
+            title: message.title || "",
+            points,
+            diagnostics: Array.isArray(message.diagnostics) ? message.diagnostics : []
+          }
+        : null;
+      fitLocationVisualisation();
+      drawMap();
       renderSide();
       return;
     }

@@ -98,6 +98,16 @@ public sealed class EditorForm : WebViewForm
     /// </summary>
     public event EventHandler<string>? DocumentSaved;
 
+    /// <summary>
+    /// Запрос показать набор точек на карте Симулятора (режим визуализации
+    /// Location). Аргумент — подписанные точки и пояснение.
+    ///
+    /// Событие, а не ссылка на Simulator: редактор локаций не должен знать про
+    /// окно симулятора, ему достаточно сообщить о факте запроса. Кто именно
+    /// покажет точки — решает MainForm.
+    /// </summary>
+    public event EventHandler<LocationVisualisationRequest>? LocationVisualisationRequested;
+
     public string WindowKey { get; }
 
     public string? CurrentQuestPath =>
@@ -1339,6 +1349,12 @@ public sealed class EditorForm : WebViewForm
                 TestLocation(root, showOnly: true);
                 break;
 
+            // Режим визуализации: набор точек показывается на ОСНОВНОЙ карте
+            // Симулятора, где есть города и прочие ориентиры мира.
+            case "location_show_in_simulator":
+                ShowLocationInSimulator(root);
+                break;
+
             case "location_delete":
                 DeleteLocation();
                 break;
@@ -1421,12 +1437,20 @@ public sealed class EditorForm : WebViewForm
         var path = _currentLocationPath;
         if (saveAs || string.IsNullOrWhiteSpace(path))
         {
+            // Библиотека Location — единственное место, где ресурс может жить:
+            // LocationStore отказывается писать за её пределы (защита от записи
+            // куда попало). Диалог же позволял выбрать произвольный каталог, и
+            // сохранение падало с «Путь Location выходит за пределы библиотеки»,
+            // причём уже ПОСЛЕ выбора файла — то есть выглядело как потеря работы.
+            // Поэтому каталог диалога задаётся библиотекой, а выбранный путь
+            // потом явно проверяется с понятным сообщением.
             using var dialog = new SaveFileDialog
             {
                 Title = "Сохранить Location",
                 Filter = ResourceFileTypes.Filter(ResourceFileTypes.Get(".aqlocation")),
                 DefaultExt = "aqlocation",
                 AddExtension = true,
+                InitialDirectory = _locationStore.Root,
                 FileName = string.IsNullOrWhiteSpace(path)
                     ? SanitizeFileName(definition.Name) + ".aqlocation"
                     : Path.GetFileName(path)
@@ -1436,6 +1460,18 @@ public sealed class EditorForm : WebViewForm
                 return false;
 
             path = dialog.FileName;
+
+            if (!_locationStore.ContainsPath(path))
+            {
+                MessageBox.Show(
+                    this,
+                    "Location сохраняются только в библиотеку:\r\n" + _locationStore.Root +
+                    "\r\n\r\nВыбранный файл находится вне неё, поэтому сохранение отменено.",
+                    "Сохранение Location",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Warning);
+                return false;
+            }
         }
 
         _currentLocationDefinition = definition;
@@ -1496,6 +1532,38 @@ public sealed class EditorForm : WebViewForm
             type = "location_test",
             result
         }, WebJsonOptions));
+    }
+
+    /// <summary>
+    /// Показывает отобранные точки на карте Симулятора (режим визуализации).
+    ///
+    /// Собственная карта редактора локаций не имеет ориентиров — на ней нет
+    /// городов и прочих признаков мира, поэтому по ней нельзя понять, ГДЕ
+    /// оказались точки. Основная карта такие ориентиры имеет, поэтому набор
+    /// показывается поверх неё. Точки берутся из того же LocationResolver, что и
+    /// тест, чтобы показанное совпадало с проверенным.
+    /// </summary>
+    private void ShowLocationInSimulator(JsonElement root)
+    {
+        var definition = _locationDefinitionFrom(root);
+        if (definition is null)
+            throw new InvalidOperationException("Не передана Location Definition.");
+
+        var rounds = Math.Clamp(OptionalInt(root, "rounds") ?? 8, 1, 128);
+        var world = _hub.Get<WorldState>("world").Value;
+        var result = new LocationResolver().Test(definition, world.Points, rounds);
+
+        // Нумерация совпадает с тестовой картой: 1..N в порядке отбора. Повторы
+        // сохраняются намеренно — иначе исчезло бы представление о том, какие
+        // точки выбираются чаще.
+        var points = result.Candidates
+            .Select((candidate, index) => new LocationVisualisationPoint(candidate.CandidateId, index + 1))
+            .ToArray();
+
+        LocationVisualisationRequested?.Invoke(this, new LocationVisualisationRequest(
+            definition.Name,
+            points,
+            result.Diagnostics ?? Array.Empty<string>()));
     }
 
     private static LocationDefinition? _locationDefinitionFrom(JsonElement root)

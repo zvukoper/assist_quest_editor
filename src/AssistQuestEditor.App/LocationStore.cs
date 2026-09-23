@@ -30,6 +30,31 @@ public sealed class LocationStore
 
     public bool IsReadOnly => _readOnly;
 
+    /// <summary>Каталог библиотеки: единственное место, куда можно писать Location.</summary>
+    public string Root => _root;
+
+    /// <summary>
+    /// Лежит ли путь внутри библиотеки.
+    ///
+    /// Нужен, чтобы UI мог проверить выбор пользователя ДО записи и объяснить
+    /// отказ. Иначе сохранение падало исключением уже после выбора файла.
+    /// </summary>
+    public bool ContainsPath(string? path)
+    {
+        if (string.IsNullOrWhiteSpace(path))
+            return false;
+
+        try
+        {
+            EnsureInsideRoot(Path.GetFullPath(path));
+            return true;
+        }
+        catch (InvalidOperationException)
+        {
+            return false;
+        }
+    }
+
     public IReadOnlyList<LocationDefinition> Definitions =>
         _items.Values
             .Select(item => item.Definition)

@@ -11,10 +11,10 @@
     <Prefer32Bit>false</Prefer32Bit>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
 
-    <Version>1.0.40.165</Version>
-    <AssemblyVersion>1.0.40.165</AssemblyVersion>
-    <FileVersion>1.0.40.165</FileVersion>
-    <AssemblyInformationalVersion>1.0.40.165-LOCATION-WEBVIEW-CHANNEL-R13</AssemblyInformationalVersion>
+    <Version>1.0.40.166</Version>
+    <AssemblyVersion>1.0.40.166</AssemblyVersion>
+    <FileVersion>1.0.40.166</FileVersion>
+    <AssemblyInformationalVersion>1.0.40.166-LOCATION-MAP-VISUALISATION-R14</AssemblyInformationalVersion>
     <PublishSingleFile>true</PublishSingleFile>
     <SelfContained>true</SelfContained>
     <RuntimeIdentifier>win-x64</RuntimeIdentifier>
