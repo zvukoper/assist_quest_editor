@@ -14,6 +14,7 @@ public sealed class EditorForm : WebViewForm
     };
 
 
+    private readonly IDataChannelHub _hub;
     private readonly IDataChannel<PlayerState> _player;
     private readonly IDataChannel<WorldSelectionState> _selection;
     private const int DefinitionSchemaVersion = 1;
@@ -85,6 +86,7 @@ public sealed class EditorForm : WebViewForm
         IQuestRuntimeController runtime)
         : base($"{title}", page, new Size(1380, 900), "editor:" + page)
     {
+        _hub = hub ?? throw new ArgumentNullException(nameof(hub));
         WindowKey = "editor:" + page;
         _player = hub.Get<PlayerState>("player");
         _selection = hub.Get<WorldSelectionState>("world-selection");
@@ -1578,6 +1580,11 @@ public sealed class EditorForm : WebViewForm
                 id = scene.Id,
                 title = scene.Title
             }).ToArray(),
+            itemCatalog = ItemCatalogFactory.CreateStarter(),
+            npcCatalog = NpcCatalogFactory.CreateStarter(),
+            // WorldPoint catalog берётся из того же World Data Channel, что и карта
+            // Simulator. Поэтому Reference Picker не создаёт второй источник точек.
+            worldPointCatalog = _hub.GetSnapshot().World.Points,
             documentPath = _currentDefinitionPath ?? string.Empty,
             lastDocumentPath = _lastDefinitionPath ?? string.Empty,
             documentDirty = _documentDirty
