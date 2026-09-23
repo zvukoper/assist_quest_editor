@@ -182,8 +182,20 @@
               ((questActivation?.mode || "Manual") === mode ? " selected" : "") + ">" + mode + "</option>").join("") +
           "</select></label>" +
         "<label class='miniLabel' style='display:flex;align-items:center;gap:6px'>WorldPoint" +
-          "<input id='activationPoint' class='toolButton' style='width:280px' placeholder='sdo:camping:0x... или city:chelyabinsk' value='" +
-            escapeHtml(questActivation?.worldPointId || "") + "'></label>" +
+          "<input id='activationPoint' list='activationWorldPointOptions' class='toolButton' style='width:250px' placeholder='Имя или ID WorldPoint' value='" +
+            escapeHtml(questActivation?.worldPointId || "") + "'>" +
+          "<datalist id='activationWorldPointOptions'>" +
+            worldPointCatalog.map(point =>
+              "<option value='" + escapeHtml(point.id || "") + "' label='" +
+                escapeHtml((point.name || point.id || "") + (point.category ? " · " + point.category : "")) +
+              "'></option>" +
+              (point.name && point.name !== point.id
+                ? "<option value='" + escapeHtml(point.name) + "' label='" + escapeHtml(point.id || "") + "'></option>"
+                : "")
+            ).join("") +
+          "</datalist>" +
+          "<button class='toolButton' id='activationFromSimulator' type='button' title='Взять текущую выбранную точку на карте Simulator'>Взять выбранную из Simulator</button>" +
+        "</label>" +
         "<label class='miniLabel' style='display:flex;align-items:center;gap:6px'>Радиус" +
           "<input id='activationRadius' class='toolButton' style='width:90px' type='number' min='0' value='" +
             escapeHtml(String(questActivation?.radius ?? 35)) + "'></label>" +
@@ -213,9 +225,28 @@
     ws.querySelector("#editActivation").addEventListener("click", () => {
       activationPanel.style.display = activationPanel.style.display === "none" ? "flex" : "none";
     });
+    ws.querySelector("#activationFromSimulator").addEventListener("click", () => {
+      const point = simulatorContext.selection?.point;
+      const input = ws.querySelector("#activationPoint");
+      const hint = ws.querySelector("#activationHint");
+      if (!point) {
+        hint.textContent = "В Simulator сначала выберите точку на карте.";
+        return;
+      }
+
+      input.value = point.id || "";
+      const isTemporary = String(point.id || "").toLowerCase().startsWith("temporary:");
+      const display = point.name || point.id || "точка";
+      hint.textContent = isTemporary
+        ? "Подставлена временная точка «" + display + "». Она действует только в текущей сессии Simulator."
+        : "Подставлен WorldPoint «" + display + "».";
+    });
+
     ws.querySelector("#applyActivation").addEventListener("click", () => {
       const mode = ws.querySelector("#activationMode").value;
-      const worldPointId = ws.querySelector("#activationPoint").value.trim();
+      const rawWorldPointId = ws.querySelector("#activationPoint").value.trim();
+      const resolved = resolveReference("worldPointId", rawWorldPointId);
+      const worldPointId = resolved.entry ? resolved.id : rawWorldPointId;
       const radius = Number(ws.querySelector("#activationRadius").value);
       const hint = ws.querySelector("#activationHint");
 
@@ -226,7 +257,9 @@
         return;
       }
 
-      hint.textContent = "";
+      hint.textContent = !resolved.entry && worldPointId
+        ? "Внимание: сохранена ссылка «" + worldPointId + "», но такого WorldPoint сейчас нет в каталоге."
+        : "";
       send({
         action: "set_activation",
         mode,
