@@ -46,9 +46,10 @@ public sealed class LocationResolver
         WorldCoordinate? playerPosition = null,
         ILocationUsageHistory? history = null,
         RoadIndex? roads = null,
-        JunctionIndex? junctions = null)
+        JunctionIndex? junctions = null,
+        CityBoundaryIndex? cities = null)
     {
-        var result = Test(location, worldPoints, 1, playerPosition, history, roads, junctions);
+        var result = Test(location, worldPoints, 1, playerPosition, history, roads, junctions, cities);
         var candidate = result.Candidates.FirstOrDefault();
         if (!result.Supported || candidate is null)
         {
@@ -87,7 +88,8 @@ public sealed class LocationResolver
         WorldCoordinate? playerPosition = null,
         ILocationUsageHistory? history = null,
         RoadIndex? roads = null,
-        JunctionIndex? junctions = null)
+        JunctionIndex? junctions = null,
+        CityBoundaryIndex? cities = null)
     {
         rounds = Math.Clamp(rounds, 1, 128);
         var diagnostics = new List<string>();
@@ -218,6 +220,60 @@ public sealed class LocationResolver
                 diagnostics);
         }
 
+        // Черты городов — та же логика окружения. Отличие от перекрёстков:
+        // отсутствие черт не всегда ошибка. Черты рисует автор вручную, и пока он
+        // не нарисовал ни одной, критерий «В любом городе» честно не находит
+        // ничего, но это НЕ поломка окружения — в отличие от отсутствия файла
+        // перекрёстков, который поставляется вместе с данными.
+        //
+        // Различаются два случая, и их важно не смешивать:
+        //  - черт нет вообще: поиск осмысленно сообщает автору, что рисовать
+        //    надо, но результат пуст и это ожидаемо;
+        //  - запрошен КОНКРЕТНЫЙ город, а черты у него нет: это уже ошибка
+        //    настройки критерия, и молчаливое «кандидатов нет» уведёт автора
+        //    искать проблему в данных мира вместо собственной черты.
+        if (criteria.Any(IsCityCriterion))
+        {
+            var withoutBoundary = cities is null
+                ? criteria.Where(IsCitySpecificCriterion)
+                    .Select(CityCriterionCity)
+                    .Where(city => !string.IsNullOrWhiteSpace(city))
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .ToArray()
+                : criteria.Where(IsCitySpecificCriterion)
+                    .Select(CityCriterionCity)
+                    .Where(city => !string.IsNullOrWhiteSpace(city) && !cities.HasBoundaryFor(city))
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .ToArray();
+
+            if (withoutBoundary.Length > 0)
+            {
+                diagnostics.Add(
+                    "Критерий «В черте города» не может быть выполнен: у города нет нарисованной черты. " +
+                    "Нарисуйте черту в окне «Черты городов».");
+                diagnostics.AddRange(withoutBoundary.Select(city => "Без черты: " + city));
+                return new LocationTestResult(
+                    location.Id,
+                    false,
+                    rounds,
+                    Array.Empty<LocationTestCandidate>(),
+                    diagnostics);
+            }
+
+            if (cities is null || cities.IsEmpty)
+            {
+                diagnostics.Add(
+                    "Критерий «В черте города» не может быть выполнен: ни одна черта города не нарисована. " +
+                    "Нарисуйте черты в окне «Черты городов».");
+                return new LocationTestResult(
+                    location.Id,
+                    false,
+                    rounds,
+                    Array.Empty<LocationTestCandidate>(),
+                    diagnostics);
+            }
+        }
+
         // Индекс строится один раз: критерии «рядом есть категория» и «нет категории
         // в радиусе» просматривают окрестность каждой точки, а точек в мире тысячи.
         // Без индекса это был бы полный перебор по всем парам (5192² ≈ 27 млн
@@ -226,7 +282,7 @@ public sealed class LocationResolver
         var index = new WorldPointIndex(worldPoints);
 
         var candidates = worldPoints.Where(point =>
-            MatchesAll(point, criteria, worldPoints, index, playerPosition, roads, junctions, diagnostics)).ToList();
+            MatchesAll(point, criteria, worldPoints, index, playerPosition, roads, junctions, cities, diagnostics)).ToList();
 
         candidates = candidates.Where(point =>
             MatchesHistory(location.Id, point.Id, location.Query?.History, history)).ToList();
@@ -357,6 +413,7 @@ public sealed class LocationResolver
         WorldCoordinate? playerPosition,
         RoadIndex? roads,
         JunctionIndex? junctions,
+        CityBoundaryIndex? cities,
         ICollection<string> diagnostics)
     {
         foreach (var criterion in criteria)
@@ -373,7 +430,7 @@ public sealed class LocationResolver
             if (IsStrategyCriterion(criterion))
                 continue;
 
-            var supported = Matches(candidate, criterion, worldPoints, index, playerPosition, roads, junctions,
+            var supported = Matches(candidate, criterion, worldPoints, index, playerPosition, roads, junctions, cities,
                 out var result, out var message);
             if (!supported)
             {
@@ -397,6 +454,7 @@ public sealed class LocationResolver
         WorldCoordinate? playerPosition,
         RoadIndex? roads,
         JunctionIndex? junctions,
+        CityBoundaryIndex? cities,
         out bool result,
         out string message)
     {
@@ -589,6 +647,63 @@ public sealed class LocationResolver
                 return true;
             }
 
+            // «В любом городе»: точка внутри ЛЮБОЙ из нарисованных черт. Галочка
+            // «Нет» даёт «вне городов» — это и есть глобальное отделение города
+            // от сельской местности (например, рубка дров в городе не актуальна).
+            //
+            // Проверка не по признаку «точка — город» из данных, а по НАРИСОВАННОЙ
+            // автором области: городские точки стоят в центре населённого пункта, а
+            // квесту нужна вся его площадь, включая окраины.
+            case "inanycity":
+            case "citycontains":
+            {
+                if (cities is null || cities.IsEmpty)
+                {
+                    result = false;
+                    message = $"Критерий {type}: ни одна черта города не нарисована.";
+                    return false;
+                }
+
+                result = cities.Contains(candidate.Position.X, candidate.Position.Z);
+                message = string.Empty;
+                return true;
+            }
+
+            // «В черте города X»: точка внутри области КОНКРЕТНОГО города.
+            // Нужно для квестов, привязанных к одному городу (доставка еды),
+            // и для их противоположности через галочку «Нет» (пригороды).
+            case "incityboundary":
+            case "cityboundary":
+            {
+                if (!parameters.TryGetValue("city", out var wantedCity) ||
+                    string.IsNullOrWhiteSpace(wantedCity))
+                {
+                    result = false;
+                    message = $"Критерий {type}: не задан город city.";
+                    return false;
+                }
+
+                if (cities is null || cities.IsEmpty)
+                {
+                    result = false;
+                    message = $"Критерий {type}: ни одна черта города не нарисована.";
+                    return false;
+                }
+
+                if (!cities.HasBoundaryFor(wantedCity))
+                {
+                    // Отдельное сообщение, а не «точка не найдена»: причина в том,
+                    // что черта не нарисована, и автору надо знать именно это.
+                    result = false;
+                    message = $"Критерий {type}: у города «{wantedCity}» нет нарисованной черты.";
+                    return false;
+                }
+
+                result = cities.ContainsCity(wantedCity, candidate.Position.X, candidate.Position.Z);
+                message = string.Empty;
+                return true;
+            }
+
             default:
                 result = false;
                 message = $"Критерий {type} пока не поддерживается текущим Sandbox Provider.";
@@ -624,6 +739,35 @@ public sealed class LocationResolver
                type.Equals("junctionradius", StringComparison.OrdinalIgnoreCase) ||
                type.Equals("junctiondistance", StringComparison.OrdinalIgnoreCase);
     }
+
+    /// <summary>
+    /// Критерий, зависящий от нарисованных черт городов.
+    ///
+    /// Отдельно от <see cref="IsCitySpecificCriterion"/>: этот нужен для общей
+    /// проверки окружения (загружены ли вообще черты), тот — для точного
+    /// сообщения о конкретном городе.
+    /// </summary>
+    private static bool IsCityCriterion(LocationCriterion criterion)
+    {
+        var type = criterion.Type.Trim();
+        return type.Equals("inanycity", StringComparison.OrdinalIgnoreCase) ||
+               type.Equals("citycontains", StringComparison.OrdinalIgnoreCase) ||
+               IsCitySpecificCriterion(criterion);
+    }
+
+    /// <summary>Критерий «в черте КОНКРЕТНОГО города» (у него есть параметр city).</summary>
+    private static bool IsCitySpecificCriterion(LocationCriterion criterion)
+    {
+        var type = criterion.Type.Trim();
+        return type.Equals("incityboundary", StringComparison.OrdinalIgnoreCase) ||
+               type.Equals("cityboundary", StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>Название города из параметра критерия, как его ввёл автор.</summary>
+    private static string CityCriterionCity(LocationCriterion criterion) =>
+        criterion.SafeParameters.TryGetValue("city", out var city)
+            ? city?.Trim() ?? string.Empty
+            : string.Empty;
 
     /// <summary>
     /// Диапазон расстояния от игрока.
@@ -879,6 +1023,12 @@ public sealed class LocationResolver
                 return $"Критерий {type}: минимум {junctionRange.Min:0.#} больше максимума {junctionUpper:0.#}.";
         }
 
+        // «В черте города X» без названия города — ошибка настройки, а не «ничего
+        // не найдено»: без параметра критерий не может быть выполнен вообще, и
+        // молчаливый пустой результат увёл бы автора искать причину в данных.
+        if (IsCitySpecificCriterion(criterion) && string.IsNullOrWhiteSpace(CityCriterionCity(criterion)))
+            return $"Критерий {type}: не задан город city.";
+
         return null;
     }
 
@@ -908,6 +1058,8 @@ public sealed class LocationResolver
         "distancefromplayer", "playerdistance",
         "nearbyroad", "maxroaddistance",
         "nearbyjunction", "junctionradius", "junctiondistance",
+        "inanycity", "citycontains",
+        "incityboundary", "cityboundary",
         MinDistanceCriterion
     ];
 

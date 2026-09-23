@@ -42,6 +42,12 @@ public sealed class EditorForm : WebViewForm
     /// не входит.
     /// </summary>
     private readonly JunctionIndex _junctions;
+
+    /// <summary>
+    /// Черты городов: критерии «В любом городе» и «В черте города X» работают по
+    /// областям, нарисованным автором вручную, а не по признаку точки.
+    /// </summary>
+    private readonly CityBoundaryIndex _cityBoundaries;
     private readonly HashSet<string> _executedNodeIds = new(StringComparer.OrdinalIgnoreCase);
 
     /// <summary>
@@ -141,7 +147,8 @@ public sealed class EditorForm : WebViewForm
         IQuestRuntimeController runtime,
         LocationStore locationStore,
         RoadIndex? roads = null,
-        JunctionIndex? junctions = null)
+        JunctionIndex? junctions = null,
+        CityBoundaryIndex? cityBoundaries = null)
         : base($"{title}", page, new Size(1380, 900), "editor:" + page)
     {
         _hub = hub ?? throw new ArgumentNullException(nameof(hub));
@@ -156,6 +163,7 @@ public sealed class EditorForm : WebViewForm
         _locationStore = locationStore ?? throw new ArgumentNullException(nameof(locationStore));
         _roads = roads ?? new RoadIndex(Array.Empty<RoadSegment>());
         _junctions = junctions ?? new JunctionIndex(Array.Empty<JunctionPoint>());
+        _cityBoundaries = cityBoundaries ?? CityBoundaryIndex.Empty;
         var preferences = AppUiPreferencesStore.Load();
         _lastDefinitionPath = preferences.LastQuestDefinitionPath;
         _activePane = NormalizePane(PaneFromPage(page));
@@ -1552,13 +1560,8 @@ public sealed class EditorForm : WebViewForm
             rounds,
             PlayerPosition(),
             roads: _roads,
-            junctions: _junctions);
-
-        PostJson(JsonSerializer.Serialize(new
-        {
-            type = "location_test",
-            result
-        }, WebJsonOptions));
+        junctions: _junctions,
+        cities: _cityBoundaries);
     }
 
     /// <summary>

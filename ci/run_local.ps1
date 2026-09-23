@@ -79,7 +79,7 @@ $script:HeartbeatPath = Join-Path $script:StateDir 'monitor.heartbeat'
 # Значение фиксировано: publish присутствует всегда (как «пропущено»), поэтому
 # число не зависит от -IncludePublish.
 # Держать в актуальном состоянии при добавлении/удалении Invoke-Check.
-$script:TotalChecks = 34
+$script:TotalChecks = 35
 
 # Подавление уведомления скрипта. Вызывающий скрипт может взять уведомление на
 # себя: pull.ps1 показывает одно уведомление с учётом признака активности
@@ -610,6 +610,16 @@ Invoke-Check -Name 'Ручная проверка перекрёстков' -Bod
     node ci/junction_review_smoke.mjs
 }
 
+# Черты городов: окно рисования контура и два критерия отбора точек.
+# Единственное взаимодействие с картой там — рисование многоугольника, поэтому
+# проверяется именно КОНТУР: незамкнутый не должен уходить на сохранение, а
+# сохранённый обязан нести координаты. Отдельно стережётся ЦЕПОЧКА имён
+# критериев (панель → SupportedCriteria → switch → предикат): расхождение даёт
+# «критерий молча не поддерживается» без единой ошибки в интерфейсе.
+Invoke-Check -Name 'Черты городов' -Body {
+    node ci/city_boundary_smoke.mjs
+}
+
 # Шаг 5.3: pan средней кнопкой следует за курсором в обоих нодовых редакторах.
 # Отдельная проверка нужна потому, что pan-ассерты в quest/scene smoke требуют
 # лишь изменения viewBox: при несовпадении аспекта канваса и viewBox pan
@@ -704,6 +714,7 @@ Invoke-Check -Name 'Синтаксис web JavaScript' -Body {
         '.\src\AssistQuestEditor.App\Web\interface.js',
         '.\src\AssistQuestEditor.App\Web\simulator.js',
         '.\src\AssistQuestEditor.App\Web\junctions.js',
+        '.\src\AssistQuestEditor.App\Web\cityBoundaries.js',
         '.\src\AssistQuestEditor.App\Web\web_log.js'
     )
 

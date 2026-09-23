@@ -917,6 +917,256 @@ public sealed class LocationResolverTests
         Assert.Equal(source, index.ToPoints());
     }
 
+    // --- Черты городов ---
+
+    [Fact]
+    public void InAnyCityKeepsOnlyPointsInsideBoundary()
+    {
+        var resolver = new LocationResolver(seed: 1);
+
+        // Точки на оси X: 0 — центр квадрата, 250 — за его границей (100 м).
+        var world = new[]
+        {
+            Point("inside", "В городе", "man", 0),
+            Point("edge", "Почти на грани", "man", 99),
+            Point("outside", "За городом", "man", 250)
+        };
+
+        var cities = new CityBoundaryIndex(new[] { Square() });
+
+        var location = DynamicLocation(("InAnyCity", new Dictionary<string, string>()));
+        var result = resolver.Test(location, world, 8, cities: cities);
+
+        Assert.True(result.Supported);
+        // Раундов 8, а подходящих точек две: список кандидатов — выбранные
+        // раунды, а не отфильтрованный мир, поэтому считаются РАЗЛИЧНЫЕ id.
+        Assert.Equal(
+            new[] { "edge", "inside" },
+            result.Candidates.Select(candidate => candidate.CandidateId).Distinct().OrderBy(id => id));
+        Assert.DoesNotContain(result.Candidates, candidate => candidate.CandidateId == "outside");
+    }
+
+    [Fact]
+    public void InAnyCityWithoutBoundariesReportsSingleDiagnostic()
+    {
+        var resolver = new LocationResolver(seed: 1);
+        var world = new[] { Point("a", "Точка", "man", 0) };
+
+        var location = DynamicLocation(("InAnyCity", new Dictionary<string, string>()));
+        var result = resolver.Test(location, world, 4);
+
+        // Черты рисует автор вручную, поэтому их отсутствие — не поломка данных,
+        // но поиск обязан сказать об этом внятно, а не вернуть пустой список.
+        Assert.False(result.Supported);
+        Assert.Empty(result.Candidates);
+        Assert.Single(result.Diagnostics);
+        Assert.Contains("черт", result.Diagnostics[0], StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void InCityBoundaryMatchesByNameAndById()
+    {
+        var resolver = new LocationResolver(seed: 1);
+        var world = new[]
+        {
+            Point("inside", "В городе", "man", 0),
+            Point("far", "Далеко", "man", 5000)
+        };
+
+        var cities = new CityBoundaryIndex(new[]
+        {
+            Square("city:kazan", "Казань"),
+            Square("city:arsk", "Арск", centerX: 10000)
+        });
+
+        // Имя: автор выбирает город из списка и видит имя, а не идентификатор.
+        var byName = resolver.Test(
+            DynamicLocation(("InCityBoundary", new Dictionary<string, string> { ["city"] = "Казань" })),
+            world, 4, cities: cities);
+
+        Assert.True(byName.Supported);
+        Assert.All(byName.Candidates, candidate => Assert.Equal("inside", candidate.CandidateId));
+
+        // Идентификатор: так критерий выглядит в сохранённом файле.
+        var byId = resolver.Test(
+            DynamicLocation(("InCityBoundary", new Dictionary<string, string> { ["city"] = "city:kazan" })),
+            world, 4, cities: cities);
+
+        Assert.True(byId.Supported);
+        Assert.All(byId.Candidates, candidate => Assert.Equal("inside", candidate.CandidateId));
+
+        // Арск стоит в 10 км: точка центра Казани внутрь его черты не попадает.
+        var arsk = resolver.Test(
+            DynamicLocation(("InCityBoundary", new Dictionary<string, string> { ["city"] = "Арск" })),
+            world, 4, cities: cities);
+
+        Assert.True(arsk.Supported);
+        Assert.Empty(arsk.Candidates);
+    }
+
+    [Fact]
+    public void NegatedCityCriteriaSelectSuburbs()
+    {
+        var resolver = new LocationResolver(seed: 1);
+
+        // «Пригород» — это точка вне черты: ровно то, что даёт галочка «Нет».
+        var world = new[]
+        {
+            Point("inside", "В городе", "man", 0),
+            Point("suburbA", "Пригород-1", "man", 300),
+            Point("suburbB", "Пригород-2", "man", -800)
+        };
+
+        var cities = new CityBoundaryIndex(new[] { Square() });
+
+        var anyCity = resolver.Test(
+            NegatedDynamicLocation(("InAnyCity", new Dictionary<string, string>())),
+            world, 8, cities: cities);
+
+        Assert.True(anyCity.Supported);
+        Assert.Equal(
+            new[] { "suburbA", "suburbB" },
+            anyCity.Candidates.Select(candidate => candidate.CandidateId).Distinct().OrderBy(id => id));
+        Assert.DoesNotContain(anyCity.Candidates, candidate => candidate.CandidateId == "inside");
+
+        var outsideKazan = resolver.Test(
+            NegatedDynamicLocation(("InCityBoundary", new Dictionary<string, string> { ["city"] = "Казань" })),
+            world, 8, cities: cities);
+
+        Assert.True(outsideKazan.Supported);
+        Assert.Equal(
+            new[] { "suburbA", "suburbB" },
+            outsideKazan.Candidates.Select(candidate => candidate.CandidateId).Distinct().OrderBy(id => id));
+        Assert.DoesNotContain(outsideKazan.Candidates, candidate => candidate.CandidateId == "inside");
+    }
+
+    [Fact]
+    public void InCityBoundaryWithoutThatCityBoundaryReportsTheCity()
+    {
+        var resolver = new LocationResolver(seed: 1);
+        var world = new[] { Point("a", "Точка", "man", 0) };
+
+        // Черта Казани нарисована, черты Арска нет: автор должен узнать, что
+        // рисовать надо именно Арск, а не получить «кандидатов нет».
+        var cities = new CityBoundaryIndex(new[] { Square("city:kazan", "Казань") });
+
+        var location = DynamicLocation(("InCityBoundary", new Dictionary<string, string> { ["city"] = "Арск" }));
+        var result = resolver.Test(location, world, 4, cities: cities);
+
+        Assert.False(result.Supported);
+        Assert.Empty(result.Candidates);
+        Assert.Contains(result.Diagnostics, message =>
+            message.Contains("Арск", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public void InCityBoundaryWithoutCityParameterIsConfigurationError()
+    {
+        var resolver = new LocationResolver(seed: 1);
+        var world = new[] { Point("a", "Точка", "man", 0) };
+        var cities = new CityBoundaryIndex(new[] { Square() });
+
+        var location = DynamicLocation(("InCityBoundary", new Dictionary<string, string>()));
+
+        var result = resolver.Test(location, world, 4, cities: cities);
+
+        // Без города критерий невыполним в принципе, и молчаливый пустой результат
+        // увёл бы автора искать причину в данных мира.
+        Assert.False(result.Supported);
+        Assert.Contains(result.Diagnostics, message =>
+            message.Contains("город", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public void CityBoundaryGeometryHandlesConcaveAndDegenerateShapes()
+    {
+        // Вогнутый «П»-образный контур: точка в вырезе снаружи, хотя её
+        // прямоугольник накрывает. Проверка только по рамке дала бы ложное «внутри».
+        var horseshoe = new CityBoundary("city:test", "Тест", new[]
+        {
+            new CityBoundaryPoint(0, 0),
+            new CityBoundaryPoint(100, 0),
+            new CityBoundaryPoint(100, 100),
+            new CityBoundaryPoint(70, 100),
+            new CityBoundaryPoint(70, 30),
+            new CityBoundaryPoint(30, 30),
+            new CityBoundaryPoint(30, 100),
+            new CityBoundaryPoint(0, 100)
+        });
+
+        Assert.True(horseshoe.Contains(15, 50));
+        Assert.True(horseshoe.Contains(85, 50));
+        Assert.False(horseshoe.Contains(50, 80));
+
+        // Вырожденные области не содержат ничего: у них нет внутренности, и
+        // «угадывать» её значило бы считать перекрёстком любую пару вершин.
+        Assert.False(new CityBoundary("c", "Т", new[]
+        {
+            new CityBoundaryPoint(0, 0),
+            new CityBoundaryPoint(10, 0)
+        }).Contains(5, 0));
+
+        Assert.False(new CityBoundary("c", "Т", Array.Empty<CityBoundaryPoint>()).Contains(0, 0));
+
+        // Нечисловая вершина делает область негодной ЦЕЛИКОМ, а не «чинится»
+        // выбрасыванием: чинить чужой контур молча — значит менять замысел автора.
+        var broken = new CityBoundary("c", "Т", new[]
+        {
+            new CityBoundaryPoint(0, 0),
+            new CityBoundaryPoint(double.NaN, 0),
+            new CityBoundaryPoint(0, 100)
+        });
+
+        Assert.False(broken.IsValid);
+        Assert.False(broken.Contains(0, 50));
+    }
+
+    [Fact]
+    public void MissingCitiesListsEveryCityWithoutBoundary()
+    {
+        var index = new CityBoundaryIndex(new[]
+        {
+            Square("city:kazan", "Казань"),
+            Square("city:arsk", "Арск", centerX: 10000)
+        });
+
+        var missing = index.MissingCities(new[]
+        {
+            new CityReference("city:kazan", "Казань"),
+            new CityReference("city:arsk", "Арск"),
+            new CityReference("city:bugulma", "Бугульма"),
+            new CityReference("city:ufa", "Уфа")
+        });
+
+        // Именно это и есть «проверка, которая уведомляет»: мир расширяется,
+        // города добавляются, и узнать об этом надо явным списком.
+        Assert.Equal(2, missing.Count);
+        Assert.Equal(new[] { "Бугульма", "Уфа" }, missing.Select(city => city.Name));
+
+        Assert.True(index.HasBoundaryFor("Казань"));
+        Assert.True(index.HasBoundaryFor("city:kazan"));
+        Assert.False(index.HasBoundaryFor("Уфа"));
+
+        // Пустой индекс: без черты все города, и это не ошибка, а состояние
+        // первого запуска.
+        Assert.Equal(4, CityBoundaryIndex.Empty.MissingCities(new[]
+        {
+            new CityReference("city:kazan", "Казань"),
+            new CityReference("city:arsk", "Арск"),
+            new CityReference("city:bugulma", "Бугульма"),
+            new CityReference("city:ufa", "Уфа")
+        }).Count);
+    }
+
+    [Fact]
+    public void CityBoundaryTitleIsBuiltAsAuthorRequested()
+    {
+        // Название собирается в домене, потому что его видят и окно рисования,
+        // и панель критериев, и журнал — расходиться они не должны.
+        Assert.Equal("Черта города Казань", Square(cityName: "Казань").Title);
+        Assert.Equal("Черта города (без названия)", Square(cityName: "").Title);
+    }
+
     private static LocationDefinition DynamicLocation(
         params (string Type, Dictionary<string, string> Parameters)[] criteria) =>
         new("location_test", "Тестовая локация")
@@ -929,6 +1179,38 @@ public sealed class LocationResolverTests
                     .ToArray()
             }
         };
+
+    /// <summary>
+    /// Локация с ГАЛОЧКОЙ «Нет» у каждого критерия: то, ради чего черты городов и
+    /// заводились — пригороды («не в черте города»).
+    /// </summary>
+    private static LocationDefinition NegatedDynamicLocation(
+        params (string Type, Dictionary<string, string> Parameters)[] criteria) =>
+        new("location_test", "Тестовая локация")
+        {
+            Mode = LocationMode.Dynamic,
+            Query = new LocationQueryDefinition
+            {
+                Criteria = criteria
+                    .Select(item => new LocationCriterion(item.Type, item.Parameters, Negate: true))
+                    .ToArray()
+            }
+        };
+
+    /** Квадрат вокруг (0,0) со стороной 200 м: простая проверяемая область. */
+    private static CityBoundary Square(
+        string cityId = "city:kazan",
+        string cityName = "Казань",
+        double centerX = 0,
+        double centerZ = 0,
+        double halfSize = 100) =>
+        new(cityId, cityName, new[]
+        {
+            new CityBoundaryPoint(centerX - halfSize, centerZ - halfSize),
+            new CityBoundaryPoint(centerX + halfSize, centerZ - halfSize),
+            new CityBoundaryPoint(centerX + halfSize, centerZ + halfSize),
+            new CityBoundaryPoint(centerX - halfSize, centerZ + halfSize)
+        });
 
     private static WorldPoint Man(string id, double x) => Point(id, "Мужчина", "man", x);
     private static WorldPoint Cat(string id, double x) => Point(id, "Кот", "cat", x);

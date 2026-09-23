@@ -106,12 +106,19 @@ internal static class Program
             var junctions = JunctionWorldDataLoader.Load();
             AppLogger.Info("Перекрёстки загружены.", $"count={junctions.JunctionCount}");
 
+            // Черты городов — пользовательские данные, а не поставляемые: их
+            // рисует автор руками, потому что границу города нельзя вывести из
+            // геометрии. Пустой список — нормальное состояние первого запуска.
+            var cityBoundaries = CityBoundaryWorldDataLoader.Load();
+            AppLogger.Info("Черты городов загружены.",
+                $"count={cityBoundaries.Count}; path={CityBoundaryWorldDataLoader.FilePath}");
+
             var simulatorAdapter = new SimulatorDataSourceAdapter(worldPoints);
             var worldCount = simulatorAdapter.Channels.Get<WorldState>("world").Value.Points.Count;
             AppLogger.Info("Создан SimulatorDataSourceAdapter.",
                 $"channels={simulatorAdapter.Channels.Describe().Count}; points={worldCount}");
 
-            mainForm = new MainForm(simulatorAdapter.Channels, ciTest, roads, junctions)
+            mainForm = new MainForm(simulatorAdapter.Channels, ciTest, roads, junctions, cityBoundaries, worldPoints)
             {
                 Opacity = 0
             };

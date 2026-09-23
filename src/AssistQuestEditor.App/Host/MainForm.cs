@@ -35,6 +35,23 @@ public sealed class MainForm : WebViewForm
     private readonly JunctionIndex _junctions;
 
     /// <summary>
+    /// Черты городов, нарисованные автором вручную.
+    ///
+    /// Отдаются критериям «В любом городе» и «В черте города X», и окну
+    /// рисования. В отличие от дорог и перекрёстков это ПОЛЬЗОВАТЕЛЬСКИЕ данные:
+    /// в поставке их нет, пока автор не обвёл города.
+    /// </summary>
+    private readonly CityBoundaryIndex _cityBoundaries;
+
+    /// <summary>
+    /// Точки мира для окна черт.
+    ///
+    /// Кэшируются в форме, а не читаются из канала при каждом сохранении черты:
+    /// окно живёт долго и должно работать независимо от состояния каналов.
+    /// </summary>
+    private readonly IReadOnlyList<WorldPoint> _worldPoints;
+
+    /// <summary>
     /// Окна редакторов. Список, а не словарь по странице: одно окно может
     /// переключать активную панель (сайдбар = селектор рабочей области), поэтому
     /// ключ «страница» перестал быть уникальным идентификатором окна.
@@ -46,12 +63,15 @@ public sealed class MainForm : WebViewForm
     private SimulatorForm? _simulator;
     private SettingsForm? _settings;
     private JunctionReviewForm? _junctionReview;
+    private CityBoundaryForm? _cityBoundaryForm;
 
     public MainForm(
         IDataChannelHub hub,
         bool ciTest = false,
         RoadIndex? roads = null,
-        JunctionIndex? junctions = null)
+        JunctionIndex? junctions = null,
+        CityBoundaryIndex? cityBoundaries = null,
+        IReadOnlyList<WorldPoint>? worldPoints = null)
         : base(
             "Редактор",
             "main.html",
@@ -66,6 +86,8 @@ public sealed class MainForm : WebViewForm
         _hub = hub;
         _roads = roads ?? new RoadIndex(Array.Empty<RoadSegment>());
         _junctions = junctions ?? new JunctionIndex(Array.Empty<JunctionPoint>());
+        _cityBoundaries = cityBoundaries ?? CityBoundaryIndex.Empty;
+        _worldPoints = worldPoints ?? Array.Empty<WorldPoint>();
         _campaignStore = ciTest
             ? new CampaignStore(Path.Combine(AppPaths.ResourceRoot, "campaigns"), readOnly: true)
             : new CampaignStore();
@@ -78,7 +100,7 @@ public sealed class MainForm : WebViewForm
         _locationStore = ciTest
             ? new LocationStore(Path.Combine(Path.GetTempPath(), "AssistQuestEditor-CI-Locations"), readOnly: true)
             : new LocationStore(AppPaths.UserLocationRoot);
-        _locationResolver = new LocationRuntimeResolver(_locationStore, _hub, _roads, _junctions);
+        _locationResolver = new LocationRuntimeResolver(_locationStore, _hub, _roads, _junctions, _cityBoundaries);
         var preferences = AppUiPreferencesStore.Load();
         _sceneDocument = new SceneDocumentSession(
             initialScene.Id,
@@ -139,6 +161,7 @@ public sealed class MainForm : WebViewForm
             _simulator?.Close();
             _settings?.Close();
             _junctionReview?.Close();
+            _cityBoundaryForm?.Close();
         };
     }
 
@@ -161,6 +184,28 @@ public sealed class MainForm : WebViewForm
         _junctionReview = new JunctionReviewForm(_roads, _junctions);
         _junctionReview.FormClosed += (_, _) => _junctionReview = null;
         _junctionReview.Show(this);
+    }
+
+    /// <summary>
+    /// Открывает окно рисования черт городов (одиночный экземпляр).
+    ///
+    /// Одно окно на приложение: черта — это состояние (нарисованные области), и
+    /// два окна показывали бы его по-разному. После закрытия черты перечитываются
+    /// из файла — автор мог нарисовать их в другом окне или править файл руками.
+    /// </summary>
+    private void OpenCityBoundaries()
+    {
+        if (_cityBoundaryForm is not null && !_cityBoundaryForm.IsDisposed)
+        {
+            _cityBoundaryForm.WindowState = FormWindowState.Normal;
+            _cityBoundaryForm.BringToFront();
+            _cityBoundaryForm.Activate();
+            return;
+        }
+
+        _cityBoundaryForm = new CityBoundaryForm(_roads, _worldPoints);
+        _cityBoundaryForm.FormClosed += (_, _) => _cityBoundaryForm = null;
+        _cityBoundaryForm.Show(this);
     }
 
     private void MainForm_BrowserReady(object? sender, EventArgs e)
@@ -300,6 +345,11 @@ public sealed class MainForm : WebViewForm
                 // длительная работа с картой, а не краткая команда.
                 case "open_junction_review":
                     OpenJunctionReview();
+                    break;
+
+                // Черты городов: тоже длительная работа с картой и своё состояние.
+                case "open_city_boundaries":
+                    OpenCityBoundaries();
                     break;
 
                 case "reset_simulator":
@@ -604,7 +654,8 @@ public sealed class MainForm : WebViewForm
             _runtime,
             _locationStore,
             _roads,
-            _junctions);
+            _junctions,
+            _cityBoundaries);
 
         _editors.Add(form);
         form.NavigationRequested += Editor_NavigationRequested;

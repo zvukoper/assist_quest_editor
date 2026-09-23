@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Черты городов</title><link rel="stylesheet" href="theme.css?v=1.0.40.176">
+<style>
+/* Страница целиком про карту: окно открывается ради одной задачи — обвести
+   город и сохранить черту. */
+html, body { height: 100%; margin: 0; overflow: hidden; background: #0d1014; }
+#boundaryRoot { display: grid; grid-template-rows: auto 1fr; height: 100%; }
+
+#boundaryBar {
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  padding: 8px 12px; border-bottom: 1px solid var(--border, #222831);
+  background: #111419;
+}
+
+#boundaryCanvasHost { position: relative; overflow: hidden; }
+#boundaryCanvas { display: block; width: 100%; height: 100%; cursor: crosshair; }
+
+/* Плашка состояния: сколько вершин в контуре, какой город внутри, что записано. */
+#boundaryStatus { margin-left: auto; font-size: 12px; color: #9aa4b2; white-space: nowrap; }
+#boundaryCounter { font-weight: 600; color: #e6e8ea; }
+#boundaryMessage { color: #ffb454; }
+</style>
+</head>
+<body>
+<div id="boundaryRoot">
+  <div id="boundaryBar">
+    <button class="toolButton" id="boundaryClose" type="button" title="Замкнуть контур на начальной точке: после этого можно сохранять черту">Замкнуть черту</button>
+    <button class="toolButton primary" id="boundarySave" type="button" title="Сохранить черту города внутри контура">Сохранить черту</button>
+    <button class="toolButton" id="boundaryUndo" type="button" title="Убрать последнюю поставленную вершину">Убрать точку</button>
+    <button class="toolButton" id="boundaryClear" type="button" title="Стереть текущий контур и начать заново">Очистить</button>
+    <button class="toolButton" id="boundaryFitAll" type="button" title="Показать всю карту">Вся карта</button>
+    <button class="toolButton" id="boundaryReload" type="button" title="Перечитать файл черт с диска">Перечитать</button>
+    <button class="toolButton" id="boundaryDelete" type="button" title="Удалить черту выбранного города из списка">Удалить черту</button>
+    <div id="boundaryStatus">
+      <span id="boundaryCounter">вершин: 0</span>
+      <span id="boundaryHint"> · клик — вершина контура, замкните контур на первой точке</span>
+      <span id="boundaryMessage"></span>
+    </div>
+  </div>
+  <div id="boundaryCanvasHost"><canvas id="boundaryCanvas"></canvas></div>
+</div>
+<script src="web_log.js?v=1.0.40.176"></script>
+<script src="cityBoundaries.js?v=1.0.40.176"></script>
+</body></html>
