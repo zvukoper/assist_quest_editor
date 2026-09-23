@@ -93,6 +93,17 @@ public interface ILocationResolver
 }
 
 /// <summary>
+/// Необязательный жизненный цикл кэша разрешённых Dynamic Locations.
+/// Runtime может начать новый проход мира без привязки Domain к конкретному
+/// способу хранения выбранного кандидата.
+/// </summary>
+public interface ILocationResolutionSession
+{
+    void Reset();
+    void Invalidate(string locationId);
+}
+
+/// <summary>
 /// Канонический файл standalone location resource.
 /// </summary>
 public sealed record LocationDefinitionDocument(
