@@ -77,6 +77,48 @@ public sealed class QuestRuntimeTests
     }
 
     [Fact]
+    public void InteractionCanWaitOnDynamicLocation()
+    {
+        var point = new WorldPoint("random-point", "Случайная точка", "firewood", new WorldCoordinate(100, 0, 0));
+        var hub = new SimulatorDataSourceAdapter(new[] { point }).Channels;
+        var start = Node("start", "Start");
+        var interaction = Node(
+            "interaction",
+            "Interaction",
+            ("locationId", "firewood-location"),
+            ("triggerRadius", "10"));
+        var end = Node("end", "End");
+
+        var graph = Graph(
+            new[] { start, interaction, end },
+            new[]
+            {
+                C("start", start, "out", interaction, "in"),
+                C("interaction", interaction, "out", end, "in")
+            });
+
+        var runtime = new QuestRuntime(
+            new QuestGraphStore(graph),
+            hub,
+            locationResolver: new FakeLocationResolver(point));
+
+        hub.Get<PlayerState>("player").Set(
+            new PlayerState(new WorldCoordinate(-1000, 0, -1000), 0, 0, false, true),
+            "Тест");
+
+        runtime.Start();
+        Assert.Equal(QuestRuntimeStatus.Waiting, runtime.State.Status);
+
+        hub.Get<PlayerState>("player").Set(
+            new PlayerState(new WorldCoordinate(100, 0, 0), 0, 0, false, true),
+            "Тест");
+
+        runtime.Tick();
+
+        Assert.Equal(QuestRuntimeStatus.Completed, runtime.State.Status);
+    }
+
+    [Fact]
     public void WaitTimerResumesThroughOutputAndDoesNotReenterWait()
     {
         var hub = new SimulatorDataSourceAdapter(Array.Empty<WorldPoint>()).Channels;
@@ -616,6 +658,18 @@ public sealed class QuestRuntimeTests
         Assert.Equal("3", restored.Definition.Graph.Nodes.Single(x => x.NodeId == "choice").Parameters["outputCount"]);
         Assert.Contains(restored.Definition.Graph.Connections, x =>
             x.FromNodeId == "choice" && x.FromSocketId == "choice.choice1" && x.ToNodeId == "end");
+    }
+
+    private sealed class FakeLocationResolver : ILocationResolver
+    {
+        private readonly WorldPoint _point;
+
+        public FakeLocationResolver(WorldPoint point) => _point = point;
+
+        public WorldPoint? Resolve(string locationId) =>
+            locationId.Equals("firewood-location", StringComparison.OrdinalIgnoreCase)
+                ? _point
+                : null;
     }
 
     private static QuestNode Node(string id, string type, params (string Key, string Value)[] parameters)
