@@ -1,425 +1,147 @@
-# Authoring UX — Reference Picker, Simulator Bridge и Auto Layout
+# Authoring UX — Reference Picker, Data Bridge и Auto Layout Guard
 
 ## Статус
 
-Документ фиксирует идеи и план, обсуждённые **2026-09-22**. Это архитектурная задача на будущее, а не команда немедленно менять код.
+Документ обновлён 23.09.2026 после фиксации концепции WORLD_AUTHORING_PLATFORM.md.
 
-**Текущее решение:**
-- код проекта в рамках этой записи не изменять;
-- сначала закончить текущий физический тест Campaign/Quest activation;
-- затем реализовывать этот Authoring UX pass отдельным связным пакетом.
+Authoring UX теперь является общей инфраструктурой создания Content для параллельного мира, а не набором удобств только для Quest Graph.
 
-**Зафиксированная точка проекта на момент записи:**
-- repository: `zvukoper/assist_quest_editor`;
-- branch: `main`;
-- HEAD на момент фиксации: `ff8ced08852ac18a116ca71eeb5c4916d6142ce8`;
-- версия в этом HEAD: `1.0.40.162-GEO-ZERO-FIX-R10`.
+Главные инварианты:
+- Content и Runtime не зависят от World Provider;
+- Simulator является полноценным Sandbox Provider;
+- ссылки используют стабильные canonical IDs;
+- Coordinate и WorldPoint reference — разные semantics;
+- неизвестные ссылки не уничтожаются;
+- Auto Layout защищает от плохого imported/agent-created layout и не ломает хороший пользовательский layout.
 
----
+## 1. Reference Picker
 
-# 1. Главная идея
-
-Редактор не должен заставлять автора вручную помнить и копировать идентификаторы объектов, если поле по смыслу является ссылкой на уже существующую сущность.
-
-Вместо универсального:
-
-`строковый input`
-
-нужен единый контекстный механизм:
-
-**Reference Picker / Parameter Editor**
-
-Он должен:
+Общий Reference Picker / Parameter Editor должен:
 - знать тип ожидаемой ссылки;
-- показывать существующие объекты;
-- искать их по мере ввода;
-- отображать человеку понятное имя;
-- сохранять в canonical model стабильный ID;
-- уметь показывать отсутствующий ID, не уничтожая его;
-- по возможности давать навигацию к связанному ресурсу;
-- не превращать все строки подряд в закрытые dropdowns.
+- использовать соответствующий каталог;
+- искать по имени или ID;
+- показывать человеку понятное имя;
+- сохранять стабильный ID;
+- показывать отсутствующую ссылку;
+- не очищать неизвестное значение;
+- поддерживать навигацию к связанному ресурсу.
 
-Главный принцип:
+Главный принцип: отображаемое имя и стабильный ID — разные вещи.
 
-> Отображаемое имя и стабильный ID — разные вещи.
+## 2. Три класса параметров
 
-Пример:
+### Reference
+Первые типы:
+- worldPointId → WorldPoint;
+- sceneId → Scene;
+- itemId → Item;
+- npcId → NPC.
 
-`Челябинск · city:chelyabinsk`
+В дальнейшем: Dialogue, Choice, Condition, Reward, Skill и другие canonical resources.
 
-пользователь выбирает **Челябинск**, а в canonical data хранится:
+### Enum
+Закрытые значения: status, comparison, operator, kind, QuestStartMode и другие зарегистрированные enum.
 
-`worldPointId = "city:chelyabinsk"`
+### Free / Autocomplete
+Расширяемые значения: step, Fact keys, Variable paths, eventType.
 
----
+## 3. Реализованный Reference UX baseline
 
-# 2. Три класса параметров
+Quest Graph получает:
+- Scene catalog;
+- Item catalog;
+- NPC catalog;
+- WorldPoint catalog из того же World Data Channel, который использует Simulator.
 
-Не все параметры должны стать одним и тем же control.
+Reference-поля используют единый registry для worldPointId, sceneId, itemId и npcId.
 
-## 2.1. Reference
+Known resource отображается по имени и сохраняется по ID. Unknown resource не теряется и показывает диагностику «не найден».
 
-Поле разрешается только через известный каталог сущностей, но ручной ввод неизвестного ID не должен приводить к потере значения.
+sceneId сохраняет навигацию «Открыть сцену».
 
-Первый приоритет:
+Это первый вертикальный срез общей Reference infrastructure. Новые ресурсы не должны получать отдельные controls.
 
-| Параметр | Каталог / источник | Решение |
-|---|---|---|
-| `worldPointId` | WorldPoint / SDO catalog | Reference Picker |
-| `sceneId` | Scene Catalog | Reference Picker |
-| `itemId` | Item Catalog | Reference Picker |
-| `npcId` | NPC Catalog | Reference Picker |
-| `dialogueId` | текущая Scene / Dialogue catalog | Reference Picker |
-| `choiceId` | текущая Scene / Choice catalog | Reference Picker |
+## 4. WorldPoint и Coordinate
 
-Следующий уровень, после появления полноценных ресурсов:
+Coordinate — просто X/Y/Z. Для него используется Simulator bridge.
 
-| Параметр | Будущий ресурс |
-|---|---|
-| `conditionId` | Condition |
-| `rewardId` | Reward |
-| другие resource IDs | соответствующий catalog |
-
-## 2.2. Enum
-
-Закрытое множество допустимых значений:
-
-- `status`;
-- `comparison`;
-- `operator`;
-- `kind`;
-- `QuestStartMode`;
-- другие зарегистрированные enum.
-
-Для них нужен обычный enum/combo control, а не поиск по ресурсам.
-
-## 2.3. Free / Autocomplete
-
-Значение автор вправе создавать сам.
-
-Примеры:
-- `step`;
-- Fact keys;
-- Variable paths;
-- `eventType`;
-- другие расширяемые строковые ключи.
-
-Для них нужен autocomplete/search по уже известным значениям, но должна оставаться возможность ввести новое.
-
----
-
-# 3. Что пока не делать Reference Picker
-
-Не превращать в обязательный список до появления соответствующего canonical catalog:
-
-- `skillId` — сначала выделить полноценный SkillDefinition/SkillCatalog;
-- `conditionId` — до появления полноценного Condition resource/catalog;
-- `rewardId` — до появления полноценного Reward resource/catalog.
-
-Причина:
-
-> Picker должен ссылаться на настоящую canonical сущность, а не на временную заглушку UI.
-
-Особенно важно для `AddSkill`: сейчас эта нода частично хранит данные самого Skill (`name`, `description`, `kind`, `maxLevel`). Это признак незавершённого выделения Skill как отдельной сущности.
-
----
-
-# 4. Поведение Reference Picker
-
-Предлагаемая форма:
-
-`[ отображаемое имя / ID ] [⌄] [↗] [⌖/действие]`
-
-При вводе появляется searchable список.
-
-Например:
-
-`worldPointId`
-
-**Челябинск**
-
-`city:chelyabinsk`
-
-Ниже могут появляться:
-- точное совпадение;
-- совпадение по имени;
-- совпадение по ID;
-- совпадение по категории;
-- другие допустимые поля поиска.
-
-## Обязательное правило отсутствующего объекта
-
-Нельзя автоматически очищать или переписывать неизвестный ID.
-
-Пример:
-
-`secret.point.42`
-
-если объекта ещё нет:
-
-> ⚠ Точка не найдена  
-> secret.point.42
-
-Но значение остаётся в документе.
-
-Это нужно для:
-- незавершённых квестов;
-- будущих ресурсов;
-- ручного authoring;
-- совместимости;
-- внешнего импорта.
-
----
-
-# 5. Навигация из Reference Picker
-
-Уже существующий в проекте принцип `GRAPH_REFERENCE_EDITORS` должен со временем стать общей registry-моделью.
-
-Reference Picker должен иметь возможность:
-
-**Выбрать → открыть связанный ресурс → вернуться обратно с сохранением контекста.**
-
-Для Scene уже существует такой workflow:
-- `sceneId`;
-- кнопка «Открыть сцену»;
-- возврат к исходному Quest Graph NodeId.
-
-Следующий этап должен не создавать отдельные специальные решения для Item/NPC/WorldPoint, а подключать их к общей инфраструктуре.
-
----
-
-# 6. WorldPoint и карта Симулятора
-
-Текущая проблема:
-
-для задания координаты автор сейчас может копировать имя/ID точки из Simulator и вставлять вручную.
-
-Это надо заменить на прямой bridge:
-
-## Для ссылочного поля WorldPoint
-
-`worldPointId`
-
-использовать **Reference Picker**:
-
-> Челябинск  
-> city:chelyabinsk
-
-## Для собственно координатного поля
-
-Нужна микро-кнопка:
-
-**«Взять из симулятора»**
-
-Она должна получать координаты через Simulator → Host → Editor bridge, а не через копирование текста.
-
----
-
-# 7. Какие источники координат нужны
-
-Минимально два действия:
-
-### «Взять позицию игрока»
-
-Берёт текущие координаты Player Marker в Simulator.
-
-### «Взять выбранную точку»
-
-Берёт координаты выбранного WorldPoint в Simulator.
-
-В UI можно использовать очень маленькие кнопки/icon actions рядом с полями:
-
-`X [123.4] [⌖]`  
-`Y [456.7] [⌖]`  
-`Z [78.9]  [⌖]`
-
-или одну общую кнопку, которая заполняет весь WorldCoordinate.
-
-Предпочтительный UX:
-
-**одна общая кнопка «Взять из симулятора»** для X/Y/Z, плюс источник выбора:
-- игрок;
-- выбранная точка.
-
----
-
-# 8. Временная точка на карте
-
-ЛКМ по пустому месту карты Simulator должен создавать **временную точку**.
-
-Она:
-- не является настоящим WorldPoint;
-- не записывается автоматически в canonical World catalog;
-- существует для текущего authoring/simulation workflow;
-- имеет координаты;
-- может быть выбранной;
-- может быть источником координат для редактора;
-- визуально отличается от настоящих точек.
-
-Это не должно превращаться в новый permanent resource без явной команды.
-
-## Предлагаемые действия временной точки
-
-После создания:
-
-**Использовать координаты**
-
-и, отдельно:
-
-**Создать WorldPoint**
-
-Вторая команда превращает временную точку в настоящую authoring сущность, например:
-
-- ID;
-- Name;
-- Category;
-- Position;
-- TriggerRadius;
-- остальные canonical metadata.
-
-Это соответствует зарезервированному в registry ресурсу `.aqpoint`.
-
----
-
-# 9. Очень важное разделение WorldPoint и Coordinate
-
-Не смешивать два понятия.
-
-### Coordinate
-
-Просто `X/Y/Z`.
-
-Подходит там, где поле действительно означает положение в пространстве.
-
-### WorldPoint reference
-
-Стабильная ссылка:
-
-`worldPointId`
-
-Означает:
-
-> существующий именованный объект мира.
+WorldPoint reference — стабильная ссылка на именованный canonical объект мира.
 
 Поэтому:
+- coordinate field → Simulator bridge;
+- worldPointId → Reference Picker;
+- WorldPoint catalog → World Data Channel;
+- temporary point → отдельная будущая authoring сущность.
 
-- координатное поле → кнопка «Взять из симулятора»;
-- `worldPointId` → Reference Picker;
-- временная карта-точка → источник координат;
-- «Создать WorldPoint» → явное действие authoring.
+## 5. Simulator coordinate bridge
 
----
+Базовый bridge уже существует:
 
-# 10. Auto Layout для графов, созданных агентами
+Editor → coordinate_request → Host → WorldSelection/Player Data Channel → coordinate → Editor.
 
-Проблема:
+Источники:
+1. текущая позиция игрока;
+2. выбранная точка Simulator.
 
-агенты создают Quest Graph программно, а ноды остаются слишком близко друг к другу / накладываются.
+Следующий UX-шаг — сделать этот bridge доступным непосредственно рядом с coordinate-полями, а не только в World editor.
 
-В проекте уже существует canonical `QuestGraphLayout` и ручная команда **«Перестроить»**.
+## 6. Temporary Point
 
-Но workflow сейчас требует, чтобы автор/агент явно вспомнил про эту кнопку.
+Следующий этап:
+- ЛКМ по пустому месту Simulator → временная точка;
+- она не попадает автоматически в canonical WorldPoint catalog;
+- её можно выбрать;
+- координаты доступны через bridge;
+- явная команда «Создать WorldPoint» превращает её в canonical resource.
 
-Это нужно изменить.
+Обычный клик по карте не должен незаметно создавать permanent content.
 
-## Новый принцип
+## 7. Auto Layout Guard
 
-Не:
+В Domain добавлен QuestGraphLayout.IsObviouslyPoor().
 
-> агент обязан вызвать «Перестроить».
+Guard выявляет:
+- одинаковые координаты;
+- физическое перекрытие нод;
+- чрезмерно сжатую область для нескольких нод.
 
-А:
+QuestGraphStore.Replace(QuestDefinition) автоматически применяет deterministic QuestGraphLayout для явно плохого imported graph.
 
-> новый или импортированный граф автоматически получает пригодную стартовую раскладку, если его текущие координаты не являются качественным layout.
+AddNode также использует guard:
+- хороший layout сохраняется;
+- плохой agent-created/imported layout получает автоматическую раскладку.
 
----
+Ручная «Перестроить» остаётся принудительной операцией.
 
-# 11. Auto Layout Guard
+## 8. Дальнейшее разделение Editor State
 
-При открытии/создании/импорте графа проверять, пригодна ли текущая раскладка.
+Сейчас X/Y находятся в QuestNode как промежуточное решение.
 
-Минимальные признаки плохого layout:
+Целевая модель:
 
-- одинаковые или почти одинаковые координаты нескольких нод;
-- сильное геометрическое перекрытие;
-- слишком малые расстояния между нодами;
-- явно нулевая/дефолтная раскладка массового программного создания.
-
-Если layout плохой:
-
-**автоматически применить существующий `QuestGraphLayout`.**
-
-Важно:
-
-> Автоматический layout не должен заменять сознательно сделанный пользователем layout.
-
----
-
-# 12. Когда НЕ делать auto layout
-
-Нормальный, уже отредактированный человеком граф при повторном открытии должен оставаться как есть.
-
-То есть логика:
-
-`Graph created/imported`
-→ проверка layout
-→ если layout пригоден → оставить
-→ если layout отсутствует/явно плох → Auto Layout
-
-А ручная кнопка **«Перестроить»** остаётся принудительной операцией для пользователя.
-
----
-
-# 13. Agent authoring
-
-В дальнейшем идеальный workflow агента:
-
-1. агент создаёт canonical nodes/connections/parameters;
-2. агенту не нужно вручную вычислять красивые X/Y;
-3. редактор сам делает первичную раскладку;
-4. пользователь при необходимости нажимает «Перестроить» или двигает ноды вручную;
-5. пользовательский layout не ломается при следующем открытии.
-
-Это особенно важно до полноценного отделения editor metadata от canonical graph.
-
----
-
-# 14. Архитектурное продолжение: layout metadata
-
-В `MemoryAI/WOLVENKIT_REFERENCE.md` зафиксирован принцип, что graph content и editor state должны быть раздельными.
-
-Сейчас в проекте X/Y ещё находятся непосредственно в `QuestNode`.
-
-Это допустимый промежуточный этап, но долгосрочная цель:
-
-### Canonical Quest Graph
-
+Canonical Quest Graph:
 - NodeId;
 - NodeType;
-- sockets;
-- connections;
-- semantic parameters.
+- Parameters;
+- Sockets;
+- Connections.
 
-### Editor state
-
+Editor State:
 - X/Y;
-- zoom;
-- pan;
-- selection;
-- collapsed state;
-- прочие visual/editor metadata.
+- Zoom;
+- Pan;
+- Selection;
+- Collapsed state;
+- другие визуальные данные.
 
-Auto Layout Guard должен проектироваться так, чтобы этот будущий переход не потребовал перелома всей системы.
+После этого Auto Layout должен работать с editor state, а не менять semantic resource.
 
----
+## 9. Общая Resource Reference Registry
 
-# 15. Порядок реализации после отдельного согласования
+Текущий GRAPH_REFERENCE_EDITORS должен эволюционировать в декларативную registry-модель:
 
-## Этап A — единая Reference infrastructure
-
-Сначала создать декларативное описание параметров/reference-типа:
-
-- expected data kind;
+ReferenceSpec:
+- expected resource kind;
 - catalog;
 - display formatter;
 - ID selector;
@@ -427,134 +149,98 @@ Auto Layout Guard должен проектироваться так, чтобы
 - missing-value behavior;
 - navigation action.
 
-Подключить первые reference:
+Специализированные UI должны быть тонкими представлениями этой схемы.
 
-1. WorldPoint;
-2. Scene;
-3. Item;
-4. NPC.
+## 10. План каталогов
 
-## Этап B — simulator bridge
+WorldPointCatalog
+NpcCatalog
+SceneCatalog
+DialogueCatalog
+ItemCatalog
+ShopCatalog
+ServiceCatalog
+QuestCatalog
+MiniGameCatalog
+CommunicationCatalog
+InteractionCatalog
 
-Добавить API/сообщения:
+UI каталога не должен появляться раньше соответствующей canonical сущности.
 
-- получить Player coordinates;
-- получить selected WorldPoint;
-- передать временную точку/координаты в editor.
+## 11. Simulator как authoring context
 
-## Этап C — temporary point
+Simulator предоставляет authoring context:
+- текущий Player;
+- выбранный WorldPoint;
+- временная карта-точка;
+- текущий World State;
+- доступные catalog entities.
 
-На карте Simulator:
+Это не делает Simulator источником истины для Content: он только предоставляет данные через Data Channels/Host bridge.
 
-- ЛКМ по пустому месту → temporary point;
-- выбор;
-- отображение координат;
-- «Взять из симулятора»;
-- «Создать WorldPoint».
+## 12. Три режима
 
-## Этап D — остальные catalogs
+Authoring → Canonical Content.
 
-После появления canonical сущностей:
+Sandbox → управление World State → тот же Runtime.
 
-- Dialogue;
-- Choice;
-- Condition;
-- Reward;
-- Skill;
-- будущие resource references.
+Game → естественный ввод игрока → тот же Runtime.
 
-## Этап E — Auto Layout Guard
+Ни один режим не должен создавать отдельную модель квестов.
 
-- определить критерии плохого layout;
-- переиспользовать существующий `QuestGraphLayout`;
-- автоматически применять layout только для новых/явно плохих графов;
-- добавить regression tests для agent-created graphs.
+## 13. Следующий порядок реализации
 
-## Этап F — будущий editor-state separation
+A. Reference infrastructure — текущий baseline создан для WorldPoint/Scene/Item/NPC. Следом вынести registry из ad-hoc UI и унифицировать formatter/search/missing/navigation.
 
-Отделить layout/viewport/selection от canonical graph, когда общая editor infrastructure будет готова.
+B. Simulator coordinate bridge — подключить существующий bridge к coordinate-полям.
 
----
+C. Temporary Point — map click, selection, bridge, явное создание WorldPoint.
 
-# 16. UI/UX правила
+D. Canonical catalogs — Dialogue, Choice, Condition, Reward, Skill и т. д. только вместе с canonical resources.
 
-1. Reference field всегда показывает человеку имя, но хранит ID.
-2. Поиск работает по имени и ID.
-3. Для больших каталогов нужен incremental search, а не огромный dropdown.
-4. Неизвестный ID не теряется.
-5. Reference Picker не заменяет enum.
-6. Reference Picker не заменяет свободную строку.
-7. Координаты и WorldPoint reference — разные типы authoring semantics.
-8. Simulator должен быть прямым источником координат, без копирования текста.
-9. Temporary Point не должна незаметно становиться permanent resource.
-10. Автоматическая раскладка не должна уничтожать пользовательскую.
+E. Editor State separation — вынести X/Y/zoom/pan/selection из semantic resource.
 
----
+F. Scenario Runtime — RESET, SET WORLD, SET PLAYER, SET FACT, SET INVENTORY, RUN, EXPECT, SELECT.
 
-# 17. Текущая база в коде, на которую нужно опираться
+## 14. Критерий готовности
 
-На момент фиксации уже существуют:
-
-- `QuestNodeReferenceCatalog` — центральное описание ссылок Quest node;
-- `GRAPH_REFERENCE_EDITORS` в Web editor — текущий UI reference registry;
-- `SceneCatalog`;
-- `ItemCatalogFactory`;
-- `NpcCatalogFactory`;
-- `SdoWorldDataLoader`;
-- `QuestGraphLayout`;
-- `QuestGraphStore.ApplyLayout()`;
-- `WorldPoint` / `WorldCoordinate`;
-- `WorldSelectionState`.
-
-Следовательно, следующую реализацию не следует строить как отдельные независимые controls для каждого поля. Сначала нужно объединить уже существующие зачатки reference/catalog инфраструктуры.
-
----
-
-# 18. WolvenKit reference
-
-При реализации обязательно повторно проверить актуальный upstream WolvenKit и свериться с:
-
-- contextual property editors;
-- search/dropdown/reference property editing;
-- Quest/Scene creation workflows;
-- validation;
-- graph/editor state separation;
-- фабриками/registry.
-
-Наш проект не копирует REDengine model WolvenKit. Заимствуются архитектурные принципы:
-
-> canonical resource → contextual editor → specialized view → stable references → validation.
-
-Смотреть прежде всего `MemoryAI/WOLVENKIT_REFERENCE.md` и актуальные upstream source/docs.
-
----
-
-# 19. Критерий готовности Authoring UX pass
-
-Этап считается завершённым только когда автор может:
-
+Автор должен уметь:
 1. выбрать WorldPoint без копирования ID;
 2. найти Scene/Item/NPC поиском;
-3. увидеть понятное имя и стабильный ID;
-4. получить координаты игрока из Simulator одной кнопкой;
-5. выбрать точку на карте и получить её координаты одной кнопкой;
-6. поставить temporary point ЛКМ по пустой карте;
-7. превратить temporary point в настоящий WorldPoint явно;
-8. открыть неизвестный ID без потери его значения и увидеть понятную диагностику;
-9. создать Quest Graph агентом без заранее рассчитанных X/Y и получить автоматически пригодную раскладку;
-10. открыть уже вручную расположенный граф и не получить неожиданного автоматического перемещения.
+3. видеть имя и стабильный ID;
+4. получить координаты игрока;
+5. получить координаты выбранной точки;
+6. видеть неизвестный ID и не терять его;
+7. создавать граф агентом без заранее рассчитанных X/Y;
+8. получать Auto Layout только для явно плохой раскладки;
+9. открывать хороший граф без неожиданного перемещения;
+10. использовать одну Reference infrastructure в новых ресурсах.
 
----
+## 15. WolvenKit reference
 
-# 20. Связь с текущей задачей
+При дальнейшем развитии снова сверяться с актуальным upstream WolvenKit.
 
-Эта задача **не отменяет** текущую работу по:
+В актуальном upstream сохраняются релевантные для нас принципы: resource-oriented editing, contextual property editing, dropdown/search support, специализированные редакторы поверх общей инфраструктуры и работа со стабильными ресурсными ссылками. Мы заимствуем эти принципы, но не REDengine-specific model. citeturn1search5turn1search1
 
-- Campaign/Quest activation;
-- Simulator start/stop semantics;
-- физическому тестированию Quest lifecycle;
-- исправлению проблем с agent-generated graph layout.
+## 16. Что не входит в этот pass
 
-В частности, проблема «агенты создают ноды слишком близко» считается подтверждением, что Auto Layout Guard нужен как отдельная инфраструктурная часть, а не как инструкция агенту нажимать кнопку «Перестроить».
+Не смешивать сюда:
+- ETS2 integration;
+- DayZ integration;
+- real telemetry;
+- full Shop runtime;
+- Radio runtime;
+- MiniGame runtime;
+- asynchronous player exchange.
 
-**Следующий практический шаг после завершения текущего тестирования: сначала спроектировать и реализовать общий Reference Picker/Parameter Schema layer, затем Simulator coordinate bridge, затем Temporary Point и Auto Layout Guard.**
+Они строятся позже на уже закреплённых World/State/Content/Runtime границах.
+
+## 17. Итог
+
+Authoring UX теперь рассматривается как первая инфраструктура World Authoring.
+
+Первый полезный результат:
+
+выбрать сущность по имени → сохранить стабильную ссылку → получить координату из Sandbox → автоматически получить нормальную раскладку графа.
+
+Дальнейшие редакторы подключаются к этим же механизмам, а не создают новые локальные варианты.
