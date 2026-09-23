@@ -46,6 +46,55 @@ public static class QuestGraphLayout
     }
 
     /// <summary>
+    /// Определяет, выглядит ли текущая раскладка как отсутствующая или явно плохая.
+    /// Это guard для импортированных/агентских графов: хороший пользовательский
+    /// layout не должен неожиданно перестраиваться.
+    /// </summary>
+    public static bool IsObviouslyPoor(QuestGraph graph)
+    {
+        ArgumentNullException.ThrowIfNull(graph);
+        if (graph.Nodes.Count <= 1)
+            return false;
+
+        // Массовое создание без координат обычно даёт одну точку для всех нод.
+        var distinctPositions = graph.Nodes
+            .Select(node => (X: node.X, Y: node.Y))
+            .Distinct()
+            .Count();
+        if (distinctPositions <= 1)
+            return true;
+
+        // Ищем реальные пересечения прямоугольников нод.
+        for (var i = 0; i < graph.Nodes.Count; i++)
+        {
+            var left = graph.Nodes[i];
+            var leftRight = left.X + NodeWidth;
+            var leftBottom = left.Y + NodeHeight(left);
+
+            for (var j = i + 1; j < graph.Nodes.Count; j++)
+            {
+                var right = graph.Nodes[j];
+                var rightRight = right.X + NodeWidth;
+                var rightBottom = right.Y + NodeHeight(right);
+
+                if (left.X < rightRight && leftRight > right.X &&
+                    left.Y < rightBottom && leftBottom > right.Y)
+                    return true;
+            }
+        }
+
+        // Несколько нод, сжатых почти в одну область, тоже являются типичным
+        // следствием программного создания графа без layout.
+        var minX = graph.Nodes.Min(node => node.X);
+        var maxX = graph.Nodes.Max(node => node.X);
+        var minY = graph.Nodes.Min(node => node.Y);
+        var maxY = graph.Nodes.Max(node => node.Y);
+        return graph.Nodes.Count >= 3 &&
+               maxX - minX < NodeWidth &&
+               maxY - minY < VerticalGap * 2;
+    }
+
+    /// <summary>
     /// Вычисляет новые координаты для всех нод графа.
     /// Возвращает словарь «NodeId → позиция» без изменения исходного графа.
     /// </summary>
