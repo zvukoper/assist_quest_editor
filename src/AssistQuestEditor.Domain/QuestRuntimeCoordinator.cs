@@ -14,6 +14,7 @@ public sealed class QuestRuntimeCoordinator : IQuestRuntimeController
     private readonly SceneRuntime _sceneRuntime;
     private readonly Func<IReadOnlyList<QuestDefinition>> _definitionsProvider;
     private readonly string _defaultQuestId;
+    private readonly ILocationResolver? _locationResolver;
 
     private QuestRuntime? _activeRuntime;
     private QuestRuntimeState _lastState;
@@ -26,7 +27,8 @@ public sealed class QuestRuntimeCoordinator : IQuestRuntimeController
         IDataChannelHub hub,
         SceneRuntime sceneRuntime,
         Func<IReadOnlyList<QuestDefinition>> definitionsProvider,
-        string defaultQuestId)
+        string defaultQuestId,
+        ILocationResolver? locationResolver = null)
     {
         _hub = hub ?? throw new ArgumentNullException(nameof(hub));
         _sceneRuntime = sceneRuntime ?? throw new ArgumentNullException(nameof(sceneRuntime));
@@ -36,6 +38,7 @@ public sealed class QuestRuntimeCoordinator : IQuestRuntimeController
             throw new ArgumentException("Default QuestId обязателен.", nameof(defaultQuestId));
 
         _defaultQuestId = defaultQuestId;
+        _locationResolver = locationResolver;
         _lastState = new QuestRuntimeState(
             defaultQuestId,
             null,
@@ -246,7 +249,8 @@ public sealed class QuestRuntimeCoordinator : IQuestRuntimeController
         var runtime = new QuestRuntime(
             new QuestGraphStore(definition.Graph),
             _hub,
-            _sceneRuntime);
+            _sceneRuntime,
+            _locationResolver);
 
         _activeRuntime = runtime;
         runtime.Published += ActiveRuntime_Published;
@@ -278,7 +282,8 @@ public sealed class QuestRuntimeCoordinator : IQuestRuntimeController
             var readyNow =
                 activation is not null &&
                 activation.Mode == QuestStartMode.Proximity &&
-                !string.IsNullOrWhiteSpace(activation.WorldPointId) &&
+                (!string.IsNullOrWhiteSpace(activation.LocationId) ||
+                 !string.IsNullOrWhiteSpace(activation.WorldPointId)) &&
                 ActivationMatches(activation);
 
             var wasReady = _activationReady.TryGetValue(definition.Id, out var ready) && ready;
@@ -305,8 +310,10 @@ public sealed class QuestRuntimeCoordinator : IQuestRuntimeController
 
     private bool ActivationMatches(QuestActivation activation)
     {
-        var point = _hub.Get<WorldState>("world").Value.Points.FirstOrDefault(item =>
-            item.Id.Equals(activation.WorldPointId, StringComparison.OrdinalIgnoreCase));
+        var point = !string.IsNullOrWhiteSpace(activation.LocationId)
+            ? _locationResolver?.Resolve(activation.LocationId)
+            : _hub.Get<WorldState>("world").Value.Points.FirstOrDefault(item =>
+                item.Id.Equals(activation.WorldPointId, StringComparison.OrdinalIgnoreCase));
 
         if (point is null)
             return false;
