@@ -721,3 +721,31 @@ UI: правая панель персонажа получила табы «П�
 
 Проверки: `ci/check_campaigns.mjs` и расширенный `ci/check_quest_graph.mjs` включены в
 локальный CI и GitHub Actions. Физическая сборка после этих изменений здесь не выполнялась.
+
+
+## 2026-09-23 — World Authoring Platform + Authoring UX baseline
+
+Зафиксирован новый архитектурный уровень проекта в MemoryAI/WORLD_AUTHORING_PLATFORM.md.
+Assist Quest Editor сохраняет внешнее историческое название, но canonical цель проекта
+теперь формулируется как создание и симуляция параллельного интерактивного мира.
+
+Архитектурные границы закреплены дополнительно в MemoryAI/ARCHITECTURE.md:
+World Provider → World State → Content → Runtime → Presentation/Authoring/Simulation.
+Sandbox считается полноценным World Provider; ETS2 — будущий внешний adapter.
+
+В рамках ранее согласованной задачи Authoring UX реализованы:
+- Reference Picker baseline для WorldPoint/Scene/Item/NPC;
+- передача каталогов из Host в Quest Graph Web UI;
+- сохранение стабильного ID вместо display name;
+- сохранение неизвестных reference values без очистки;
+- сохранена навигация к Scene;
+- Auto Layout Guard для явно плохих imported/agent-created graph layouts;
+- regression tests для автоматической раскладки и сохранения хорошего layout.
+
+Оставшиеся шаги Authoring UX: вынести registry в общую декларативную инфраструктуру,
+расширить coordinate bridge, сделать temporary map point, затем отделить editor state
+от canonical graph.
+
+Проверка среды этого изменения: локальный container не имеет сетевого доступа, поэтому
+raw GitHub/Node smoke из container выполнить не удалось. .NET SDK также должен проверяться
+на машине/CI согласно INSTRUCTIONS.md. Перед физическим тестом требуется обычный bump версии.
