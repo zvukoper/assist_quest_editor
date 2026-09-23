@@ -138,6 +138,115 @@ if (!/drawRoads\s*\(/.test(simulatorJs))
       "без геометрии критерий не получит понятной диагностики.");
 }
 
+// --- Перекрёстки: тот же приём проверки имён и самих данных ---
+{
+  const resolver = read("src/AssistQuestEditor.Domain/LocationResolver.cs");
+  const editor = read("src/AssistQuestEditor.App/Web/locationEditor.js");
+  const label = "В радиусе от перекрёстка";
+
+  const listStart = editor.indexOf("const CRITERIA = [");
+  const listEnd = editor.indexOf("];", listStart);
+  const criteriaList = editor.slice(listStart, listEnd);
+
+  const row = criteriaList.match(new RegExp(`\\["([A-Za-z]+)",\\s*"${label}"\\]`));
+  if (!row)
+    throw new Error("В списке CRITERIA панели нет критерия «" + label + "».");
+
+  const panelName = row[1];
+  const domainName = panelName.toLowerCase();
+
+  if (!editor.includes(`type === "${panelName}"`))
+    throw new Error("Имя критерия «" + panelName + "» есть в списке, но разбор " +
+      "параметров его не знает: поля критерия не соберутся в определение.");
+
+  const supported = resolver.slice(resolver.indexOf("SupportedCriteria"));
+  if (!supported.toLowerCase().includes(domainName))
+    throw new Error("Критерий «" + domainName + "» отсутствует в SupportedCriteria.");
+
+  if (!new RegExp(`case\\s+"${domainName}"`, "i").test(resolver))
+    throw new Error("В разборе критериев домена нет ветки «" + domainName + "».");
+
+  // Данные перекрёстков обязаны лежать отдельным ресурсом рядом с дорогами.
+  const junctionsPath = path.join(root, "data", "world", "junctions.json");
+  if (!fs.existsSync(junctionsPath))
+    throw new Error("Файл data/world/junctions.json отсутствует: критерий нечем выполнить.");
+
+  const payload = JSON.parse(fs.readFileSync(junctionsPath, "utf8"));
+  if (!Array.isArray(payload.points))
+    throw new Error("В junctions.json нет массива points.");
+  if (payload.points.length % 2 !== 0)
+    throw new Error("Длина points не кратна двум числам: " + payload.points.length);
+  if (payload.junctionCount !== payload.points.length / 2)
+    throw new Error("junctionCount не совпадает с длиной массива: " +
+      payload.junctionCount + " против " + payload.points.length / 2);
+  if (payload.layout !== "x,z")
+    throw new Error("Неожиданная раскладка перекрёстков: " + payload.layout);
+
+  // Метод обязан быть записан: по нему видно, что список получен нодировкой,
+  // а не «примерно похожим» способом, который давал ложные перекрёстки на каждом
+  // повороте двухполосной дороги.
+  if (typeof payload.method !== "string" || !payload.method.includes("noding"))
+    throw new Error("В junctions.json не записан метод построения: " + payload.method);
+
+  // Объём: список узлов компактный. Раздувание означает, что в файл попали
+  // промежуточные структуры (дуги, узлы графа), а не координаты перекрёстков.
+  const sizeKb = fs.statSync(junctionsPath).size / 1024;
+  if (sizeKb > 400)
+    throw new Error("junctions.json вырос до " + sizeKb.toFixed(1) + " КБ: " +
+      "в файл попали лишние данные.");
+
+  if (payload.junctionCount < 100)
+    throw new Error("Перекрёстков подозрительно мало: " + payload.junctionCount +
+      ". Настоящий мир даёт тысячи узлов.");
+
+  // Верхняя граница ловит потерю схлопывания направлений. Дороги в наборе
+  // продублированы полосами; если не объединять близкие направления, каждый
+  // изгиб двухполосной дороги становится «перекрёстком», и число узлов
+  // подскакивает в разы. Настоящий мир даёт 3483 узла, предел 8000 — это
+  // заметный запас, но он втрое ниже такого всплеска.
+  if (payload.junctionCount > 8000)
+    throw new Error("Перекрёстков слишком много: " + payload.junctionCount +
+      ". Похоже, направления дублирующихся полос не схлопываются, " +
+      "и каждый изгиб дороги считается перекрёстком.");
+
+  // Доли узлов по числу веток. Сшивка «конец -> линия» восстанавливает
+  // Т-образные примыкания: в наборе дорог конец примыкающей улицы упирается в
+  // КРАЙ проезжей части, а не в её ось, поэтому без сшивки примыкание не
+  // находится. Проверяем именно ДОЛЮ, а не абсолютное число, чтобы проверка не
+  // зависела от размера карты.
+  //
+  // Порог снят замерами на этом же наборе: со сшивкой Т-образных 19.4%,
+  // без сшивки — 10.4%. Граница 15% лежит между ними.
+  if (!Array.isArray(payload.branches))
+    throw new Error("В junctions.json нет распределения узлов по числу веток.");
+
+  const branches = new Map(payload.branches);
+  const total = payload.junctionCount;
+  const threeWay = (branches.get(3) || 0) / total;
+
+  if (threeWay < 0.15)
+    throw new Error("Т-образных примыканий всего " + (threeWay * 100).toFixed(1) +
+      "%: похоже, концы полилиний не сшиваются с чужими дорогами, " +
+      "и примыкания теряются.");
+
+  // Схлопывание близких направлений. Дороги в наборе идут двойными полосами; без
+  // объединения направлений на каждом повороте появлялись бы лишние ветки, и
+  // простые узлы превращались бы в «сложные». Замеры на этом же наборе: со
+  // схлопыванием сложных узлов 0.6%, без схлопывания — 3.4%.
+  let complex = 0;
+  for (const [branchCount, count] of branches) if (branchCount >= 5) complex += count;
+  const complexShare = complex / total;
+
+  if (complexShare > 0.012)
+    throw new Error("Сложных узлов " + (complexShare * 100).toFixed(1) +
+      "%: похоже, близкие направления не схлопываются, и каждый поворот " +
+      "двухполосной дороги даёт лишние ветки.");
+
+  console.log(`Перекрёстки: ${payload.junctionCount} узлов, ${sizeKb.toFixed(1)} КБ, ` +
+    `Т-образных ${(threeWay * 100).toFixed(1)}%, сложных ${(complexShare * 100).toFixed(1)}%, ` +
+    `метод ${payload.method}.`);
+}
+
 // --- Динамическая часть: слой реально рисуется на canvas ---
 
 const browser = await chromium.launch({ headless: true });

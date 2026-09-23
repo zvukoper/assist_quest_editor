@@ -752,6 +752,184 @@ public sealed class LocationResolverTests
             new RoadIndex(Array.Empty<RoadSegment>()).DistanceToNearest(0, 0, 100)));
     }
 
+    // --- Критерий «В радиусе от перекрёстка» ---
+
+    /// <summary>
+    /// Критерий оставляет только точки в заданном диапазоне расстояний до узла.
+    ///
+    /// Проверяются ОБА конца диапазона: слишком близкие точки (ближе минимума) и
+    /// слишком далёкие (дальше максимума) должны отбраковываться. Без минимума
+    /// критерий не отличал бы «рядом с перекрёстком» от «ровно на перекрёстке».
+    /// </summary>
+    [Fact]
+    public void JunctionRadiusKeepsOnlyPointsWithinRange()
+    {
+        var resolver = new LocationResolver(seed: 1);
+        var world = new[]
+        {
+            Point("near", "Рядом", "man", 0),      // 50 м до узла
+            Point("middle", "Середина", "man", 300), // 300 м
+            Point("far", "Далеко", "man", 2000)    // 2000 м
+        };
+
+        var junctions = new JunctionIndex(new[] { new JunctionPoint(0, 0) });
+
+        var location = DynamicLocation(("NearbyJunction", new Dictionary<string, string>
+        {
+            ["meters"] = "100-500"
+        }));
+
+        var result = resolver.Test(location, world, 8, junctions: junctions);
+
+        Assert.True(result.Supported);
+        Assert.All(result.Candidates, candidate =>
+            Assert.Equal("middle", candidate.CandidateId));
+    }
+
+    /// <summary>
+    /// Одно число — это МИНИМУМ, а не точное расстояние.
+    ///
+    /// Тот же смысл, что у «Радиуса от игрока»: автор, написав «300», имеет в виду
+    /// «не ближе 300 м от перекрёстка», а не «ровно 300». Если бы значение
+    /// трактовалось как максимум, критерий молча означал бы противоположное.
+    /// </summary>
+    [Fact]
+    public void JunctionRadiusTreatsSingleNumberAsMinimum()
+    {
+        var resolver = new LocationResolver(seed: 1);
+        var world = new[]
+        {
+            Point("atJunction", "На перекрёстке", "man", 0),
+            Point("faraway", "Далёкая", "man", 5000)
+        };
+
+        var junctions = new JunctionIndex(new[] { new JunctionPoint(0, 0) });
+
+        var location = DynamicLocation(("NearbyJunction", new Dictionary<string, string>
+        {
+            ["meters"] = "300"
+        }));
+
+        var result = resolver.Test(location, world, 4, junctions: junctions);
+
+        Assert.True(result.Supported);
+        Assert.All(result.Candidates, candidate =>
+            Assert.Equal("faraway", candidate.CandidateId));
+    }
+
+    /// <summary>
+    /// Без списка перекрёстков критерий даёт ОДНУ диагностику и Supported = false.
+    ///
+    /// Проверка выполняется до фильтрации: внутри неё сообщение размножилось бы
+    /// на каждую точку мира (тысячи одинаковых строк), и причины было бы не найти.
+    /// </summary>
+    [Fact]
+    public void JunctionRadiusWithoutGeometryReportsSingleDiagnostic()
+    {
+        var resolver = new LocationResolver(seed: 1);
+        var world = new[] { Point("a", "Точка", "man", 0), Point("b", "Точка-2", "man", 100) };
+
+        var location = DynamicLocation(("NearbyJunction", new Dictionary<string, string>
+        {
+            ["meters"] = "100-500"
+        }));
+
+        var result = resolver.Test(location, world, 4);
+
+        Assert.False(result.Supported);
+        Assert.Empty(result.Candidates);
+        Assert.Single(result.Diagnostics);
+        Assert.Contains("перекрёстк", result.Diagnostics[0], StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
+    /// Перепутанные границы диапазона — ошибка настройки, а не «ничего не найдено».
+    ///
+    /// «500-100» синтаксически корректный диапазон, но бессмысленный. Молчаливое
+    /// «подходящих кандидатов нет» заставило бы автора искать проблему в данных.
+    /// </summary>
+    [Fact]
+    public void JunctionRadiusWithReversedBoundsReportsConfigurationProblem()
+    {
+        var resolver = new LocationResolver(seed: 1);
+        var world = new[] { Point("a", "Точка", "man", 0) };
+
+        var location = DynamicLocation(("NearbyJunction", new Dictionary<string, string>
+        {
+            ["meters"] = "500-100"
+        }));
+
+        var result = resolver.Test(
+            location, world, 4,
+            junctions: new JunctionIndex(new[] { new JunctionPoint(0, 0) }));
+
+        Assert.False(result.Supported);
+        Assert.Contains(result.Diagnostics, item => item.Contains("больше максимума", StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// Индекс перекрёстков возвращает корректное расстояние через границы ячеек.
+    ///
+    /// Узлы разнесены так, чтобы сетка точно разложила их по разным ячейкам
+    /// (размер ячейки — 250 м). Ошибка в раскладке дала бы «бесконечно далеко»
+    /// там, где узел рядом, то есть критерий молча ничего не находил бы.
+    /// </summary>
+    [Fact]
+    public void JunctionIndexFindsNearestPointAcrossCells()
+    {
+        var index = new JunctionIndex(new[]
+        {
+            new JunctionPoint(0, 0),
+            new JunctionPoint(10000, 0),
+            new JunctionPoint(0, 20000)
+        });
+
+        Assert.Equal(3, index.JunctionCount);
+
+        Assert.Equal(10, index.DistanceToNearest(0, 10, 100), 3);
+        Assert.Equal(10, index.DistanceToNearest(10000, 10, 100), 3);
+        Assert.Equal(15, index.DistanceToNearest(0, 20015, 100), 3);
+
+        Assert.True(double.IsPositiveInfinity(
+            new JunctionIndex(Array.Empty<JunctionPoint>()).DistanceToNearest(0, 0, 100)));
+    }
+
+    /// <summary>
+    /// Порядок узлов сохраняется при загрузке.
+    ///
+    /// Кнопки «следующий/предыдущий» в панели ручной проверки обязаны идти в том
+    /// порядке, в котором перекрёстки нашлись: иначе автор проходил бы их в
+    /// случайной последовательности и не мог бы продолжить проверку с того места,
+    /// где остановился.
+    /// </summary>
+    [Fact]
+    public void JunctionIndexKeepsSourceOrder()
+    {
+        var source = new[]
+        {
+            new JunctionPoint(300, 0),
+            new JunctionPoint(100, 0),
+            new JunctionPoint(200, 0)
+        };
+
+        var index = new JunctionIndex(source);
+
+        Assert.Equal(source, index.ToPoints());
+    }
+
+    private static LocationDefinition DynamicLocation(
+        params (string Type, Dictionary<string, string> Parameters)[] criteria) =>
+        new("location_test", "Тестовая локация")
+        {
+            Mode = LocationMode.Dynamic,
+            Query = new LocationQueryDefinition
+            {
+                Criteria = criteria
+                    .Select(item => new LocationCriterion(item.Type, item.Parameters))
+                    .ToArray()
+            }
+        };
+
     private static WorldPoint Man(string id, double x) => Point(id, "Мужчина", "man", x);
     private static WorldPoint Cat(string id, double x) => Point(id, "Кот", "cat", x);
 

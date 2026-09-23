@@ -27,6 +27,14 @@ public sealed class MainForm : WebViewForm
     private readonly RoadIndex _roads;
 
     /// <summary>
+    /// Перекрёстки дорожной сети (предпосчитанные).
+    ///
+    /// Отдаются и критерию «в радиусе от перекрёстка», и панели ручной проверки,
+    /// где их видно на карте. Считать нодировку при старте редактора нельзя.
+    /// </summary>
+    private readonly JunctionIndex _junctions;
+
+    /// <summary>
     /// Окна редакторов. Список, а не словарь по странице: одно окно может
     /// переключать активную панель (сайдбар = селектор рабочей области), поэтому
     /// ключ «страница» перестал быть уникальным идентификатором окна.
@@ -37,8 +45,13 @@ public sealed class MainForm : WebViewForm
     private readonly RecentFileList _recentSceneFiles;
     private SimulatorForm? _simulator;
     private SettingsForm? _settings;
+    private JunctionReviewForm? _junctionReview;
 
-    public MainForm(IDataChannelHub hub, bool ciTest = false, RoadIndex? roads = null)
+    public MainForm(
+        IDataChannelHub hub,
+        bool ciTest = false,
+        RoadIndex? roads = null,
+        JunctionIndex? junctions = null)
         : base(
             "Редактор",
             "main.html",
@@ -52,6 +65,7 @@ public sealed class MainForm : WebViewForm
 
         _hub = hub;
         _roads = roads ?? new RoadIndex(Array.Empty<RoadSegment>());
+        _junctions = junctions ?? new JunctionIndex(Array.Empty<JunctionPoint>());
         _campaignStore = ciTest
             ? new CampaignStore(Path.Combine(AppPaths.ResourceRoot, "campaigns"), readOnly: true)
             : new CampaignStore();
@@ -64,7 +78,7 @@ public sealed class MainForm : WebViewForm
         _locationStore = ciTest
             ? new LocationStore(Path.Combine(Path.GetTempPath(), "AssistQuestEditor-CI-Locations"), readOnly: true)
             : new LocationStore(AppPaths.UserLocationRoot);
-        _locationResolver = new LocationRuntimeResolver(_locationStore, _hub, _roads);
+        _locationResolver = new LocationRuntimeResolver(_locationStore, _hub, _roads, _junctions);
         var preferences = AppUiPreferencesStore.Load();
         _sceneDocument = new SceneDocumentSession(
             initialScene.Id,
@@ -124,7 +138,29 @@ public sealed class MainForm : WebViewForm
 
             _simulator?.Close();
             _settings?.Close();
+            _junctionReview?.Close();
         };
+    }
+
+    /// <summary>
+    /// Открывает окно ручной проверки перекрёстков (одиночный экземпляр).
+    ///
+    /// Одно окно на приложение: проверка — это состояние (исключённые и
+    /// добавленные узлы), и два окна показывали бы его по-разному.
+    /// </summary>
+    private void OpenJunctionReview()
+    {
+        if (_junctionReview is not null && !_junctionReview.IsDisposed)
+        {
+            _junctionReview.WindowState = FormWindowState.Normal;
+            _junctionReview.BringToFront();
+            _junctionReview.Activate();
+            return;
+        }
+
+        _junctionReview = new JunctionReviewForm(_roads, _junctions);
+        _junctionReview.FormClosed += (_, _) => _junctionReview = null;
+        _junctionReview.Show(this);
     }
 
     private void MainForm_BrowserReady(object? sender, EventArgs e)
@@ -258,6 +294,12 @@ public sealed class MainForm : WebViewForm
 
                 case "open_simulator":
                     OpenSimulator();
+                    break;
+
+                // Ручная проверка перекрёстков: отдельное окно, потому что это
+                // длительная работа с картой, а не краткая команда.
+                case "open_junction_review":
+                    OpenJunctionReview();
                     break;
 
                 case "reset_simulator":
@@ -561,7 +603,8 @@ public sealed class MainForm : WebViewForm
             _sceneDocument,
             _runtime,
             _locationStore,
-            _roads);
+            _roads,
+            _junctions);
 
         _editors.Add(form);
         form.NavigationRequested += Editor_NavigationRequested;

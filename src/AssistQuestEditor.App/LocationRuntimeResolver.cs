@@ -14,17 +14,23 @@ public sealed class LocationRuntimeResolver : ILocationResolver, ILocationResolu
     private readonly IDataChannel<WorldState> _world;
     private readonly IDataChannel<PlayerState> _player;
     private readonly RoadIndex _roads;
+    private readonly JunctionIndex _junctions;
     private readonly LocationResolver _resolver = new();
     private readonly Dictionary<string, WorldPoint> _resolved =
         new(StringComparer.OrdinalIgnoreCase);
 
-    public LocationRuntimeResolver(LocationStore store, IDataChannelHub hub, RoadIndex? roads = null)
+    public LocationRuntimeResolver(
+        LocationStore store,
+        IDataChannelHub hub,
+        RoadIndex? roads = null,
+        JunctionIndex? junctions = null)
     {
         _store = store ?? throw new ArgumentNullException(nameof(store));
         ArgumentNullException.ThrowIfNull(hub);
         _world = hub.Get<WorldState>("world");
         _player = hub.Get<PlayerState>("player");
         _roads = roads ?? new RoadIndex(Array.Empty<RoadSegment>());
+        _junctions = junctions ?? new JunctionIndex(Array.Empty<JunctionPoint>());
     }
 
     public WorldPoint? Resolve(string locationId)
@@ -43,7 +49,8 @@ public sealed class LocationRuntimeResolver : ILocationResolver, ILocationResolu
             definition,
             _world.Value.Points,
             _player.Value.Position,
-            roads: _roads).Point;
+            roads: _roads,
+            junctions: _junctions).Point;
 
         if (point is not null)
             _resolved[locationId] = point;

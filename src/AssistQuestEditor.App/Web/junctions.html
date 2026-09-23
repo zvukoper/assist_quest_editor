@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Проверка перекрёстков</title><link rel="stylesheet" href="theme.css?v=1.0.40.172">
+<style>
+/* Страница целиком про карту: заголовков и карточек нет, потому что окно
+   открывается ради одной задачи — пройти по узлам и отметить лишние. */
+html, body { height: 100%; margin: 0; overflow: hidden; background: #0d1014; }
+#junctionRoot { display: grid; grid-template-rows: auto 1fr; height: 100%; }
+
+#junctionBar {
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  padding: 8px 12px; border-bottom: 1px solid var(--border, #222831);
+  background: #111419;
+}
+
+#junctionCanvasHost { position: relative; overflow: hidden; }
+#junctionCanvas { display: block; width: 100%; height: 100%; cursor: crosshair; }
+
+/* Плашка состояния: сколько узлов, какой выбран, что записано в файл. */
+#junctionStatus { margin-left: auto; font-size: 12px; color: #9aa4b2; white-space: nowrap; }
+#junctionCounter { font-weight: 600; color: #e6e8ea; }
+</style>
+</head>
+<body>
+<div id="junctionRoot">
+  <div id="junctionBar">
+    <button class="toolButton" id="junctionPrev" type="button" title="Предыдущий перекрёсток">◀ предыдущий</button>
+    <button class="toolButton" id="junctionNext" type="button" title="Следующий перекрёсток">следующий ▶</button>
+    <button class="toolButton" id="junctionExclude" type="button" title="Исключить выбранные узлы: они не будут считаться перекрёстками">Исключить выбранные</button>
+    <button class="toolButton" id="junctionRestore" type="button" title="Вернуть выбранные узлы в список: снять пометку «исключён»">Вернуть</button>
+    <button class="toolButton primary" id="junctionSave" type="button" title="Записать правки в файл">Сохранить правки</button>
+    <button class="toolButton" id="junctionReload" type="button" title="Перечитать файл правок с диска">Перечитать</button>
+    <button class="toolButton" id="junctionFitAll" type="button" title="Показать всю карту">Вся карта</button>
+    <div id="junctionStatus">
+      <span id="junctionCounter">0 / 0</span>
+      <span id="junctionHint"> · клик по узлу — выбрать, Ctrl+клик — мультивыбор, клик по пустому месту — добавить узел</span>
+    </div>
+  </div>
+  <div id="junctionCanvasHost"><canvas id="junctionCanvas"></canvas></div>
+</div>
+<script src="web_log.js?v=1.0.40.172"></script>
+<script src="junctions.js?v=1.0.40.172"></script>
+</body></html>

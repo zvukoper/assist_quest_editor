@@ -45,9 +45,10 @@ public sealed class LocationResolver
         IReadOnlyList<WorldPoint> worldPoints,
         WorldCoordinate? playerPosition = null,
         ILocationUsageHistory? history = null,
-        RoadIndex? roads = null)
+        RoadIndex? roads = null,
+        JunctionIndex? junctions = null)
     {
-        var result = Test(location, worldPoints, 1, playerPosition, history, roads);
+        var result = Test(location, worldPoints, 1, playerPosition, history, roads, junctions);
         var candidate = result.Candidates.FirstOrDefault();
         if (!result.Supported || candidate is null)
         {
@@ -74,6 +75,10 @@ public sealed class LocationResolver
     /// <paramref name="roads"/> нужен критерию «рядом с дорогой». Дорожная
     /// геометрия передаётся отдельно и НЕ входит в список точек мира: дорог
     /// ~98 000, и в снимке карты они весили бы почти 19 МБ вместо 0.9 МБ.
+    ///
+    /// <paramref name="junctions"/> нужен критерию «в радиусе от перекрёстка».
+    /// Перекрёстки, как и дороги, — отдельный слой: они приходят предпосчитанным
+    /// списком (нодировка всей сети — сотни миллисекунд).
     /// </summary>
     public LocationTestResult Test(
         LocationDefinition location,
@@ -81,7 +86,8 @@ public sealed class LocationResolver
         int rounds,
         WorldCoordinate? playerPosition = null,
         ILocationUsageHistory? history = null,
-        RoadIndex? roads = null)
+        RoadIndex? roads = null,
+        JunctionIndex? junctions = null)
     {
         rounds = Math.Clamp(rounds, 1, 128);
         var diagnostics = new List<string>();
@@ -196,6 +202,22 @@ public sealed class LocationResolver
                 diagnostics);
         }
 
+        // Перекрёстки проверяются так же один раз ДО фильтрации: их отсутствие —
+        // ошибка окружения, а не свойство точки, и сообщение не должно
+        // размножаться на каждую точку мира.
+        if (criteria.Any(IsJunctionCriterion) && (junctions is null || junctions.IsEmpty))
+        {
+            diagnostics.Add(
+                "Критерий «В радиусе от перекрёстка» не может быть выполнен: " +
+                "список перекрёстков не загружен. Проверьте файл data/world/junctions.json рядом с приложением.");
+            return new LocationTestResult(
+                location.Id,
+                false,
+                rounds,
+                Array.Empty<LocationTestCandidate>(),
+                diagnostics);
+        }
+
         // Индекс строится один раз: критерии «рядом есть категория» и «нет категории
         // в радиусе» просматривают окрестность каждой точки, а точек в мире тысячи.
         // Без индекса это был бы полный перебор по всем парам (5192² ≈ 27 млн
@@ -204,7 +226,7 @@ public sealed class LocationResolver
         var index = new WorldPointIndex(worldPoints);
 
         var candidates = worldPoints.Where(point =>
-            MatchesAll(point, criteria, worldPoints, index, playerPosition, roads, diagnostics)).ToList();
+            MatchesAll(point, criteria, worldPoints, index, playerPosition, roads, junctions, diagnostics)).ToList();
 
         candidates = candidates.Where(point =>
             MatchesHistory(location.Id, point.Id, location.Query?.History, history)).ToList();
@@ -334,6 +356,7 @@ public sealed class LocationResolver
         WorldPointIndex index,
         WorldCoordinate? playerPosition,
         RoadIndex? roads,
+        JunctionIndex? junctions,
         ICollection<string> diagnostics)
     {
         foreach (var criterion in criteria)
@@ -350,7 +373,7 @@ public sealed class LocationResolver
             if (IsStrategyCriterion(criterion))
                 continue;
 
-            var supported = Matches(candidate, criterion, worldPoints, index, playerPosition, roads,
+            var supported = Matches(candidate, criterion, worldPoints, index, playerPosition, roads, junctions,
                 out var result, out var message);
             if (!supported)
             {
@@ -373,6 +396,7 @@ public sealed class LocationResolver
         WorldPointIndex index,
         WorldCoordinate? playerPosition,
         RoadIndex? roads,
+        JunctionIndex? junctions,
         out bool result,
         out string message)
     {
@@ -526,6 +550,45 @@ public sealed class LocationResolver
                 return true;
             }
 
+            // «В радиусе от перекрёстка»: кандидат в заданном диапазоне расстояний
+            // до ближайшего перекрёстка. Диапазон, а не только максимум: одним
+            // числом задаётся минимум («не ближе 100 м»), двумя через дефис —
+            // и минимум, и максимум («не ближе 100 и не дальше 500»).
+            //
+            // Ближайший перекрёсток ищется в пределах МАКСИМУМА диапазона. Если
+            // максимум не задан, радиус поиска берётся с запасом: без ограничения
+            // перебор шёл бы по всем 3 483 узлам для каждой точки мира.
+            case "nearbyjunction":
+            case "junctionradius":
+            case "junctiondistance":
+            {
+                if (!parameters.TryGetValue("meters", out var junctionRangeText) ||
+                    !TryParseDistanceRange(junctionRangeText, out var junctionRange))
+                {
+                    result = false;
+                    message = $"Критерий {type}: расстояние задаётся числом или диапазоном, например 300 или 100-500.";
+                    return false;
+                }
+
+                if (junctions is null || junctions.IsEmpty)
+                {
+                    result = false;
+                    message = $"Критерий {type}: список перекрёстков не загружен.";
+                    return false;
+                }
+
+                // Когда максимум не задан, поиск ограничивается минимальным
+                // расстоянием, ниже которого перекрёсток всё равно не подойдёт:
+                // искать ближе смысла нет.
+                var searchRadius = junctionRange.Max ?? Math.Max(junctionRange.Min, MaxJunctionSearchRadius);
+                var junctionDistance = junctions.DistanceToNearest(
+                    candidate.Position.X, candidate.Position.Z, searchRadius);
+
+                result = junctionRange.Contains(junctionDistance);
+                message = string.Empty;
+                return true;
+            }
+
             default:
                 result = false;
                 message = $"Критерий {type} пока не поддерживается текущим Sandbox Provider.";
@@ -552,6 +615,14 @@ public sealed class LocationResolver
         var type = criterion.Type.Trim();
         return type.Equals("distancefromplayer", StringComparison.OrdinalIgnoreCase) ||
                type.Equals("playerdistance", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool IsJunctionCriterion(LocationCriterion criterion)
+    {
+        var type = criterion.Type.Trim();
+        return type.Equals("nearbyjunction", StringComparison.OrdinalIgnoreCase) ||
+               type.Equals("junctionradius", StringComparison.OrdinalIgnoreCase) ||
+               type.Equals("junctiondistance", StringComparison.OrdinalIgnoreCase);
     }
 
     /// <summary>
@@ -794,6 +865,20 @@ public sealed class LocationResolver
                 return $"Критерий {type}: расстояние до дороги должно быть больше нуля.";
         }
 
+        if (IsJunctionCriterion(criterion))
+        {
+            if (!parameters.TryGetValue("meters", out var junctionText) ||
+                !TryParseDistanceRange(junctionText, out var junctionRange))
+            {
+                return $"Критерий {type}: расстояние задаётся числом или диапазоном, например 300 или 100-500.";
+            }
+
+            // Перепутанные границы (500-100) синтаксически верны, но бессмысленны:
+            // молчаливое «ничего не найдено» здесь хуже точного сообщения.
+            if (junctionRange.Max is { } junctionUpper && junctionUpper < junctionRange.Min)
+                return $"Критерий {type}: минимум {junctionRange.Min:0.#} больше максимума {junctionUpper:0.#}.";
+        }
+
         return null;
     }
 
@@ -822,8 +907,19 @@ public sealed class LocationResolver
         "categorynotwithinnearby", "nonearbycategory",
         "distancefromplayer", "playerdistance",
         "nearbyroad", "maxroaddistance",
+        "nearbyjunction", "junctionradius", "junctiondistance",
         MinDistanceCriterion
     ];
+
+    /// <summary>
+    /// Запасной радиус поиска перекрёстка, когда критерий задан одним числом.
+    ///
+    /// Одно число — это МИНИМУМ («не ближе 300 м»), максимум при этом
+    /// не ограничен. Искать бесконечно далеко нельзя, но и обрезать слишком
+    /// рано — значит терять точки: берётся величина заведомо больше типичного
+    /// расстояния до ближайшего узла (медиана по миру ~677 м).
+    /// </summary>
+    private const double MaxJunctionSearchRadius = 20000d;
 
     /// <summary>
     /// Индекс мира по категориям.

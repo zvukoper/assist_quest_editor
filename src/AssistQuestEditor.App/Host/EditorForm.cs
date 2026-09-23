@@ -33,6 +33,15 @@ public sealed class EditorForm : WebViewForm
     /// точек значило бы возить их в каждом снимке карты.
     /// </summary>
     private readonly RoadIndex _roads;
+
+    /// <summary>
+    /// Перекрёстки для критерия «в радиусе от перекрёстка».
+    ///
+    /// Отдельный слой по той же причине, что и дороги: список предпосчитан
+    /// (нодировка всей сети при старте была бы слишком дорогой) и в снимок карты
+    /// не входит.
+    /// </summary>
+    private readonly JunctionIndex _junctions;
     private readonly HashSet<string> _executedNodeIds = new(StringComparer.OrdinalIgnoreCase);
 
     /// <summary>
@@ -131,7 +140,8 @@ public sealed class EditorForm : WebViewForm
         SceneDocumentSession sceneDocument,
         IQuestRuntimeController runtime,
         LocationStore locationStore,
-        RoadIndex? roads = null)
+        RoadIndex? roads = null,
+        JunctionIndex? junctions = null)
         : base($"{title}", page, new Size(1380, 900), "editor:" + page)
     {
         _hub = hub ?? throw new ArgumentNullException(nameof(hub));
@@ -145,6 +155,7 @@ public sealed class EditorForm : WebViewForm
         _runtime = runtime;
         _locationStore = locationStore ?? throw new ArgumentNullException(nameof(locationStore));
         _roads = roads ?? new RoadIndex(Array.Empty<RoadSegment>());
+        _junctions = junctions ?? new JunctionIndex(Array.Empty<JunctionPoint>());
         var preferences = AppUiPreferencesStore.Load();
         _lastDefinitionPath = preferences.LastQuestDefinitionPath;
         _activePane = NormalizePane(PaneFromPage(page));
@@ -1540,7 +1551,8 @@ public sealed class EditorForm : WebViewForm
             world.Points,
             rounds,
             PlayerPosition(),
-            roads: _roads);
+            roads: _roads,
+            junctions: _junctions);
 
         PostJson(JsonSerializer.Serialize(new
         {

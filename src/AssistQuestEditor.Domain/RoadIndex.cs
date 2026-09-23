@@ -98,6 +98,29 @@ public sealed class RoadIndex
     public int SegmentCount => _segmentCount;
 
     /// <summary>
+    /// Дорожная геометрия плоским массивом <c>[x1,z1,x2,z2, ...]</c>.
+    ///
+    /// Нужно панели ручной проверки перекрёстков: она рисует дороги как фон,
+    /// чтобы автор видел, где именно находится узел. Формат совпадает с
+    /// <c>data/world/roads.json</c>, поэтому web-сторона рисует его тем же кодом,
+    /// что и карта Симулятора.
+    /// </summary>
+    public double[] ToFlatArray()
+    {
+        var result = new double[_segments.Count * 4];
+        for (var i = 0; i < _segments.Count; i++)
+        {
+            var segment = _segments[i];
+            result[i * 4] = segment.X1;
+            result[i * 4 + 1] = segment.Z1;
+            result[i * 4 + 2] = segment.X2;
+            result[i * 4 + 3] = segment.Z2;
+        }
+
+        return result;
+    }
+
+    /// <summary>
     /// Расстояние от точки до ближайшей дороги.
     ///
     /// <paramref name="searchRadius"/> ограничивает перебор окрестными ячейками.

@@ -100,12 +100,18 @@ internal static class Program
             var roads = RoadWorldDataLoader.Load();
             AppLogger.Info("Дорожная геометрия загружена.", $"segments={roads.SegmentCount}");
 
+            // Перекрёстки грузятся рядом с дорогами: критерий «в радиусе от перекрёстка»
+            // работает по предпосчитанному списку, а панель ручной проверки показывает
+            // его на карте. Нодировка всей сети при старте была бы слишком дорогой.
+            var junctions = JunctionWorldDataLoader.Load();
+            AppLogger.Info("Перекрёстки загружены.", $"count={junctions.JunctionCount}");
+
             var simulatorAdapter = new SimulatorDataSourceAdapter(worldPoints);
             var worldCount = simulatorAdapter.Channels.Get<WorldState>("world").Value.Points.Count;
             AppLogger.Info("Создан SimulatorDataSourceAdapter.",
                 $"channels={simulatorAdapter.Channels.Describe().Count}; points={worldCount}");
 
-            mainForm = new MainForm(simulatorAdapter.Channels, ciTest, roads)
+            mainForm = new MainForm(simulatorAdapter.Channels, ciTest, roads, junctions)
             {
                 Opacity = 0
             };

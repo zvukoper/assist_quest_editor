@@ -79,7 +79,7 @@ $script:HeartbeatPath = Join-Path $script:StateDir 'monitor.heartbeat'
 # Значение фиксировано: publish присутствует всегда (как «пропущено»), поэтому
 # число не зависит от -IncludePublish.
 # Держать в актуальном состоянии при добавлении/удалении Invoke-Check.
-$script:TotalChecks = 33
+$script:TotalChecks = 34
 
 # Подавление уведомления скрипта. Вызывающий скрипт может взять уведомление на
 # себя: pull.ps1 показывает одно уведомление с учётом признака активности
@@ -601,6 +601,15 @@ Invoke-Check -Name 'Дорожный слой карты' -Body {
     node ci/road_layer_smoke.mjs
 }
 
+# Окно ручной проверки перекрёстков. Проверяется не только «окно открылось»:
+# исключение ложных узлов и добавление пропущенных ломаются незаметно, потому
+# что страница при этом выглядит совершенно исправной. Здесь же стережётся
+# порядок обхода: кнопки «следующий/предыдущий» обязаны идти в том порядке, в
+# котором узлы нашлись, — иначе автор пропускает часть перекрёстков.
+Invoke-Check -Name 'Ручная проверка перекрёстков' -Body {
+    node ci/junction_review_smoke.mjs
+}
+
 # Шаг 5.3: pan средней кнопкой следует за курсором в обоих нодовых редакторах.
 # Отдельная проверка нужна потому, что pan-ассерты в quest/scene smoke требуют
 # лишь изменения viewBox: при несовпадении аспекта канваса и viewBox pan
@@ -694,6 +703,7 @@ Invoke-Check -Name 'Синтаксис web JavaScript' -Body {
         '.\src\AssistQuestEditor.App\Web\locationEditor.js',
         '.\src\AssistQuestEditor.App\Web\interface.js',
         '.\src\AssistQuestEditor.App\Web\simulator.js',
+        '.\src\AssistQuestEditor.App\Web\junctions.js',
         '.\src\AssistQuestEditor.App\Web\web_log.js'
     )
 
