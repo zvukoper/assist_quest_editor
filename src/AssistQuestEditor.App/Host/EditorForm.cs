@@ -24,11 +24,16 @@ public sealed class EditorForm : WebViewForm
     private readonly SceneCatalog _sceneCatalog;
     private readonly SceneDocumentSession _sceneDocument;
     private readonly IQuestRuntimeController _runtime;
+    private readonly LocationStore _locationStore;
     private readonly HashSet<string> _executedNodeIds = new(StringComparer.OrdinalIgnoreCase);
     private readonly bool _isGraphEditor;
     private readonly bool _isSceneEditor;
     private readonly bool _isDialogueWorkspace;
+    private readonly bool _isLocationEditor;
     private string? _currentDefinitionPath;
+    private string? _currentLocationPath;
+    private LocationDefinition? _currentLocationDefinition;
+    private bool _locationDirty;
     private string? _lastDefinitionPath;
     private bool _documentDirty;
     private bool _loadingScene;
@@ -83,7 +88,8 @@ public sealed class EditorForm : WebViewForm
         SceneGraphStore sceneGraph,
         SceneCatalog sceneCatalog,
         SceneDocumentSession sceneDocument,
-        IQuestRuntimeController runtime)
+        IQuestRuntimeController runtime,
+        LocationStore locationStore)
         : base($"{title}", page, new Size(1380, 900), "editor:" + page)
     {
         _hub = hub ?? throw new ArgumentNullException(nameof(hub));
@@ -95,6 +101,7 @@ public sealed class EditorForm : WebViewForm
         _sceneCatalog = sceneCatalog;
         _sceneDocument = sceneDocument;
         _runtime = runtime;
+        _locationStore = locationStore ?? throw new ArgumentNullException(nameof(locationStore));
         var preferences = AppUiPreferencesStore.Load();
         _lastDefinitionPath = preferences.LastQuestDefinitionPath;
         _isGraphEditor = page.EndsWith("#graph", StringComparison.OrdinalIgnoreCase);
@@ -102,6 +109,9 @@ public sealed class EditorForm : WebViewForm
             page.EndsWith("#scene", StringComparison.OrdinalIgnoreCase) ||
             page.EndsWith("#dialogue", StringComparison.OrdinalIgnoreCase);
         _isDialogueWorkspace = page.EndsWith("#dialogue", StringComparison.OrdinalIgnoreCase);
+        _isLocationEditor =
+            page.EndsWith("#locations", StringComparison.OrdinalIgnoreCase) ||
+            page.EndsWith("#location", StringComparison.OrdinalIgnoreCase);
 
         _player.Changed += Player_Changed;
         _selection.Changed += Selection_Changed;
@@ -128,8 +138,28 @@ public sealed class EditorForm : WebViewForm
             PostSceneCatalog();
     }
 
+    public void RefreshLocationCatalog()
+    {
+        if (_isGraphEditor)
+        {
+            PostQuestGraph();
+            return;
+        }
+
+        if (_isLocationEditor)
+        {
+            _locationStore.Reload();
+            PostLocationEditorState(includeWorldPoints: true);
+        }
+    }
+
     /// <summary>Вид ресурса, историю которого ведёт этот редактор.</summary>
-    public string RecentFileKind => _isGraphEditor ? App.RecentFileKind.Quest : App.RecentFileKind.Scene;
+    public string RecentFileKind =>
+        _isGraphEditor
+            ? App.RecentFileKind.Quest
+            : _isSceneEditor
+                ? App.RecentFileKind.Scene
+                : string.Empty;
 
     /// <summary>
     /// Принимает обновлённый список последних файлов от Host и перерисовывает
@@ -222,6 +252,7 @@ public sealed class EditorForm : WebViewForm
         {
             "Quest" when _isGraphEditor => OpenGraphResource(path),
             "Scene" when _isSceneEditor => OpenSceneResource(path),
+            "Location" when _isLocationEditor => OpenLocationResource(path),
             _ => throw new InvalidOperationException(
                 "Ресурс " + resource.Extension + " пока не поддерживается этим редактором.")
         };
@@ -299,6 +330,32 @@ public sealed class EditorForm : WebViewForm
             }
         }
 
+        if (_isLocationEditor && _locationDirty)
+        {
+            var result = MessageBox.Show(
+                this,
+                "В текущей Location есть несохранённые изменения.\r\n\r\n" +
+                "Да — сохранить Location.\r\n" +
+                "Нет — закрыть без сохранения.\r\n" +
+                "Отмена — вернуться в редактор.",
+                "Несохранённые изменения Location",
+                MessageBoxButtons.YesNoCancel,
+                MessageBoxIcon.Warning,
+                MessageBoxDefaultButton.Button1);
+
+            if (result == DialogResult.Cancel)
+            {
+                e.Cancel = true;
+                return;
+            }
+
+            if (result == DialogResult.Yes && !SaveLocation())
+            {
+                e.Cancel = true;
+                return;
+            }
+        }
+
         base.OnFormClosing(e);
     }
 
@@ -318,9 +375,16 @@ public sealed class EditorForm : WebViewForm
             PostSceneGraph();
         }
 
+        if (_isLocationEditor)
+        {
+            _locationStore.Reload();
+            PostLocationEditorState(includeWorldPoints: true);
+        }
+
         // История последних файлов нужна обеим вкладкам: у нодового редактора
         // и у редактора сцен свой список.
-        PostRecentFiles();
+        if (!_isLocationEditor)
+            PostRecentFiles();
 
         if (_isGraphEditor && !string.IsNullOrWhiteSpace(_pendingQuestNodeSelection))
         {
@@ -373,6 +437,10 @@ public sealed class EditorForm : WebViewForm
             {
                 HandleSceneAction(root, action);
             }
+            else if (_isLocationEditor)
+            {
+                HandleLocationAction(root, action);
+            }
         }
         catch (Exception ex)
         {
@@ -389,6 +457,14 @@ public sealed class EditorForm : WebViewForm
     {
         switch (action)
         {
+            case "open_editor":
+                NavigationRequested?.Invoke(
+                    this,
+                    new EditorNavigationRequestEventArgs(
+                        "open_editor",
+                        editor: Required(root, "editor")));
+                break;
+
             case "navigate_to_quest_node":
             {
                 var nodeId = Required(root, "nodeId");
@@ -775,6 +851,14 @@ public sealed class EditorForm : WebViewForm
     {
         switch (action)
         {
+            case "open_editor":
+                NavigationRequested?.Invoke(
+                    this,
+                    new EditorNavigationRequestEventArgs(
+                        "open_editor",
+                        editor: Required(root, "editor")));
+                break;
+
             case "graph_add_node":
             {
                 var node = _questGraph.AddNode(
@@ -988,12 +1072,13 @@ public sealed class EditorForm : WebViewForm
                         OptionalDouble(root, "radius") ?? 35,
                         OptionalString(root, "requiredReputationNpcId"),
                         OptionalInt(root, "requiredReputation"),
-                        OptionalBool(root, "repeatable"));
+                        OptionalBool(root, "repeatable"),
+                        OptionalString(root, "locationId"));
 
                 _questGraph.UpdateActivation(activation);
                 AppLogger.Info(
                     "Quest Graph: изменена политика запуска.",
-                    $"mode={mode}; worldPointId={activation?.WorldPointId ?? "<none>"}; radius={activation?.Radius}");
+                    $"mode={mode}; locationId={activation?.LocationId ?? "<none>"}; worldPointId={activation?.WorldPointId ?? "<none>"}; radius={activation?.Radius}");
 
                 _documentDirty = true;
                 UpdateWindowTitle();
@@ -1546,6 +1631,15 @@ public sealed class EditorForm : WebViewForm
                 ? "Рабочее пространство диалогов"
                 : "Редактор сцен";
             Text = $"{prefix} — {fileName}" + (_sceneDocument.IsDirty ? " *" : string.Empty);
+            return;
+        }
+
+        if (_isLocationEditor)
+        {
+            var fileName = string.IsNullOrWhiteSpace(_currentLocationPath)
+                ? "Новая локация"
+                : Path.GetFileName(_currentLocationPath);
+            Text = $"Редактор локаций — {fileName}" + (_locationDirty ? " *" : string.Empty);
         }
     }
 
@@ -1582,6 +1676,13 @@ public sealed class EditorForm : WebViewForm
             }).ToArray(),
             itemCatalog = ItemCatalogFactory.CreateStarter(),
             npcCatalog = NpcCatalogFactory.CreateStarter(),
+            locationCatalog = _locationStore.Definitions.Select(location => new
+            {
+                id = location.Id,
+                name = location.Name,
+                mode = location.Mode,
+                worldPointId = location.WorldPointId
+            }).ToArray(),
             // WorldPoint catalog берётся из того же World Data Channel, что и карта
             // Simulator. Поэтому Reference Picker не создаёт второй источник точек.
             worldPointCatalog = _hub.GetSnapshot().World.Points,
