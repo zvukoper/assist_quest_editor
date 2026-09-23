@@ -39,7 +39,18 @@ public sealed class QuestGraphStoreTests
             new QuestNode("c", "Phase", "C", 0, 0, QuestNodeCatalog.CreateSockets("Phase", "c", new Dictionary<string,string>()))
         };
         var graph = new QuestGraph("poor", "Плохой layout", nodes, Array.Empty<QuestConnection>());
-        var store = new QuestGraphStore(graph);
+
+        // Импортированный документ загружается через Replace(QuestDefinition):
+        // Auto Layout Guard подключён именно там. Конструктор раскладку не
+        // применяет (это простая замена значения), поэтому проверять guard
+        // через new QuestGraphStore(graph) нельзя — тест ничего не измерял.
+        var store = new QuestGraphStore(QuestGraphFactory.CreateStarter());
+        store.Replace(new QuestDefinition(
+            graph.Id,
+            graph.Name,
+            "Импортированный документ.",
+            graph,
+            Array.Empty<string>()));
 
         Assert.False(QuestGraphLayout.IsObviouslyPoor(store.Value));
         Assert.NotEqual((0d, 0d), (store.FindNode("b")!.X, store.FindNode("b")!.Y));
