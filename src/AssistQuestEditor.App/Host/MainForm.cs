@@ -571,6 +571,11 @@ public sealed class MainForm : WebViewForm
                 editor.RefreshLocationCatalog();
         }
 
+        if (string.Equals(Path.GetExtension(path), LocationStore.Extension, StringComparison.OrdinalIgnoreCase))
+        {
+            _locationResolver.Reset();
+        }
+
         if (_simulator is null || _simulator.IsDisposed)
         {
             return;
