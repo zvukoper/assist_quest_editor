@@ -312,6 +312,12 @@
       visiblePoints.push(point);
     }
 
+    const temporaryPoint = getTemporaryPoint();
+    if (temporaryPoint) {
+      drawTemporaryPoint(ctx, temporaryPoint, width, height);
+      visiblePoints.push(temporaryPoint);
+    }
+
     // Квестовая графика не зависит от галочек видимости точек: «только квесты»
     // должна ПОКАЗЫВАТЬ квесты, а не прятать их вместе с их СДО. Квест,
     // привязанный к СДО, остаётся на карте — его ромб и помечают место.
@@ -1067,6 +1073,38 @@
    * скрытую фильтром СДО можно было бы «выбрать» вслепую — она осталась бы
    * кликабельной невидимой мишенью.
    */
+  function getTemporaryPoint() {
+    const point = snapshot?.selection?.point;
+    if (!point || !String(point.id || "").toLowerCase().startsWith("temporary:")) return null;
+    return point;
+  }
+
+  function drawTemporaryPoint(ctx, point, width, height) {
+    const q = worldToScreen(point.position.x, point.position.z);
+    if (q.x < -30 || q.y < -30 || q.x > width + 30 || q.y > height + 30) return;
+
+    const selected = point.id === selectedPointId;
+    ctx.save();
+    ctx.beginPath();
+    ctx.moveTo(q.x, q.y - 8);
+    ctx.lineTo(q.x + 8, q.y);
+    ctx.lineTo(q.x, q.y + 8);
+    ctx.lineTo(q.x - 8, q.y);
+    ctx.closePath();
+    ctx.fillStyle = ACCENT_COLOR;
+    ctx.shadowColor = "rgba(250,176,3,.95)";
+    ctx.shadowBlur = selected ? 14 : 8;
+    ctx.fill();
+    ctx.shadowColor = "transparent";
+    ctx.shadowBlur = 0;
+    ctx.lineWidth = selected ? 4 : 2;
+    ctx.strokeStyle = "#ffffff";
+    ctx.stroke();
+    ctx.restore();
+
+    drawPointLabel(ctx, { name: "Временная точка", isPlayer: false, color: ACCENT_COLOR }, q, selected, false);
+  }
+
   function hitPoint(px, py) {
     let best = null;
     let bestDistance = Math.min(18, Math.max(8, 10 / Math.sqrt(camera.mpp)));
@@ -3022,9 +3060,22 @@
 
       const point = hitPoint(pos.x, pos.y);
       if (point && !point.isCity) {
+        if (String(point.id || "").toLowerCase().startsWith("temporary:")) {
+          // Временная точка уже является текущим выбором. Она не попадает в
+          // World catalog и не требует отдельной команды select_point.
+          event.preventDefault();
+          return;
+        }
         send({ action: "select_point", id: point.id });
-      } else if (!point && snapshot?.selection?.point) {
-        send({ action: "clear_selection" });
+      } else if (!point) {
+        const world = screenToWorld(pos.x, pos.y);
+        send({
+          action: "create_temporary_point",
+          x: world.x,
+          y: snapshot?.player?.position?.y ?? 0,
+          z: world.z
+        });
+        event.preventDefault();
       }
       return;
     }
