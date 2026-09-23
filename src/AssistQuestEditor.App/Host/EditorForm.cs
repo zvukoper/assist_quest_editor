@@ -1134,6 +1134,226 @@ public sealed class EditorForm : WebViewForm
         }
     }
 
+
+    private void HandleLocationAction(JsonElement root, string? action)
+    {
+        switch (action)
+        {
+            case "open_editor":
+                NavigationRequested?.Invoke(
+                    this,
+                    new EditorNavigationRequestEventArgs(
+                        "open_editor",
+                        editor: Required(root, "editor")));
+                break;
+
+            case "location_new":
+                _currentLocationDefinition = new LocationDefinition(
+                    "location_" + Guid.NewGuid().ToString("N")[..8],
+                    "Новая локация");
+                _currentLocationPath = null;
+                _locationDirty = false;
+                UpdateWindowTitle();
+                PostLocationEditorState(includeWorldPoints: true);
+                break;
+
+            case "location_open":
+                OpenLocation();
+                break;
+
+            case "location_save":
+                SaveLocation(saveAs: false, root);
+                break;
+
+            case "location_save_as":
+                SaveLocation(saveAs: true, root);
+                break;
+
+            case "location_test":
+                TestLocation(root, showOnly: false);
+                break;
+
+            case "location_show":
+                TestLocation(root, showOnly: true);
+                break;
+
+            case "location_delete":
+                DeleteLocation();
+                break;
+
+            case "location_mark_dirty":
+                _locationDirty = true;
+                UpdateWindowTitle();
+                PostLocationEditorState(includeWorldPoints: true);
+                break;
+        }
+    }
+
+    private void OpenLocation()
+    {
+        using var dialog = new OpenFileDialog
+        {
+            Title = "Открыть Location",
+            Filter = ResourceFileTypes.Filter(ResourceFileTypes.Get(".aqlocation")),
+            Multiselect = false
+        };
+
+        if (dialog.ShowDialog(this) == DialogResult.OK)
+            OpenLocationResource(dialog.FileName);
+    }
+
+    private bool OpenLocationResource(string path)
+    {
+        var document = JsonSerializer.Deserialize<LocationDefinitionDocument>(
+            File.ReadAllText(path),
+            ResourceJsonFormat.Options)
+            ?? throw new InvalidOperationException("Файл Location пуст или повреждён.");
+
+        if (document.SchemaVersion != DefinitionSchemaVersion ||
+            !string.Equals(document.Format, "aqlocation", StringComparison.OrdinalIgnoreCase) ||
+            document.Definition is null)
+        {
+            throw new InvalidOperationException(
+                "Файл не является поддерживаемым Location resource. Format=" +
+                document.Format + "; schema=" + document.SchemaVersion + ".");
+        }
+
+        _currentLocationDefinition = document.Definition;
+        _currentLocationPath = Path.GetFullPath(path);
+        _locationDirty = false;
+        UpdateWindowTitle();
+        PostLocationEditorState(includeWorldPoints: true);
+
+        AppLogger.Info(
+            "Location Editor: документ открыт.",
+            "path=" + _currentLocationPath + "; location=" + document.Definition.Id);
+
+        return true;
+    }
+
+    private bool SaveLocation(bool saveAs, JsonElement root)
+    {
+        if (_locationDefinitionFrom(root) is not { } definition)
+        {
+            throw new InvalidOperationException("Не передана Location Definition.");
+        }
+
+        var path = _currentLocationPath;
+        if (saveAs || string.IsNullOrWhiteSpace(path))
+        {
+            using var dialog = new SaveFileDialog
+            {
+                Title = "Сохранить Location",
+                Filter = ResourceFileTypes.Filter(ResourceFileTypes.Get(".aqlocation")),
+                DefaultExt = "aqlocation",
+                AddExtension = true,
+                FileName = string.IsNullOrWhiteSpace(path)
+                    ? SanitizeFileName(definition.Name) + ".aqlocation"
+                    : Path.GetFileName(path)
+            };
+
+            if (dialog.ShowDialog(this) != DialogResult.OK)
+                return false;
+
+            path = dialog.FileName;
+        }
+
+        _currentLocationDefinition = definition;
+        _locationStore.Save(definition, path);
+        _currentLocationPath = Path.GetFullPath(path!);
+        _locationDirty = false;
+        UpdateWindowTitle();
+        PostLocationEditorState(includeWorldPoints: true);
+
+        PublishDocumentSaved(_currentLocationPath);
+        AppLogger.Info(
+            "Location Editor: документ сохранён.",
+            "path=" + _currentLocationPath + "; location=" + definition.Id);
+        return true;
+    }
+
+    private void DeleteLocation()
+    {
+        if (_currentLocationDefinition is null)
+            return;
+
+        var answer = MessageBox.Show(
+            this,
+            "Удалить Location «" + _currentLocationDefinition.Name + "»?\r\n\r\n" +
+            "Файл будет удалён из пользовательской библиотеки.",
+            "Удаление Location",
+            MessageBoxButtons.YesNo,
+            MessageBoxIcon.Warning);
+
+        if (answer != DialogResult.Yes)
+            return;
+
+        _locationStore.Delete(_currentLocationDefinition.Id);
+        _currentLocationDefinition = new LocationDefinition(
+            "location_" + Guid.NewGuid().ToString("N")[..8],
+            "Новая локация");
+        _currentLocationPath = null;
+        _locationDirty = false;
+        UpdateWindowTitle();
+        PostLocationEditorState(includeWorldPoints: true);
+    }
+
+    private void TestLocation(JsonElement root, bool showOnly)
+    {
+        var definition = _locationDefinitionFrom(root);
+        if (definition is null)
+            throw new InvalidOperationException("Не передана Location Definition.");
+
+        var rounds = showOnly
+            ? 1
+            : Math.Clamp(OptionalInt(root, "rounds") ?? 8, 1, 128);
+
+        var world = _hub.Get<WorldState>("world").Value;
+        var result = new LocationResolver().Test(definition, world.Points, rounds);
+
+        PostJson(JsonSerializer.Serialize(new
+        {
+            type = "location_test",
+            result
+        }, WebJsonOptions));
+    }
+
+    private static LocationDefinition? _locationDefinitionFrom(JsonElement root)
+    {
+        if (!root.TryGetProperty("definition", out var definitionNode) ||
+            definitionNode.ValueKind is JsonValueKind.Null or JsonValueKind.Undefined)
+        {
+            return null;
+        }
+
+        return definitionNode.Deserialize<LocationDefinition>(WebJsonOptions);
+    }
+
+    private void PostLocationEditorState(bool includeWorldPoints)
+    {
+        if (!_isLocationEditor || Browser.CoreWebView2 is null)
+            return;
+
+        PostJson(JsonSerializer.Serialize(new
+        {
+            type = "location_editor_state",
+            definition = _currentLocationDefinition,
+            documentPath = _currentLocationPath ?? string.Empty,
+            documentDirty = _locationDirty,
+            readOnly = _locationStore.IsReadOnly,
+            locations = _locationStore.Definitions.Select(location => new
+            {
+                id = location.Id,
+                name = location.Name,
+                mode = location.Mode,
+                worldPointId = location.WorldPointId
+            }).ToArray(),
+            worldPoints = includeWorldPoints
+                ? _hub.GetSnapshot().World.Points
+                : Array.Empty<WorldPoint>()
+        }, WebJsonOptions));
+    }
+
     private void OpenGraph()
     {
         using var dialog = new OpenFileDialog
