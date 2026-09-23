@@ -1263,6 +1263,120 @@ public sealed class LocationResolverTests
             message.Contains("Подходящих кандидатов нет.", StringComparison.OrdinalIgnoreCase));
     }
 
+    // --- Пошаговый отчёт о поиске ---
+
+    [Fact]
+    public void TraceShowsEachCriterionReachSeparately()
+    {
+        // Ради этого отчёт и заведён: критерии применяются ВМЕСТЕ, и по пустому
+        // результату нельзя понять, какой из них отсеял точки. Здесь у каждого
+        // критерия виден СВОЙ охват на всём мире, поэтому виновник называется
+        // точно, а не угадывается.
+        var resolver = new LocationResolver(seed: 1);
+        var world = new[]
+        {
+            Point("guard", "Охранник", "ohrana", 0),
+            Point("shop", "Продукты", "producti", 10),
+            Point("far", "Охранник", "ohrana", 5000)
+        };
+
+        var cities = new CityBoundaryIndex(new[] { Square() });
+        var location = DynamicLocation(
+            ("InAnyCity", new Dictionary<string, string>()),
+            ("CategoryIs", new Dictionary<string, string> { ["value"] = "ohrana" }));
+
+        var trace = new LocationSearchTrace();
+        var result = resolver.Test(location, world, 1, cities: cities, trace: trace);
+
+        Assert.NotEmpty(result.Candidates);
+
+        // Шаги разбираются по НОМЕРУ критерия: имя есть ещё и в общем шаге
+        // «Критерии», поэтому поиск по имени выбрал бы его.
+        var cityStep = trace.Steps.First(step => step.Stage == "Критерий 1");
+        Assert.Equal(2, cityStep.Remaining);
+        Assert.Contains("InAnyCity", cityStep.Detail);
+
+        // Категория «ohrana» есть у двух точек мира.
+        var categoryStep = trace.Steps.First(step => step.Stage == "Критерий 2");
+        Assert.Equal(2, categoryStep.Remaining);
+
+        // Значение параметра обязано попасть в текст: самая частая причина пустого
+        // результата — написание, и без значения её в отчёте не видно.
+        Assert.Contains("ohrana", categoryStep.Detail);
+    }
+
+    [Fact]
+    public void TraceNamesTheCriterionThatRejectedEverything()
+    {
+        // Отчёт обязан назвать виновника и по цифрам: у критерия с опечаткой охват
+        // НОЛЬ, у исправного — больше нуля. Это и есть пошаговая диагностика.
+        var resolver = new LocationResolver(seed: 1);
+        var world = new[]
+        {
+            Point("guard", "Охранник", "ohrana", 0),
+            Point("shop", "Продукты", "producti", 10)
+        };
+
+        var cities = new CityBoundaryIndex(new[] { Square() });
+        var location = DynamicLocation(
+            ("InAnyCity", new Dictionary<string, string>()),
+            ("CategoryIs", new Dictionary<string, string> { ["value"] = "охрана" }));
+
+        var trace = new LocationSearchTrace();
+        var result = resolver.Test(location, world, 4, cities: cities, trace: trace);
+
+        Assert.Empty(result.Candidates);
+
+        var cityStep = trace.Steps.First(step => step.Stage == "Критерий 1");
+        Assert.Equal(2, cityStep.Remaining);
+        Assert.Contains("InAnyCity", cityStep.Detail);
+
+        var categoryStep = trace.Steps.First(step => step.Stage == "Критерий 2");
+        Assert.Equal(0, categoryStep.Remaining);
+        Assert.Contains("охрана", categoryStep.Detail);
+
+        // Последний шаг перед пустым результатом тоже называет виновника.
+        Assert.Contains(trace.Steps, step =>
+            step.Detail.Contains("отбраковал все точки мира", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public void TraceReportsEnvironmentBeforeFiltering()
+    {
+        // Отчёт начинается с окружения: «черт нет» — это первое, что должно быть
+        // исключено, до любых догадок про критерии и данные мира.
+        var resolver = new LocationResolver(seed: 1);
+        var world = new[] { Point("guard", "Охранник", "ohrana", 0) };
+        var location = DynamicLocation(("InAnyCity", new Dictionary<string, string>()));
+
+        var trace = new LocationSearchTrace();
+        resolver.Test(location, world, 1, trace: trace);
+
+        var start = trace.Steps.First();
+        Assert.Equal("Старт", start.Stage);
+        Assert.Equal(1, start.Remaining);
+        Assert.Contains("точек мира: 1", start.Detail);
+
+        // Критериев указано столько, сколько задано.
+        Assert.Contains(trace.Steps, step => step.Stage == "Критерии" && step.Detail.Contains("InAnyCity"));
+    }
+
+    [Fact]
+    public void TraceIsNotBuiltWhenNotRequested()
+    {
+        // Отчёт требует отдельного прохода по всем точкам на каждый критерий, а
+        // Resolve идёт по этому коду постоянно во время симуляции. Значит без
+        // запроса никакой работы выполняться не должно.
+        var resolver = new LocationResolver(seed: 1);
+        var world = new[] { Point("guard", "Охранник", "ohrana", 0) };
+        var location = DynamicLocation(("CategoryIs", new Dictionary<string, string> { ["value"] = "ohrana" }));
+
+        var result = resolver.Test(location, world, 1);
+
+        // Результат прежний, отчёта нет — параметр необязательный.
+        Assert.NotEmpty(result.Candidates);
+    }
+
     private static LocationDefinition DynamicLocation(
         params (string Type, Dictionary<string, string> Parameters)[] criteria) =>
         new("location_test", "Тестовая локация")

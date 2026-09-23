@@ -30,6 +30,10 @@
   // при каждом появлении класса — без этого флага плашка мигала бы постоянно.
   let noCandidatesPulsePending = false;
 
+  // Пошаговый отчёт последнего теста (Host присылает его только для кнопки «Тест»).
+  let testTrace = null;
+  let testEnvironment = "";
+
   // Текст диагностики, по которому узнаём пустой результат. Строка совпадает с
   // формулировкой домена (LocationResolver.Test).
   const NO_CANDIDATES_MARKER = "Подходящих кандидатов нет";
@@ -716,9 +720,43 @@
       playerSvg;
   }
 
+  /**
+   * Пошаговый отчёт поиска: что проверялось и сколько точек прошло каждый шаг.
+   *
+   * Нужен против слепой отладки. Критерии применяются ВМЕСТЕ, поэтому по пустому
+   * списку нельзя понять, какой из них отсеял точки, и автор правит наугад. Здесь
+   * видно и окружение (загружены ли черты, сколько точек в мире), и результат
+   * КАЖДОГО критерия ПО ОТДЕЛЬНОСТИ на всём мире.
+   */
+  function renderTrace() {
+    if (!testTrace || !testTrace.length) return "";
+
+    const rows = testTrace.map(step => {
+      // Ноль оставшихся точек — это и есть виновник, и он должен быть виден
+      // сразу. Класс ставится здесь, а не через CSS: селектор по позиции ребёнка
+      // сломался бы при добавлении колонки.
+      const empty = Number.isFinite(step.remaining) && step.remaining === 0;
+      const remaining = Number.isFinite(step.remaining)
+        ? "<span class='traceCount'>" + step.remaining + "</span>"
+        : "";
+      return "<div class='traceRow" + (empty ? " traceRowEmpty" : "") + "'>" +
+        "<span class='traceStage'>" + escapeHtml(step.stage || "") + "</span>" +
+        "<span class='traceDetail'>" + escapeHtml(step.detail || "") + "</span>" +
+        remaining +
+      "</div>";
+    }).join("");
+
+    return "<div class='card' style='margin-top:12px'>" +
+      "<div class='miniLabel'>Ход поиска</div>" +
+      (testEnvironment
+        ? "<div class='traceEnv'>" + escapeHtml(testEnvironment) + "</div>"
+        : "") +
+      "<div class='traceList' style='margin-top:7px'>" + rows + "</div>" +
+    "</div>";
+  }
+
   function render(ws, ins) {
-    const definition = ensureDefinition();
-    const readonly = state.readOnly;
+    const definition = ensureDefinition();    const readonly = state.readOnly;
     const currentPoint = findWorldPoint(definition.worldPointId);
     const selection = simulatorContext.selection?.point || null;
     const capturable = capturableSelection();
@@ -802,6 +840,8 @@
             "</div>") +
 
         (dynamic ? historyHtml(definition.query?.history) : "") +
+
+        renderTrace() +
 
         (dynamic
           ? "<div class='card' style='margin-top:12px'><div class='miniLabel'>Проверка результата</div>" +
@@ -1047,6 +1087,9 @@
       };
       pointSearch = "";
       testResult = null;
+      // Новый документ — прошлый отчёт поиска к нему не относится.
+      testTrace = null;
+      testEnvironment = "";
       if (locationIsVisible())
         rerender();
       return;
@@ -1054,6 +1097,10 @@
 
     if (data.type === "location_test") {
       testResult = data.result || null;
+      // Отчёт приходит только на кнопку «Тест»; на любой другой ответ старый
+      // отчёт надо СБРОСИТЬ, иначе он показывал бы ход чужого поиска.
+      testTrace = Array.isArray(data.steps) ? data.steps : null;
+      testEnvironment = String(data.environment || "");
       // Флаг ставится только на НОВЫЙ результат: он сгорает в первом же рендере.
       noCandidatesPulsePending = hasNoCandidatesDiagnostic(testResult);
       if (locationIsVisible())

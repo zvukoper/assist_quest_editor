@@ -24,6 +24,35 @@ public sealed record LocationTestResult(
     public int SuccessfulRounds => Candidates.Count(item => item.Selected);
 }
 
+/// <summary>Один шаг поиска: что проверялось и сколько точек это прошло.</summary>
+public sealed record LocationSearchStep(
+    string Stage,
+    string Detail,
+    int? Remaining = null);
+
+/// <summary>
+/// Пошаговый отчёт о прогоне поиска.
+///
+/// Зачем отдельно от <see cref="LocationTestResult"/>: результат отвечает «что
+/// нашлось», а отчёт — «почему нашлось именно это». Без него автор видит только
+/// пустой список и вынужден угадывать, какой из критериев отсеял точки, а
+/// проверка правится вслепую.
+///
+/// Собирается ТОЛЬКО по запросу: счёт «сколько точек проходит каждый критерий В
+/// ОТДЕЛЬНОСТИ» — это дополнительный проход по всем точкам мира (тысячи
+/// вычислений), и на пути симуляции, где <c>Resolve</c> вызывается постоянно, он
+/// был бы лишней работой.
+/// </summary>
+public sealed class LocationSearchTrace
+{
+    private readonly List<LocationSearchStep> _steps = new();
+
+    public IReadOnlyList<LocationSearchStep> Steps => _steps;
+
+    public void Add(string stage, string detail, int? remaining = null) =>
+        _steps.Add(new LocationSearchStep(stage, detail, remaining));
+}
+
 /// <summary>
 /// Базовый резолвер Location для Sandbox.
 ///
@@ -89,15 +118,24 @@ public sealed class LocationResolver
         ILocationUsageHistory? history = null,
         RoadIndex? roads = null,
         JunctionIndex? junctions = null,
-        CityBoundaryIndex? cities = null)
+        CityBoundaryIndex? cities = null,
+        LocationSearchTrace? trace = null)
     {
         rounds = Math.Clamp(rounds, 1, 128);
         var diagnostics = new List<string>();
 
+        trace?.Add("Старт", worldPoints.Count > 0
+            ? $"точек мира: {worldPoints.Count}; раундов: {rounds}"
+            : "В мире НЕТ ни одной точки: искать нечего.",
+            worldPoints.Count);
+
         if (location.Mode == LocationMode.Fixed)
         {
+            trace?.Add("Режим", "Fixed: выбор не рандомизируется, ищется одна конкретная точка.");
+
             if (string.IsNullOrWhiteSpace(location.WorldPointId))
             {
+                trace?.Add("Отказ", "не задан WorldPointId.");
                 return new LocationTestResult(location.Id, false, rounds,
                     Array.Empty<LocationTestCandidate>(),
                     ["Для Fixed Location не задан WorldPointId."]);
@@ -108,10 +146,13 @@ public sealed class LocationResolver
 
             if (point is null)
             {
+                trace?.Add("Отказ", $"WorldPoint «{location.WorldPointId}» не найден среди {worldPoints.Count} точек мира.");
                 return new LocationTestResult(location.Id, false, rounds,
                     Array.Empty<LocationTestCandidate>(),
                     [$"WorldPoint «{location.WorldPointId}» не найден в WorldState."]);
             }
+
+            trace?.Add("Готово", $"точка «{point.Name}» найдена.", 1);
 
             return new LocationTestResult(
                 location.Id,
@@ -131,12 +172,17 @@ public sealed class LocationResolver
 
         var criteria = location.Query?.Criteria ?? Array.Empty<LocationCriterion>();
 
+        trace?.Add("Критерии", criteria.Count == 0
+            ? "их НЕТ: под условие попадёт любая точка мира."
+            : string.Join("; ", criteria.Select(DescribeCriterion)));
+
         if (criteria.Any(IsUnsupportedCriterion))
         {
             diagnostics.Add("Sandbox не может выполнить один или несколько критериев Location.");
             diagnostics.AddRange(criteria
                 .Where(IsUnsupportedCriterion)
                 .Select(item => "Не поддерживается: " + item.Type));
+            trace?.Add("Отказ", "есть неподдерживаемый критерий: поиск не выполняется вообще.");
             return new LocationTestResult(
                 location.Id,
                 false,
@@ -161,6 +207,7 @@ public sealed class LocationResolver
         {
             diagnostics.Add("Sandbox не может выполнить один или несколько критериев Location.");
             diagnostics.AddRange(parameterProblems);
+            trace?.Add("Отказ", "у критерия неполные параметры: поиск не выполняется вообще.");
             return new LocationTestResult(
                 location.Id,
                 false,
@@ -281,6 +328,12 @@ public sealed class LocationResolver
         // нужной категории.
         var index = new WorldPointIndex(worldPoints);
 
+        // Пошаговый разбор по критериям — ТОЛЬКО когда отчёт запрошен: он требует
+        // отдельного прохода по всем точкам на каждый критерий, а Resolve идёт по
+        // этому коду постоянно во время симуляции.
+        if (trace is not null)
+            ReportCriterionReach(criteria, worldPoints, index, playerPosition, roads, junctions, cities, trace);
+
         // Счётчик отсева ПО КРИТЕРИЮ. Нужен только для объяснения пустого
         // результата, поэтому живёт рядом с фильтрацией и не влияет на отбор.
         var rejections = new int[criteria.Count];
@@ -289,8 +342,15 @@ public sealed class LocationResolver
             MatchesAll(point, criteria, worldPoints, index, playerPosition, roads, junctions, cities, diagnostics,
                 rejections)).ToList();
 
+        trace?.Add("После критериев", candidates.Count > 0
+            ? $"прошли все критерии: {candidates.Count}"
+            : "не прошла НИ ОДНА точка.",
+            candidates.Count);
+
         candidates = candidates.Where(point =>
             MatchesHistory(location.Id, point.Id, location.Query?.History, history)).ToList();
+
+        trace?.Add("После истории", $"с учётом истории посещений: {candidates.Count}.", candidates.Count);
 
         if (candidates.Count == 0)
         {
@@ -301,7 +361,10 @@ public sealed class LocationResolver
 
             var culprit = ZeroMatchDiagnostic(criteria, rejections, worldPoints.Count);
             if (culprit is not null)
+            {
                 diagnostics.Add(culprit);
+                trace?.Add("Виновник", culprit);
+            }
 
             diagnostics.Add("Подходящих кандидатов нет.");
             return new LocationTestResult(
@@ -363,6 +426,10 @@ public sealed class LocationResolver
                 "Кандидат прошёл все поддерживаемые критерии."));
         }
 
+        trace?.Add("Готово",
+            $"выбрано {selected.Count} из {candidates.Count} кандидатов за {rounds} раундов.",
+            selected.Count);
+
         return new LocationTestResult(
             location.Id,
             !criteria.Any(IsUnsupportedCriterion) &&
@@ -370,6 +437,81 @@ public sealed class LocationResolver
             rounds,
             selected,
             diagnostics);
+    }
+
+    /// <summary>
+    /// Сколько точек проходит КАЖДЫЙ критерий по отдельности.
+    ///
+    /// Главный инструмент против слепой отладки: критерии в списке применяются
+    /// ВМЕСТЕ, и по пустому результату невозможно понять, какой из них отсеял
+    /// точки. Здесь каждый проверяется самостоятельно, на всём мире, и автор
+    /// сразу видит, что дело, например, в написании категории, а не в черте
+    /// города и не в данных мира.
+    /// </summary>
+    private static void ReportCriterionReach(
+        IReadOnlyList<LocationCriterion> criteria,
+        IReadOnlyList<WorldPoint> worldPoints,
+        WorldPointIndex index,
+        WorldCoordinate? playerPosition,
+        RoadIndex? roads,
+        JunctionIndex? junctions,
+        CityBoundaryIndex? cities,
+        LocationSearchTrace trace)
+    {
+        for (var position = 0; position < criteria.Count; position++)
+        {
+            var criterion = criteria[position];
+
+            if (IsStrategyCriterion(criterion))
+            {
+                trace.Add($"Критерий {position + 1} (только отбор)",
+                    $"«{DescribeCriterion(criterion)}» — не фильтрует точки, управляет разбросом раундов.");
+                continue;
+            }
+
+            var passed = 0;
+            var unjudged = 0;
+
+            foreach (var point in worldPoints)
+            {
+                var supported = Matches(point, criterion, worldPoints, index, playerPosition, roads, junctions,
+                    cities, out var result, out _);
+
+                // Неоценимый критерий не отбраковывает точку — это и надо показать:
+                // иначе «сколько прошло» выглядело бы как успех проверки.
+                if (!supported)
+                {
+                    unjudged++;
+                    continue;
+                }
+
+                if (criterion.Negate ? !result : result)
+                    passed++;
+            }
+
+            var detail = $"«{DescribeCriterion(criterion)}» — прошло {passed} из {worldPoints.Count}";
+            if (unjudged > 0)
+                detail += $" (не оценивается для {unjudged} точек)";
+
+            trace.Add($"Критерий {position + 1}", detail, passed);
+        }
+    }
+
+    /// <summary>
+    /// Критерий словами — так, как его увидит автор в отчёте.
+    ///
+    /// Значения параметров включены намеренно: самая частая причина пустого
+    /// результата — написание («охрана» вместо «ohrana»), и без значения в тексте
+    /// отчёта её не видно.
+    /// </summary>
+    private static string DescribeCriterion(LocationCriterion criterion)
+    {
+        var parameters = criterion.SafeParameters;
+        var values = parameters.Count == 0
+            ? string.Empty
+            : " [" + string.Join(", ", parameters.Select(item => $"{item.Key}={item.Value}")) + "]";
+
+        return criterion.Type + values + (criterion.Negate ? " (галочка «Нет»)" : string.Empty);
     }
 
     /// <summary>

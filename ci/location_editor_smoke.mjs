@@ -193,7 +193,100 @@ try {
   if (!(await page.locator("#useSelectedSimulatorPoint").isDisabled()))
     throw new Error("Кнопка захвата активна для города: город не является СДО.");
 
-  // --- 2. Живой поиск по имени и по ID ---
+  // --- 2a. Кнопка «Тест» требует ОТВЕТА Host ---
+  //
+  // Иначе не проходит ни один тест: панель рисует результат ТОЛЬКО из ответа
+  // location_test, а Host считал результат и выбрасывал его — ни сообщения, ни
+  // ошибки, ни строк в журнале. Симптом ровно как у автора: «нажимаю Тест —
+  // никакой реакции».
+  {
+    const editorCs = read("src/AssistQuestEditor.App/Host/EditorForm.cs");
+
+    // Срез идёт ТОЛЬКО по телу TestLocation. Границей служит объявление самого
+    // PostLocationTestResult: если резать до PlayerPosition(), в срез попадёт
+    // ОПРЕДЕЛЕНИЕ метода-отправителя, имя найдётся в нём, и проверка пройдёт
+    // даже когда вызов удалён — та же ловушка, что с SupportedCriteria.
+    const start = editorCs.indexOf("private void TestLocation(");
+    if (start < 0)
+      throw new Error("В EditorForm нет TestLocation.");
+
+    const end = editorCs.indexOf("private void PostLocationTestResult(", start);
+    if (end < 0)
+      throw new Error("В EditorForm нет PostLocationTestResult.");
+
+    const body = editorCs.slice(start, end);
+
+    if (!/PostLocationTestResult\(/.test(body))
+      throw new Error("TestLocation не отправляет ответ в панель: результат считается и " +
+        "выбрасывается, поэтому кнопка «Тест» не даёт никакой реакции.");
+
+    // Отчёт строится только для «Тест»: «Показать точку» — служебная операция.
+    if (!/new LocationSearchTrace\(\)/.test(body))
+      throw new Error("TestLocation не собирает пошаговый отчёт: причину пустого результата " +
+        "придётся искать вслепую.");
+
+    if (!/cities: cities/.test(body))
+      throw new Error("TestLocation не читает индекс черт в момент проверки.");
+  }
+
+  // --- 2b. Панель показывает ход поиска ---
+  {
+    await loadState(definition, null);
+    await page.evaluate(() => {
+      window.__deliverFromHost({
+        type: "location_test",
+        result: { locationId: "location_fixture", supported: true, requestedRounds: 4,
+          candidates: [], diagnostics: ["Подходящих кандидатов нет."] },
+        environment: "Точек мира: 5192; черт городов: 1",
+        steps: [
+          { stage: "Старт", detail: "точек мира: 5192; раундов: 4", remaining: 5192 },
+          { stage: "Критерий 1", detail: "«InAnyCity» — прошло 17 из 5192", remaining: 17 },
+          { stage: "Критерий 2", detail: "«CategoryIs [value=охрана]» — прошло 0 из 5192", remaining: 0 }
+        ]
+      });
+    });
+    await page.waitForTimeout(150);
+
+    const trace = await page.evaluate(() => {
+      const card = [...document.querySelectorAll(".card")]
+        .find(node => node.querySelector(".miniLabel")?.textContent?.trim() === "Ход поиска");
+      if (!card) return null;
+      return {
+        environment: card.querySelector(".traceEnv")?.textContent || "",
+        rows: [...card.querySelectorAll(".traceRow")].map(row => ({
+          stage: row.querySelector(".traceStage")?.textContent || "",
+          detail: row.querySelector(".traceDetail")?.textContent || "",
+          empty: row.classList.contains("traceRowEmpty")
+        }))
+      };
+    });
+
+    if (!trace)
+      throw new Error("Панель не показала блок «Ход поиска»: отчёт Host теряется.");
+
+    if (!trace.environment.includes("черт городов: 1"))
+      throw new Error("Окружение в отчёте не показано: " + trace.environment);
+
+    if (trace.rows.length !== 3)
+      throw new Error("Показаны не все шаги поиска: " + trace.rows.length);
+
+    if (!trace.rows[0].detail.includes("5192"))
+      throw new Error("Шаг «Старт» не показал число точек мира: " + trace.rows[0].detail);
+
+    // Главное: шаг с нулём обязан быть выделен. По нему автор и находит виновника,
+    // не читая весь список.
+    if (!trace.rows[2].empty)
+      throw new Error("Шаг с нулём оставшихся точек не выделен: виновника не видно.");
+
+    if (trace.rows[1].empty)
+      throw new Error("Шаг с 17 точками помечен как пустой: выделение врёт о виновнике.");
+
+    // Значение критерия обязано быть видно: именно в написании и бывает причина.
+    if (!trace.rows[2].detail.includes("охрана"))
+      throw new Error("В отчёте нет значения критерия: написание не проверить.");
+  }
+
+  // --- 3. Живой поиск по имени и по ID ---
   await loadState(definition, null);
   const search = page.locator("#locationPointSearch");
   if (!(await search.count()))

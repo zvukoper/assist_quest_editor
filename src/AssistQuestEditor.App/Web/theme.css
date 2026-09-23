@@ -933,3 +933,15 @@ input,select,textarea{padding:4px 5px;border-radius:4px;font-size:10px}textarea{
   }
 }
 .notice.noticePulseAlert{animation:locationNoticeAlertPulse .5s ease-in-out 3 both}
+/* Ход поиска Location: пошаговый отчёт вместо слепой отладки.
+   Раскладка grid, а не flex: счётчик справа должен стоять в одной колонке у
+   всех строк, иначе числа пляшут по ширине и список не читается столбиком. */
+.traceEnv{border:1px solid var(--border);background:rgba(255,255,255,.03);border-radius:7px;padding:7px 9px;color:var(--muted);font-size:11px;line-height:1.5;word-break:break-word}
+.traceList{display:flex;flex-direction:column;gap:4px}
+.traceRow{display:grid;grid-template-columns:110px 1fr 46px;align-items:baseline;gap:8px;padding:5px 8px;border-left:2px solid var(--border);background:rgba(255,255,255,.02);border-radius:5px;font-size:11px;line-height:1.45}
+.traceStage{color:var(--accent);font-weight:800;letter-spacing:.3px;text-transform:uppercase;font-size:10px}
+.traceDetail{color:var(--text);word-break:break-word}
+.traceCount{text-align:right;color:var(--muted-white);font-weight:800;font-variant-numeric:tabular-nums}
+/* Шаг, после которого не осталось ни одной точки, — это и есть виновник. */
+.traceRowEmpty{border-left-color:var(--accent);background:rgba(250,176,3,.07)}
+.traceRowEmpty .traceCount{color:var(--accent)}

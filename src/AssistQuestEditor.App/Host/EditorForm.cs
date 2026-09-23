@@ -1557,6 +1557,12 @@ public sealed class EditorForm : WebViewForm
             : Math.Clamp(OptionalInt(root, "rounds") ?? 8, 1, 128);
 
         var world = _hub.Get<WorldState>("world").Value;
+
+        // Пошаговый отчёт собирается только для кнопки «Тест»: он требует
+        // отдельного прохода по всем точкам мира на каждый критерий.
+        var trace = showOnly ? null : new LocationSearchTrace();
+        var cities = _cityBoundaries.Current;
+
         var result = new LocationResolver().Test(
             definition,
             world.Points,
@@ -1566,7 +1572,73 @@ public sealed class EditorForm : WebViewForm
             junctions: _junctions,
             // Индекс берётся ЗДЕСЬ, а не из поля-снимка: автор мог нарисовать черту
             // уже после открытия окна, и проверка обязана видеть актуальные данные.
-            cities: _cityBoundaries.Current);
+            cities: cities,
+            trace: trace);
+
+        // Ответ уходит В ПАНЕЛЬ. Без него кнопка «Тест» не давала никакой реакции:
+        // результат считался и выбрасывался, панель ждала сообщение, которого не
+        // было, и снаружи это выглядело как «кнопка сломана», хотя вся причина
+        // была в отсутствующей отправке. Сообщение идёт ТОЛЬКО для «Тест»:
+        // «Показать точку» — служебная операция и панель не перерисовывает.
+        if (trace is not null)
+            PostLocationTestResult(result, trace, world.Points.Count, definition, cities);
+
+        AppLogger.Info("EditorForm.TestLocation: поиск выполнен.",
+            $"location={definition.Id}; mode={definition.Mode}; criteria={definition.Query?.Criteria.Count ?? 0}; " +
+            $"points={world.Points.Count}; cities={cities.Count}; candidates={result.Candidates.Count}; " +
+            $"supported={result.Supported}; diagnostics={result.Diagnostics.Count}; " +
+            $"trace={trace?.Steps.Count ?? 0}");
+    }
+
+    /// <summary>
+    /// Отправляет панели результат поиска вместе с пошаговым отчётом.
+    ///
+    /// Отчёт нужен, чтобы автор видел ход поиска, а не только пустой список:
+    /// критерии применяются вместе, и по пустому результату невозможно понять,
+    /// какой из них отсеял точки.
+    /// </summary>
+    private void PostLocationTestResult(
+        LocationTestResult result,
+        LocationSearchTrace trace,
+        int worldPointCount,
+        LocationDefinition definition,
+        CityBoundaryIndex cities)
+    {
+        // Окружение отдельной строкой: если черты не загружены, ни один критерий
+        // города не сработает, и это первое, что стоит исключить.
+        var environment = $"Точек мира: {worldPointCount}; черт городов: {cities.Count}; " +
+            $"критериев: {definition.Query?.Criteria.Count ?? 0}; раундов: {result.RequestedRounds}";
+        if (!cities.IsEmpty)
+            environment += "; черты: " + string.Join(", ", cities.Boundaries.Select(boundary => boundary.Title));
+
+        PostJson(JsonSerializer.Serialize(new
+        {
+            type = "location_test",
+            result = new
+            {
+                locationId = result.LocationId,
+                supported = result.Supported,
+                requestedRounds = result.RequestedRounds,
+                successfulRounds = result.SuccessfulRounds,
+                candidates = result.Candidates.Select(candidate => new
+                {
+                    candidateId = candidate.CandidateId,
+                    name = candidate.Name,
+                    category = candidate.Category,
+                    position = new { x = candidate.Position.X, y = candidate.Position.Y, z = candidate.Position.Z },
+                    selected = candidate.Selected,
+                    message = candidate.Message
+                }),
+                diagnostics = result.Diagnostics
+            },
+            environment,
+            steps = trace.Steps.Select(step => new
+            {
+                stage = step.Stage,
+                detail = step.Detail,
+                remaining = step.Remaining
+            })
+        }, WebJsonOptions));
     }
 
     /// <summary>
