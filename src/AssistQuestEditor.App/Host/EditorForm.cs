@@ -1182,9 +1182,10 @@ public sealed class EditorForm : WebViewForm
                 break;
 
             case "location_mark_dirty":
+                if (_locationDefinitionFrom(root) is { } changedDefinition)
+                    _currentLocationDefinition = changedDefinition;
                 _locationDirty = true;
                 UpdateWindowTitle();
-                PostLocationEditorState(includeWorldPoints: true);
                 break;
         }
     }
@@ -1228,6 +1229,23 @@ public sealed class EditorForm : WebViewForm
             "Location Editor: документ открыт.",
             "path=" + _currentLocationPath + "; location=" + document.Definition.Id);
 
+        return true;
+    }
+
+    private bool SaveLocation()
+    {
+        if (_currentLocationDefinition is null)
+            return false;
+
+        var path = _currentLocationPath;
+        if (string.IsNullOrWhiteSpace(path))
+            return false;
+
+        _locationStore.Save(_currentLocationDefinition, path);
+        _locationDirty = false;
+        UpdateWindowTitle();
+        PostLocationEditorState(includeWorldPoints: true);
+        PublishDocumentSaved(path);
         return true;
     }
 
