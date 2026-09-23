@@ -135,8 +135,13 @@ public sealed class LocationResolver
             }
 
             diagnostics.Add("Подходящих кандидатов нет.");
-            return new LocationTestResult(location.Id, !criteria.Any(IsUnsupportedCriterion),
-                rounds, Array.Empty<LocationTestCandidate>(), diagnostics);
+            return new LocationTestResult(
+                location.Id,
+                !criteria.Any(IsUnsupportedCriterion) &&
+                !HasUnsupportedHistoryCriteria(location.Query?.History),
+                rounds,
+                Array.Empty<LocationTestCandidate>(),
+                diagnostics);
         }
 
         if (candidates.Count < rounds)
@@ -168,7 +173,8 @@ public sealed class LocationResolver
 
         return new LocationTestResult(
             location.Id,
-            !criteria.Any(IsUnsupportedCriterion) && !HasHistoryCriteria(location.Query?.History),
+            !criteria.Any(IsUnsupportedCriterion) &&
+            !HasUnsupportedHistoryCriteria(location.Query?.History),
             rounds,
             selected,
             diagnostics);
