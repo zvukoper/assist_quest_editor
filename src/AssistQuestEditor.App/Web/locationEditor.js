@@ -682,7 +682,18 @@
     });
   }
 
-  window.addEventListener("message", event => {
+  /**
+   * Приём сообщений Host.
+   *
+   * Подписка ОБЯЗАНА идти на chrome.webview: именно через него WebView2
+   * доставляет сообщения Host. Раньше был только window-addEventListener, и
+   * панель не получала НИЧЕГО — ни списка мира, ни выбранной точки. При этом
+   * форма рисовалась, потому что render() сам создаёт пустое определение, так
+   * что снаружи это выглядело как «кнопка не активна» и «поиск ничего не ищет».
+   * window оставлен вторым каналом для совместимости с остальными модулями
+   * (editor.js и sceneEditor.js слушают оба).
+   */
+  const handleLocationMessage = event => {
     const data = typeof event.data === "string" ? (() => {
       try { return JSON.parse(event.data); } catch { return null; }
     })() : event.data;
@@ -717,7 +728,14 @@
       if (locationIsVisible())
         rerender();
     }
-  });
+  };
+
+  window.addEventListener("message", handleLocationMessage);
+
+  const webview = window.chrome?.webview;
+  if (typeof webview?.addEventListener === "function") {
+    webview.addEventListener("message", handleLocationMessage);
+  }
 
   function locationIsVisible() {
     return location.hash.toLowerCase() === "#locations" ||

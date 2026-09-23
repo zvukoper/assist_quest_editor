@@ -2,9 +2,14 @@ import fs from "node:fs";
 import path from "node:path";
 import { chromium } from "playwright";
 
-// Проверка редактора локаций: он «молча не работал» тремя разными способами, и
-// каждый раз это выглядело как «кнопка не активна» / «поиск ничего не ищет».
+// Проверка редактора локаций: он «молча не работал» четырьмя разными способами,
+// и каждый раз это выглядело как «кнопка не активна» / «поиск ничего не ищет».
 //
+//  0. Модуль слушал сообщения Host только на window, а WebView2 доставляет их
+//     через chrome.webview. Панель не получала НИЧЕГО: ни списка мира, ни
+//     выбранной точки. Форма при этом рисовалась (render() сам создаёт пустое
+//     определение), поэтому симптом выглядел как поломка кнопки и поиска.
+//     Harness доставляет сообщения только через chrome.webview, как приложение.
 //  1. markDirty вызывал render() без аргументов → TypeError на ws.innerHTML.
 //     Значение уходило в Host, но панель не перерисовывалась, поэтому захват
 //     выбранной точки выглядел как «ничего не произошло».
@@ -39,11 +44,42 @@ try {
   await page.evaluate(() => {
     window.__messages = [];
     window.__assistSend = payload => window.__messages.push(payload);
+    // Подменяем chrome.webview так, как его видит приложение: сообщения Host
+    // доставляет ИМЕННО он (Host использует PostWebMessageAsJson). Если
+    // модуль слушает только window, он не получит ничего — и проверка ниже
+    // это поймает. Раньше harness сам рассылал сообщения через window, поэтому
+    // молча пропускал именно этот дефект.
+    window.__hostListeners = [];
+    window.chrome = {
+      webview: {
+        addEventListener: (type, handler) => {
+          if (type === "message") window.__hostListeners.push(handler);
+        },
+        postMessage() {}
+      }
+    };
+    window.__deliverFromHost = data => {
+      // window-канал НЕ используется: только chrome.webview, как в WebView2.
+      for (const handler of window.__hostListeners) {
+        handler({ data: typeof data === "string" ? data : JSON.stringify(data) });
+      }
+    };
   });
   await page.addScriptTag({ content: sceneJs });
   await page.addScriptTag({ content: dialogueJs });
-  await page.addScriptTag({ content: locationJs });
   await page.addScriptTag({ content: editorJs });
+
+  // Модуль локаций обязан подписаться на канал chrome.webview: без этого Host не
+  // может доставить ни список мира, ни выбранную точку. Считается именно ПРИРОСТ
+  // слушателей: соседние модули тоже подписываются, поэтому «их вообще есть»
+  // ничего не доказывает (такая проверка прошла бы на сломанном файле).
+  const listenersBefore = await page.evaluate(() => window.__hostListeners.length);
+  await page.addScriptTag({ content: locationJs });
+  const listenersAfter = await page.evaluate(() => window.__hostListeners.length);
+  if (listenersAfter <= listenersBefore)
+    throw new Error(
+      "locationEditor.js не подписан на chrome.webview: сообщения Host " +
+      "(список точек, выбранная точка) до панели не доходят.");
 
   // Мир: 50 СДО с узнаваемым именем у одной из них + город (не СДО).
   const points = [];
@@ -80,22 +116,18 @@ try {
   };
 
   const loadState = (def, context) => page.evaluate(([d, c, pts]) => {
-    window.dispatchEvent(new MessageEvent("message", {
-      data: { type: "active_pane", pane: "locations" }
-    }));
-    window.dispatchEvent(new MessageEvent("message", {
-      data: {
-        type: "location_editor_state",
-        definition: d,
-        documentPath: "",
-        documentDirty: false,
-        readOnly: false,
-        locations: [],
-        worldPoints: pts
-      }
-    }));
+    window.__deliverFromHost({ type: "active_pane", pane: "locations" });
+    window.__deliverFromHost({
+      type: "location_editor_state",
+      definition: d,
+      documentPath: "",
+      documentDirty: false,
+      readOnly: false,
+      locations: [],
+      worldPoints: pts
+    });
     if (c) {
-      window.dispatchEvent(new MessageEvent("message", { data: c }));
+      window.__deliverFromHost(c);
     }
   }, [def, context, points]);
 
@@ -198,13 +230,11 @@ try {
   // --- 3. Читаемость подписи «Нет точек» ---
   await loadState(definition, null);
   await page.evaluate(() => {
-    window.dispatchEvent(new MessageEvent("message", {
-      data: {
-        type: "location_test",
-        result: { locationId: "location_fixture", supported: true, requestedRounds: 1,
-          candidates: [], diagnostics: ["Подходящих кандидатов нет."] }
-      }
-    }));
+    window.__deliverFromHost({
+      type: "location_test",
+      result: { locationId: "location_fixture", supported: true, requestedRounds: 1,
+        candidates: [], diagnostics: ["Подходящих кандидатов нет."] }
+    });
   });
   await page.waitForTimeout(150);
 
