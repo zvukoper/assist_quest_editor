@@ -836,7 +836,7 @@ try {
 
   await page.locator("#saveGraphNode").click();
   const referenceSave = await page.evaluate(() =>
-    window.__messages.find(message => message.action === "graph_update_node")
+    [...window.__messages].reverse().find(message => message.action === "graph_update_node")
   );
   if (!referenceSave || referenceSave.parameters.worldPointId !== "city:chelyabinsk") {
     throw new Error("Reference Picker должен сохранять стабильный WorldPoint ID.");
