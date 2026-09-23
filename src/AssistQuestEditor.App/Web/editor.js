@@ -18,6 +18,9 @@
   // от графа: это метаданные документа, а не ноды со связями.
   let questActivation = null;
   let sceneCatalog = [];
+  let itemCatalog = [];
+  let npcCatalog = [];
+  let worldPointCatalog = [];
   let selectedGraphNodeId = null;
   let pendingOutput = null;
   let graphHistory = { canUndo: false, canRedo: false };
@@ -1015,6 +1018,74 @@
     return node?.nodeType === "Interaction";
   }
 
+  const REFERENCE_PARAMETER_SPECS = {
+    worldPointId: { catalog: "worldPoint", label: "WorldPoint" },
+    sceneId: { catalog: "scene", label: "Scene" },
+    itemId: { catalog: "item", label: "предмет" },
+    npcId: { catalog: "npc", label: "НПЦ" }
+  };
+
+  function referenceCatalog(kind) {
+    switch (kind) {
+      case "worldPoint": return worldPointCatalog;
+      case "scene": return sceneCatalog;
+      case "item": return itemCatalog;
+      case "npc": return npcCatalog;
+      default: return [];
+    }
+  }
+
+  function referenceId(entry) {
+    return String(entry?.id ?? entry?.itemId ?? entry?.npcId ?? "");
+  }
+
+  function referenceName(entry) {
+    return String(entry?.name ?? entry?.title ?? referenceId(entry));
+  }
+
+  function referenceCategory(entry) {
+    return String(entry?.category ?? entry?.kind ?? "");
+  }
+
+  function resolveReference(key, rawValue) {
+    const spec = REFERENCE_PARAMETER_SPECS[key];
+    if (!spec) return { id: String(rawValue ?? ""), entry: null };
+    const value = String(rawValue ?? "").trim();
+    const catalog = referenceCatalog(spec.catalog);
+    const entry = catalog.find(item =>
+      referenceId(item).toLowerCase() === value.toLowerCase() ||
+      referenceName(item).toLowerCase() === value.toLowerCase());
+    return { id: entry ? referenceId(entry) : value, entry: entry || null };
+  }
+
+  function referenceEditorHtml(key, value, rowIndex) {
+    const spec = REFERENCE_PARAMETER_SPECS[key];
+    if (!spec) return null;
+
+    const resolved = resolveReference(key, value);
+    const catalog = referenceCatalog(spec.catalog);
+    const listId = "reference-options-" + rowIndex + "-" + key.replace(/[^a-z0-9_-]/gi, "_");
+    const displayValue = resolved.entry ? referenceName(resolved.entry) : String(value ?? "");
+    const warning = !resolved.entry && String(value ?? "").trim()
+      ? "<span class='badge red' title='Значение сохранится, даже если объект пока отсутствует'>не найден</span>"
+      : "";
+
+    return "<div style='display:flex;gap:6px;align-items:center;flex:1'>" +
+      "<input class='toolButton' data-param-value data-reference-input data-reference-key='" + escapeHtml(key) +
+      "' data-reference-id='" + escapeHtml(resolved.id) + "' list='" + escapeHtml(listId) +
+      "' value='" + escapeHtml(displayValue) + "' placeholder='Поиск по имени или ID' style='flex:1'>" +
+      "<datalist id='" + escapeHtml(listId) + "'>" +
+        catalog.map(entry => {
+          const id = referenceId(entry);
+          const name = referenceName(entry);
+          const category = referenceCategory(entry);
+          const label = [id, category].filter(Boolean).join(" · ");
+          return "<option value='" + escapeHtml(name) + "' label='" + escapeHtml(label) + "'></option>";
+        }).join("") +
+      "</datalist>" + warning +
+      "</div>";
+  }
+
   function parameterEditorHtml(node) {
     const parameters = node.parameters || {};
     const entries = Object.entries(parameters);
@@ -1022,34 +1093,19 @@
       return "<div class='notice'>У этой ноды пока нет параметров.</div>";
     }
 
-    return "<div class='tableLike'>" + entries.map(([key, value]) =>
-      "<div class='tableRow' data-param-row>" +
+    return "<div class='tableLike'>" + entries.map(([key, value], index) => {
+      const reference = referenceEditorHtml(key, value, index);
+      return "<div class='tableRow' data-param-row>" +
         "<input class='toolButton' data-param-key value='" + escapeHtml(key) + "' title='" + escapeHtml(parameterLabel(key)) + "'>" +
-        (node.nodeType === "DialogueScene" && key === "sceneId"
-          ? "<div style='display:flex;gap:6px;align-items:center'>" +
-              "<select class='toolButton' data-param-value style='flex:1'>" +
-                (sceneCatalog.some(scene => scene.id === value)
-                  ? ""
-                  : "<option value='" + escapeHtml(value) + "' selected>" +
-                      escapeHtml(value || "— отсутствует в Scene catalog —") + "</option>") +
-                sceneCatalog.map(scene =>
-                  "<option value='" + escapeHtml(scene.id) + "'" +
-                    (scene.id === value ? " selected" : "") + ">" +
-                    escapeHtml(scene.title + " (" + scene.id + ")") +
-                  "</option>"
-                ).join("") +
-              "</select>" +
-              (sceneCatalog.some(scene => scene.id === value)
-                ? "<button class='toolButton primary' type='button' data-open-reference='" + escapeHtml(value) + "' title='Открыть связанную сцену'>Открыть сцену</button>"
-                : "") +
-            "</div>"
+        (reference
+          ? reference
           : "<input class='toolButton' data-param-value value='" + escapeHtml(value) + "'>") +
         "<button class='toolButton' data-param-remove title='Удалить параметр'>×</button>" +
       "</div>" +
       (parameterHint(key)
         ? "<div class='miniLabel' style='margin:2px 0 8px'>" + escapeHtml(parameterHint(key)) + "</div>"
-        : "")
-    ).join("") + "</div>";
+        : "");
+    }).join("") + "</div>";
   }
 
   function addParameterRow(container) {
@@ -1069,7 +1125,18 @@
     ins.querySelectorAll("[data-param-row]").forEach(row => {
       const key = row.querySelector("[data-param-key]")?.value.trim();
       if (!key) return;
-      parameters[key] = row.querySelector("[data-param-value]")?.value ?? "";
+      const input = row.querySelector("[data-param-value]");
+      if (!input) return;
+
+      const raw = input.value ?? "";
+      if (input.matches("[data-reference-input]")) {
+        const resolved = resolveReference(key, raw);
+        // Сохраняем стабильный ID. Если объект неизвестен, сохраняем исходное
+        // значение вместо его очистки — импортированный/будущий resource ID нельзя терять.
+        parameters[key] = resolved.entry ? resolved.id : String(input.dataset.referenceId || raw);
+      } else {
+        parameters[key] = raw;
+      }
     });
     return parameters;
   }
@@ -1806,6 +1873,9 @@
     if (data?.type === "quest_graph") {
       questGraph = data.graph;
       questActivation = data.activation || null;
+      itemCatalog = Array.isArray(data.itemCatalog) ? data.itemCatalog : [];
+      npcCatalog = Array.isArray(data.npcCatalog) ? data.npcCatalog : [];
+      worldPointCatalog = Array.isArray(data.worldPointCatalog) ? data.worldPointCatalog : [];
       graphDocument = {
         path: data.documentPath || "",
         lastPath: data.lastDocumentPath || "",
