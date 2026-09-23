@@ -281,8 +281,13 @@ public sealed class LocationResolver
         // нужной категории.
         var index = new WorldPointIndex(worldPoints);
 
+        // Счётчик отсева ПО КРИТЕРИЮ. Нужен только для объяснения пустого
+        // результата, поэтому живёт рядом с фильтрацией и не влияет на отбор.
+        var rejections = new int[criteria.Count];
+
         var candidates = worldPoints.Where(point =>
-            MatchesAll(point, criteria, worldPoints, index, playerPosition, roads, junctions, cities, diagnostics)).ToList();
+            MatchesAll(point, criteria, worldPoints, index, playerPosition, roads, junctions, cities, diagnostics,
+                rejections)).ToList();
 
         candidates = candidates.Where(point =>
             MatchesHistory(location.Id, point.Id, location.Query?.History, history)).ToList();
@@ -293,6 +298,10 @@ public sealed class LocationResolver
             {
                 diagnostics.Add("Часть критериев требует capability текущего World Provider.");
             }
+
+            var culprit = ZeroMatchDiagnostic(criteria, rejections, worldPoints.Count);
+            if (culprit is not null)
+                diagnostics.Add(culprit);
 
             diagnostics.Add("Подходящих кандидатов нет.");
             return new LocationTestResult(
@@ -414,10 +423,12 @@ public sealed class LocationResolver
         RoadIndex? roads,
         JunctionIndex? junctions,
         CityBoundaryIndex? cities,
-        ICollection<string> diagnostics)
+        ICollection<string> diagnostics,
+        IList<int>? rejections = null)
     {
-        foreach (var criterion in criteria)
+        for (var position = 0; position < criteria.Count; position++)
         {
+            var criterion = criteria[position];
             // Критерий-стратегия не фильтрует кандидатов, а управляет ВЫБОРОМ
             // раундов, поэтому в фильтрации пропускается.
             //
@@ -440,10 +451,60 @@ public sealed class LocationResolver
 
             var matches = criterion.Negate ? !result : result;
             if (!matches)
+            {
+                // Считаем, СКОЛЬКО кандидатов отбраковал каждый критерий: при
+                // пустом результате важно назвать критерий, который отсеял всех.
+                // Иначе автор видит только «Подходящих кандидатов нет» и идёт
+                // проверять данные мира, хотя причина — единственная строка в
+                // его собственном критерии.
+                if (rejections is not null)
+                    rejections[position]++;
                 return false;
+            }
         }
 
         return true;
+    }
+
+    /// <summary>
+    /// Объясняет ПЕРВЫЙ критерий, отбраковавший все точки мира.
+    ///
+    /// Возвращает null, если критериев с полным отсевом нет — тогда пустой
+    /// результат вызван не одним критерием, а их сочетанием, и выдумывать
+    /// виновника нельзя.
+    /// </summary>
+    private static string? ZeroMatchDiagnostic(
+        IReadOnlyList<LocationCriterion> criteria,
+        IList<int> rejections,
+        int worldPoints)
+    {
+        // Пустой мир — это состояние данных, а не свойство критерия. Называть
+        // критерий виновником при нуле точек было бы ложной подсказкой.
+        if (worldPoints == 0)
+            return null;
+
+        for (var position = 0; position < criteria.Count; position++)
+        {
+            if (rejections[position] < worldPoints)
+                continue;
+
+            var criterion = criteria[position];
+            var prefix = $"Критерий «{criterion.Type}» отбраковал все точки мира ({worldPoints}).";
+
+            if (!IsCategoryCriterion(criterion) || !criterion.SafeParameters.TryGetValue("value", out var value))
+                return prefix;
+
+            // Подсказка именно о написании: категории в мире латинские внутренние
+            // идентификаторы игры, а имена объектов — русские. Автор по привычке
+            // вводит видимое имя и получает пустой результат.
+            return prefix +
+                   $" Категория «{value}» не встречается ни у одной точки. " +
+                   "Категории в данных — это внутренние идентификаторы игры латиницей " +
+                   "(например ohrana, producti), а не подписи объектов («Охранник», «Продукты»). " +
+                   "Выберите категорию из подсказок поля.";
+        }
+
+        return null;
     }
 
     private static bool Matches(
@@ -768,6 +829,29 @@ public sealed class LocationResolver
         criterion.SafeParameters.TryGetValue("city", out var city)
             ? city?.Trim() ?? string.Empty
             : string.Empty;
+
+    /// <summary>
+    /// Критерий, отбраковывающий кандидатов по КАТЕГОРИИ.
+    ///
+    /// Нужен отдельно, чтобы пустой результат объяснялся подсказкой о написании
+    /// категории: имена объектов в мире русские («Охранник», «Продукты»), а
+    /// категории — латинские внутренние идентификаторы игры («ohrana»,
+    /// «producti»). Автор почти всегда вводит имя объекта и получает вечное
+    /// «Подходящих кандидатов нет» — без подсказки причину не найти.
+    /// </summary>
+    private static bool IsCategoryCriterion(LocationCriterion criterion)
+    {
+        var type = criterion.Type.Trim();
+        return type.Equals("categoryis", StringComparison.OrdinalIgnoreCase) ||
+               type.Equals("worldpointcategoryis", StringComparison.OrdinalIgnoreCase) ||
+               type.Equals("categorycontains", StringComparison.OrdinalIgnoreCase) ||
+               type.Equals("worldpointcategorycontains", StringComparison.OrdinalIgnoreCase) ||
+               type.Equals("excludecategory", StringComparison.OrdinalIgnoreCase) ||
+               type.Equals("categorywithinnearby", StringComparison.OrdinalIgnoreCase) ||
+               type.Equals("nearbycategory", StringComparison.OrdinalIgnoreCase) ||
+               type.Equals("categorynotwithinnearby", StringComparison.OrdinalIgnoreCase) ||
+               type.Equals("nonearbycategory", StringComparison.OrdinalIgnoreCase);
+    }
 
     /// <summary>
     /// Диапазон расстояния от игрока.

@@ -108,10 +108,14 @@ internal static class Program
 
             // Черты городов — пользовательские данные, а не поставляемые: их
             // рисует автор руками, потому что границу города нельзя вывести из
-            // геометрии. Пустой список — нормальное состояние первого запуска.
-            var cityBoundaries = CityBoundaryWorldDataLoader.Load();
+            // геометрии. Пустой файл — нормальное состояние первого запуска.
+            //
+            // Передаётся ИСТОЧНИК, а не прочитанный индекс: черты автор рисует уже
+            // во время работы, и снимок, сделанный на старте, оставлял бы критерии
+            // слепыми к только что нарисованной черте до перезапуска приложения.
+            var cityBoundaries = new CityBoundaryFileSource();
             AppLogger.Info("Черты городов загружены.",
-                $"count={cityBoundaries.Count}; path={CityBoundaryWorldDataLoader.FilePath}");
+                $"count={cityBoundaries.Current.Count}; path={cityBoundaries.FilePath}");
 
             var simulatorAdapter = new SimulatorDataSourceAdapter(worldPoints);
             var worldCount = simulatorAdapter.Channels.Get<WorldState>("world").Value.Points.Count;

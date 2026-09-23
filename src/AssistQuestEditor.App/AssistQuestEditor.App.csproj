@@ -11,10 +11,10 @@
     <Prefer32Bit>false</Prefer32Bit>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
 
-    <Version>1.0.40.178</Version>
-    <AssemblyVersion>1.0.40.178</AssemblyVersion>
-    <FileVersion>1.0.40.178</FileVersion>
-    <AssemblyInformationalVersion>1.0.40.178-EXCLUDED-COLORS-R26</AssemblyInformationalVersion>
+    <Version>1.0.40.179</Version>
+    <AssemblyVersion>1.0.40.179</AssemblyVersion>
+    <FileVersion>1.0.40.179</FileVersion>
+    <AssemblyInformationalVersion>1.0.40.179-LIVE-CITY-BOUNDARIES-R27</AssemblyInformationalVersion>
     <PublishSingleFile>true</PublishSingleFile>
     <SelfContained>true</SelfContained>
     <RuntimeIdentifier>win-x64</RuntimeIdentifier>

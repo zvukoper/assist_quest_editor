@@ -33,7 +33,6 @@ public sealed class EditorForm : WebViewForm
     /// точек значило бы возить их в каждом снимке карты.
     /// </summary>
     private readonly RoadIndex _roads;
-
     /// <summary>
     /// Перекрёстки для критерия «в радиусе от перекрёстка».
     ///
@@ -46,8 +45,12 @@ public sealed class EditorForm : WebViewForm
     /// <summary>
     /// Черты городов: критерии «В любом городе» и «В черте города X» работают по
     /// областям, нарисованным автором вручную, а не по признаку точки.
+    ///
+    /// Держится ИСТОЧНИК, а не готовый индекс: черты рисуются вручную уже после
+    /// открытия этого окна, и снимок, сделанный при старте, приводил к «ни одна
+    /// черта города не нарисована» на только что обведённом городе.
     /// </summary>
-    private readonly CityBoundaryIndex _cityBoundaries;
+    private readonly ICityBoundarySource _cityBoundaries;
     private readonly HashSet<string> _executedNodeIds = new(StringComparer.OrdinalIgnoreCase);
 
     /// <summary>
@@ -148,7 +151,7 @@ public sealed class EditorForm : WebViewForm
         LocationStore locationStore,
         RoadIndex? roads = null,
         JunctionIndex? junctions = null,
-        CityBoundaryIndex? cityBoundaries = null)
+        ICityBoundarySource? cityBoundaries = null)
         : base($"{title}", page, new Size(1380, 900), "editor:" + page)
     {
         _hub = hub ?? throw new ArgumentNullException(nameof(hub));
@@ -163,7 +166,7 @@ public sealed class EditorForm : WebViewForm
         _locationStore = locationStore ?? throw new ArgumentNullException(nameof(locationStore));
         _roads = roads ?? new RoadIndex(Array.Empty<RoadSegment>());
         _junctions = junctions ?? new JunctionIndex(Array.Empty<JunctionPoint>());
-        _cityBoundaries = cityBoundaries ?? CityBoundaryIndex.Empty;
+        _cityBoundaries = cityBoundaries ?? new StaticCityBoundarySource();
         var preferences = AppUiPreferencesStore.Load();
         _lastDefinitionPath = preferences.LastQuestDefinitionPath;
         _activePane = NormalizePane(PaneFromPage(page));
@@ -1560,8 +1563,10 @@ public sealed class EditorForm : WebViewForm
             rounds,
             PlayerPosition(),
             roads: _roads,
-        junctions: _junctions,
-        cities: _cityBoundaries);
+            junctions: _junctions,
+            // Индекс берётся ЗДЕСЬ, а не из поля-снимка: автор мог нарисовать черту
+            // уже после открытия окна, и проверка обязана видеть актуальные данные.
+            cities: _cityBoundaries.Current);
     }
 
     /// <summary>

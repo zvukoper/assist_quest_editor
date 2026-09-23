@@ -41,7 +41,7 @@ public sealed class MainForm : WebViewForm
     /// рисования. В отличие от дорог и перекрёстков это ПОЛЬЗОВАТЕЛЬСКИЕ данные:
     /// в поставке их нет, пока автор не обвёл города.
     /// </summary>
-    private readonly CityBoundaryIndex _cityBoundaries;
+    private readonly ICityBoundarySource _cityBoundaries;
 
     /// <summary>
     /// Точки мира для окна черт.
@@ -70,7 +70,7 @@ public sealed class MainForm : WebViewForm
         bool ciTest = false,
         RoadIndex? roads = null,
         JunctionIndex? junctions = null,
-        CityBoundaryIndex? cityBoundaries = null,
+        ICityBoundarySource? cityBoundaries = null,
         IReadOnlyList<WorldPoint>? worldPoints = null)
         : base(
             "Редактор",
@@ -86,7 +86,7 @@ public sealed class MainForm : WebViewForm
         _hub = hub;
         _roads = roads ?? new RoadIndex(Array.Empty<RoadSegment>());
         _junctions = junctions ?? new JunctionIndex(Array.Empty<JunctionPoint>());
-        _cityBoundaries = cityBoundaries ?? CityBoundaryIndex.Empty;
+        _cityBoundaries = cityBoundaries ?? new StaticCityBoundarySource();
         _worldPoints = worldPoints ?? Array.Empty<WorldPoint>();
         _campaignStore = ciTest
             ? new CampaignStore(Path.Combine(AppPaths.ResourceRoot, "campaigns"), readOnly: true)

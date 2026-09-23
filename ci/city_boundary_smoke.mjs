@@ -172,6 +172,103 @@ if (!/\.filter\(point => point\.isCity\)/.test(locationEditorJs))
   throw new Error("worldCities() не ограничивается городскими точками: подсказки предложат " +
     "точки, которые не могут стать городом черты.");
 
+// --- Черты обновляются без перезапуска приложения ---
+
+// Черты рисует автор ВРУЧНУЮ и уже во время работы. Если критерии держат индекс,
+// прочитанный на старте, то только что обведённый город не находится до
+// перезапуска — а выглядит это как поломка геометрии, хотя причина в снимке.
+{
+  const editorCs = read("src/AssistQuestEditor.App/Host/EditorForm.cs");
+  const runtimeCs = read("src/AssistQuestEditor.App/LocationRuntimeResolver.cs");
+  const programCs = read("src/AssistQuestEditor.App/Program.cs");
+
+  if (!/ICityBoundarySource/.test(editorCs))
+    throw new Error("EditorForm держит не источник черт, а снимок: черта, нарисованная " +
+      "после открытия окна, не будет найдена до перезапуска приложения.");
+
+  // Проверка ищется именно в TestLocation: поле может объявляться и передаваться
+  // куда угодно, а важно только то, что индекс читается В МОМЕНТ проверки.
+  {
+    const start = editorCs.indexOf("private void TestLocation(");
+    if (start < 0)
+      throw new Error("В EditorForm нет TestLocation.");
+
+    const end = editorCs.indexOf("private WorldCoordinate? PlayerPosition()", start);
+    const body = editorCs.slice(start, end > start ? end : undefined);
+
+    if (!/_cityBoundaries\.Current/.test(body))
+      throw new Error("TestLocation не берёт индекс черт из источника: проверка пойдёт " +
+        "по устаревшему снимку и сообщит «ни одна черта города не нарисована».");
+  }
+
+  // Кэш разрешённых локаций помнит точку, найденную по ПРЕЖНЕЙ черте. Без сброса
+  // при смене индекса симуляция продолжала бы ходить в старую точку.
+  //
+  // Проверка ищется ВНУТРИ Resolve: `_lastCities` объявлено полем, а
+  // `_resolved.Clear()` есть ещё и в Reset(), поэтому поиск этих имён по файлу
+  // проходил и после удаления самого сброса — то есть не измерял ничего.
+  {
+    const start = runtimeCs.indexOf("public WorldPoint? Resolve(string locationId)");
+    if (start < 0)
+      throw new Error("В LocationRuntimeResolver нет Resolve.");
+
+    const end = runtimeCs.indexOf("public double? ResolveTriggerRadius", start);
+    const body = runtimeCs.slice(start, end > start ? end : undefined);
+
+    if (!/_lastCities/.test(body) || !/_resolved\.Clear\(\)/.test(body))
+      throw new Error("LocationRuntimeResolver не сбрасывает кэш разрешений при смене черт: " +
+        "симуляция останется на точке, найденной по старой черте.");
+  }
+
+  // Читаться черты обязаны при КАЖДОМ обращении с проверкой метки файла, иначе
+  // правка файла снаружи приложения не подхватится.
+  if (!/class CityBoundaryFileSource/.test(read("src/AssistQuestEditor.App/CityBoundaryFileSource.cs")))
+    throw new Error("Нет CityBoundaryFileSource: черты не перечитываются с диска.");
+
+  if (!/new CityBoundaryFileSource\(\)/.test(programCs))
+    throw new Error("Program.cs не создаёт живой источник черт: критерии получат снимок " +
+      "и не увидят нарисованную черту до перезапуска.");
+}
+
+// --- Пустой результат объясняется, а не просто «кандидатов нет» ---
+
+// Симптом, ради которого это добавлено: автор вводит «охрана» (русское ИМЯ
+// объекта) вместо категории «ohrana», черта нарисована верно, точки внутри есть,
+// а поиск молчит «Подходящих кандидатов нет». Категории в данных — латинские
+// внутренние идентификаторы игры, и без подсказки причину не найти.
+{
+  const start = resolverCs.indexOf("private static string? ZeroMatchDiagnostic(");
+  if (start < 0)
+    throw new Error("В LocationResolver нет ZeroMatchDiagnostic: пустой результат ничем " +
+      "не объясняется, и автор идёт проверять данные мира вместо своего критерия.");
+
+  const end = resolverCs.indexOf("private static bool Matches(", start);
+  const body = resolverCs.slice(start, end > start ? end : undefined);
+
+  if (!/IsCategoryCriterion\(criterion\)/.test(body))
+    throw new Error("ZeroMatchDiagnostic не различает критерий по категории: подсказка о " +
+      "латинском написании категории не появится.");
+
+  if (!/отбраковал все точки мира/.test(body))
+    throw new Error("ZeroMatchDiagnostic не называет виновника: автор не поймёт, какой " +
+      "критерий отсеял все точки.");
+
+  // Обвинять критерий можно ТОЛЬКО при полном отсеве: иначе подсказка отправит
+  // автора править исправный критерий.
+  if (!/rejections\[position\] < worldPoints/.test(body))
+    throw new Error("ZeroMatchDiagnostic не проверяет, что критерий отбраковал ВСЕ точки: " +
+      "подсказка обвинит исправный критерий.");
+
+  // Счётчик отсева обязан заполняться в самой фильтрации — иначе он вечно пуст
+  // и подсказка никогда не сработает.
+  if (!/rejections\[position\]\+\+/.test(resolverCs))
+    throw new Error("Счётчик отсева не заполняется в MatchesAll: подсказка не сможет " +
+      "определить виновника.");
+
+  if (!/var culprit = ZeroMatchDiagnostic\(/.test(resolverCs))
+    throw new Error("ZeroMatchDiagnostic не вызывается при пустом результате.");
+}
+
 // --- Динамическая часть ---
 
 const browser = await chromium.launch({ headless: true });

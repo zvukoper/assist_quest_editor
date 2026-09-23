@@ -1167,6 +1167,102 @@ public sealed class LocationResolverTests
         Assert.Equal("Черта города (без названия)", Square(cityName: "").Title);
     }
 
+    // --- Объяснение пустого результата ---
+
+    [Fact]
+    public void CategoryThatNoPointHasIsReportedAsTheCulprit()
+    {
+        // Симптом из жизни: автор вводит «охрана» (русское имя объекта) вместо
+        // категории «ohrana», черта города нарисована верно, точки внутри есть —
+        // и всё равно «Подходящих кандидатов нет». Без объяснения причину искать
+        // негде: подозревается и геометрия, и данные мира, и сам поиск.
+        var resolver = new LocationResolver(seed: 1);
+        var world = new[]
+        {
+            Point("guard", "Охранник", "ohrana", 0),
+            Point("shop", "Продукты", "producti", 10)
+        };
+
+        var cities = new CityBoundaryIndex(new[] { Square() });
+        var location = DynamicLocation(
+            ("InAnyCity", new Dictionary<string, string>()),
+            ("CategoryIs", new Dictionary<string, string> { ["value"] = "охрана" }));
+
+        var result = resolver.Test(location, world, 4, cities: cities);
+
+        Assert.Empty(result.Candidates);
+        Assert.Contains(result.Diagnostics, message =>
+            message.Contains("охрана", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(result.Diagnostics, message =>
+            message.Contains("CategoryIs", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public void CorrectCategoryInsideBoundaryFindsTheGuard()
+    {
+        // Обратная сторона предыдущей проверки: геометрия и поиск исправны, и с
+        // ПРАВИЛЬНОЙ категорией охранник в черте города находится. Без этой пары
+        // тестов «диагностика сработала» ничего не говорит о том, находятся ли
+        // точки на самом деле.
+        var resolver = new LocationResolver(seed: 1);
+        var world = new[]
+        {
+            Point("guard", "Охранник", "ohrana", 0),
+            Point("shop", "Продукты", "producti", 10),
+            Point("far", "Охранник", "ohrana", 5000)
+        };
+
+        var cities = new CityBoundaryIndex(new[] { Square() });
+        var location = DynamicLocation(
+            ("InAnyCity", new Dictionary<string, string>()),
+            ("CategoryIs", new Dictionary<string, string> { ["value"] = "ohrana" }));
+
+        var result = resolver.Test(location, world, 1, cities: cities);
+
+        Assert.True(result.Supported);
+        Assert.NotEmpty(result.Candidates);
+        Assert.All(result.Candidates, candidate => Assert.Equal("guard", candidate.CandidateId));
+    }
+
+    [Fact]
+    public void CombinedCriteriaThatEachKeepPointsDoNotBlameAnyCriterion()
+    {
+        // Точки отсеивает СОЧЕТАНИЕ критериев, а не один из них. Обвинять первый
+        // попавшийся нельзя: это отправило бы автора править исправный критерий.
+        var resolver = new LocationResolver(seed: 1);
+        var world = new[]
+        {
+            Point("insideCat", "Кот", "cat", 0),
+            Point("outsideMan", "Мужчина", "man", 5000)
+        };
+
+        var cities = new CityBoundaryIndex(new[] { Square() });
+        var location = DynamicLocation(
+            ("InAnyCity", new Dictionary<string, string>()),
+            ("CategoryIs", new Dictionary<string, string> { ["value"] = "man" }));
+
+        var result = resolver.Test(location, world, 4, cities: cities);
+
+        Assert.Empty(result.Candidates);
+        Assert.DoesNotContain(result.Diagnostics, message =>
+            message.Contains("отбраковал все точки мира", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(result.Diagnostics, message =>
+            message.Contains("Подходящих кандидатов нет.", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public void EmptyWorldDoesNotBlameCriteria()
+    {
+        // Нет ни одной точки мира: это состояние данных, а не свойство критерия.
+        var resolver = new LocationResolver(seed: 1);
+        var location = DynamicLocation(("CategoryIs", new Dictionary<string, string> { ["value"] = "ohrana" }));
+
+        var result = resolver.Test(location, Array.Empty<WorldPoint>(), 4);
+
+        Assert.Contains(result.Diagnostics, message =>
+            message.Contains("Подходящих кандидатов нет.", StringComparison.OrdinalIgnoreCase));
+    }
+
     private static LocationDefinition DynamicLocation(
         params (string Type, Dictionary<string, string> Parameters)[] criteria) =>
         new("location_test", "Тестовая локация")
