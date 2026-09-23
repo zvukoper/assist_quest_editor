@@ -17,6 +17,9 @@
   };
   let testResult = null;
   let simulatorContext = { selection: { point: null }, player: null };
+  // Текст поиска точки держится в модуле: перерисовка панели создаёт поле
+  // заново, и без этого запрос пользователя терялся бы после каждого выбора.
+  let pointSearch = "";
 
   const CRITERIA = [
     ["CategoryIs", "Категория равна"],
@@ -95,13 +98,29 @@
     return state.definition;
   }
 
+  /**
+   * Перерисовка активной панели изнутри модуля.
+   *
+   * render() принимает рабочую область и инспектор аргументами, потому что его
+   * вызывает editor.js. Внутренние обработчики обязаны идти через этот помощник:
+   * вызов render() без аргументов давал TypeError на ws.innerHTML, панель не
+   * обновлялась, и «Взять выбранную из Simulator» выглядела как «ничего не
+   * произошло» (значение уходило в Host, но на экране не менялось).
+   */
+  function rerender() {
+    const ws = document.getElementById("workspace");
+    const ins = document.getElementById("inspector");
+    if (!ws || !ins) return;
+    render(ws, ins);
+  }
+
   function markDirty() {
     state.documentDirty = true;
     send({
       action: "location_mark_dirty",
       definition: state.definition
     });
-    render();
+    rerender();
   }
 
   function valueNumber(value) {
@@ -165,27 +184,14 @@
       name: form?.querySelector("[data-location-field='name']")?.value?.trim() || "Без названия",
       description: form?.querySelector("[data-location-field='description']")?.value || "",
       mode: form?.querySelector("[data-location-field='mode']")?.value || "Fixed",
-      worldPointId: form?.querySelector("[data-location-field='worldPointId']")?.dataset.resolvedId ||
-        form?.querySelector("[data-location-field='worldPointId']")?.value?.trim() || "",
+      // Скрытое поле хранит уже канонический ID: видимое поле — только поиск,
+      // поэтому переводить имя в ID здесь больше не требуется.
+      worldPointId: form?.querySelector("[data-location-field='worldPointId']")?.value?.trim() || "",
       triggerRadius: valueNumber(form?.querySelector("[data-location-field='radius']")?.value) ?? 35,
       query: { criteria, history }
     };
 
     return definition;
-  }
-
-  function resolveWorldPointInput(input) {
-    if (!input) return;
-    const raw = input.value.trim();
-    const match = state.worldPoints.find(point =>
-      referenceId(point).toLowerCase() === raw.toLowerCase() ||
-      referenceName(point).toLowerCase() === raw.toLowerCase());
-    if (match) {
-      input.dataset.resolvedId = referenceId(match);
-      input.value = referenceName(match);
-    } else {
-      input.dataset.resolvedId = raw;
-    }
   }
 
   function criterionParameterHtml(type, parameters, index) {
@@ -233,6 +239,91 @@
     if (!id) return "";
     const point = findWorldPoint(id);
     return point ? referenceName(point) : id;
+  }
+
+  /** Поиск точки по ID ИЛИ по имени: findWorldPoint умеет только ID. */
+  function findAnyWorldPoint(value) {
+    const raw = String(value || "").trim().toLowerCase();
+    if (!raw) return null;
+    return state.worldPoints.find(point =>
+      referenceId(point).toLowerCase() === raw ||
+      referenceName(point).toLowerCase() === raw) || null;
+  }
+
+  /** Временная точка живёт только в выборе Simulator; её ID имеет префикс. */
+  function isTemporaryPoint(point) {
+    return String(point?.id || "").toLowerCase().startsWith("temporary:");
+  }
+
+  /**
+   * Выбор Simulator, пригодный для захвата.
+   *
+   * Город не подходит: это справочная точка карты, а не СДО для квеста. Всё
+   * остальное — включая временную точку — захватывается: пользователь ожидает,
+   * что кнопка «Взять выбранную» заберёт и её.
+   */
+  function capturableSelection() {
+    const point = simulatorContext.selection?.point || null;
+    return point && !point.isCity ? point : null;
+  }
+
+  const POINT_RESULT_LIMIT = 40;
+
+  function pointMatches(point, query) {
+    const q = String(query || "").trim().toLowerCase();
+    if (!q) return true;
+    return referenceName(point).toLowerCase().includes(q) ||
+      referenceId(point).toLowerCase().includes(q);
+  }
+
+  function pointCandidates() {
+    return (state.worldPoints || []).filter(point => !point.isCity);
+  }
+
+  /**
+   * Список совпадений поиска точки.
+   *
+   * Явный список вместо <datalist>: у 5000+ пунктов браузерный datalist даёт
+   * непредсказуемый поиск, а здесь видно и имя, и ID одновременно.
+   */
+  function searchResultsHtml() {
+    const matches = pointCandidates().filter(point => pointMatches(point, pointSearch));
+    const selectedId = String(state.definition?.worldPointId || "").toLowerCase();
+
+    if (!matches.length) {
+      return "<div class='notice'>Ничего не найдено по «" + escapeHtml(pointSearch) +
+        "». Поиск идёт по имени и по ID.</div>";
+    }
+
+    const shown = matches.slice(0, POINT_RESULT_LIMIT);
+    const rows = shown.map(point => {
+      const selected = referenceId(point).toLowerCase() === selectedId;
+      return "<button type='button' class='toolButton' data-point-result='" +
+        escapeHtml(referenceId(point)) + "' style=\"display:block;width:100%;text-align:left;margin-top:4px" +
+        (selected ? ";border-color:var(--accent)" : "") + "\">" +
+        escapeHtml(referenceName(point)) +
+        "<span class='miniLabel' style='display:block;margin-top:2px'>" +
+          escapeHtml(referenceId(point) + " · " + (point.category || "")) +
+        "</span></button>";
+    }).join("");
+
+    return rows +
+      (matches.length > shown.length
+        ? "<div class='notice' style='margin-top:6px'>Показаны первые " + shown.length +
+          " из " + matches.length + ". Уточните запрос.</div>"
+        : "");
+  }
+
+  function wirePointResults() {
+    document.querySelectorAll("[data-point-result]").forEach(button => {
+      button.addEventListener("click", () => {
+        state.definition = ensureDefinition();
+        state.definition.mode = "Fixed";
+        state.definition.worldPointId = button.dataset.pointResult;
+        pointSearch = "";
+        markDirty();
+      });
+    });
   }
 
   function criterionRowHtml(criterion, index) {
@@ -293,8 +384,11 @@
     const points = candidates.map(item => item.position).filter(Boolean);
 
     if (!points.length) {
+      // fill, а не class='miniLabel': в SVG текст рисуется через fill, и класс
+      // с CSS color оставлял подпись чёрной на тёмной карте — нечитаемой.
       svg.innerHTML =
-        "<text x='50%' y='50%' text-anchor='middle' class='miniLabel'>Нет точек для отображения</text>";
+        "<text x='50%' y='50%' text-anchor='middle' fill='var(--accent)' " +
+        "font-size='12' font-weight='800'>Нет точек для отображения</text>";
       return;
     }
 
@@ -351,9 +445,9 @@
   function render(ws, ins) {
     const definition = ensureDefinition();
     const readonly = state.readOnly;
-    const points = state.worldPoints || [];
     const currentPoint = findWorldPoint(definition.worldPointId);
     const selection = simulatorContext.selection?.point || null;
+    const capturable = capturableSelection();
     const dynamic = definition.mode === "Dynamic";
 
     ws.innerHTML =
@@ -384,9 +478,14 @@
                 "<option value='Dynamic' " + (dynamic ? "selected" : "") + ">Dynamic · динамический поиск</option>" +
               "</select>" +
             "</label>" +
-            "<label class='miniLabel' style='display:flex;align-items:center;gap:6px'>Радиус" +
+            "<label class='miniLabel' style='display:flex;align-items:center;gap:6px'>Радиус срабатывания" +
               "<input class='toolButton' type='number' min='0' data-location-field='radius' style='width:100px' value='" +
                 escapeHtml(definition.triggerRadius ?? 35) + "'> м</label>" +
+          "</div>" +
+          "<div class='notice' style='margin-top:8px'>" +
+            "Радиус — расстояние в метрах, на котором игрок считается находящимся «в точке». " +
+            "Он применяется в Runtime вместо triggerRadius ноды: у ноды это значение лишь " +
+            "значение по умолчанию, а авторский радиус живёт здесь." +
           "</div>" +
         "</div>" +
 
@@ -403,22 +502,28 @@
           : "<div class='card' style='margin-top:12px'>" +
               "<div class='miniLabel'>Фиксированная точка</div>" +
               "<div class='toolbar' style='margin-top:7px;gap:6px;flex-wrap:wrap'>" +
-                "<input class='toolButton' style='flex:1;min-width:260px' data-location-field='worldPointId' list='location-world-points' value='" +
-                  escapeHtml(pointDisplayValue(definition.worldPointId)) + "' placeholder='Поиск по имени или ID'>" +
-                "<button class='toolButton' id='useSelectedSimulatorPoint' " + (selection ? "" : "disabled") + ">Взять выбранную из Simulator</button>" +
+                "<input class='toolButton' id='locationPointSearch' style='flex:1;min-width:260px' value='" +
+                  escapeHtml(pointSearch) + "' placeholder='Поиск по имени или ID'>" +
+                "<button class='toolButton' id='useSelectedSimulatorPoint' " +
+                  (capturable ? "" : "disabled") + ">Взять выбранную из Simulator</button>" +
               "</div>" +
-              "<datalist id='location-world-points'>" +
-                points.filter(point => !point.isCity).map(point =>
-                  "<option value='" + escapeHtml(referenceName(point)) + "' label='" +
-                    escapeHtml(referenceId(point) + " · " + (point.category || "")) + "'></option>" +
-                  (referenceName(point).toLowerCase() === referenceId(point).toLowerCase() ? "" :
-                    "<option value='" + escapeHtml(referenceId(point)) + "' label='" + escapeHtml(referenceName(point)) + "'></option>")
-                ).join("") +
-              "</datalist>" +
+              // Канонический ID хранится в скрытом поле: видимое поле — только поиск.
+              "<input type='hidden' data-location-field='worldPointId' value='" +
+                escapeHtml(definition.worldPointId || "") + "'>" +
+              "<div id='locationPointResults' style='margin-top:7px'>" + searchResultsHtml() + "</div>" +
               "<div class='notice' style='margin-top:7px'>" +
                 (currentPoint
-                  ? "Точка: <strong>" + escapeHtml(currentPoint.name) + "</strong> · " + formatPosition(currentPoint.position)
-                  : "WorldPoint ещё не выбран.") +
+                  ? (isTemporaryPoint(currentPoint) ? "Временная точка Simulator: " : "Точка: ") +
+                    "<strong>" + escapeHtml(currentPoint.name) + "</strong> · " +
+                    formatPosition(currentPoint.position)
+                  : (selection
+                      ? "В Simulator выбрана точка «" + escapeHtml(selection.name || selection.id) +
+                        "». Нажмите «Взять выбранную», чтобы подставить её."
+                      : "WorldPoint ещё не выбран — найдите его выше.")) +
+              "</div>" +
+              "<div class='notice' style='margin-top:6px'>" +
+                "«Взять выбранную из Simulator» подставляет точку, выбранную на карте Симулятора, " +
+                "включая временную точку, созданную кликом по пустому месту." +
               "</div>" +
             "</div>") +
 
@@ -476,8 +581,6 @@
     const form = document.getElementById("locationForm");
     form?.querySelectorAll("[data-location-field]").forEach(input => {
       input.addEventListener("change", () => {
-        if (input.dataset.locationField === "worldPointId")
-          resolveWorldPointInput(input);
         state.definition = collectLocation();
         markDirty();
       });
@@ -522,13 +625,34 @@
     });
 
     document.getElementById("useSelectedSimulatorPoint")?.addEventListener("click", () => {
-      const point = simulatorContext.selection?.point;
+      const point = capturableSelection();
       if (!point) return;
       state.definition = ensureDefinition();
       state.definition.mode = "Fixed";
       state.definition.worldPointId = point.id;
+      pointSearch = "";
       markDirty();
     });
+
+    // Поиск точки обновляет ТОЛЬКО список совпадений, а не всю панель: полная
+    // перерисовка на каждый символ отбирала бы фокус у поля ввода.
+    const pointSearchInput = document.getElementById("locationPointSearch");
+    pointSearchInput?.addEventListener("input", () => {
+      pointSearch = pointSearchInput.value;
+      const results = document.getElementById("locationPointResults");
+      if (results) results.innerHTML = searchResultsHtml();
+      wirePointResults();
+    });
+    pointSearchInput?.addEventListener("change", () => {
+      const match = findAnyWorldPoint(pointSearchInput.value);
+      if (!match) return;
+      state.definition = ensureDefinition();
+      state.definition.mode = "Fixed";
+      state.definition.worldPointId = referenceId(match);
+      pointSearch = "";
+      markDirty();
+    });
+    wirePointResults();
 
     document.getElementById("newLocation")?.addEventListener("click", () => {
       send({ action: "location_new" });
@@ -574,23 +698,24 @@
         locations: Array.isArray(data.locations) ? data.locations : [],
         worldPoints: Array.isArray(data.worldPoints) ? data.worldPoints : []
       };
+      pointSearch = "";
       testResult = null;
       if (locationIsVisible())
-        render(document.getElementById("workspace"), document.getElementById("inspector"));
+        rerender();
       return;
     }
 
     if (data.type === "location_test") {
       testResult = data.result || null;
       if (locationIsVisible())
-        render(document.getElementById("workspace"), document.getElementById("inspector"));
+        rerender();
       return;
     }
 
     if (data.type === "simulator_context") {
       simulatorContext = data;
       if (locationIsVisible())
-        render(document.getElementById("workspace"), document.getElementById("inspector"));
+        rerender();
     }
   });
 

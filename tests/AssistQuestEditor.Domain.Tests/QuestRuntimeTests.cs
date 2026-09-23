@@ -118,6 +118,57 @@ public sealed class QuestRuntimeTests
         Assert.Equal(QuestRuntimeStatus.Completed, runtime.State.Status);
     }
 
+    /// <summary>
+    /// Радиус Location обязан влиять на срабатывание, а не быть мёртвым полем.
+    ///
+    /// Каталог нод проставляет triggerRadius=35 по умолчанию, поэтому раньше
+    /// параметр ноды всегда присутствовал и значение радиуса из .aqlocation
+    /// нельзя было использовать никак. Здесь радиус Location намеренно меньше
+    /// расстояния до игрока, а параметр ноды оставлен «35»: без приоритета
+    /// Location квест сработал бы ложно.
+    /// </summary>
+    [Fact]
+    public void InteractionUsesLocationRadiusInsteadOfNodeDefault()
+    {
+        var point = new WorldPoint("random-point", "Случайная точка", "firewood", new WorldCoordinate(100, 0, 0));
+        var hub = new SimulatorDataSourceAdapter(new[] { point }).Channels;
+        var start = Node("start", "Start");
+        var interaction = Node(
+            "interaction",
+            "Interaction",
+            ("locationId", "firewood-location"),
+            ("triggerRadius", "35"));
+        var end = Node("end", "End");
+
+        var graph = Graph(
+            new[] { start, interaction, end },
+            new[]
+            {
+                C("start", start, "out", interaction, "in"),
+                C("interaction", interaction, "out", end, "in")
+            });
+
+        var runtime = new QuestRuntime(
+            new QuestGraphStore(graph),
+            hub,
+            locationResolver: new FakeLocationResolver(point, radius: 10));
+
+        // 20 м: внутри дефолтных 35 м ноды, но вне 10 м самой Location.
+        hub.Get<PlayerState>("player").Set(
+            new PlayerState(new WorldCoordinate(120, 0, 0), 0, 0, false, true),
+            "Тест");
+
+        runtime.Start();
+        Assert.Equal(QuestRuntimeStatus.Waiting, runtime.State.Status);
+
+        hub.Get<PlayerState>("player").Set(
+            new PlayerState(new WorldCoordinate(105, 0, 0), 0, 0, false, true),
+            "Тест");
+
+        runtime.Tick();
+        Assert.Equal(QuestRuntimeStatus.Completed, runtime.State.Status);
+    }
+
     [Fact]
     public void WaitTimerResumesThroughOutputAndDoesNotReenterWait()
     {
@@ -663,12 +714,22 @@ public sealed class QuestRuntimeTests
     private sealed class FakeLocationResolver : ILocationResolver
     {
         private readonly WorldPoint _point;
+        private readonly double? _radius;
 
-        public FakeLocationResolver(WorldPoint point) => _point = point;
+        public FakeLocationResolver(WorldPoint point, double? radius = null)
+        {
+            _point = point;
+            _radius = radius;
+        }
 
         public WorldPoint? Resolve(string locationId) =>
             locationId.Equals("firewood-location", StringComparison.OrdinalIgnoreCase)
                 ? _point
+                : null;
+
+        public double? ResolveTriggerRadius(string locationId) =>
+            locationId.Equals("firewood-location", StringComparison.OrdinalIgnoreCase)
+                ? _radius
                 : null;
     }
 

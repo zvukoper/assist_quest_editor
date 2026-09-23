@@ -39,6 +39,23 @@ public sealed class LocationRuntimeResolver : ILocationResolver, ILocationResolu
         return point;
     }
 
+    /// <summary>
+    /// Радиус из самой Location.
+    ///
+    /// Раньше поле радиуса в редакторе локаций ни на что не влияло: Runtime
+    /// всегда брал triggerRadius ноды. Теперь при ссылке на Location её радиус
+    /// важнее параметра ноды, иначе значение в файле .aqlocation было бы
+    /// недостижимо для автора.
+    /// </summary>
+    public double? ResolveTriggerRadius(string locationId)
+    {
+        if (string.IsNullOrWhiteSpace(locationId) ||
+            !_store.TryGet(locationId, out var definition))
+            return null;
+
+        return double.IsFinite(definition.TriggerRadius) ? definition.TriggerRadius : null;
+    }
+
     public void Reset() => _resolved.Clear();
 
     public void Invalidate(string locationId)

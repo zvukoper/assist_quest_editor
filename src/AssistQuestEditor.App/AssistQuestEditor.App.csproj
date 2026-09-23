@@ -11,10 +11,10 @@
     <Prefer32Bit>false</Prefer32Bit>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
 
-    <Version>1.0.40.163</Version>
-    <AssemblyVersion>1.0.40.163</AssemblyVersion>
-    <FileVersion>1.0.40.163</FileVersion>
-    <AssemblyInformationalVersion>1.0.40.163-SIDEBAR-PANE-R11</AssemblyInformationalVersion>
+    <Version>1.0.40.164</Version>
+    <AssemblyVersion>1.0.40.164</AssemblyVersion>
+    <FileVersion>1.0.40.164</FileVersion>
+    <AssemblyInformationalVersion>1.0.40.164-LOCATION-EDITOR-FIX-R12</AssemblyInformationalVersion>
     <PublishSingleFile>true</PublishSingleFile>
     <SelfContained>true</SelfContained>
     <RuntimeIdentifier>win-x64</RuntimeIdentifier>

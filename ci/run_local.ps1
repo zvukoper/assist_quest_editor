@@ -79,7 +79,7 @@ $script:HeartbeatPath = Join-Path $script:StateDir 'monitor.heartbeat'
 # Значение фиксировано: publish присутствует всегда (как «пропущено»), поэтому
 # число не зависит от -IncludePublish.
 # Держать в актуальном состоянии при добавлении/удалении Invoke-Check.
-$script:TotalChecks = 30
+$script:TotalChecks = 31
 
 # Подавление уведомления скрипта. Вызывающий скрипт может взять уведомление на
 # себя: pull.ps1 показывает одно уведомление с учётом признака активности
@@ -577,6 +577,13 @@ Invoke-Check -Name 'Scene interface UI smoke' -Body {
 # Навигация по resource reference: Quest node → Scene → обратно к исходной ноде.
 Invoke-Check -Name 'Resource navigation smoke' -Body {
     node ci/resource_navigation_smoke.mjs
+}
+
+# Редактор локаций: панель трижды «молча не работала» — захват выбранной точки
+# (render() без аргументов), поиск точки (datalist на 5000+ пунктов) и подпись
+# «Нет точек» (SVG-текст через CSS color вместо fill).
+Invoke-Check -Name 'Location editor smoke' -Body {
+    node ci/location_editor_smoke.mjs
 }
 
 # Шаг 5.3: pan средней кнопкой следует за курсором в обоих нодовых редакторах.

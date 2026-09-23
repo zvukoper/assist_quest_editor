@@ -28,6 +28,11 @@ public sealed class QuestRuntime : IQuestRuntimeController
 {
     private const int MaxTransitionsPerPass = 64;
 
+    /// <summary>
+    /// Радиус срабатывания по умолчанию, если его не задали ни нода, ни Location.
+    /// </summary>
+    private const double DefaultTriggerRadius = 35;
+
     private readonly QuestGraphStore _graphStore;
     private readonly IDataChannelHub _hub;
     private readonly SceneRuntime? _sceneRuntime;
@@ -648,7 +653,7 @@ public sealed class QuestRuntime : IQuestRuntimeController
     {
         var locationId = GetParameter(parameters, "locationId");
         var pointId = GetParameter(parameters, "worldPointId", GetParameter(parameters, "right"));
-        var radius = ParseDouble(GetParameter(parameters, "triggerRadius"), 35);
+        var radius = ResolveRadius(locationId, parameters);
         var point = !string.IsNullOrWhiteSpace(locationId)
             ? _locationResolver?.Resolve(locationId)
             : _hub.Get<WorldState>("world").Value.Points
@@ -666,12 +671,30 @@ public sealed class QuestRuntime : IQuestRuntimeController
         return Compare(distance, radius, GetParameter(parameters, "comparison", "<="));
     }
 
+    /// <summary>
+    /// Радиус срабатывания для ссылки на цель.
+    ///
+    /// При ссылке на Location решает радиус САМОЙ Location: он авторский и лежит
+    /// рядом с её описанием. Приоритет ноды здесь не годится — каталог нод
+    /// проставляет triggerRadius=35 по умолчанию, поэтому параметр ноды был бы
+    /// всегда «задан» и поле радиуса в редакторе локаций осталось бы мёртвым.
+    /// Для нод с прямым WorldPoint поведение прежнее: берётся параметр ноды.
+    /// </summary>
+    private double ResolveRadius(string locationId, IReadOnlyDictionary<string, string> parameters)
+    {
+        if (!string.IsNullOrWhiteSpace(locationId) &&
+            _locationResolver?.ResolveTriggerRadius(locationId) is { } locationRadius)
+            return locationRadius;
+
+        return ParseDouble(GetParameter(parameters, "triggerRadius"), DefaultTriggerRadius);
+    }
+
     private bool EvaluateInteraction(QuestNode node)
     {
         var parameters = node.Parameters;
         var locationId = GetParameter(parameters, "locationId");
         var pointId = GetParameter(parameters, "worldPointId");
-        var radius = ParseDouble(GetParameter(parameters, "triggerRadius"), 35);
+        var radius = ResolveRadius(locationId, parameters);
         if (string.IsNullOrWhiteSpace(locationId) && string.IsNullOrWhiteSpace(pointId))
         {
             return false;

@@ -90,6 +90,15 @@ public interface ILocationUsageHistory
 public interface ILocationResolver
 {
     WorldPoint? Resolve(string locationId);
+
+    /// <summary>
+    /// Радиус срабатывания из самой Location или null, если он неизвестен.
+    ///
+    /// Задан методом по умолчанию, чтобы реализации, которым радиуса не нужно
+    /// (например, тестовые), не обязаны были его писать: без значения
+    /// вызывающий код остаётся на прежнем поведении — radius из ноды.
+    /// </summary>
+    double? ResolveTriggerRadius(string locationId) => null;
 }
 
 /// <summary>
