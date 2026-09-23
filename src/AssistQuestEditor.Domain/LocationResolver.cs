@@ -44,9 +44,10 @@ public sealed class LocationResolver
         LocationDefinition location,
         IReadOnlyList<WorldPoint> worldPoints,
         WorldCoordinate? playerPosition = null,
-        ILocationUsageHistory? history = null)
+        ILocationUsageHistory? history = null,
+        RoadIndex? roads = null)
     {
-        var result = Test(location, worldPoints, 1, playerPosition, history);
+        var result = Test(location, worldPoints, 1, playerPosition, history, roads);
         var candidate = result.Candidates.FirstOrDefault();
         if (!result.Supported || candidate is null)
         {
@@ -69,13 +70,18 @@ public sealed class LocationResolver
     /// него невозможно сказать, далеко ли точка от игрока. Позиция передаётся
     /// снаружи, потому что игрок не часть мира точек — в Sandbox его состояние
     /// живёт в отдельном канале.
+    ///
+    /// <paramref name="roads"/> нужен критерию «рядом с дорогой». Дорожная
+    /// геометрия передаётся отдельно и НЕ входит в список точек мира: дорог
+    /// ~98 000, и в снимке карты они весили бы почти 19 МБ вместо 0.9 МБ.
     /// </summary>
     public LocationTestResult Test(
         LocationDefinition location,
         IReadOnlyList<WorldPoint> worldPoints,
         int rounds,
         WorldCoordinate? playerPosition = null,
-        ILocationUsageHistory? history = null)
+        ILocationUsageHistory? history = null,
+        RoadIndex? roads = null)
     {
         rounds = Math.Clamp(rounds, 1, 128);
         var diagnostics = new List<string>();
@@ -174,6 +180,22 @@ public sealed class LocationResolver
                 diagnostics);
         }
 
+        // Дорожная геометрия проверяется один раз до фильтрации — по той же
+        // причине, что и позиция игрока: её отсутствие это ошибка окружения, а не
+        // свойство точки, и сообщение не должно размножаться на каждую точку.
+        if (criteria.Any(IsRoadCriterion) && (roads is null || roads.IsEmpty))
+        {
+            diagnostics.Add(
+                "Критерий «Рядом с дорогой» не может быть выполнен: дорожная геометрия не загружена. " +
+                "Проверьте файл data/world/roads.json рядом с приложением.");
+            return new LocationTestResult(
+                location.Id,
+                false,
+                rounds,
+                Array.Empty<LocationTestCandidate>(),
+                diagnostics);
+        }
+
         // Индекс строится один раз: критерии «рядом есть категория» и «нет категории
         // в радиусе» просматривают окрестность каждой точки, а точек в мире тысячи.
         // Без индекса это был бы полный перебор по всем парам (5192² ≈ 27 млн
@@ -182,7 +204,7 @@ public sealed class LocationResolver
         var index = new WorldPointIndex(worldPoints);
 
         var candidates = worldPoints.Where(point =>
-            MatchesAll(point, criteria, worldPoints, index, playerPosition, diagnostics)).ToList();
+            MatchesAll(point, criteria, worldPoints, index, playerPosition, roads, diagnostics)).ToList();
 
         candidates = candidates.Where(point =>
             MatchesHistory(location.Id, point.Id, location.Query?.History, history)).ToList();
@@ -311,6 +333,7 @@ public sealed class LocationResolver
         IReadOnlyList<WorldPoint> worldPoints,
         WorldPointIndex index,
         WorldCoordinate? playerPosition,
+        RoadIndex? roads,
         ICollection<string> diagnostics)
     {
         foreach (var criterion in criteria)
@@ -327,7 +350,7 @@ public sealed class LocationResolver
             if (IsStrategyCriterion(criterion))
                 continue;
 
-            var supported = Matches(candidate, criterion, worldPoints, index, playerPosition,
+            var supported = Matches(candidate, criterion, worldPoints, index, playerPosition, roads,
                 out var result, out var message);
             if (!supported)
             {
@@ -349,6 +372,7 @@ public sealed class LocationResolver
         IReadOnlyList<WorldPoint> worldPoints,
         WorldPointIndex index,
         WorldCoordinate? playerPosition,
+        RoadIndex? roads,
         out bool result,
         out string message)
     {
@@ -464,6 +488,44 @@ public sealed class LocationResolver
                 message = string.Empty;
                 return true;
 
+            // «Рядом с дорогой»: кандидат не дальше указанного расстояния от
+            // любой дороги. Ограничение передаётся в индекс: без него перебор шёл
+            // бы по всем 98 000 отрезкам для каждой точки мира.
+            //
+            // Наличие дорог проверено до фильтрации (см. Test); null-проверка
+            // нужна только компилятору и остаётся дешёвой.
+            case "nearbyroad":
+            case "maxroaddistance":
+            {
+                if (!TryGetDouble(parameters, "meters", out var roadMeters))
+                {
+                    result = false;
+                    message = $"Критерий {type}: не задано числовое расстояние meters.";
+                    return false;
+                }
+
+                if (roadMeters <= 0)
+                {
+                    result = false;
+                    message = $"Критерий {type}: расстояние должно быть больше нуля.";
+                    return false;
+                }
+
+                if (roads is null || roads.IsEmpty)
+                {
+                    result = false;
+                    message = $"Критерий {type}: дорожная геометрия не загружена.";
+                    return false;
+                }
+
+                var roadDistance = roads.DistanceToNearest(
+                    candidate.Position.X, candidate.Position.Z, roadMeters);
+
+                result = roadDistance <= roadMeters;
+                message = string.Empty;
+                return true;
+            }
+
             default:
                 result = false;
                 message = $"Критерий {type} пока не поддерживается текущим Sandbox Provider.";
@@ -477,6 +539,13 @@ public sealed class LocationResolver
     /// </summary>
     private static bool IsStrategyCriterion(LocationCriterion criterion) =>
         criterion.Type.Trim().Equals(MinDistanceCriterion, StringComparison.OrdinalIgnoreCase);
+
+    private static bool IsRoadCriterion(LocationCriterion criterion)
+    {
+        var type = criterion.Type.Trim();
+        return type.Equals("nearbyroad", StringComparison.OrdinalIgnoreCase) ||
+               type.Equals("maxroaddistance", StringComparison.OrdinalIgnoreCase);
+    }
 
     private static bool IsPlayerDistanceCriterion(LocationCriterion criterion)
     {
@@ -713,6 +782,18 @@ public sealed class LocationResolver
                 return $"Критерий {type}: минимум {range.Min:0.#} больше максимума {upper:0.#}.";
         }
 
+        if (IsRoadCriterion(criterion))
+        {
+            if (!TryGetDouble(parameters, "meters", out var roadMeters))
+                return $"Критерий {type}: не задано числовое расстояние meters.";
+
+            // Нулевое расстояние до дороги недостижимо: точка на самой линии
+            // встречается практически никогда, и критерий выглядел бы всегда
+            // ложным. Это ошибка настройки, а не «ничего не найдено».
+            if (roadMeters <= 0)
+                return $"Критерий {type}: расстояние до дороги должно быть больше нуля.";
+        }
+
         return null;
     }
 
@@ -740,6 +821,7 @@ public sealed class LocationResolver
         "categorywithinnearby", "nearbycategory",
         "categorynotwithinnearby", "nonearbycategory",
         "distancefromplayer", "playerdistance",
+        "nearbyroad", "maxroaddistance",
         MinDistanceCriterion
     ];
 

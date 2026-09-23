@@ -18,6 +18,15 @@ public sealed class MainForm : WebViewForm
     private readonly IQuestRuntimeController _runtime;
 
     /// <summary>
+    /// Дорожная геометрия мира.
+    ///
+    /// Живёт в Host и передаётся в окна, а не лежит в точках мира: дорог ~98 000,
+    /// и в снимке карты они весили бы почти 19 МБ вместо 0.9 МБ. В поиске они
+    /// участвуют критерием «рядом с дорогой», на карте — отдельным слоем.
+    /// </summary>
+    private readonly RoadIndex _roads;
+
+    /// <summary>
     /// Окна редакторов. Список, а не словарь по странице: одно окно может
     /// переключать активную панель (сайдбар = селектор рабочей области), поэтому
     /// ключ «страница» перестал быть уникальным идентификатором окна.
@@ -29,7 +38,7 @@ public sealed class MainForm : WebViewForm
     private SimulatorForm? _simulator;
     private SettingsForm? _settings;
 
-    public MainForm(IDataChannelHub hub, bool ciTest = false)
+    public MainForm(IDataChannelHub hub, bool ciTest = false, RoadIndex? roads = null)
         : base(
             "Редактор",
             "main.html",
@@ -42,6 +51,7 @@ public sealed class MainForm : WebViewForm
         }
 
         _hub = hub;
+        _roads = roads ?? new RoadIndex(Array.Empty<RoadSegment>());
         _campaignStore = ciTest
             ? new CampaignStore(Path.Combine(AppPaths.ResourceRoot, "campaigns"), readOnly: true)
             : new CampaignStore();
@@ -54,7 +64,7 @@ public sealed class MainForm : WebViewForm
         _locationStore = ciTest
             ? new LocationStore(Path.Combine(Path.GetTempPath(), "AssistQuestEditor-CI-Locations"), readOnly: true)
             : new LocationStore(AppPaths.UserLocationRoot);
-        _locationResolver = new LocationRuntimeResolver(_locationStore, _hub);
+        _locationResolver = new LocationRuntimeResolver(_locationStore, _hub, _roads);
         var preferences = AppUiPreferencesStore.Load();
         _sceneDocument = new SceneDocumentSession(
             initialScene.Id,
@@ -550,7 +560,8 @@ public sealed class MainForm : WebViewForm
             _sceneCatalog,
             _sceneDocument,
             _runtime,
-            _locationStore);
+            _locationStore,
+            _roads);
 
         _editors.Add(form);
         form.NavigationRequested += Editor_NavigationRequested;

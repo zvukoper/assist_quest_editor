@@ -199,6 +199,19 @@ try {
   if (!(await search.count()))
     throw new Error("Поле поиска точки отсутствует: список должен быть явным, а не datalist.");
 
+  // Пока запрос пуст, списка быть НЕ ДОЛЖНО. Раньше пустой запрос означал
+  // «совпадает всё», и панель сразу вываливала первые 40 произвольных точек мира:
+  // выглядело как мусор, не имеющий отношения к тому, что автор собирается искать.
+  const beforeTyping = await page.evaluate(() => ({
+    rows: document.querySelectorAll("[data-point-result]").length,
+    text: document.querySelector("#locationPointResults .notice")?.textContent || ""
+  }));
+  if (beforeTyping.rows !== 0)
+    throw new Error("При пустом поле выводится список точек — это мусор до начала поиска: " +
+      beforeTyping.rows + " строк.");
+  if (!beforeTyping.text.includes("Начните вводить"))
+    throw new Error("Пустое поле не подсказывает, что нужно начать ввод: " + beforeTyping.text);
+
   await search.click();
   await search.fill("Пятёрочка");
   await page.waitForTimeout(150);
@@ -229,6 +242,47 @@ try {
     document.querySelector("#locationPointResults .notice")?.textContent || "");
   if (!empty.includes("Ничего не найдено"))
     throw new Error("Пустой результат поиска не объяснён пользователю: " + empty);
+
+  // Стирание запроса обязано ВЕРНУТЬ панель к исходному виду без списка, а не
+  // показать произвольные точки.
+  await search.fill("");
+  await page.waitForTimeout(150);
+  const afterClear = await page.evaluate(() => document.querySelectorAll("[data-point-result]").length);
+  if (afterClear !== 0)
+    throw new Error("После очистки поля снова выводится список точек: " + afterClear + " строк.");
+
+  // --- 2б. «Показать в симуляторе» у Fixed-точки ---
+  //
+  // Раньше кнопка была только у Dynamic. Без неё автор искал выбранную точку на
+  // основной карте глазами по координатам.
+  {
+    const emptyFixed = { ...definition, mode: "Fixed", worldPointId: "" };
+    await loadState(emptyFixed, null);
+
+    const fixedVisual = page.locator("#showLocationInSimulator");
+    if (!(await fixedVisual.count()))
+      throw new Error("У Fixed-точки нет кнопки «Показать в симуляторе».");
+    if (!(await fixedVisual.isDisabled()))
+      throw new Error("У Fixed-точки кнопка активна без выбранной точки: показывать нечего.");
+
+    // Выбираем точку — кнопка обязана ожить.
+    const fixedChosen = { ...definition, mode: "Fixed", worldPointId: "sdo:test:0x7" };
+    await loadState(fixedChosen, null);
+
+    if (await fixedVisual.isDisabled())
+      throw new Error("У Fixed-точки кнопка не ожила после выбора точки.");
+
+    await page.evaluate(() => { window.__messages.length = 0; });
+    await fixedVisual.click();
+    await page.waitForTimeout(150);
+
+    const sentFixed = await send("location_show_in_simulator");
+    if (sentFixed.length !== 1)
+      throw new Error("Fixed-точка: «Показать в симуляторе» не отправила сообщение.");
+    const fixedIds = (sentFixed[0].candidates || []).map(item => item.candidateId);
+    if (fixedIds.join(",") !== "sdo:test:0x7")
+      throw new Error("Fixed-точка: на карту уходит не выбранная точка: " + JSON.stringify(fixedIds));
+  }
 
   // --- 3. Читаемость подписи «Нет точек» ---
   await loadState(definition, null);
@@ -386,9 +440,44 @@ try {
     const options = await page.evaluate(() =>
       [...document.querySelectorAll("[data-criterion-type] option")].map(o => o.value));
 
-    for (const required of ["NearbyCategory", "NoNearbyCategory", "MinDistanceBetweenCandidates", "DistanceFromPlayer"])
+    for (const required of ["NearbyCategory", "NoNearbyCategory", "MinDistanceBetweenCandidates", "DistanceFromPlayer", "NearbyRoad"])
       if (!options.includes(required))
         throw new Error("В списке критериев нет «" + required + "»: " + JSON.stringify(options));
+
+    // «Рядом с дорогой»: только расстояние. Тип обязан совпадать с тем, что
+    // понимает домен: `NearbyRoad`, а не `NearRoad` — расхождение дало бы
+    // «критерий не поддерживается» и полное отсутствие фильтрации.
+    const roadDefinition = { ...definition, mode: "Dynamic",
+      query: { criteria: [{ type: "NearbyRoad", parameters: { meters: "100" }, negate: false }], history: {} } };
+    await loadState(roadDefinition, null);
+
+    const roadField = await page.evaluate(() => {
+      const row = document.querySelector("[data-criterion]");
+      const input = row?.querySelector("[data-criterion-parameter='meters']");
+      return input
+        ? { value: input.value, keys: [...row.querySelectorAll("[data-criterion-parameter]")]
+            .map(item => item.dataset.criterionParameter) }
+        : null;
+    });
+    if (!roadField)
+      throw new Error("У критерия «Рядом с дорогой» нет поля расстояния.");
+    if (roadField.keys.join(",") !== "meters")
+      throw new Error("У критерия «Рядом с дорогой» должны быть только метры: " +
+        JSON.stringify(roadField.keys));
+
+    await page.evaluate(() => { window.__messages.length = 0; });
+    await page.locator("#saveLocation").click();
+    await page.waitForTimeout(150);
+    const savedRoad = await send("location_save");
+    const roadCriterion = savedRoad[0]?.definition?.query?.criteria?.[0];
+    if (roadCriterion?.type !== "NearbyRoad" ||
+        String(roadCriterion?.parameters?.meters) !== "100")
+      throw new Error("Критерий «Рядом с дорогой» не собрался в определение: " +
+        JSON.stringify(roadCriterion));
+
+    // Состояние возвращается к критерию соседства: следующая проверка работает
+    // именно с ним, и порядок блоков не должен её ломать.
+    await loadState(criteriaDefinition, null);
 
     // Критерий соседства обязан показать категорию и радиус.
     const nearbyFields = await page.evaluate(() => {

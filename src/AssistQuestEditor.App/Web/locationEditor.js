@@ -47,6 +47,8 @@
     ["FartherThanPoint", "Дальше от точки"],
     // Радиус от игрока: принимает число (минимум) или диапазон «100-1000».
     ["DistanceFromPlayer", "Радиус от игрока"],
+    // Рядом с дорогой: кандидат не дальше указанного расстояния от любой дороги.
+    ["NearbyRoad", "Рядом с дорогой"],
     ["ExcludeCategory", "Исключить категорию"],
     // Соседство по категории. Два разных критерия, а не «НЕ» над первым:
     // «НЕ (есть сосед)» и «(нет соседей)» — разные условия, когда соседей несколько.
@@ -334,6 +336,18 @@
         "<span class='miniLabel' style='align-self:center'>от игрока, м</span>";
     }
 
+    // Рядом с дорогой: только расстояние до ближайшей дороги.
+    //
+    // Дорог в мире ~98 000, поэтому это ОТДЕЛЬНЫЙ слой, а не категория точки:
+    // в списке точек они весили бы ~19 МБ в каждом снимке карты. Критерий
+    // проверяет расстояние до ближайшего отрезка, а не соседство по категории.
+    if (type === "NearbyRoad") {
+      return "<input class='toolButton' style='width:130px' type='number' min='1' " +
+        "data-criterion-parameter='meters' value='" + escapeHtml(p.meters || "100") +
+        "' placeholder='метров' title='Максимальное расстояние от точки до дороги'>" +
+        "<span class='miniLabel' style='align-self:center'>до дороги, м</span>";
+    }
+
     // Минимальная дистанция — только расстояние: это разброс раундов, а не фильтр.
     if (type === "MinDistanceBetweenCandidates") {
       return "<input class='toolButton' style='width:130px' type='number' min='1' " +
@@ -421,14 +435,28 @@
    *
    * Явный список вместо <datalist>: у 5000+ пунктов браузерный datalist даёт
    * непредсказуемый поиск, а здесь видно и имя, и ID одновременно.
+   *
+   * Пока запрос пуст, списка НЕТ вообще. Раньше пустой запрос считался «совпадает
+   * всё», и панель сразу вываливала первые 40 произвольных точек мира — это
+   * выглядело как мусор, не имеющий отношения к тому, что автор собирается искать.
+   * Список формируется только когда начинается поиск по вводу.
    */
   function searchResultsHtml() {
+    const query = String(pointSearch || "").trim();
+
+    if (!query) {
+      return "<div class='notice'>Начните вводить имя или ID точки — " +
+        "список появится по мере ввода.</div>";
+    }
+
     const matches = pointCandidates().filter(point => pointMatches(point, pointSearch));
     const selectedId = String(state.definition?.worldPointId || "").toLowerCase();
 
     if (!matches.length) {
-      return "<div class='notice'>Ничего не найдено по «" + escapeHtml(pointSearch) +
-        "». Поиск идёт по имени и по ID.</div>";
+      // Та же красная плашка, что и у пустого теста: «ничего не найдено» —
+      // это отказ, и он должен быть заметен, а не сливаться с подсказками.
+      return "<div class='notice noticePulseAlert'>Ничего не найдено по «" +
+        escapeHtml(pointSearch) + "». Поиск идёт по имени и по ID.</div>";
     }
 
     const shown = matches.slice(0, POINT_RESULT_LIMIT);
@@ -517,8 +545,32 @@
     return Array.isArray(testResult?.candidates) ? testResult.candidates : [];
   }
 
+  /**
+   * Набор для показа на основной карте.
+   *
+   * Для Dynamic Location это результат теста, для Fixed — единственная
+   * выбранная точка. Один способ нужен обоим режимам: пользователь ожидает,
+   * что кнопка «Показать в симуляторе» работает одинаково.
+   */
+  function visualisationEntries() {
+    const definition = state.definition || {};
+
+    if (definition.mode === "Fixed") {
+      const id = String(definition.worldPointId || "").trim();
+      return id ? [{ pointId: id }] : [];
+    }
+
+    return displayedCandidates().map(candidate => ({ pointId: candidate.candidateId }));
+  }
+
   function visualisationReady() {
-    return displayedCandidates().length > 0;
+    return visualisationEntries().length > 0;
+  }
+
+  function visualisationDisabledReason() {
+    return state.definition?.mode === "Fixed"
+      ? "Сначала выберите точку: показывать пока нечего"
+      : "Сначала нажмите «Тест»: показывать пока нечего";
   }
 
   function renderMap(result) {
@@ -697,7 +749,7 @@
                   (visualisationReady() ? "" : "disabled") +
                   " title='" + (visualisationReady()
                     ? "Показать на основной карте набор, который уже отображён на карте ниже"
-                    : "Сначала нажмите «Тест»: показывать пока нечего") + "'>" +
+                    : visualisationDisabledReason()) + "'>" +
                   "Показать в симуляторе</button>" +
               "</div>" +
               "<div class='miniLabel' style='margin-top:6px'>Тест каждый раз заново выбирает точки. Результаты показываются на карте ниже.</div>" +
@@ -708,7 +760,18 @@
               "</div>" +
             "</div>"
           : "<div class='card' style='margin-top:12px'><div class='miniLabel'>Проверка результата</div>" +
-              "<div class='toolbar' style='margin-top:7px'><button class='toolButton primary' id='showLocation'>Показать точку</button></div>" +
+              "<div class='toolbar' style='margin-top:7px;gap:6px;flex-wrap:wrap'>" +
+                "<button class='toolButton primary' id='showLocation'>Показать точку</button>" +
+                // Та же кнопка, что и у Dynamic: показать выбранную точку на
+                // основной карте с городами и дорогами. Её отсутствие заставляло
+                // автора искать точку глазами по координатам.
+                "<button class='toolButton' id='showLocationInSimulator' " +
+                  (visualisationReady() ? "" : "disabled") +
+                  " title='" + (visualisationReady()
+                    ? "Показать выбранную точку на основной карте Симулятора"
+                    : visualisationDisabledReason()) + "'>" +
+                  "Показать в симуляторе</button>" +
+              "</div>" +
               "</div>") +
 
         "<div class='card' style='margin-top:12px;position:relative'>" +
@@ -877,15 +940,14 @@
     // «Показать в симуляторе» НЕ запускает новый поиск: на основную карту уходит
     // тот же набор, который уже нарисован ниже. Повторный прогон дал бы другие
     // точки (тест рандомизирован), и автор сравнивал бы не то, что проверял.
-    // Поэтому отправляется готовый список, а без результата теста кнопка вообще
-    // неактивна — показывать нечего.
+    // Для Fixed это единственная выбранная точка. Без набора кнопка неактивна.
     document.getElementById("showLocationInSimulator")?.addEventListener("click", () => {
-      const candidates = displayedCandidates();
-      if (!candidates.length) return;
+      const entries = visualisationEntries();
+      if (!entries.length) return;
       send({
         action: "location_show_in_simulator",
         definition: collectLocation(),
-        candidates: candidates.map(candidate => ({ candidateId: candidate.candidateId })),
+        candidates: entries.map(entry => ({ candidateId: entry.pointId })),
         diagnostics: testResult?.diagnostics || []
       });
     });

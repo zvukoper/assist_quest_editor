@@ -25,6 +25,14 @@ public sealed class EditorForm : WebViewForm
     private readonly SceneDocumentSession _sceneDocument;
     private readonly IQuestRuntimeController _runtime;
     private readonly LocationStore _locationStore;
+
+    /// <summary>
+    /// Дорожная геометрия мира для критерия «рядом с дорогой».
+    ///
+    /// Передаётся отдельно от точек мира: дорог ~98 000, и держать их в списке
+    /// точек значило бы возить их в каждом снимке карты.
+    /// </summary>
+    private readonly RoadIndex _roads;
     private readonly HashSet<string> _executedNodeIds = new(StringComparer.OrdinalIgnoreCase);
 
     /// <summary>
@@ -122,7 +130,8 @@ public sealed class EditorForm : WebViewForm
         SceneCatalog sceneCatalog,
         SceneDocumentSession sceneDocument,
         IQuestRuntimeController runtime,
-        LocationStore locationStore)
+        LocationStore locationStore,
+        RoadIndex? roads = null)
         : base($"{title}", page, new Size(1380, 900), "editor:" + page)
     {
         _hub = hub ?? throw new ArgumentNullException(nameof(hub));
@@ -135,6 +144,7 @@ public sealed class EditorForm : WebViewForm
         _sceneDocument = sceneDocument;
         _runtime = runtime;
         _locationStore = locationStore ?? throw new ArgumentNullException(nameof(locationStore));
+        _roads = roads ?? new RoadIndex(Array.Empty<RoadSegment>());
         var preferences = AppUiPreferencesStore.Load();
         _lastDefinitionPath = preferences.LastQuestDefinitionPath;
         _activePane = NormalizePane(PaneFromPage(page));
@@ -1529,7 +1539,8 @@ public sealed class EditorForm : WebViewForm
             definition,
             world.Points,
             rounds,
-            PlayerPosition());
+            PlayerPosition(),
+            roads: _roads);
 
         PostJson(JsonSerializer.Serialize(new
         {

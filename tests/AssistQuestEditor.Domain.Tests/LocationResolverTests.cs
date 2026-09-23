@@ -558,8 +558,201 @@ public sealed class LocationResolverTests
             message.Contains("больше максимума", StringComparison.OrdinalIgnoreCase));
     }
 
-    private static WorldPoint Man(string id, double x) => Point(id, "Мужчина", "man", x);
+    /// <summary>
+    /// «Рядом с дорогой»: кандидат не дальше указанного расстояния от дороги.
+    ///
+    /// Проверяются обе стороны: точка у дороги проходит, далёкая — нет.
+    /// Односторонний тест прошёл бы и при полностью проигнорированном критерии.
+    ///
+    /// Геометрия: вертикальная дорога вдоль X = 0. Точка «near» отстоит на 20 м,
+    /// «far» — на 5000 м.
+    /// </summary>
+    [Fact]
+    public void NearbyRoadKeepsOnlyPointsCloseToRoad()
+    {
+        var roads = new RoadIndex(new[]
+        {
+            new RoadSegment(0, -10000, 0, 10000)
+        });
+        var points = new[]
+        {
+            Point("near", "У дороги", "camping", 20),
+            Point("far", "Далеко", "camping", 5000)
+        };
+        var location = new LocationDefinition("roadside", "У дороги")
+        {
+            Mode = LocationMode.Dynamic,
+            Query = new LocationQueryDefinition
+            {
+                Criteria = new[]
+                {
+                    new LocationCriterion("NearbyRoad", new Dictionary<string, string>
+                    {
+                        ["meters"] = "100"
+                    })
+                }
+            }
+        };
 
+        var result = new LocationResolver(1).Test(location, points, 2, roads: roads);
+
+        Assert.True(result.Supported);
+        var picked = result.Candidates.Select(item => item.CandidateId).Distinct().ToArray();
+        Assert.Contains("near", picked);
+        Assert.DoesNotContain("far", picked);
+    }
+
+    /// <summary>
+    /// Расстояние считается до ОТРЕЗКА, а не до его концов.
+    ///
+    /// Точка стоит напротив середины длинной дороги: до обоих концов тысячи
+    /// метров, но до самой дороги — метры. Проверка «до концов» отбраковала бы
+    /// корректный кандидат, и критерий работал бы только вблизи узлов.
+    /// </summary>
+    [Fact]
+    public void NearbyRoadMeasuresDistanceToSegmentNotToEndpoints()
+    {
+        var roads = new RoadIndex(new[]
+        {
+            new RoadSegment(-10000, 0, 10000, 0)
+        });
+        var points = new[]
+        {
+            // Напротив середины: до концов 10 км, до дороги — 15 м.
+            Point("mid", "Напротив середины", "camping", 0) with
+            {
+                Position = new WorldCoordinate(0, 0, 15)
+            }
+        };
+        var location = new LocationDefinition("segment", "Отрезок")
+        {
+            Mode = LocationMode.Dynamic,
+            Query = new LocationQueryDefinition
+            {
+                Criteria = new[]
+                {
+                    new LocationCriterion("NearbyRoad", new Dictionary<string, string>
+                    {
+                        ["meters"] = "50"
+                    })
+                }
+            }
+        };
+
+        var result = new LocationResolver(1).Test(location, points, 1, roads: roads);
+
+        Assert.True(result.Supported);
+        Assert.Single(result.Candidates);
+    }
+
+    /// <summary>
+    /// Без дорожной геометрии критерий — ошибка окружения с ОДНИМ сообщением.
+    ///
+    /// Дороги грузятся отдельным файлом и могут отсутствовать. Проверка обязана
+    /// быть до фильтрации: иначе на каждую из 5000 точек мира появилось бы по
+    /// диагностике, и причина в списке не читалась бы.
+    /// </summary>
+    [Fact]
+    public void NearbyRoadWithoutGeometryReportsSingleDiagnostic()
+    {
+        var points = new[]
+        {
+            Point("a", "Точка A", "camping", 0),
+            Point("b", "Точка B", "camping", 100),
+            Point("c", "Точка C", "camping", 200)
+        };
+        var location = new LocationDefinition("noroards", "Без дорог")
+        {
+            Mode = LocationMode.Dynamic,
+            Query = new LocationQueryDefinition
+            {
+                Criteria = new[]
+                {
+                    new LocationCriterion("NearbyRoad", new Dictionary<string, string>
+                    {
+                        ["meters"] = "100"
+                    })
+                }
+            }
+        };
+
+        // Геометрия не передана намеренно.
+        var result = new LocationResolver(1).Test(location, points, 1);
+
+        Assert.False(result.Supported);
+        Assert.Empty(result.Candidates);
+        Assert.Single(result.Diagnostics);
+        Assert.Contains("дорожная геометрия не загружена", result.Diagnostics.Single(),
+            StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
+    /// Нулевое расстояние до дороги — ошибка настройки, а не «ничего не найдено».
+    ///
+    /// Точка ровно на линии дороги практически не встречается, поэтому при нуле
+    /// критерий выглядел бы всегда ложным. Автор обязан узнать настоящую причину.
+    /// </summary>
+    [Fact]
+    public void NearbyRoadWithZeroDistanceReportsConfigurationProblem()
+    {
+        var roads = new RoadIndex(new[] { new RoadSegment(0, 0, 100, 0) });
+        var points = new[] { Point("a", "Точка A", "camping", 0) };
+        var location = new LocationDefinition("zero", "Ноль")
+        {
+            Mode = LocationMode.Dynamic,
+            Query = new LocationQueryDefinition
+            {
+                Criteria = new[]
+                {
+                    new LocationCriterion("NearbyRoad", new Dictionary<string, string>
+                    {
+                        ["meters"] = "0"
+                    })
+                }
+            }
+        };
+
+        var result = new LocationResolver(1).Test(location, points, 1, roads: roads);
+
+        Assert.False(result.Supported);
+        Assert.Contains(result.Diagnostics, message =>
+            message.Contains("больше нуля", StringComparison.OrdinalIgnoreCase));
+    }
+
+    /// <summary>
+    /// Индекс дорожной геометрии возвращает корректное расстояние.
+    ///
+    /// Прямая проверка <see cref="RoadIndex"/>: критерий опирается на него, и
+    /// ошибка в пространственной сетке (например, отрезок не попал в ячейку)
+    /// дала бы «бесконечно далеко» там, где дорога рядом.
+    /// </summary>
+    [Fact]
+    public void RoadIndexFindsNearestSegmentAcrossCells()
+    {
+        // Отрезки разнесены далеко друг от друга, чтобы сетка точно разложила их
+        // по разным ячейкам (размер ячейки — 500 м).
+        var index = new RoadIndex(new[]
+        {
+            new RoadSegment(0, 0, 100, 0),
+            new RoadSegment(10000, 0, 10100, 0),
+            new RoadSegment(0, 20000, 100, 20000)
+        });
+
+        Assert.Equal(3, index.SegmentCount);
+
+        // Точка в 10 м над первым отрезком.
+        Assert.Equal(10, index.DistanceToNearest(50, 10, 100), 3);
+        // Точка в 10 м над вторым (дальним) отрезком.
+        Assert.Equal(10, index.DistanceToNearest(10050, 10, 100), 3);
+        // Точка в 15 м над третьим отрезком.
+        Assert.Equal(15, index.DistanceToNearest(50, 20015, 100), 3);
+
+        // Пустой индекс — «бесконечно далеко», а не исключение.
+        Assert.True(double.IsPositiveInfinity(
+            new RoadIndex(Array.Empty<RoadSegment>()).DistanceToNearest(0, 0, 100)));
+    }
+
+    private static WorldPoint Man(string id, double x) => Point(id, "Мужчина", "man", x);
     private static WorldPoint Cat(string id, double x) => Point(id, "Кот", "cat", x);
 
     private static WorldPoint Point(string id, string name, string category, double x) =>

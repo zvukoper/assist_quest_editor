@@ -13,6 +13,7 @@
   const inventoryNotifications = document.getElementById("inventoryNotifications");
   const onlyQuestsToggle = document.getElementById("onlyQuestsToggle");
   const citiesToggle = document.getElementById("citiesToggle");
+  const roadsToggle = document.getElementById("roadsToggle");
   const mapStatusHint = document.getElementById("mapStatusHint");
   const send = payload => window.chrome?.webview?.postMessage(payload);
 
@@ -35,6 +36,13 @@
   // Города гасятся отдельной галочкой: «только квесты» их НЕ отключает, иначе
   // нельзя было бы показать карту без СДО, но с ориентирами-городами.
   let citiesFilter = true;
+  // Дорожный слой. Геометрия грузится файлом ОДИН раз при старте, а не едет в
+  // снимке: снимки приходят постоянно (каждое событие, тик времени), а ~98 000
+  // отрезков добавили бы к ним ~19 МБ вместо 0.9 МБ.
+  let roadsFilter = true;
+  let roadsLoaded = false;
+  // Плоский массив [x1,z1,x2,z2, ...]: та же раскладка, что в data/world/roads.json.
+  let roadSegments = [];
   let questHitAreas = [];
   // Точки, реально нарисованные в текущем кадре. Клик проверяется только по
   // ним: иначе можно было бы выбрать точку, которой на карте не видно
@@ -283,6 +291,9 @@
     ctx.fillStyle = "#0d1014";
     ctx.fillRect(0, 0, width, height);
     drawGrid(ctx, width, height);
+
+    // Дороги рисуются между сеткой и точками: они фон, а не объект выбора.
+    drawRoads(ctx, width, height);
 
     const points = snapshot.world?.points || [];
     const showAllLabels = camera.mpp < 24;
@@ -767,6 +778,81 @@
 
     if (current) lines.push(current);
     return lines.slice(0, 3);
+  }
+
+  /**
+   * Дорожный слой карты.
+   *
+   * Рисуется до точек, чтобы СДО и квесты оставались читаемыми поверх дорог.
+   * Толщина берётся из масштаба: при мелком масштабе линия тоньше, иначе дороги
+   * слились бы в сплошное пятно и закрыли карту.
+   *
+   * Отсечение по экрану обязательно: в кадре могут быть видны доли процента от
+   * 98 000 отрезков, и рисовать остальные — это тысячи лишних вызовов на кадр.
+   */
+  function drawRoads(ctx, width, height) {
+    if (!roadsFilter || !roadSegments.length) return;
+    const lineWidth = Math.max(0.6, Math.min(2.6, 20 / camera.mpp));
+    // Запас в пикселях: отрезок может быть виден, даже если оба его конца за
+    // кадром (длинная прямая дорога через весь экран).
+    const margin = 40;
+
+    ctx.save();
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
+    ctx.lineWidth = lineWidth;
+    ctx.strokeStyle = "rgba(118,130,146,.85)";
+    ctx.beginPath();
+
+    for (let i = 0; i + 3 < roadSegments.length; i += 4) {
+      const a = worldToScreen(roadSegments[i], roadSegments[i + 1]);
+      const b = worldToScreen(roadSegments[i + 2], roadSegments[i + 3]);
+
+      if (Math.max(a.x, b.x) < -margin || Math.min(a.x, b.x) > width + margin) continue;
+      if (Math.max(a.y, b.y) < -margin || Math.min(a.y, b.y) > height + margin) continue;
+
+      ctx.moveTo(a.x, a.y);
+      ctx.lineTo(b.x, b.y);
+    }
+
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  /**
+   * Загрузка дорожной геометрии.
+   *
+   * Путь строится от корня приложения (../data/...), а не от страницы Web/: под
+   * file:// относительный путь без "../" ушёл бы в несуществующий Web/data/...
+   * Ошибка загрузки не ломает карту: дороги — дополнительный слой, и без них
+   * редактор полностью работоспособен.
+   */
+  async function loadRoads() {
+    if (roadsLoaded) return;
+    roadsLoaded = true;
+
+    try {
+      const response = await fetch("../data/world/roads.json", { cache: "no-store" });
+      if (!response.ok) {
+        window.assistWebLog?.("WARN", "Дороги не загружены.", { status: response.status });
+        return;
+      }
+
+      const payload = await response.json();
+      if (!Array.isArray(payload?.segments)) {
+        window.assistWebLog?.("WARN", "В roads.json нет массива segments.");
+        return;
+      }
+
+      roadSegments = payload.segments;
+      window.assistWebLog?.("INFO", "Дорожная геометрия загружена.", {
+        segments: roadSegments.length / 4
+      });
+      scheduleUiRender();
+    } catch (error) {
+      // Ошибка загрузки дорог НЕ должна ломать карту: это дополнительный слой.
+      window.assistWebLog?.("ERROR", "Ошибка загрузки дорог.", { error: String(error) });
+    }
   }
 
   function drawGrid(ctx, width, height) {
@@ -2459,6 +2545,7 @@
     // Статус-панель внизу карты: галочки фильтров и краткая сводка.
     if (onlyQuestsToggle) onlyQuestsToggle.checked = onlyQuestsFilter;
     if (citiesToggle) citiesToggle.checked = citiesFilter;
+    if (roadsToggle) roadsToggle.checked = roadsFilter;
     if (mapStatusHint) {
       // Сводка должна описывать именно то, что нарисовано: две галочки
       // независимы, поэтому считаем по каждому типу отдельно.
@@ -3462,6 +3549,12 @@
     drawMap();
   });
 
+  // Галочка дорог не влияет на кликабельность точек: дороги — только фон.
+  roadsToggle?.addEventListener("change", () => {
+    roadsFilter = !!roadsToggle.checked;
+    drawMap();
+  });
+
   document.getElementById("simulationToggle")?.addEventListener("click", () => {
     send({ action: simulationRunning ? "simulation_stop" : "simulation_start" });
   });
@@ -3503,4 +3596,8 @@
   // Часы отображения стартуют один раз: интервал сам проверяет, идёт ли
   // симуляция, поэтому перезапускать его при каждом изменении не нужно.
   startClockTicker();
+
+  // Дорожная геометрия грузится фоном: карта обязана показаться сразу, не ожидая
+  // 3.5 МБ геометрии. До загрузки слой просто пуст.
+  loadRoads();
 })();

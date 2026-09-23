@@ -93,12 +93,19 @@ internal static class Program
             var worldPoints = sdoPoints.Concat(cityPoints).ToArray();
             AppLogger.Info("World data загружены.", $"sdo={sdoPoints.Count}; cities={cityPoints.Count}; total={worldPoints.Length}");
 
+            // Дорожная геометрия грузится отдельно и НЕ входит в список точек мира:
+            // дорог 98 341, и в снимке карты они весили бы ~19 МБ вместо 0.9 МБ
+            // при каждом обновлении. В поиске они участвуют критерием «рядом с
+            // дорогой», а на карте — отдельным слоем.
+            var roads = RoadWorldDataLoader.Load();
+            AppLogger.Info("Дорожная геометрия загружена.", $"segments={roads.SegmentCount}");
+
             var simulatorAdapter = new SimulatorDataSourceAdapter(worldPoints);
             var worldCount = simulatorAdapter.Channels.Get<WorldState>("world").Value.Points.Count;
             AppLogger.Info("Создан SimulatorDataSourceAdapter.",
                 $"channels={simulatorAdapter.Channels.Describe().Count}; points={worldCount}");
 
-            mainForm = new MainForm(simulatorAdapter.Channels, ciTest)
+            mainForm = new MainForm(simulatorAdapter.Channels, ciTest, roads)
             {
                 Opacity = 0
             };
