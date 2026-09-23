@@ -13,6 +13,7 @@ public sealed class SimulatorForm : WebViewForm
     private readonly QuestGraphStore _questGraph;
     private readonly CampaignStore _campaignStore;
     private readonly ILocationResolver _locationResolver;
+    private readonly RoadIndex _roads;
     private readonly SimulationSaveStore _saveStore = new();
     private readonly Action<string> _openQuestEditor;
     private readonly System.Windows.Forms.Timer _runtimeTimer;
@@ -45,7 +46,8 @@ public sealed class SimulatorForm : WebViewForm
         QuestGraphStore questGraph,
         CampaignStore campaignStore,
         Action<string> openQuestEditor,
-        ILocationResolver locationResolver)
+        ILocationResolver locationResolver,
+        RoadIndex? roads = null)
         : base(
             "Симулятор",
             "simulator.html",
@@ -58,6 +60,7 @@ public sealed class SimulatorForm : WebViewForm
         _campaignStore = campaignStore ?? throw new ArgumentNullException(nameof(campaignStore));
         _openQuestEditor = openQuestEditor ?? throw new ArgumentNullException(nameof(openQuestEditor));
         _locationResolver = locationResolver ?? throw new ArgumentNullException(nameof(locationResolver));
+        _roads = roads ?? new RoadIndex(Array.Empty<RoadSegment>());
         _journalDetached = AppUiPreferencesStore.Load().JournalDetached;
         Opacity = 0;
         _questGraph.Changed += QuestGraph_Changed;
@@ -101,11 +104,45 @@ public sealed class SimulatorForm : WebViewForm
     {
         Opacity = 1;
         AppLogger.Info("SimulatorForm: browser ready, отправляю snapshot.");
+        PushRoads();
         PushSnapshot();
         if (_journalDetached)
         {
             BeginInvoke((Action)OpenJournalWindow);
         }
+    }
+
+    /// <summary>
+    /// Отправляет дорожную геометрию отдельным сообщением.
+    ///
+    /// Почему не файлом: страница открыта по схеме file://, а Chromium блокирует
+    /// для неё выборку данных по этой схеме — fetch, XHR и даже &lt;img&gt; не могут
+    /// прочитать файл, лежащий рядом со страницей (проверено замером). Тот же
+    /// канал уже использует окно проверки перекрёстков, и 3,5 МБ через него
+    /// проходят целиком.
+    ///
+    /// Отправка идёт ДО снимка: карта рисуется сразу с дорогами, а не мигает
+    /// пустым фоном до прихода второго сообщения.
+    /// </summary>
+    private void PushRoads()
+    {
+        if (Browser.CoreWebView2 is null || _roads.IsEmpty)
+        {
+            if (_roads.IsEmpty)
+                AppLogger.Warn("Дорожная геометрия пуста: слой дорог не будет показан.");
+            return;
+        }
+
+        var payload = JsonSerializer.Serialize(new
+        {
+            type = "roads",
+            segments = _roads.ToFlatArray(),
+            segmentCount = _roads.SegmentCount
+        }, SnapshotJsonOptions);
+
+        AppLogger.Info("SimulatorForm: отправляю дорожную геометрию.",
+            $"segments={_roads.SegmentCount}; jsonChars={payload.Length}");
+        PostJson(payload);
     }
 
     public void PushSnapshot()

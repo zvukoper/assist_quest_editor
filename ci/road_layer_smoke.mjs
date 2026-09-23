@@ -19,10 +19,21 @@ const theme = read("src/AssistQuestEditor.App/Web/theme.css");
 
 // --- Статическая часть: дороги не должны попасть в точки мира ---
 
-// Загрузчик обязан ходить за отдельным файлом, а не ждать дороги в снимке.
-if (!simulatorJs.includes("../data/world/roads.json"))
-  throw new Error("simulator.js не загружает ../data/world/roads.json: " +
-    "дороги должны приходить отдельным файлом, а не в снимке.");
+// Геометрия обязана приходить СООБЩЕНИЕМ от Host, а не читаться fetch-ом.
+//
+// Это не стилистическое требование: страница открыта по схеме file://, и
+// Chromium блокирует для неё выборку данных по этой схеме. Проверено замером —
+// fetch, XHR и <img> одинаково не могут прочитать файл, лежащий рядом со
+// страницей. Проверка «в коде есть путь ../data/world/roads.json» это НЕ ловит:
+// путь может быть верным, а чтение всё равно не работать.
+if (/fetch\(\s*["'][^"']*roads\.json/.test(simulatorJs))
+  throw new Error("simulator.js читает дороги через fetch по схеме file://: " +
+    "Chromium блокирует такую выборку, и слой дорог не появится. " +
+    "Геометрия должна приходить сообщением от Host.");
+
+if (!/message\.type === "roads"/.test(simulatorJs))
+  throw new Error("simulator.js не обрабатывает сообщение type='roads': " +
+    "геометрия дорог приходит от Host и без этой ветки будет отброшена.");
 
 // Дорожный слой обязан вызываться в отрисовке карты. Без этого геометрия
 // загрузится и молча не покажется.
@@ -299,15 +310,23 @@ try {
         postMessage(payload) { window.__sent.push(payload); }
       }
     };
-    // Заглушка fetch: настоящий файл не нужен, важна отрисовка.
-    window.fetch = async url => {
-      if (String(url).includes("roads.json"))
-        return { ok: true, json: async () => ({ segments: roads, segmentCount: roads.length / 4 }) };
-      return { ok: false, status: 404, json: async () => ({}) };
-    };
+
+    // Заглушки fetch здесь НЕТ намеренно. Прошлая версия подменяла fetch и тем
+    // самым подтверждала баг как норму: она подавала дороги способом, который в
+    // приложении не работает (Chromium блокирует выборку по схеме file://), и
+    // проверка «дороги видны» проходила даже когда слой в реальности пуст.
+    // Теперь дороги доставляются тем же каналом, что и в приложении.
+    window.__roads = roads;
   }, fixtureRoads);
 
   await page.addScriptTag({ content: simulatorJs });
+
+  // Дороги доставляются ТЕМ ЖЕ каналом, что и в приложении (Host -> chrome.webview),
+  // и ДО снимка — приложение отправляет их первым сообщением.
+  await page.evaluate(() => {
+    const payload = { type: "roads", segments: window.__roads, segmentCount: window.__roads.length / 4 };
+    window.chrome.webview.listeners.get("message")({ data: JSON.stringify(payload) });
+  });
 
   // Снимок нужен, чтобы карта вообще нарисовалась.
   await page.evaluate(() => {

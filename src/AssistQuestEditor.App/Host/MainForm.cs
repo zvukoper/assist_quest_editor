@@ -872,7 +872,8 @@ public sealed class MainForm : WebViewForm
             _questGraph,
             _campaignStore,
             path => OpenStartupResource(path),
-            _locationResolver);
+            _locationResolver,
+            _roads);
         _simulator.FormClosed += (_, _) => _simulator = null;
         PlaceOnSecondaryScreen(_simulator);
         _simulator.Show(this);
