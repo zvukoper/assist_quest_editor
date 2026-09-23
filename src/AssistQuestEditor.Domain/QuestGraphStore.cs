@@ -73,16 +73,20 @@ public sealed class QuestGraphStore
         };
 
         var graph = _value with { Nodes = _value.Nodes.Append(node).ToArray() };
-        var positions = QuestGraphLayout.Compute(graph);
-        var nodes = graph.Nodes
-            .Select(item => positions.TryGetValue(item.NodeId, out var position)
-                ? item with { X = position.X, Y = position.Y }
-                : item)
-            .ToArray();
+        // Новый узел не должен каждый раз ломать уже вручную расставленный граф.
+        // Но агентский/импортированный граф с явно плохими координатами должен
+        // автоматически получить пригодный layout.
+        var nodes = QuestGraphLayout.IsObviouslyPoor(graph)
+            ? graph.Nodes
+                .Select(item => QuestGraphLayout.Compute(graph).TryGetValue(item.NodeId, out var position)
+                    ? item with { X = position.X, Y = position.Y }
+                    : item)
+                .ToArray()
+            : graph.Nodes.ToArray();
 
-        var laidOutNode = nodes.Single(item => item.NodeId.Equals(node.NodeId, StringComparison.OrdinalIgnoreCase));
+        var addedNode = nodes.Single(item => item.NodeId.Equals(node.NodeId, StringComparison.OrdinalIgnoreCase));
         Apply(graph with { Nodes = nodes });
-        return laidOutNode;
+        return addedNode;
     }
 
     public QuestNode? UpdateNode(
@@ -272,7 +276,21 @@ public sealed class QuestGraphStore
         if (definition.Graph is null)
             throw new ArgumentException("Quest Definition должен содержать Graph.", nameof(definition));
 
-        _value = definition.Graph;
+        var graph = definition.Graph;
+        if (QuestGraphLayout.IsObviouslyPoor(graph))
+        {
+            var positions = QuestGraphLayout.Compute(graph);
+            graph = graph with
+            {
+                Nodes = graph.Nodes
+                    .Select(node => positions.TryGetValue(node.NodeId, out var position)
+                        ? node with { X = position.X, Y = position.Y }
+                        : node)
+                    .ToArray()
+            };
+        }
+
+        _value = graph;
         _description = definition.Description ?? string.Empty;
         _sceneIds = definition.SceneIds ?? Array.Empty<string>();
         _activation = definition.Activation;
