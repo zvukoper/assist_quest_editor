@@ -21,6 +21,7 @@
   let itemCatalog = [];
   let npcCatalog = [];
   let worldPointCatalog = [];
+  let locationCatalog = [];
   let selectedGraphNodeId = null;
   let pendingOutput = null;
   let graphHistory = { canUndo: false, canRedo: false };
@@ -48,6 +49,7 @@
       sceneId: { resourceKind: "Scene", action: "graph_open_scene", label: "Открыть сцену" }
     },
     Interaction: {
+      locationId: { resourceKind: "Location", action: null, label: "Открыть локацию" },
       worldPointId: { resourceKind: "WorldPoint", action: null, label: "Открыть точку" }
     },
     WaitForCondition: {
@@ -83,6 +85,10 @@
       title: "Рабочее пространство диалогов",
       draw: (ws, ins) => window.__assistDialogueWorkspace?.render?.(ws, ins)
     },
+    locations: {
+      title: "Редактор локаций",
+      draw: (ws, ins) => window.__assistLocationEditor?.render?.(ws, ins)
+    },
     world: { title: "Редактор мира и координат", draw: renderWorld },
     channels: { title: "Инспектор Data Channels", draw: renderChannels },
     conditions: { title: "Редактор условий и действий", draw: renderConditions },
@@ -109,6 +115,15 @@
     button.dataset.id = id;
     button.textContent = item.title;
     button.addEventListener("click", () => {
+      const from = currentId();
+      const hostGroup = editorHostGroup(from);
+      const targetGroup = editorHostGroup(id);
+
+      if (hostGroup !== targetGroup) {
+        send({ action: "open_editor", editor: id });
+        return;
+      }
+
       location.hash = id;
       render();
     });
@@ -117,6 +132,16 @@
 
   function currentId() {
     return location.hash.slice(1).toLowerCase() || "graph";
+  }
+
+  // Один WebView обслуживает несколько вспомогательных панелей, но Scene,
+  // Quest Graph и Location являются разными Host-контекстами. При переходе
+  // между ними нужно просить MainForm открыть соответствующее окно, иначе
+  // новый hash увидит старый Host и останется без нужного payload.
+  function editorHostGroup(id) {
+    if (id === "scene" || id === "dialogue") return "scene";
+    if (id === "locations") return "locations";
+    return "graph";
   }
 
   function render() {
@@ -181,8 +206,21 @@
               "<option value='" + mode + "'" +
               ((questActivation?.mode || "Manual") === mode ? " selected" : "") + ">" + mode + "</option>").join("") +
           "</select></label>" +
-        "<label class='miniLabel' style='display:flex;align-items:center;gap:6px'>WorldPoint" +
-          "<input id='activationPoint' class='toolButton' style='width:280px' placeholder='sdo:camping:0x... или city:chelyabinsk' value='" +
+        "<label class='miniLabel' style='display:flex;align-items:center;gap:6px'>Location" +
+          "<input id='activationLocation' class='toolButton' style='width:280px' list='activation-location-options' " +
+            "placeholder='Поиск Location по имени или ID' value='" +
+            escapeHtml(questActivation?.locationId || "") + "'>" +
+        "</label>" +
+        "<datalist id='activation-location-options'>" +
+          locationCatalog.map(item =>
+            "<option value='" + escapeHtml(item.name || item.id) + "' label='" +
+              escapeHtml(item.id + (item.mode ? " · " + item.mode : "")) + "'></option>" +
+            (String(item.name || "").toLowerCase() === String(item.id || "").toLowerCase() ? "" :
+              "<option value='" + escapeHtml(item.id) + "' label='" + escapeHtml(item.name || item.id) + "'></option>")
+          ).join("") +
+        "</datalist>" +
+        "<label class='miniLabel' style='display:flex;align-items:center;gap:6px'>Legacy WorldPoint" +
+          "<input id='activationPoint' class='toolButton' style='width:230px' placeholder='старый worldPointId' value='" +
             escapeHtml(questActivation?.worldPointId || "") + "'></label>" +
         "<label class='miniLabel' style='display:flex;align-items:center;gap:6px'>Радиус" +
           "<input id='activationRadius' class='toolButton' style='width:90px' type='number' min='0' value='" +
@@ -215,14 +253,19 @@
     });
     ws.querySelector("#applyActivation").addEventListener("click", () => {
       const mode = ws.querySelector("#activationMode").value;
+      const locationRaw = ws.querySelector("#activationLocation").value.trim();
+      const location = locationCatalog.find(item =>
+        String(item.id || "").toLowerCase() === locationRaw.toLowerCase() ||
+        String(item.name || "").toLowerCase() === locationRaw.toLowerCase());
+      const locationId = location ? location.id : locationRaw;
       const worldPointId = ws.querySelector("#activationPoint").value.trim();
       const radius = Number(ws.querySelector("#activationRadius").value);
       const hint = ws.querySelector("#activationHint");
 
       // Proximity без цели бессмысленна: Runtime не сможет стартовать квест, а
       // на карте нечего рисовать. Лучше не отправлять такое в Host.
-      if (mode === "Proximity" && !worldPointId) {
-        hint.textContent = "Для Proximity нужен WorldPoint.";
+      if (mode === "Proximity" && !locationId && !worldPointId) {
+        hint.textContent = "Для Proximity нужна Location или WorldPoint.";
         return;
       }
 
@@ -230,6 +273,7 @@
       send({
         action: "set_activation",
         mode,
+        locationId,
         worldPointId,
         radius: Number.isFinite(radius) ? radius : 35
       });
@@ -979,7 +1023,7 @@
     if (preview) preview.innerHTML = connectionPreviewMarkup();
   }
   const PARAMETER_LABELS = {
-    worldPointId: "WorldPoint Id", triggerRadius: "Радиус триггера",
+    worldPointId: "WorldPoint Id", locationId: "Location Id", triggerRadius: "Радиус триггера",
     operator: "Оператор", left: "Левый операнд", comparison: "Сравнение", right: "Правый операнд",
     seconds: "Секунды", conditionId: "Condition Id", eventType: "Тип события",
     status: "Статус", step: "Этап", key: "Ключ", value: "Значение", sceneId: "Scene Id",
@@ -996,8 +1040,8 @@
    * «поменял координату, но квест не сдвинулся».
    */
   const PARAMETER_HINTS = {
-    worldPointId: "Цель Runtime: к этой точке приближается игрок по ходу квеста. " +
-      "Маркер квеста на карте задаётся в «Активация…» и берётся из активации документа."
+    worldPointId: "Совместимость: конкретная точка Runtime. Для новых квестов предпочтительно использовать Location.",
+    locationId: "Логическая локация Runtime. Location может быть фиксированной или динамически разрешаться в WorldPoint."
   };
 
   function parameterLabel(key) {
@@ -1020,6 +1064,7 @@
 
   const REFERENCE_PARAMETER_SPECS = {
     worldPointId: { catalog: "worldPoint", label: "WorldPoint" },
+    locationId: { catalog: "location", label: "Location" },
     sceneId: { catalog: "scene", label: "Scene" },
     itemId: { catalog: "item", label: "предмет" },
     npcId: { catalog: "npc", label: "НПЦ" }
@@ -1028,6 +1073,7 @@
   function referenceCatalog(kind) {
     switch (kind) {
       case "worldPoint": return worldPointCatalog;
+      case "location": return locationCatalog;
       case "scene": return sceneCatalog;
       case "item": return itemCatalog;
       case "npc": return npcCatalog;
@@ -1913,6 +1959,12 @@
         pendingGraphFit = false;
         fitGraph();
       }
+      return;
+    }
+
+    if (data?.type === "location_catalog") {
+      locationCatalog = Array.isArray(data.locations) ? data.locations : [];
+      if (currentId() === "graph") render();
       return;
     }
 
