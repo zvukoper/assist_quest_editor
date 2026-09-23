@@ -30,6 +30,43 @@ public sealed class QuestGraphStoreTests
     }
 
     [Fact]
+    public void ReplaceAutomaticallyLayoutsObviouslyPoorImportedGraph()
+    {
+        var nodes = new[]
+        {
+            new QuestNode("a", "Phase", "A", 0, 0, QuestNodeCatalog.CreateSockets("Phase", "a", new Dictionary<string,string>())),
+            new QuestNode("b", "Phase", "B", 0, 0, QuestNodeCatalog.CreateSockets("Phase", "b", new Dictionary<string,string>())),
+            new QuestNode("c", "Phase", "C", 0, 0, QuestNodeCatalog.CreateSockets("Phase", "c", new Dictionary<string,string>()))
+        };
+        var graph = new QuestGraph("poor", "Плохой layout", nodes, Array.Empty<QuestConnection>());
+        var store = new QuestGraphStore(graph);
+
+        Assert.False(QuestGraphLayout.IsObviouslyPoor(store.Value));
+        Assert.NotEqual((0d, 0d), (store.FindNode("b")!.X, store.FindNode("b")!.Y));
+    }
+
+    [Fact]
+    public void AddingNodeDoesNotRearrangeGoodExistingLayout()
+    {
+        var graph = new QuestGraph(
+            "good",
+            "Хороший layout",
+            new[]
+            {
+                new QuestNode("a", "Phase", "A", 0, 0, QuestNodeCatalog.CreateSockets("Phase", "a", new Dictionary<string,string>())),
+                new QuestNode("b", "Phase", "B", 500, 300, QuestNodeCatalog.CreateSockets("Phase", "b", new Dictionary<string,string>()))
+            },
+            Array.Empty<QuestConnection>());
+        var store = new QuestGraphStore(graph);
+        var before = store.Value.Nodes.ToDictionary(node => node.NodeId, node => (node.X, node.Y));
+
+        store.AddNode("Phase", "C", 900, 500);
+
+        Assert.Equal(before["a"], (store.FindNode("a")!.X, store.FindNode("a")!.Y));
+        Assert.Equal(before["b"], (store.FindNode("b")!.X, store.FindNode("b")!.Y));
+    }
+
+    [Fact]
     public void ConnectsExistingOutputToExistingInputAndRejectsDuplicate()
     {
         var store = new QuestGraphStore(QuestGraphFactory.CreateStarter());
