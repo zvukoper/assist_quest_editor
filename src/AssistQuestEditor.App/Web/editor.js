@@ -1082,7 +1082,11 @@
           const label = [id, category].filter(Boolean).join(" · ");
           return "<option value='" + escapeHtml(name) + "' label='" + escapeHtml(label) + "'></option>";
         }).join("") +
-      "</datalist>" + warning +
+      "</datalist>" +
+      (key === "sceneId" && resolved.entry
+        ? "<button class='toolButton primary' type='button' data-open-reference='" + escapeHtml(resolved.id) + "' title='Открыть связанную сцену'>Открыть сцену</button>"
+        : "") +
+      warning +
       "</div>";
   }
 
@@ -1133,7 +1137,7 @@
         const resolved = resolveReference(key, raw);
         // Сохраняем стабильный ID. Если объект неизвестен, сохраняем исходное
         // значение вместо его очистки — импортированный/будущий resource ID нельзя терять.
-        parameters[key] = resolved.entry ? resolved.id : String(input.dataset.referenceId || raw);
+        parameters[key] = resolved.entry ? resolved.id : String(raw);
       } else {
         parameters[key] = raw;
       }
