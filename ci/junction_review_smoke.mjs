@@ -59,12 +59,28 @@ for (const id of ["junctionPrev", "junctionNext", "junctionExclude", "junctionSa
 
 // Правки должны применяться в домене, а не только в окне: иначе файл исключений
 // ни на что не влияет и вся ручная работа пропадает.
+//
+// Правило живёт в ДОМЕНЕ (JunctionReview.cs), а файл — в App: правило проверяется
+// тестами домена, работа с файлом остаётся в приложении. Проверять правило надо
+// там, где оно лежит, иначе проверка прошла бы по одному факту наличия имени.
 {
+  const domain = read("src/AssistQuestEditor.Domain/JunctionReview.cs");
   const store = read("src/AssistQuestEditor.App/JunctionReviewStore.cs");
-  if (!/Apply\(IReadOnlyList<JunctionPoint>/.test(store))
+
+  if (!/Apply\(IReadOnlyList<JunctionPoint>/.test(domain))
     throw new Error("В JunctionReview нет метода Apply: правки не применяются к списку перекрёстков.");
-  if (!/IsExcluded\(/.test(store))
+  if (!/IsExcluded\(/.test(domain))
     throw new Error("В JunctionReview нет проверки исключения узла: файл исключений ни на что не влияет.");
+  if (!/IsAdded\(/.test(domain))
+    throw new Error("В JunctionReview нет проверки добавленного узла: приоритет " +
+      "добавленного над исключением проверить нечем.");
+
+  // Одна копия правила, а не две: запись файла и логика правки больше не в одном
+  // файле, и второй экземпляр JunctionReview разошёлся бы с первым при правке.
+  if (/record JunctionReview\(/.test(store))
+    throw new Error("JunctionReview объявлен дважды (в App и в Domain): " +
+      "две копии правила разойдутся, и правки начнут применяться по-разному.");
+
   if (!/public void Save\(JunctionReview/.test(store))
     throw new Error("JunctionReviewStore не умеет записывать правки в файл.");
 }
@@ -676,12 +692,217 @@ try {
   if (backToAdd.state.selected !== 0)
     throw new Error("Смена режима оставила выделение: " + backToAdd.state.selected);
 
+  // --- Цвета исключённых узлов: красный до сохранения, серый после ---
+  //
+  // Без этого все точки жёлтые, и автор путается, где уже вычищено. Проверяются
+  // ЧЕТЫРЕ состояния: жёлтая (не проверена), красная (исключена, не записана),
+  // серая (записана) и зелёная (добавлена вручную).
+  {
+    // ОТДЕЛЬНАЯ фикстура: узел (300, 0) уже исключён в файле, а (−200, 100) —
+    // добавлен вручную. Основная фикстура намеренно без правок: на ней
+    // проверяются счётчики других разделов, и подмешивать туда исключение с
+    // добавлением значило бы пересчитывать их все.
+    const payloadWithSaved = {
+      ...payload,
+      excluded: [{ x: 300, z: 0 }],
+      added: [{ x: -200, z: 100 }],
+      excludedCount: 1,
+      addedCount: 1
+    };
+
+    await page.evaluate(p => {
+      window.chrome.webview.listeners.get("message")({ data: JSON.stringify(p) });
+    }, payloadWithSaved);
+    await page.waitForTimeout(150);
+    await page.locator("#junctionFitAll").click();
+    await page.waitForTimeout(150);
+
+    const beforeColours = await page.evaluate(() => window.__assistJunctionReview.getState());
+    if (beforeColours.freshExcluded !== 0 || beforeColours.savedExcluded !== 1)
+      throw new Error("Перед проверкой цветов состояние неверно: свежих " +
+        beforeColours.freshExcluded + ", сохранённых " + beforeColours.savedExcluded +
+        " (ожидалось 0 и 1: один узел исключён ранее и пришёл от Host).");
+
+    // Серые точки обязаны быть НАРИСОВАНЫ: одно состояние savedExcluded прошло бы
+    // и при полностью жёлтой карте.
+    //
+    // Порог скромный (точка радиусом 5 — это ~70 пикселей, минус крестик внутри),
+    // потому что важен факт наличия, а не точное число. Ложных срабатываний нет:
+    // светлее дорог (102,113,127) этот серый на 51 по каналу, и допуск ±24 не
+    // дотягивается до цвета дорог.
+    const greyBefore = await countColor({ r: 154, g: 164, b: 178 });
+    if (greyBefore < 15)
+      throw new Error("Исключённые ранее узлы не нарисованы серыми: " + greyBefore +
+        " пикселей. Автор не увидит, что уже вычищено.");
+
+    // Исключаем узел в текущем проходе: он обязан стать КРАСНЫМ.
+    await page.evaluate(() => window.__assistJunctionReview.setMode("delete"));
+    await page.waitForTimeout(80);
+
+    const clustersForColour = await scanClusters();
+    if (clustersForColour.length === 0)
+      throw new Error("Перед проверкой цветов не найдено ни одного жёлтого узла.");
+
+    await page.mouse.click(rect.left + clustersForColour[0].x, rect.top + clustersForColour[0].y);
+    await page.waitForTimeout(150);
+
+    const afterExclude = await page.evaluate(() => window.__assistJunctionReview.getState());
+    if (afterExclude.freshExcluded !== 1)
+      throw new Error("Свежее исключение не отмечено как несохранённое: " +
+        afterExclude.freshExcluded);
+
+    const redAfter = await countColor({ r: 255, g: 77, b: 77 });
+    if (redAfter < 15)
+      throw new Error("Исключённый в текущем проходе узел не нарисован красным: " +
+        redAfter + " пикселей. Автор не увидит, где уже не нужно исключать.");
+
+    // Сохранение переводит красные в серые.
+    await page.evaluate(() => {
+      window.chrome.webview.listeners.get("message")({
+        data: JSON.stringify({ type: "junction_review_saved", excludedCount: 2, addedCount: 1 })
+      });
+    });
+    await page.waitForTimeout(150);
+
+    const afterSave = await page.evaluate(() => window.__assistJunctionReview.getState());
+    if (afterSave.freshExcluded !== 0)
+      throw new Error("После сохранения остались несохранённые исключения: " +
+        afterSave.freshExcluded + " — красные точки показывали бы «не записано» там, " +
+        "где уже записано.");
+    if (afterSave.savedExcluded !== 2)
+      throw new Error("После сохранения сохранённых исключений не 2, а " +
+        afterSave.savedExcluded);
+
+    const redAfterSave = await countColor({ r: 255, g: 77, b: 77 });
+    if (redAfterSave >= 15)
+      throw new Error("После сохранения на карте остались красные точки: " + redAfterSave +
+        " пикселей. Красный обязан смениться на серый.");
+
+    const greyAfterSave = await countColor({ r: 154, g: 164, b: 178 });
+    if (greyAfterSave < 20)
+      throw new Error("После сохранения серых точек не прибавилось: " + greyAfterSave +
+        " пикселей серого.");
+
+    // Зелёная добавленная точка остаётся зелёной — это третье состояние, и его
+    // нельзя перекрасить ни в красный, ни в серый.
+    const greenAfterSave = await countColor({ r: 84, g: 209, b: 106 });
+    if (greenAfterSave < 15)
+      throw new Error("Зелёная добавленная точка не сохранила свой цвет после записи: " +
+        greenAfterSave + " пикселей зелёного.");
+  }
+
+  // --- Добавленный узел ставится ПОВЕРХ вычищенного кольца ---
+  //
+  // Главный сценарий автора: кольцо вычищено (серые точки стоят сплошняком), и
+  // туда надо поставить ОДИН зелёный узел для квеста. Проверка «рядом уже есть
+  // найденный узел» не должна запрещать это — она для промаха мимо ЖЁЛТОЙ точки.
+  {
+    // Фикстура с СОХРАНЁННЫМ исключением: серый узел должен быть на карте, иначе
+    // проверять «добавление поверх вычищенного» не по чему.
+    const payloadWithSaved = {
+      ...payload,
+      excluded: [{ x: 300, z: 0 }],
+      excludedCount: 1
+    };
+
+    await page.evaluate(p => {
+      window.chrome.webview.listeners.get("message")({ data: JSON.stringify(p) });
+    }, payloadWithSaved);
+    await page.waitForTimeout(150);
+    await page.locator("#junctionFitAll").click();
+    await page.waitForTimeout(150);
+
+    await page.evaluate(() => window.__assistJunctionReview.setMode("add"));
+    await page.waitForTimeout(80);
+
+    const stateAdd = await page.evaluate(() => window.__assistJunctionReview.getState());
+    const addedBefore = stateAdd.added;
+
+    if (stateAdd.savedExcluded !== 1)
+      throw new Error("В фикстуре нет сохранённого исключения: " + stateAdd.savedExcluded);
+
+    // Позиция сохранённого исключения — берём её из состояния, а не угадываем:
+    // в фикстуре исключён узел (300, 0), и он рисуется СЕРОЙ точкой.
+    //
+    // Скан идёт ПО КАЖДОМУ пикселю, а не через два: у серой точки всего ~23
+    // пикселя (радиус 5 плюс тёмный крестик внутри), и шаг в 2 пикселя по обеим
+    // осям пропускал их все — проверка падала на «точка не найдена» при
+    // исправном коде.
+    const excludedScreen = await page.evaluate(() => {
+      const canvas = document.getElementById("junctionCanvas");
+      const w = canvas.width, h = canvas.height;
+      const data = canvas.getContext("2d").getImageData(0, 0, w, h).data;
+      const dpr = window.devicePixelRatio || 1;
+
+      // Собираем серые пиксели и берём их центр: одиночный пиксель может попасть
+      // на крестик внутри точки, а центр устойчив.
+      const hits = [];
+      for (let y = 0; y < h; y++) {
+        for (let x = 0; x < w; x++) {
+          const i = (y * w + x) * 4;
+          if (Math.abs(data[i] - 154) < 24 && Math.abs(data[i + 1] - 164) < 24 &&
+              Math.abs(data[i + 2] - 178) < 24) {
+            hits.push({ x: x / dpr, y: y / dpr });
+          }
+        }
+      }
+
+      if (!hits.length) return null;
+
+      return {
+        x: hits.reduce((sum, p) => sum + p.x, 0) / hits.length,
+        y: hits.reduce((sum, p) => sum + p.y, 0) / hits.length,
+        count: hits.length
+      };
+    });
+
+    if (!excludedScreen)
+      throw new Error("Серая точка исключённого узла не найдена на канвасе.");
+
+    // Клик РОВНО по серой точке: раньше добавление здесь запрещалось.
+    await page.mouse.click(rect.left + excludedScreen.x, rect.top + excludedScreen.y);
+    await page.waitForTimeout(150);
+
+    const stateAfterAdd = await page.evaluate(() => window.__assistJunctionReview.getState());
+    if (stateAfterAdd.added !== addedBefore + 1)
+      throw new Error("Поверх вычищенного узла нельзя поставить новый: added " +
+        addedBefore + " -> " + stateAfterAdd.added + ". Автор не сможет вернуть " +
+        "перекрёсток в вычищенном месте.");
+
+    const greenOnGrey = await countColor({ r: 84, g: 209, b: 106 });
+    if (greenOnGrey < 15)
+      throw new Error("Зелёная точка поверх вычищенного места не нарисована.");
+
+    // Убираем добавленное, чтобы не влиять на итоговый подсчёт.
+    await page.mouse.click(rect.left + excludedScreen.x, rect.top + excludedScreen.y);
+    await page.waitForTimeout(120);
+
+    // И РЯДОМ с серой точкой — на несколько пикселей в стороне, но в пределах
+    // 10 м по миру. Здесь работает проверка «нет ли рядом найденного узла», и она
+    // тоже не должна мешать: у вычищенного кольца точки стоят сплошняком, и автор
+    // ставит свой узел не пиксель-в-пиксель.
+    const beforeNear = await page.evaluate(() => window.__assistJunctionReview.getState());
+    await page.mouse.click(rect.left + excludedScreen.x + 6, rect.top + excludedScreen.y + 6);
+    await page.waitForTimeout(150);
+
+    const afterNear = await page.evaluate(() => window.__assistJunctionReview.getState());
+    if (afterNear.added !== beforeNear.added + 1)
+      throw new Error("Рядом с вычищенным узлом нельзя поставить новый: added " +
+        beforeNear.added + " -> " + afterNear.added + ". У вычищенного кольца " +
+        "точки стоят сплошняком, и автор ставит свой узел не пиксель-в-пиксель.");
+
+    await page.mouse.click(rect.left + excludedScreen.x + 6, rect.top + excludedScreen.y + 6);
+    await page.waitForTimeout(120);
+  }
+
   if (errors.length)
     throw new Error("pageerror: " + errors.join(" | "));
 
   console.log("Окно проверки перекрёстков: OK (узлы, порядок, мультивыбор, исключение, добавление)");
   console.log("Режимы клика: OK (выделение полигоном, удаление кликом, добавление)");
   console.log("Хувер: OK (курсор pointer, красная подсветка, снятие при уходе)");
+  console.log("Цвета исключённых: OK (красный до записи, серый после, зелёный остаётся)");
+  console.log("Добавление поверх вычищенного: OK (приоритет ручного узла)");
 } finally {
   await browser.close();
 }
