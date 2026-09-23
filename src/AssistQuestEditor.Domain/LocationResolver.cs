@@ -106,6 +106,21 @@ public sealed class LocationResolver
         }
 
         var criteria = location.Query?.Criteria ?? Array.Empty<LocationCriterion>();
+
+        if (criteria.Any(IsUnsupportedCriterion))
+        {
+            diagnostics.Add("Sandbox не может выполнить один или несколько критериев Location.");
+            diagnostics.AddRange(criteria
+                .Where(IsUnsupportedCriterion)
+                .Select(item => "Не поддерживается: " + item.Type));
+            return new LocationTestResult(
+                location.Id,
+                false,
+                rounds,
+                Array.Empty<LocationTestCandidate>(),
+                diagnostics);
+        }
+
         var candidates = worldPoints.Where(point =>
             MatchesAll(point, criteria, worldPoints, diagnostics)).ToList();
 
@@ -275,9 +290,13 @@ public sealed class LocationResolver
         if (!HasHistoryCriteria(constraints))
             return true;
 
-        if (history is null ||
-            !history.TryGet(locationId, candidateId, out var record))
-            return false;
+        var hasRecord = history is not null &&
+            history.TryGet(locationId, candidateId, out var record);
+
+        if (!hasRecord)
+        {
+            record = new LocationUsageRecord(locationId, candidateId);
+        }
 
         if (constraints?.MinVisitCount is { } minVisits && record.VisitCount < minVisits)
             return false;
