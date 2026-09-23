@@ -1525,7 +1525,11 @@ public sealed class EditorForm : WebViewForm
             : Math.Clamp(OptionalInt(root, "rounds") ?? 8, 1, 128);
 
         var world = _hub.Get<WorldState>("world").Value;
-        var result = new LocationResolver().Test(definition, world.Points, rounds);
+        var result = new LocationResolver().Test(
+            definition,
+            world.Points,
+            rounds,
+            PlayerPosition());
 
         PostJson(JsonSerializer.Serialize(new
         {
@@ -1535,13 +1539,25 @@ public sealed class EditorForm : WebViewForm
     }
 
     /// <summary>
-    /// Показывает отобранные точки на карте Симулятора (режим визуализации).
+    /// Текущая позиция игрока для критерия «радиус от игрока».
+    ///
+    /// Позиция живёт в канале Player, а не в WorldState, поэтому resolver
+    /// получает её отдельно. null означает «игрок ещё не размещён» — критерий
+    /// тогда сообщает об этом одним понятным сообщением.
+    /// </summary>
+    private WorldCoordinate? PlayerPosition() => _player.Value.Position;
+
+    /// <summary>
+    /// Показывает набор точек Location на карте Симулятора (режим визуализации).
     ///
     /// Собственная карта редактора локаций не имеет ориентиров — на ней нет
     /// городов и прочих признаков мира, поэтому по ней нельзя понять, ГДЕ
     /// оказались точки. Основная карта такие ориентиры имеет, поэтому набор
-    /// показывается поверх неё. Точки берутся из того же LocationResolver, что и
-    /// тест, чтобы показанное совпадало с проверенным.
+    /// показывается поверх неё.
+    ///
+    /// Набор берётся ГОТОВЫЙ — тот, что уже нарисован на тестовой карте. Раньше
+    /// здесь запускался новый поиск, и на основной карте оказывались ДРУГИЕ точки
+    /// (отбор рандомизирован), то есть автор видел не то, что проверял.
     /// </summary>
     private void ShowLocationInSimulator(JsonElement root)
     {
@@ -1549,21 +1565,62 @@ public sealed class EditorForm : WebViewForm
         if (definition is null)
             throw new InvalidOperationException("Не передана Location Definition.");
 
-        var rounds = Math.Clamp(OptionalInt(root, "rounds") ?? 8, 1, 128);
-        var world = _hub.Get<WorldState>("world").Value;
-        var result = new LocationResolver().Test(definition, world.Points, rounds);
+        var candidateIds = ReadCandidateIds(root);
+        if (candidateIds.Count == 0)
+        {
+            // Кнопка в панели неактивна без результата теста, поэтому сюда
+            // попасть можно только при рассинхронизации. Молча показать пустой
+            // набор хуже: выглядело бы как «режим включился, но карта пустая».
+            PostJson(JsonSerializer.Serialize(new
+            {
+                type = "location_show_result",
+                ok = false,
+                message = "Сначала нажмите «Тест»: на тестовой карте пока нет точек для показа."
+            }, WebJsonOptions));
+            return;
+        }
 
         // Нумерация совпадает с тестовой картой: 1..N в порядке отбора. Повторы
         // сохраняются намеренно — иначе исчезло бы представление о том, какие
         // точки выбираются чаще.
-        var points = result.Candidates
-            .Select((candidate, index) => new LocationVisualisationPoint(candidate.CandidateId, index + 1))
+        var points = candidateIds
+            .Select((candidateId, index) => new LocationVisualisationPoint(candidateId, index + 1))
             .ToArray();
 
         LocationVisualisationRequested?.Invoke(this, new LocationVisualisationRequest(
             definition.Name,
             points,
-            result.Diagnostics ?? Array.Empty<string>()));
+            ReadDiagnostics(root)));
+    }
+
+    private static IReadOnlyList<string> ReadCandidateIds(JsonElement root)
+    {
+        if (!root.TryGetProperty("candidates", out var candidates) ||
+            candidates.ValueKind != JsonValueKind.Array)
+        {
+            return Array.Empty<string>();
+        }
+
+        return candidates.EnumerateArray()
+            .Select(item => item.TryGetProperty("candidateId", out var id) ? id.GetString() : null)
+            .Where(id => !string.IsNullOrWhiteSpace(id))
+            .Select(id => id!)
+            .ToArray();
+    }
+
+    private static IReadOnlyList<string> ReadDiagnostics(JsonElement root)
+    {
+        if (!root.TryGetProperty("diagnostics", out var diagnostics) ||
+            diagnostics.ValueKind != JsonValueKind.Array)
+        {
+            return Array.Empty<string>();
+        }
+
+        return diagnostics.EnumerateArray()
+            .Select(item => item.GetString())
+            .Where(item => !string.IsNullOrWhiteSpace(item))
+            .Select(item => item!)
+            .ToArray();
     }
 
     private static LocationDefinition? _locationDefinitionFrom(JsonElement root)

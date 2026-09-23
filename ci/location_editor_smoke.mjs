@@ -290,21 +290,88 @@ try {
     if (shownRounds !== "20")
       throw new Error("Введённое число раундов сбросилось после теста: " + shownRounds);
 
-    // «Показать в симуляторе» использует то же значение, а не 8.
-    await page.evaluate(() => { window.__messages.length = 0; });
-    await page.locator("#showLocationInSimulator").click();
-    await page.waitForTimeout(150);
-    const sentVisual = await send("location_show_in_simulator");
-    if (sentVisual.length !== 1 || sentVisual[0].rounds !== 20)
-      throw new Error("Режим визуализации отправлен не с введённым числом раундов: " +
-        JSON.stringify(sentVisual.map(m => m.rounds)));
-
     // Значение не должно теряться и при полной перезагрузке состояния панели.
     await loadState(roundsDefinition, null);
     const afterReload = await page.evaluate(() =>
       document.getElementById("locationRounds")?.value);
     if (afterReload !== "20")
       throw new Error("Число раундов потерялось при обновлении состояния панели: " + afterReload);
+  }
+
+  // --- 4б. «Показать в симуляторе» показывает УЖЕ найденный набор ---
+  //
+  // Симптом был такой: кнопка запускала новый поиск, поэтому на основной карте
+  // оказывались ДРУГИЕ точки — отбор рандомизирован, и автор видел не то, что
+  // только что проверил на тестовой карте.
+  {
+    const definition2 = { ...definition, mode: "Dynamic",
+      query: { criteria: [], history: {} } };
+    await loadState(definition2, null);
+
+    const visualButton = page.locator("#showLocationInSimulator");
+
+    // Пока теста не было, показывать нечего: кнопка обязана быть неактивной.
+    if (!(await visualButton.isDisabled()))
+      throw new Error("«Показать в симуляторе» активна без результата теста: показывать нечего.");
+
+    // Тест нашёл две точки — теперь кнопка обязана ожить.
+    await page.evaluate(() => {
+      window.__deliverFromHost({
+        type: "location_test",
+        result: {
+          locationId: "location_fixture", supported: true, requestedRounds: 2,
+          candidates: [
+            { candidateId: "sdo:test:0x7", name: "Пятёрочка Урал", category: "camping",
+              position: { x: 1, y: 2, z: 3 }, selected: true, message: "" },
+            { candidateId: "sdo:test:0x8", name: "Точка 8", category: "camping",
+              position: { x: 4, y: 5, z: 6 }, selected: true, message: "" }
+          ],
+          diagnostics: []
+        }
+      });
+    });
+    await page.waitForTimeout(150);
+
+    if (await visualButton.isDisabled())
+      throw new Error("«Показать в симуляторе» не ожила после успешного теста.");
+
+    await page.evaluate(() => { window.__messages.length = 0; });
+    await visualButton.click();
+    await page.waitForTimeout(150);
+
+    const sentVisual = await send("location_show_in_simulator");
+    if (sentVisual.length !== 1)
+      throw new Error("«Показать в симуляторе» не отправила сообщение: " +
+        JSON.stringify(sentVisual.length));
+
+    const payload = sentVisual[0];
+
+    // Главное: уходит ИМЕННО показанный набор, а не параметры нового поиска.
+    const sentIds = (payload.candidates || []).map(item => item.candidateId);
+    if (sentIds.join(",") !== "sdo:test:0x7,sdo:test:0x8")
+      throw new Error("На основную карту уходит не тот набор, что показан на тестовой: " +
+        JSON.stringify(sentIds));
+
+    // Раунды больше не отправляются: визуализация не ищет заново. Отправка rounds
+    // означала бы, что Host снова запустит отбор и покажет другие точки.
+    if (payload.rounds !== undefined)
+      throw new Error("«Показать в симуляторе» всё ещё передаёт rounds, то есть ищет заново: " +
+        String(payload.rounds));
+
+    // Пустой набор режим не включает: без кандидатов Host обязан отказать, а не
+    // открыть пустую карту. Проверяется и на стороне Host (домен-тест).
+    await page.evaluate(() => {
+      window.__deliverFromHost({
+        type: "location_test",
+        result: { locationId: "location_fixture", supported: true, requestedRounds: 2,
+          candidates: [], diagnostics: [] }
+      });
+    });
+    await page.waitForTimeout(150);
+
+    if (!(await visualButton.isDisabled()))
+      throw new Error("«Показать в симуляторе» активна при пустом результате теста: " +
+        "показывать нечего, значит кнопка должна быть неактивна.");
   }
 
   // --- 5. Новые критерии присутствуют и дают нужные поля ---
@@ -316,7 +383,7 @@ try {
     const options = await page.evaluate(() =>
       [...document.querySelectorAll("[data-criterion-type] option")].map(o => o.value));
 
-    for (const required of ["NearbyCategory", "NoNearbyCategory", "MinDistanceBetweenCandidates"])
+    for (const required of ["NearbyCategory", "NoNearbyCategory", "MinDistanceBetweenCandidates", "DistanceFromPlayer"])
       if (!options.includes(required))
         throw new Error("В списке критериев нет «" + required + "»: " + JSON.stringify(options));
 
@@ -329,6 +396,35 @@ try {
     if (!nearbyFields.includes("value") || !nearbyFields.includes("meters"))
       throw new Error("Критерий соседства не даёт поля категории и радиуса: " +
         JSON.stringify(nearbyFields));
+
+    // «Радиус от игрока»: поле обязано принимать ДИАПАЗОН «100-1000», поэтому
+    // это текстовое поле, а не type=number — числовое молча съело бы дефис.
+    const playerDefinition = { ...definition, mode: "Dynamic",
+      query: { criteria: [{ type: "DistanceFromPlayer", parameters: { meters: "100-1000" }, negate: false }], history: {} } };
+    await loadState(playerDefinition, null);
+
+    const playerField = await page.evaluate(() => {
+      const input = document.querySelector("[data-criterion] [data-criterion-parameter='meters']");
+      return input ? { tag: input.tagName, type: input.type, value: input.value } : null;
+    });
+    if (!playerField)
+      throw new Error("У критерия «Радиус от игрока» нет поля расстояния.");
+    if (playerField.tag !== "INPUT" || playerField.type === "number")
+      throw new Error("Поле радиуса от игрока обязано быть текстовым: диапазон «100-1000» " +
+        "нельзя ввести в type=number. Получено: " + JSON.stringify(playerField));
+    if (playerField.value !== "100-1000")
+      throw new Error("Диапазон не отобразился в поле радиуса от игрока: " + playerField.value);
+
+    // Диапазон обязан сохраниться в определение как строка, а не быть обрезанным.
+    await page.evaluate(() => { window.__messages.length = 0; });
+    await page.locator("#saveLocation").click();
+    await page.waitForTimeout(150);
+    const savedPlayer = await send("location_save");
+    const playerCriterion = savedPlayer[0]?.definition?.query?.criteria?.[0];
+    if (playerCriterion?.type !== "DistanceFromPlayer" ||
+        playerCriterion?.parameters?.meters !== "100-1000")
+      throw new Error("Диапазон радиуса от игрока не собрался в определение: " +
+        JSON.stringify(playerCriterion));
 
     // Минимальная дистанция — только расстояние, и у неё нет «НЕ»: это стратегия
     // отбора раундов, а не условие на точку, инвертировать её нечего.

@@ -12,6 +12,7 @@ public sealed class LocationRuntimeResolver : ILocationResolver, ILocationResolu
 {
     private readonly LocationStore _store;
     private readonly IDataChannel<WorldState> _world;
+    private readonly IDataChannel<PlayerState> _player;
     private readonly LocationResolver _resolver = new();
     private readonly Dictionary<string, WorldPoint> _resolved =
         new(StringComparer.OrdinalIgnoreCase);
@@ -21,6 +22,7 @@ public sealed class LocationRuntimeResolver : ILocationResolver, ILocationResolu
         _store = store ?? throw new ArgumentNullException(nameof(store));
         ArgumentNullException.ThrowIfNull(hub);
         _world = hub.Get<WorldState>("world");
+        _player = hub.Get<PlayerState>("player");
     }
 
     public WorldPoint? Resolve(string locationId)
@@ -32,7 +34,14 @@ public sealed class LocationRuntimeResolver : ILocationResolver, ILocationResolu
         if (_resolved.TryGetValue(locationId, out var cached))
             return cached;
 
-        var point = _resolver.Resolve(definition, _world.Value.Points).Point;
+        // Позиция игрока передаётся обязательно: критерий «радиус от игрока» без
+        // неё неоценим, а кэш сделал бы первый (возможно, неудачный) результат
+        // постоянным — Resolve запоминает только успешное разрешение.
+        var point = _resolver.Resolve(
+            definition,
+            _world.Value.Points,
+            _player.Value.Position).Point;
+
         if (point is not null)
             _resolved[locationId] = point;
 

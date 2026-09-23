@@ -31,6 +31,8 @@
     ["NameContains", "Название содержит"],
     ["WithinDistanceOfPoint", "В радиусе точки"],
     ["FartherThanPoint", "Дальше от точки"],
+    // Радиус от игрока: принимает число (минимум) или диапазон «100-1000».
+    ["DistanceFromPlayer", "Радиус от игрока"],
     ["ExcludeCategory", "Исключить категорию"],
     // Соседство по категории. Два разных критерия, а не «НЕ» над первым:
     // «НЕ (есть сосед)» и «(нет соседей)» — разные условия, когда соседей несколько.
@@ -253,6 +255,18 @@
           "' placeholder='метров' title='Радиус поиска соседей'>";
     }
 
+    // Радиус от игрока.
+    //
+    // Поле текстовое, а не number: значение может быть диапазоном «100-1000», и
+    // числовое поле с дефисом не справилось бы (оно молча обрежет ввод до
+    // пустой строки или до первого числа).
+    if (type === "DistanceFromPlayer") {
+      return "<input class='toolButton' style='width:130px' data-criterion-parameter='meters' value='" +
+        escapeHtml(p.meters || "") + "' placeholder='100-1000 или 150' " +
+        "title='Диапазон от игрока: одно число — минимальная дистанция, два числа через дефис — от и до'>" +
+        "<span class='miniLabel' style='align-self:center'>от игрока, м</span>";
+    }
+
     // Минимальная дистанция — только расстояние: это разброс раундов, а не фильтр.
     if (type === "MinDistanceBetweenCandidates") {
       return "<input class='toolButton' style='width:130px' type='number' min='1' " +
@@ -423,6 +437,21 @@
         ).join("") +
       "</div>" +
     "</div>";
+  }
+
+  /**
+   * Набор, который уже показан на тестовой карте.
+   *
+   * «Показать в симуляторе» показывает ИМЕННО ЕГО, а не результат нового
+   * поиска: тест каждый раз заново выбирает точки, поэтому повторный прогон дал
+   * бы другой набор, и автор сравнивал бы не то, что проверял.
+   */
+  function displayedCandidates() {
+    return Array.isArray(testResult?.candidates) ? testResult.candidates : [];
+  }
+
+  function visualisationReady() {
+    return displayedCandidates().length > 0;
   }
 
   function renderMap(result) {
@@ -597,12 +626,18 @@
                 "<input class='toolButton' id='locationRounds' type='number' min='1' max='128' value='" +
                   testRounds + "' style='width:80px' title='Количество раундов'>" +
                 "<button class='toolButton primary' id='testLocation'>Тест</button>" +
-                "<button class='toolButton' id='showLocationInSimulator'>Показать в симуляторе</button>" +
+                "<button class='toolButton' id='showLocationInSimulator' " +
+                  (visualisationReady() ? "" : "disabled") +
+                  " title='" + (visualisationReady()
+                    ? "Показать на основной карте набор, который уже отображён на карте ниже"
+                    : "Сначала нажмите «Тест»: показывать пока нечего") + "'>" +
+                  "Показать в симуляторе</button>" +
               "</div>" +
               "<div class='miniLabel' style='margin-top:6px'>Тест каждый раз заново выбирает точки. Результаты показываются на карте ниже.</div>" +
               "<div class='notice' style='margin-top:6px'>" +
-                "«Показать в симуляторе» открывает набор на ОСНОВНОЙ карте: там есть города и другие " +
-                "ориентиры, поэтому видно, ГДЕ именно оказались точки. Карта ниже — только форма набора." +
+                "«Показать в симуляторе» открывает на ОСНОВНОЙ карте ТОТ ЖЕ набор, который виден ниже: там есть " +
+                "города и другие ориентиры, поэтому видно, ГДЕ именно оказались точки. Пока теста не было, " +
+                "показывать нечего — сначала нажмите «Тест»." +
               "</div>" +
             "</div>"
           : "<div class='card' style='margin-top:12px'><div class='miniLabel'>Проверка результата</div>" +
@@ -766,9 +801,20 @@
       state.definition = collectLocation();
       send({ action: "location_test", definition: state.definition, rounds: readRounds() });
     });
+    // «Показать в симуляторе» НЕ запускает новый поиск: на основную карту уходит
+    // тот же набор, который уже нарисован ниже. Повторный прогон дал бы другие
+    // точки (тест рандомизирован), и автор сравнивал бы не то, что проверял.
+    // Поэтому отправляется готовый список, а без результата теста кнопка вообще
+    // неактивна — показывать нечего.
     document.getElementById("showLocationInSimulator")?.addEventListener("click", () => {
-      state.definition = collectLocation();
-      send({ action: "location_show_in_simulator", definition: state.definition, rounds: readRounds() });
+      const candidates = displayedCandidates();
+      if (!candidates.length) return;
+      send({
+        action: "location_show_in_simulator",
+        definition: collectLocation(),
+        candidates: candidates.map(candidate => ({ candidateId: candidate.candidateId })),
+        diagnostics: testResult?.diagnostics || []
+      });
     });
   }
 
@@ -810,6 +856,14 @@
       testResult = data.result || null;
       if (locationIsVisible())
         rerender();
+      return;
+    }
+
+    // Отказ режима визуализации. Кнопка неактивна без результата теста, поэтому
+    // сюда попадаем только при рассинхронизации — но тогда пользователь обязан
+    // увидеть причину, а не молчание.
+    if (data.type === "location_show_result" && data.ok === false) {
+      window.alert(data.message || "Набор для показа пуст: сначала нажмите «Тест».");
       return;
     }
 

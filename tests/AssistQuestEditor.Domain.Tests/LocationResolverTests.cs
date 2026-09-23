@@ -110,7 +110,7 @@ public sealed class LocationResolverTests
                 VisitCount = 1
             });
 
-        var result = new LocationResolver(1).Test(location, points, 1, history);
+        var result = new LocationResolver(1).Test(location, points, 1, history: history);
 
         Assert.True(result.Supported);
         Assert.Equal("b", result.Candidates.Single().CandidateId);
@@ -373,6 +373,189 @@ public sealed class LocationResolverTests
         Assert.Equal(2, result.Candidates.Count);
         Assert.Contains(result.Diagnostics, message =>
             message.Contains("не хватает", StringComparison.OrdinalIgnoreCase));
+    }
+
+    /// <summary>
+    /// Стратегический критерий не попадает в фильтрацию.
+    ///
+    /// Симптом был такой: критерий минимальной дистанции есть, дистанция между
+    /// выбранными точками явно не соблюдается, а в диагностике — по строке
+    /// «критерий не поддерживается» НА КАЖДУЮ точку мира. Сама стратегия отбора
+    /// работала, но сообщения об ошибке забивали список, и предупреждение о
+    /// несоблюдённой дистанции терялось среди них.
+    /// </summary>
+    [Fact]
+    public void StrategyCriterionDoesNotProducePerPointDiagnostics()
+    {
+        var points = new[]
+        {
+            Point("a", "Кемпинг A", "camping", 0),
+            Point("b", "Кемпинг B", "camping", 10),
+            Point("c", "Кемпинг C", "camping", 100000)
+        };
+        var location = new LocationDefinition("quiet", "Без спама")
+        {
+            Mode = LocationMode.Dynamic,
+            Query = new LocationQueryDefinition
+            {
+                Criteria = new[]
+                {
+                    new LocationCriterion("CategoryIs", new Dictionary<string, string> { ["value"] = "camping" }),
+                    new LocationCriterion("MinDistanceBetweenCandidates", new Dictionary<string, string>
+                    {
+                        ["meters"] = "1000"
+                    })
+                }
+            }
+        };
+
+        var result = new LocationResolver(3).Test(location, points, 2);
+
+        Assert.True(result.Supported);
+        // Ни одного сообщения про неподдерживаемый критерий: стратегия обязана
+        // быть отфильтрована до Matches, а не падать в его default-ветку.
+        Assert.DoesNotContain(result.Diagnostics, message =>
+            message.Contains("не поддерживается", StringComparison.OrdinalIgnoreCase));
+        // Диагностика вообще пуста: дистанцию соблюсти можно (a и c), поэтому
+        // предупреждать не о чем.
+        Assert.Empty(result.Diagnostics);
+    }
+
+    /// <summary>
+    /// «Радиус от игрока»: диапазон ограничивает выбор с двух сторон, а одно
+    /// число задаёт только минимум.
+    ///
+    /// Проверяются обе формы и обе стороны: односторонний тест прошёл бы и при
+    /// полностью проигнорированном критерии.
+    /// </summary>
+    [Fact]
+    public void PlayerDistanceRangeLimitsBothSides()
+    {
+        var points = new[]
+        {
+            Point("near", "Рядом", "man", 50),
+            Point("mid", "Середина", "man", 500),
+            Point("far", "Далеко", "man", 5000)
+        };
+        var player = new WorldCoordinate(0, 0, 0);
+
+        var ranged = new LocationDefinition("ranged", "Диапазон")
+        {
+            Mode = LocationMode.Dynamic,
+            Query = new LocationQueryDefinition
+            {
+                Criteria = new[]
+                {
+                    new LocationCriterion("DistanceFromPlayer", new Dictionary<string, string>
+                    {
+                        ["meters"] = "100-1000"
+                    })
+                }
+            }
+        };
+
+        var rangedResult = new LocationResolver(1).Test(ranged, points, 1, player);
+
+        Assert.True(rangedResult.Supported);
+        Assert.Equal("mid", rangedResult.Candidates.Single().CandidateId);
+
+        // Одно число = МИНИМАЛЬНАЯ дистанция: «mid» и «far» подходят, «near» — нет.
+        var minimum = new LocationDefinition("minimum", "Минимум")
+        {
+            Mode = LocationMode.Dynamic,
+            Query = new LocationQueryDefinition
+            {
+                Criteria = new[]
+                {
+                    new LocationCriterion("DistanceFromPlayer", new Dictionary<string, string>
+                    {
+                        ["meters"] = "150"
+                    })
+                }
+            }
+        };
+
+        var minimumResult = new LocationResolver(1).Test(minimum, points, 3, player);
+
+        Assert.True(minimumResult.Supported);
+        var picked = minimumResult.Candidates.Select(item => item.CandidateId).Distinct().ToArray();
+        Assert.Contains("mid", picked);
+        Assert.Contains("far", picked);
+        Assert.DoesNotContain("near", picked);
+    }
+
+    /// <summary>
+    /// Отсутствие позиции игрока — ошибка окружения, а не свойство точек.
+    ///
+    /// Поэтому должно быть ОДНО внятное сообщение. Если проверять позицию внутри
+    /// фильтра, сообщение размножится на каждую точку мира (у реального мира это
+    /// тысячи строк), и внятного объяснения в списке не будет видно.
+    /// </summary>
+    [Fact]
+    public void PlayerDistanceWithoutPlayerPositionReportsSingleDiagnostic()
+    {
+        var points = new[]
+        {
+            Point("a", "Точка A", "man", 50),
+            Point("b", "Точка B", "man", 500),
+            Point("c", "Точка C", "man", 5000)
+        };
+        var location = new LocationDefinition("noplayer", "Без игрока")
+        {
+            Mode = LocationMode.Dynamic,
+            Query = new LocationQueryDefinition
+            {
+                Criteria = new[]
+                {
+                    new LocationCriterion("DistanceFromPlayer", new Dictionary<string, string>
+                    {
+                        ["meters"] = "100-1000"
+                    })
+                }
+            }
+        };
+
+        // Позиция не передана намеренно.
+        var result = new LocationResolver(1).Test(location, points, 1);
+
+        Assert.False(result.Supported);
+        Assert.Empty(result.Candidates);
+        Assert.Single(result.Diagnostics);
+        Assert.Contains("позиция игрока неизвестна", result.Diagnostics.Single(),
+            StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
+    /// Перепутанные границы диапазона — ошибка настройки с ТОЧНЫМ сообщением.
+    ///
+    /// «1000-100» синтаксически корректно, поэтому общее «задайте число или
+    /// диапазон» вводило бы в заблуждение: пользователь написал ровно то, что
+    /// просили. Сообщение обязано называть настоящую проблему — порядок границ.
+    /// </summary>
+    [Fact]
+    public void PlayerDistanceSwappedRangeReportsMinAboveMax()
+    {
+        var points = new[] { Point("a", "Точка A", "man", 50) };
+        var location = new LocationDefinition("swapped", "Наоборот")
+        {
+            Mode = LocationMode.Dynamic,
+            Query = new LocationQueryDefinition
+            {
+                Criteria = new[]
+                {
+                    new LocationCriterion("DistanceFromPlayer", new Dictionary<string, string>
+                    {
+                        ["meters"] = "1000-100"
+                    })
+                }
+            }
+        };
+
+        var result = new LocationResolver(1).Test(location, points, 1, new WorldCoordinate(0, 0, 0));
+
+        Assert.False(result.Supported);
+        Assert.Contains(result.Diagnostics, message =>
+            message.Contains("больше максимума", StringComparison.OrdinalIgnoreCase));
     }
 
     private static WorldPoint Man(string id, double x) => Point(id, "Мужчина", "man", x);

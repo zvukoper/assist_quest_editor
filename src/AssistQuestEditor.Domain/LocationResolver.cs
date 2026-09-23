@@ -43,9 +43,10 @@ public sealed class LocationResolver
     public LocationResolution Resolve(
         LocationDefinition location,
         IReadOnlyList<WorldPoint> worldPoints,
+        WorldCoordinate? playerPosition = null,
         ILocationUsageHistory? history = null)
     {
-        var result = Test(location, worldPoints, 1, history);
+        var result = Test(location, worldPoints, 1, playerPosition, history);
         var candidate = result.Candidates.FirstOrDefault();
         if (!result.Supported || candidate is null)
         {
@@ -61,10 +62,19 @@ public sealed class LocationResolver
             : new LocationResolution(location, point, true, "Локация разрешена.");
     }
 
+    /// <summary>
+    /// Прогон отбора.
+    ///
+    /// <paramref name="playerPosition"/> нужен критерию «радиус от игрока»: без
+    /// него невозможно сказать, далеко ли точка от игрока. Позиция передаётся
+    /// снаружи, потому что игрок не часть мира точек — в Sandbox его состояние
+    /// живёт в отдельном канале.
+    /// </summary>
     public LocationTestResult Test(
         LocationDefinition location,
         IReadOnlyList<WorldPoint> worldPoints,
         int rounds,
+        WorldCoordinate? playerPosition = null,
         ILocationUsageHistory? history = null)
     {
         rounds = Math.Clamp(rounds, 1, 128);
@@ -145,6 +155,25 @@ public sealed class LocationResolver
                 diagnostics);
         }
 
+        // Позиция игрока проверяется ОДИН раз до фильтрации, а не внутри Matches.
+        //
+        // Если её проверять в Matches, отсутствие позиции давало бы по диагностике
+        // на каждую точку мира: список сообщений забивался бы тысячами одинаковых
+        // строк, а внятного объяснения («позиция игрока неизвестна») в начале
+        // списка не было бы. Это ошибка окружения, а не свойство точки.
+        if (criteria.Any(IsPlayerDistanceCriterion) && playerPosition is null)
+        {
+            diagnostics.Add(
+                "Критерий «Радиус от игрока» не может быть выполнен: позиция игрока неизвестна. " +
+                "Запустите симуляцию или задайте позицию игрока на карте Симулятора.");
+            return new LocationTestResult(
+                location.Id,
+                false,
+                rounds,
+                Array.Empty<LocationTestCandidate>(),
+                diagnostics);
+        }
+
         // Индекс строится один раз: критерии «рядом есть категория» и «нет категории
         // в радиусе» просматривают окрестность каждой точки, а точек в мире тысячи.
         // Без индекса это был бы полный перебор по всем парам (5192² ≈ 27 млн
@@ -153,7 +182,7 @@ public sealed class LocationResolver
         var index = new WorldPointIndex(worldPoints);
 
         var candidates = worldPoints.Where(point =>
-            MatchesAll(point, criteria, worldPoints, index, diagnostics)).ToList();
+            MatchesAll(point, criteria, worldPoints, index, playerPosition, diagnostics)).ToList();
 
         candidates = candidates.Where(point =>
             MatchesHistory(location.Id, point.Id, location.Query?.History, history)).ToList();
@@ -281,11 +310,25 @@ public sealed class LocationResolver
         IReadOnlyList<LocationCriterion> criteria,
         IReadOnlyList<WorldPoint> worldPoints,
         WorldPointIndex index,
+        WorldCoordinate? playerPosition,
         ICollection<string> diagnostics)
     {
         foreach (var criterion in criteria)
         {
-            var supported = Matches(candidate, criterion, worldPoints, index, out var result, out var message);
+            // Критерий-стратегия не фильтрует кандидатов, а управляет ВЫБОРОМ
+            // раундов, поэтому в фильтрации пропускается.
+            //
+            // Раньше он доходил до default-ветки Matches и на КАЖДУЮ точку мира
+            // добавлял диагностику «пока не поддерживается». Сам отбор дистанции
+            // при этом работал, но список диагностик забивался сообщениями об
+            // ошибке, и со стороны это выглядело как «минимальная дистанция не
+            // работает»: пользователь видел только текст про неподдерживаемый
+            // критерий и не видел предупреждения о несоблюдённой дистанции.
+            if (IsStrategyCriterion(criterion))
+                continue;
+
+            var supported = Matches(candidate, criterion, worldPoints, index, playerPosition,
+                out var result, out var message);
             if (!supported)
             {
                 diagnostics.Add(message);
@@ -305,6 +348,7 @@ public sealed class LocationResolver
         LocationCriterion criterion,
         IReadOnlyList<WorldPoint> worldPoints,
         WorldPointIndex index,
+        WorldCoordinate? playerPosition,
         out bool result,
         out string message)
     {
@@ -392,11 +436,119 @@ public sealed class LocationResolver
                 return MatchNearbyCategory(candidate, type, parameters, index, expectPresent: false,
                     out result, out message);
 
+            // «Радиус от игрока»: точка не ближе первого значения диапазона и не
+            // дальше второго — например 100-1000 метров от игрока. Одно число
+            // задаёт только минимум («не ближе 150 м»), максимум тогда
+            // бесконечен: иначе нельзя было бы искать «что-нибудь подальше».
+            case "distancefromplayer":
+            case "playerdistance":
+                // Проверка нужна компилятору (nullable), но недостижима: отсутствие
+                // позиции игрока отсекается ДО фильтрации, поэтому диагностика не
+                // может размножиться на каждую точку мира.
+                if (playerPosition is not { } player)
+                {
+                    result = false;
+                    message = $"Критерий {type}: позиция игрока неизвестна.";
+                    return false;
+                }
+
+                if (!parameters.TryGetValue("meters", out var playerRangeText) ||
+                    !TryParseDistanceRange(playerRangeText, out var playerRange))
+                {
+                    result = false;
+                    message = $"Критерий {type}: расстояние задаётся числом или диапазоном, например 150 или 100-1000.";
+                    return false;
+                }
+
+                result = playerRange.Contains(Distance(candidate.Position, player));
+                message = string.Empty;
+                return true;
+
             default:
                 result = false;
                 message = $"Критерий {type} пока не поддерживается текущим Sandbox Provider.";
                 return false;
         }
+    }
+
+    /// <summary>
+    /// Критерий-стратегия: он не отбраковывает кандидатов, а влияет на выбор
+    /// раундов, поэтому в фильтрации участвовать не должен.
+    /// </summary>
+    private static bool IsStrategyCriterion(LocationCriterion criterion) =>
+        criterion.Type.Trim().Equals(MinDistanceCriterion, StringComparison.OrdinalIgnoreCase);
+
+    private static bool IsPlayerDistanceCriterion(LocationCriterion criterion)
+    {
+        var type = criterion.Type.Trim();
+        return type.Equals("distancefromplayer", StringComparison.OrdinalIgnoreCase) ||
+               type.Equals("playerdistance", StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
+    /// Диапазон расстояния от игрока.
+    ///
+    /// <see cref="Max"/> = null означает «до бесконечности»: автор указал одно
+    /// число, и это МИНИМАЛЬНАЯ дистанция («не ближе 150 м»), а не точное
+    /// значение. Требовать максимум в этом случае значило бы запретить обычный
+    /// сценарий «найти что-нибудь подальше от игрока».
+    /// </summary>
+    private readonly record struct DistanceRange(double Min, double? Max)
+    {
+        public bool Contains(double value) =>
+            value >= Min && (Max is not { } max || value <= max);
+    }
+
+    /// <summary>
+    /// Разбирает «100-1000» или «150».
+    ///
+    /// Дефис как разделитель выбран потому, что именно так диапазон пишут в
+    /// текстовых данных; пробелы вокруг значений и дефиса допускаются, чтобы
+    /// «100 - 1000» не считалось ошибкой ввода.
+    ///
+    /// Метод проверяет ТОЛЬКО синтаксис: перепутанные границы (1000-100) — это
+    /// синтаксически корректный диапазон, но бессмысленный, и сообщение о нём
+    /// должно быть точным. Если бы порядок проверялся здесь, пользователь
+    /// получал бы общее «задайте число или диапазон» вместо «минимум больше
+    /// максимума».
+    /// </summary>
+    private static bool TryParseDistanceRange(string? raw, out DistanceRange range)
+    {
+        range = default;
+
+        var text = raw?.Trim();
+        if (string.IsNullOrEmpty(text))
+            return false;
+
+        var separator = text.IndexOf('-');
+        if (separator < 0)
+        {
+            if (!TryGetNumber(text, out var single) || single < 0)
+                return false;
+
+            range = new DistanceRange(single, null);
+            return true;
+        }
+
+        if (!TryGetNumber(text[..separator], out var min) || min < 0)
+            return false;
+
+        if (!TryGetNumber(text[(separator + 1)..], out var max) || max < 0)
+            return false;
+
+        range = new DistanceRange(min, max);
+        return true;
+    }
+
+    private static bool TryGetNumber(string text, out double value)
+    {
+        value = 0d;
+        return double.TryParse(
+            text.Trim(),
+            System.Globalization.NumberStyles.Float,
+            System.Globalization.CultureInfo.InvariantCulture,
+            out value) &&
+            double.IsFinite(value);
     }
 
     /// <summary>
@@ -546,6 +698,21 @@ public sealed class LocationResolver
             return $"Критерий {type}: не задано числовое расстояние meters.";
         }
 
+        if (IsPlayerDistanceCriterion(criterion))
+        {
+            if (!parameters.TryGetValue("meters", out var rangeText) ||
+                !TryParseDistanceRange(rangeText, out var range))
+            {
+                return $"Критерий {type}: расстояние задаётся числом или диапазоном, например 150 или 100-1000.";
+            }
+
+            // TryParseDistanceRange отвергает только синтаксис. Перепутанные
+            // границы (1000-100) синтаксически верны, но бессмысленны, и молча
+            // вернуть «ничего не найдено» здесь хуже, чем назвать причину.
+            if (range.Max is { } upper && upper < range.Min)
+                return $"Критерий {type}: минимум {range.Min:0.#} больше максимума {upper:0.#}.";
+        }
+
         return null;
     }
 
@@ -572,6 +739,7 @@ public sealed class LocationResolver
         "excludecategory",
         "categorywithinnearby", "nearbycategory",
         "categorynotwithinnearby", "nonearbycategory",
+        "distancefromplayer", "playerdistance",
         MinDistanceCriterion
     ];
 
