@@ -20,6 +20,10 @@
   // Текст поиска точки держится в модуле: перерисовка панели создаёт поле
   // заново, и без этого запрос пользователя терялся бы после каждого выбора.
   let pointSearch = "";
+  // Количество раундов тоже держится в модуле. Значение было жёстко прописано
+  // в разметке как value='8', поэтому после каждого теста панель перерисовывалась
+  // и введённое число сбрасывалось обратно к 8.
+  let testRounds = 8;
 
   const CRITERIA = [
     ["CategoryIs", "Категория равна"],
@@ -28,6 +32,12 @@
     ["WithinDistanceOfPoint", "В радиусе точки"],
     ["FartherThanPoint", "Дальше от точки"],
     ["ExcludeCategory", "Исключить категорию"],
+    // Соседство по категории. Два разных критерия, а не «НЕ» над первым:
+    // «НЕ (есть сосед)» и «(нет соседей)» — разные условия, когда соседей несколько.
+    ["NearbyCategory", "Рядом есть категория"],
+    ["NoNearbyCategory", "В радиусе нет категории"],
+    // Это не фильтр кандидатов, а стратегия отбора: раунды расходятся по площади.
+    ["MinDistanceBetweenCandidates", "Минимальная дистанция между точками"],
     ["ProviderCriterion", "Критерий World Provider"]
   ];
 
@@ -218,6 +228,33 @@
         escapeHtml(p.meters || "") + "' placeholder='метров'>";
     }
 
+    // Соседство по категории: категория-сосед и радиус, в котором её искать.
+    // Категории предлагаются списком из мира: вручную введённое имя почти всегда
+    // расходилось бы с реальным написанием и критерий молча не находил ничего.
+    if (type === "NearbyCategory" || type === "NoNearbyCategory") {
+      const categories = [...new Set(
+        (state.worldPoints || []).map(point => String(point.category || "").trim()).filter(Boolean)
+      )].sort((a, b) => a.localeCompare(b, "ru"));
+      const listId = "location-category-options-" + index;
+      return "<input class='toolButton' list='" + listId + "' style='min-width:220px' " +
+          "data-criterion-parameter='value' value='" + escapeHtml(p.value || "") +
+          "' placeholder='Категория рядом'>" +
+        "<datalist id='" + listId + "'>" +
+          categories.map(category => "<option value='" + escapeHtml(category) + "'></option>").join("") +
+        "</datalist>" +
+        "<input class='toolButton' style='width:110px' type='number' min='1' " +
+          "data-criterion-parameter='meters' value='" + escapeHtml(p.meters || "500") +
+          "' placeholder='метров' title='Радиус поиска соседей'>";
+    }
+
+    // Минимальная дистанция — только расстояние: это разброс раундов, а не фильтр.
+    if (type === "MinDistanceBetweenCandidates") {
+      return "<input class='toolButton' style='width:130px' type='number' min='1' " +
+        "data-criterion-parameter='meters' value='" + escapeHtml(p.meters || "5000") +
+        "' placeholder='метров' title='Минимальное расстояние между выбранными точками'>" +
+        "<span class='miniLabel' style='align-self:center'>между выбранными точками</span>";
+    }
+
     if (type === "ProviderCriterion") {
       return "<input class='toolButton' data-provider-type value='" + escapeHtml(p.type || "") +
         "' placeholder='например: HouseTypeIs'>" +
@@ -328,6 +365,10 @@
 
   function criterionRowHtml(criterion, index) {
     const type = criterion?.type || "CategoryIs";
+    // «НЕ» есть не у каждого критерия: минимальная дистанция — это стратегия
+    // отбора раундов, а не условие на точку, и инвертировать её бессмысленно.
+    // Показанный чекбокс, который ни на что не влияет, — обман пользователя.
+    const negatable = type !== "MinDistanceBetweenCandidates";
     return "<div class='card' data-criterion data-index='" + index + "' style='margin-top:8px;padding:10px'>" +
       "<div class='toolbar' style='gap:6px;flex-wrap:wrap'>" +
         "<select class='toolButton' data-criterion-type style='min-width:210px'>" +
@@ -336,9 +377,11 @@
               escapeHtml(label) + "</option>"
           ).join("") +
         "</select>" +
-        "<label class='miniLabel' style='display:flex;align-items:center;gap:5px'>" +
-          "<input type='checkbox' data-criterion-negate " + (criterion?.negate ? "checked" : "") + "> НЕ" +
-        "</label>" +
+        (negatable
+          ? "<label class='miniLabel' style='display:flex;align-items:center;gap:5px'>" +
+              "<input type='checkbox' data-criterion-negate " + (criterion?.negate ? "checked" : "") + "> НЕ" +
+            "</label>"
+          : "") +
         "<button class='toolButton' type='button' data-remove-criterion>Удалить</button>" +
       "</div>" +
       "<div class='toolbar' style='margin-top:7px;gap:6px;flex-wrap:wrap'>" +
@@ -491,7 +534,7 @@
 
         (dynamic
           ? "<div class='card' style='margin-top:12px'><div class='miniLabel'>Критерии поиска</div>" +
-              "<div class='notice' style='margin-top:6px'>Критерии применяются как AND. «НЕ» инвертирует отдельный критерий. Для будущего ETS2/DayZ можно хранить provider-specific критерии без изменения Location формата.</div>" +
+              "<div class='notice' style='margin-top:6px'>Критерии применяются как AND. «НЕ» инвертирует отдельный критерий. «В радиусе нет категории» и «Рядом есть категория» — разные условия: второе ищет хотя бы одного соседа, первое требует, чтобы соседей не было вовсе. «Минимальная дистанция» не фильтрует точки, а разводит раунды по площади. Для будущего ETS2/DayZ можно хранить provider-specific критерии без изменения Location формата.</div>" +
               "<div id='locationCriteria'>" +
                 (definition.query?.criteria?.length
                   ? definition.query.criteria.map(criterionRowHtml).join("")
@@ -533,7 +576,8 @@
           ? "<div class='card' style='margin-top:12px'><div class='miniLabel'>Проверка результата</div>" +
               "<div class='toolbar' style='margin-top:7px;gap:6px;flex-wrap:wrap'>" +
                 "<button class='toolButton primary' id='showLocation'>Показать точку</button>" +
-                "<input class='toolButton' id='locationRounds' type='number' min='1' max='128' value='8' style='width:80px' title='Количество раундов'>" +
+                "<input class='toolButton' id='locationRounds' type='number' min='1' max='128' value='" +
+                  testRounds + "' style='width:80px' title='Количество раундов'>" +
                 "<button class='toolButton primary' id='testLocation'>Тест</button>" +
                 "<button class='toolButton' id='showLocationInSimulator'>Показать в симуляторе</button>" +
               "</div>" +
@@ -680,15 +724,21 @@
       state.definition = collectLocation();
       send({ action: "location_show", definition: state.definition });
     });
+    // Значение раундов читается и сохраняется в модуль перед отправкой: панель
+    // перерисовывается ответом Host, и без этого поле возвращалось к значению по
+    // умолчанию (введённое число раундов сбрасывалось после каждого теста).
+    const readRounds = () => {
+      const raw = Number(document.getElementById("locationRounds")?.value);
+      testRounds = Number.isFinite(raw) ? Math.max(1, Math.min(128, Math.round(raw))) : 8;
+      return testRounds;
+    };
     document.getElementById("testLocation")?.addEventListener("click", () => {
       state.definition = collectLocation();
-      const rounds = Math.max(1, Math.min(128, Number(document.getElementById("locationRounds")?.value) || 8));
-      send({ action: "location_test", definition: state.definition, rounds });
+      send({ action: "location_test", definition: state.definition, rounds: readRounds() });
     });
     document.getElementById("showLocationInSimulator")?.addEventListener("click", () => {
       state.definition = collectLocation();
-      const rounds = Math.max(1, Math.min(128, Number(document.getElementById("locationRounds")?.value) || 8));
-      send({ action: "location_show_in_simulator", definition: state.definition, rounds });
+      send({ action: "location_show_in_simulator", definition: state.definition, rounds: readRounds() });
     });
   }
 

@@ -252,6 +252,120 @@ try {
     throw new Error("Подпись «Нет точек» нечитаема (нужен fill, а не CSS color): " +
       JSON.stringify(contrast));
 
+  // --- 4. Количество раундов сохраняется между перерисовками ---
+  //
+  // Симптом был такой: вводишь 20, нажимаешь «Тест», панель перерисовывается
+  // ответом Host, и поле снова показывает 8 — то есть значение сбрасывалось.
+  {
+    const roundsDefinition = { ...definition, mode: "Dynamic",
+      query: { criteria: [], history: {} } };
+    await loadState(roundsDefinition, null);
+
+    const roundsInput = page.locator("#locationRounds");
+    if (!(await roundsInput.count()))
+      throw new Error("Поле количества раундов отсутствует у Dynamic Location.");
+
+    await roundsInput.fill("20");
+    await page.evaluate(() => { window.__messages.length = 0; });
+    await page.locator("#testLocation").click();
+    await page.waitForTimeout(150);
+
+    const sentTest = await send("location_test");
+    if (sentTest.length !== 1 || sentTest[0].rounds !== 20)
+      throw new Error("Тест отправлен не с введённым числом раундов: " +
+        JSON.stringify(sentTest.map(m => m.rounds)));
+
+    // Ответ Host перерисовывает панель — значение обязано остаться.
+    await page.evaluate(() => {
+      window.__deliverFromHost({
+        type: "location_test",
+        result: { locationId: "location_fixture", supported: true, requestedRounds: 20,
+          candidates: [], diagnostics: [] }
+      });
+    });
+    await page.waitForTimeout(150);
+
+    const shownRounds = await page.evaluate(() =>
+      document.getElementById("locationRounds")?.value);
+    if (shownRounds !== "20")
+      throw new Error("Введённое число раундов сбросилось после теста: " + shownRounds);
+
+    // «Показать в симуляторе» использует то же значение, а не 8.
+    await page.evaluate(() => { window.__messages.length = 0; });
+    await page.locator("#showLocationInSimulator").click();
+    await page.waitForTimeout(150);
+    const sentVisual = await send("location_show_in_simulator");
+    if (sentVisual.length !== 1 || sentVisual[0].rounds !== 20)
+      throw new Error("Режим визуализации отправлен не с введённым числом раундов: " +
+        JSON.stringify(sentVisual.map(m => m.rounds)));
+
+    // Значение не должно теряться и при полной перезагрузке состояния панели.
+    await loadState(roundsDefinition, null);
+    const afterReload = await page.evaluate(() =>
+      document.getElementById("locationRounds")?.value);
+    if (afterReload !== "20")
+      throw new Error("Число раундов потерялось при обновлении состояния панели: " + afterReload);
+  }
+
+  // --- 5. Новые критерии присутствуют и дают нужные поля ---
+  {
+    const criteriaDefinition = { ...definition, mode: "Dynamic",
+      query: { criteria: [{ type: "NearbyCategory", parameters: { value: "cat", meters: "500" }, negate: false }], history: {} } };
+    await loadState(criteriaDefinition, null);
+
+    const options = await page.evaluate(() =>
+      [...document.querySelectorAll("[data-criterion-type] option")].map(o => o.value));
+
+    for (const required of ["NearbyCategory", "NoNearbyCategory", "MinDistanceBetweenCandidates"])
+      if (!options.includes(required))
+        throw new Error("В списке критериев нет «" + required + "»: " + JSON.stringify(options));
+
+    // Критерий соседства обязан показать категорию и радиус.
+    const nearbyFields = await page.evaluate(() => {
+      const row = document.querySelector("[data-criterion]");
+      return [...row.querySelectorAll("[data-criterion-parameter]")]
+        .map(input => input.dataset.criterionParameter);
+    });
+    if (!nearbyFields.includes("value") || !nearbyFields.includes("meters"))
+      throw new Error("Критерий соседства не даёт поля категории и радиуса: " +
+        JSON.stringify(nearbyFields));
+
+    // Минимальная дистанция — только расстояние, и у неё нет «НЕ»: это стратегия
+    // отбора раундов, а не условие на точку, инвертировать её нечего.
+    const distanceDefinition = { ...definition, mode: "Dynamic",
+      query: { criteria: [{ type: "MinDistanceBetweenCandidates", parameters: { meters: "5000" }, negate: false }], history: {} } };
+    await loadState(distanceDefinition, null);
+
+    const distanceFields = await page.evaluate(() => {
+      const row = document.querySelector("[data-criterion]");
+      return {
+        parameters: [...row.querySelectorAll("[data-criterion-parameter]")]
+          .map(input => input.dataset.criterionParameter),
+        negate: !!row.querySelector("[data-criterion-negate]")
+      };
+    });
+    if (distanceFields.parameters.join(",") !== "meters")
+      throw new Error("У минимальной дистанции должны быть только метры: " +
+        JSON.stringify(distanceFields.parameters));
+    if (distanceFields.negate)
+      throw new Error("У минимальной дистанции не должно быть чекбокса «НЕ»: она не условие на точку.");
+
+    // Смена типа критерия перерисовывает строку — проверяем, что сборка не падает
+    // и коллекция параметров уходит в Host целиком, включая meters.
+    await loadState(criteriaDefinition, null);
+    await page.evaluate(() => { window.__messages.length = 0; });
+    await page.locator("#saveLocation").click();
+    await page.waitForTimeout(150);
+
+    const saved = await send("location_save");
+    const savedCriteria = saved[0]?.definition?.query?.criteria || [];
+    if (savedCriteria.length !== 1 || savedCriteria[0].type !== "NearbyCategory" ||
+        savedCriteria[0].parameters?.value !== "cat" ||
+        String(savedCriteria[0].parameters?.meters) !== "500")
+      throw new Error("Критерий соседства не собрался в определение корректно: " +
+        JSON.stringify(savedCriteria));
+  }
+
   if (errors.length)
     throw new Error("pageerror: " + errors.join(" | "));
 

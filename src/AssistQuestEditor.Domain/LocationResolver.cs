@@ -121,8 +121,39 @@ public sealed class LocationResolver
                 diagnostics);
         }
 
+        // Критерий известного типа, но с неполными параметрами (нет категории,
+        // радиуса, значения) раньше молча пропускал ВСЕ точки: Matches сообщал
+        // «не могу оценить», кандидат не отбраковывался, и запрос с опечаткой в
+        // параметре выглядел как «критерий ничего не фильтрует». Теперь это
+        // ошибка настройки, о которой сообщается явно — так же, как для
+        // неизвестного типа критерия.
+        var parameterProblems = criteria
+            .Select(CriterionParameterProblem)
+            .Where(problem => problem is not null)
+            .Select(problem => problem!)
+            .ToArray();
+
+        if (parameterProblems.Length > 0)
+        {
+            diagnostics.Add("Sandbox не может выполнить один или несколько критериев Location.");
+            diagnostics.AddRange(parameterProblems);
+            return new LocationTestResult(
+                location.Id,
+                false,
+                rounds,
+                Array.Empty<LocationTestCandidate>(),
+                diagnostics);
+        }
+
+        // Индекс строится один раз: критерии «рядом есть категория» и «нет категории
+        // в радиусе» просматривают окрестность каждой точки, а точек в мире тысячи.
+        // Без индекса это был бы полный перебор по всем парам (5192² ≈ 27 млн
+        // вычислений расстояния на каждый прогон), с индексом — только по точкам
+        // нужной категории.
+        var index = new WorldPointIndex(worldPoints);
+
         var candidates = worldPoints.Where(point =>
-            MatchesAll(point, criteria, worldPoints, diagnostics)).ToList();
+            MatchesAll(point, criteria, worldPoints, index, diagnostics)).ToList();
 
         candidates = candidates.Where(point =>
             MatchesHistory(location.Id, point.Id, location.Query?.History, history)).ToList();
@@ -153,14 +184,37 @@ public sealed class LocationResolver
         var selected = new List<LocationTestCandidate>(rounds);
         var available = candidates.ToList();
 
+        // «Минимальная дистанция между точками» — это НЕ фильтр, а стратегия
+        // отбора: критерий не отбраковывает кандидатов, а заставляет раунды
+        // расходиться по площади. Поэтому он читается здесь, а не в MatchesAll.
+        var minDistance = GetMinDistanceBetweenCandidates(criteria);
+        var distanceRelaxed = false;
+
         for (var round = 0; round < rounds; round++)
         {
             if (available.Count == 0)
                 available = candidates.ToList();
 
-            var index = _random.Next(available.Count);
-            var point = available[index];
-            available.RemoveAt(index);
+            var pick = minDistance is { } meters
+                ? SelectFarEnough(available, selected, meters)
+                : null;
+
+            if (pick is null && minDistance is { } required)
+            {
+                // Соблюсти дистанцию невозможно (мало кандидатов). Раунд всё равно
+                // выдаётся: пустой результат хуже повтора, но пользователь должен
+                // знать, что дистанция не выдержана.
+                if (!distanceRelaxed)
+                {
+                    diagnostics.Add(
+                        $"Кандидатов, отстоящих друг от друга на {required:0.#} м, не хватает; " +
+                        "часть раундов выбирает точки ближе.");
+                    distanceRelaxed = true;
+                }
+            }
+
+            var point = pick ?? available[_random.Next(available.Count)];
+            available.Remove(point);
 
             selected.Add(new LocationTestCandidate(
                 point.Id,
@@ -180,15 +234,58 @@ public sealed class LocationResolver
             diagnostics);
     }
 
+    /// <summary>
+    /// Ближайший к запрошенному разбросу кандидат из доступных.
+    ///
+    /// Возвращает первый кандидат, отстоящий от ВСЕХ уже выбранных не менее чем на
+    /// <paramref name="meters"/>, либо null, если такого нет. Выбор случайный, а не
+    /// «первый по списку»: иначе точки всегда брались бы с одного конца мира.
+    /// </summary>
+    private WorldPoint? SelectFarEnough(
+        List<WorldPoint> available,
+        List<LocationTestCandidate> selected,
+        double meters)
+    {
+        if (selected.Count == 0)
+            return available[_random.Next(available.Count)];
+
+        var eligible = available.Where(candidate =>
+            selected.All(chosen =>
+                Distance(candidate.Position, chosen.Position) >= meters)).ToList();
+
+        return eligible.Count == 0 ? null : eligible[_random.Next(eligible.Count)];
+    }
+
+    /// <summary>
+    /// Значение критерия «минимальная дистанция между точками» или null.
+    ///
+    /// Первое найденное значение: несколько таких критериев противоречили бы друг
+    /// другу, а молчаливое «побеждает последний» было бы неочевидным.
+    /// </summary>
+    private static double? GetMinDistanceBetweenCandidates(IReadOnlyList<LocationCriterion> criteria)
+    {
+        foreach (var criterion in criteria)
+        {
+            if (!criterion.Type.Trim().Equals(MinDistanceCriterion, StringComparison.OrdinalIgnoreCase))
+                continue;
+
+            if (TryGetDouble(criterion.SafeParameters, "meters", out var meters))
+                return meters;
+        }
+
+        return null;
+    }
+
     private static bool MatchesAll(
         WorldPoint candidate,
         IReadOnlyList<LocationCriterion> criteria,
         IReadOnlyList<WorldPoint> worldPoints,
+        WorldPointIndex index,
         ICollection<string> diagnostics)
     {
         foreach (var criterion in criteria)
         {
-            var supported = Matches(candidate, criterion, worldPoints, out var result, out var message);
+            var supported = Matches(candidate, criterion, worldPoints, index, out var result, out var message);
             if (!supported)
             {
                 diagnostics.Add(message);
@@ -207,6 +304,7 @@ public sealed class LocationResolver
         WorldPoint candidate,
         LocationCriterion criterion,
         IReadOnlyList<WorldPoint> worldPoints,
+        WorldPointIndex index,
         out bool result,
         out string message)
     {
@@ -274,11 +372,82 @@ public sealed class LocationResolver
                 message = string.Empty;
                 return parameters.ContainsKey("value");
 
+            // «Рядом с точкой должна быть категория»: кандидат подходит, если в
+            // радиусе есть ХОТЯ БЫ одна точка указанной категории. Так ищут
+            // «мужчину рядом с котом» или «разбитую машину рядом с магазином».
+            case "categorywithinnearby":
+            case "nearbycategory":
+                return MatchNearbyCategory(candidate, type, parameters, index, expectPresent: true,
+                    out result, out message);
+
+            // «В радиусе нет категории»: кандидат подходит, если в радиусе НЕТ ни
+            // одной точки указанной категории — отдельно стоящий человек.
+            //
+            // Отличие от «НЕ» над критерием выше принципиально: «НЕ» инвертирует
+            // результат для ОДНОЙ точки, а здесь проверяется отсутствие ВСЕХ
+            // подходящих соседей. Инверсия «(есть сосед)» и «(нет соседей)» —
+            // это разные условия, когда соседей несколько.
+            case "categorynotwithinnearby":
+            case "nonearbycategory":
+                return MatchNearbyCategory(candidate, type, parameters, index, expectPresent: false,
+                    out result, out message);
+
             default:
                 result = false;
                 message = $"Критерий {type} пока не поддерживается текущим Sandbox Provider.";
                 return false;
         }
+    }
+
+    /// <summary>
+    /// Общая проверка соседства по категории.
+    ///
+    /// <paramref name="expectPresent"/> = true — «рядом есть категория»;
+    /// false — «в радиусе нет категории». Радиус обязателен: без него критерий
+    /// либо всегда истинен, либо всегда ложен, и это неочевидно пользователю.
+    /// </summary>
+    private static bool MatchNearbyCategory(
+        WorldPoint candidate,
+        string type,
+        IReadOnlyDictionary<string, string> parameters,
+        WorldPointIndex index,
+        bool expectPresent,
+        out bool result,
+        out string message)
+    {
+        result = false;
+
+        if (!parameters.TryGetValue("value", out var category) || string.IsNullOrWhiteSpace(category))
+        {
+            message = $"Критерий {type}: не задана категория value.";
+            return false;
+        }
+
+        if (!TryGetDouble(parameters, "meters", out var meters))
+        {
+            message = $"Критерий {type}: не задано числовое расстояние meters.";
+            return false;
+        }
+
+        // Радиус 0 бессмыслен: ни один сосед не может быть «на нулевом расстоянии»,
+        // поэтому «рядом есть» всегда ложно, а «рядом нет» — всегда истинно.
+        // Это формально верно, но выглядит как сломанный критерий, поэтому радиус
+        // требуется строго положительным.
+        if (meters <= 0)
+        {
+            message = $"Критерий {type}: радиус должен быть больше нуля.";
+            return false;
+        }
+
+        var neighbours = index.ByCategory(category);
+        var found = neighbours.Any(neighbour =>
+            !ReferenceEquals(neighbour, candidate) &&
+            !neighbour.Id.Equals(candidate.Id, StringComparison.OrdinalIgnoreCase) &&
+            Distance(candidate.Position, neighbour.Position) <= meters);
+
+        result = expectPresent ? found : !found;
+        message = string.Empty;
+        return true;
     }
 
     private static bool MatchesHistory(
@@ -336,18 +505,110 @@ public sealed class LocationResolver
          value.MinGameHoursSinceLastSelection.HasValue ||
          value.MinRealHoursSinceLastSelection.HasValue);
 
+    /// <summary>
+    /// Проверяет параметры критериев, добавленных вместе с соседством.
+    ///
+    /// Зачем отдельная проверка: `MatchesAll` при неоценимом критерии добавляет
+    /// диагностику и ПРОПУСКАЕТ точку (не отбраковывает). Для фильтрующих
+    /// критериев это терпимо, но у критерия соседства пропущенный радиус означал
+    /// бы «условие не проверялось», и запрос вернул бы весь мир — что выглядит
+    /// как «критерий ничего не делает».
+    ///
+    /// Проверяются только НОВЫЕ критерии: менять поведение уже опубликованных
+    /// (например `CategoryIs` без значения) в этой правке не следует — на них
+    /// может опираться существующий контент.
+    /// </summary>
+    private static string? CriterionParameterProblem(LocationCriterion criterion)
+    {
+        var type = criterion.Type.Trim();
+        var parameters = criterion.SafeParameters;
+
+        var isNearby = type.Equals("categorywithinnearby", StringComparison.OrdinalIgnoreCase) ||
+                       type.Equals("nearbycategory", StringComparison.OrdinalIgnoreCase) ||
+                       type.Equals("categorynotwithinnearby", StringComparison.OrdinalIgnoreCase) ||
+                       type.Equals("nonearbycategory", StringComparison.OrdinalIgnoreCase);
+
+        if (isNearby)
+        {
+            if (!parameters.TryGetValue("value", out var category) || string.IsNullOrWhiteSpace(category))
+                return $"Критерий {type}: не задана категория value.";
+
+            if (!TryGetDouble(parameters, "meters", out var meters))
+                return $"Критерий {type}: не задано числовое расстояние meters.";
+
+            if (meters <= 0)
+                return $"Критерий {type}: радиус должен быть больше нуля.";
+        }
+
+        if (type.Equals(MinDistanceCriterion, StringComparison.OrdinalIgnoreCase) &&
+            !TryGetDouble(parameters, "meters", out _))
+        {
+            return $"Критерий {type}: не задано числовое расстояние meters.";
+        }
+
+        return null;
+    }
+
     private static bool IsUnsupportedCriterion(LocationCriterion item) => IsUnsupported(item.Type);
 
     private static bool IsUnsupported(string? type) =>
         string.IsNullOrWhiteSpace(type) ||
-        !new[]
+        !SupportedCriteria.Contains(type.Trim(), StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// Критерий, задающий минимальное расстояние между ВЫБРАННЫМИ точками.
+    ///
+    /// Он не отбраковывает кандидатов, а управляет разбросом раундов, поэтому
+    /// обрабатывается отдельно от остальных критериев.
+    /// </summary>
+    private const string MinDistanceCriterion = "minDistanceBetweenCandidates";
+
+    private static readonly string[] SupportedCriteria =
+    [
+        "categoryis", "worldpointcategoryis",
+        "categorycontains", "worldpointcategorycontains",
+        "namecontains", "worldpointnamecontains",
+        "withindistanceofpoint", "fartherthanpoint",
+        "excludecategory",
+        "categorywithinnearby", "nearbycategory",
+        "categorynotwithinnearby", "nonearbycategory",
+        MinDistanceCriterion
+    ];
+
+    /// <summary>
+    /// Индекс мира по категориям.
+    ///
+    /// Критерии соседства проверяют окрестность КАЖДОГО кандидата, поэтому парный
+    /// перебор был бы квадратичным (5192 точки — около 27 млн вычислений
+    /// расстояния на прогон). Здесь заранее сгруппированы точки по категории, и
+    /// каждая проверка идёт только по точкам искомой категории.
+    ///
+    /// Неизменяемость намеренна: тест и разрешение не должны менять мир.
+    /// </summary>
+    private sealed class WorldPointIndex
+    {
+        private readonly Dictionary<string, IReadOnlyList<WorldPoint>> _byCategory;
+
+        public WorldPointIndex(IReadOnlyList<WorldPoint> points)
         {
-            "categoryis", "worldpointcategoryis",
-            "categorycontains", "worldpointcategorycontains",
-            "namecontains", "worldpointnamecontains",
-            "withindistanceofpoint", "fartherthanpoint",
-            "excludecategory"
-        }.Contains(type.Trim(), StringComparer.OrdinalIgnoreCase);
+            _byCategory = points
+                .GroupBy(point => point.Category ?? string.Empty, StringComparer.OrdinalIgnoreCase)
+                .ToDictionary(
+                    group => group.Key,
+                    group => (IReadOnlyList<WorldPoint>)group.ToArray(),
+                    StringComparer.OrdinalIgnoreCase);
+        }
+
+        /// <summary>
+        /// Точки указанной категории. Пустая коллекция, если категории нет:
+        /// критерий «рядом есть категория» тогда честно не находит соседей, а
+        /// «в радиусе нет категории» — честно их не находит тоже.
+        /// </summary>
+        public IReadOnlyList<WorldPoint> ByCategory(string category) =>
+            _byCategory.TryGetValue(category?.Trim() ?? string.Empty, out var points)
+                ? points
+                : Array.Empty<WorldPoint>();
+    }
 
     private static bool TryGetDouble(
         IReadOnlyDictionary<string, string> parameters,
