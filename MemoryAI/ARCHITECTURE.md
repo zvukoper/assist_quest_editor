@@ -527,3 +527,42 @@ Interaction → завершение. Он должен полностью ра�
 Подробная формулировка цели и границ находится в
 MemoryAI/WORLD_AUTHORING_PLATFORM.md. Authoring UX и Reference/Auto Layout правила
 зафиксированы в MemoryAI/AUTHORING_UX_PLAN.md.
+
+## 8. Location Resource и динамический пространственный подбор
+
+Location является отдельным canonical Content resource и не равен WorldPoint.
+
+- WorldPoint — конкретная точка, которую предоставляет текущий World Provider.
+- Location — логическое авторское место, которое может указывать на фиксированный WorldPoint или динамически искать подходящего кандидата.
+
+Формат .aqlocation хранит:
+- Id, Name, Description;
+- Mode = Fixed | Dynamic;
+- для Fixed — WorldPointId;
+- TriggerRadius;
+- LocationQuery;
+- набор пространственных Criterion;
+- ограничения History.
+
+Spatial Query намеренно не объединён с общим Condition Tree. Общие Conditions отвечают за игровую логику, а Location Query — за поиск географического кандидата среди возможностей World Provider.
+
+Принцип разрешения:
+1. Dynamic Location получает множество кандидатов от World Provider;
+2. применяет поддерживаемые критерии и ограничения истории;
+3. выбирает кандидата случайно;
+4. конкретный результат кэшируется на время текущей Runtime/Simulation session;
+5. явный authoring-тест может выполнить новое независимое разрешение.
+
+Неподдерживаемый Provider-критерий не должен превращаться в true. Resolver обязан вернуть диагностику и Supported = false.
+
+История выбора/посещения является Runtime/Simulation state, а не canonical Location content. В будущем она должна жить через Data Channel/Runtime persistence и использоваться для повторного отбора.
+
+Первый Sandbox набор критериев ограничен доступными WorldPoint данными: категории, имя, расстояние до WorldPoint и отрицательные категории. ETS2/DayZ-specific свойства (тип дома, дорога, объекты сцены, полиция/транспорт и т.п.) подключаются через Provider capabilities, не меняя формат Location.
+
+Планируемые расширения:
+- пользовательские группы точек и критерий InGroup;
+- группы/комбинации групп;
+- provider-specific spatial predicates;
+- полноценная история Selection/Visit;
+- критерии игрового и реального времени;
+- weighted/anti-repeat selection.
