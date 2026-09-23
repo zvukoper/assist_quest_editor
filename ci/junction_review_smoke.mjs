@@ -357,7 +357,331 @@ try {
   if (errors.length)
     throw new Error("pageerror: " + errors.join(" | "));
 
+  // --- Режимы клика: радиобокс ---
+  //
+  // Режим меняет СМЫСЛ клика по карте, поэтому проверяется не «радиокнопки есть
+  // в разметке», а поведение каждого режима. Ошибка здесь тихая: клик просто
+  // делает не то, а панель выглядит исправной.
+
+  // Разметка: три режима и кнопки полигона.
+  for (const value of ["polygon", "delete", "add"]) {
+    if (!junctionsHtml.includes(`value="${value}"`))
+      throw new Error(`В junctions.html нет режима «${value}» в радиобоксе.`);
+  }
+
+  if (!junctionsHtml.includes('id="junctionPolygonClose"') ||
+      !junctionsHtml.includes('id="junctionPolygonClear"'))
+    throw new Error("В junctions.html нет кнопок полигона «Замкнуть» и «Очистить полигон».");
+
+  // По умолчанию — «Добавление»: окно открывается ради проверки списка, и
+  // случайный клик в режиме удаления уносил бы перекрёсток молча.
+  //
+  // Проверка статическая И поведенческая: браузерная ловит снятый checked у
+  // разметки, а статическая — подмену на другой режим (когда `checked` стоит не
+  // у «Добавления», браузерный запрос всё равно вернёт какой-то режим, и без
+  // явного сравнения с разметкой проверка пропустила бы перенос галочки).
+  if (!/name="junctionMode" value="add" checked/.test(junctionsHtml))
+    throw new Error("В разметке режим «Добавление» не отмечен по умолчанию: " +
+      "случайный клик в режиме удаления исключил бы перекрёсток незаметно.");
+
+  const defaultMode = await page.evaluate(() =>
+    document.querySelector('input[name="junctionMode"]:checked')?.value);
+  if (defaultMode !== "add")
+    throw new Error("По умолчанию выбран режим «" + defaultMode + "», а должно быть «add»: " +
+      "случайный клик в режиме удаления исключил бы перекрёсток незаметно.");
+
+  const stateDefault = await page.evaluate(() => window.__assistJunctionReview.getState());
+  if (stateDefault.mode !== "add")
+    throw new Error("Состояние окна не отражает режим по умолчанию: " + stateDefault.mode);
+
+  // Свежий прогон: исключения и добавления от предыдущих шагов сбрасываются
+  // повторной подачей данных, иначе счётчики смешаются.
+  await page.evaluate(p => {
+    window.chrome.webview.listeners.get("message")({ data: JSON.stringify(p) });
+  }, payload);
+  await page.waitForTimeout(120);
+  await page.locator("#junctionFitAll").click();
+  await page.waitForTimeout(150);
+
+  /**
+   * Жёлтые кластеры (узлы) на канвасе.
+   *
+   * Скан по цвету, а не пересчёт worldToScreen: модуль не экспортирует камеру, и
+   * любой внешний расчёт разошёлся бы с ним после fitAll. Кластеры нужны как
+   * настоящие точки попадания для кликов.
+   */
+  const scanClusters = () => page.evaluate(() => {
+    const canvas = document.getElementById("junctionCanvas");
+    const w = canvas.width, h = canvas.height;
+    const data = canvas.getContext("2d").getImageData(0, 0, w, h).data;
+    const dpr = window.devicePixelRatio || 1;
+    const points = [];
+    for (let y = 0; y < h; y += 2) {
+      for (let x = 0; x < w; x += 2) {
+        const i = (y * w + x) * 4;
+        if (Math.abs(data[i] - 255) < 40 && Math.abs(data[i + 1] - 204) < 40 && Math.abs(data[i + 2]) < 60) {
+          const near = points.find(p => Math.hypot(p.x - x / dpr, p.y - y / dpr) < 18);
+          if (near) { near.n++; } else { points.push({ x: x / dpr, y: y / dpr, n: 1 }); }
+        }
+      }
+    }
+    return points;
+  });
+
+  let freshClusters = await scanClusters();
+
+  // Второй проход после повторного «Вся карта»: навигация в предыдущих шагах
+  // приближала камеру, и часть узлов могла уехать за кадр.
+  if (freshClusters.length !== 3) {
+    await page.locator("#junctionFitAll").click();
+    await page.waitForTimeout(220);
+    freshClusters = await scanClusters();
+  }
+
+  if (freshClusters.length !== 3)
+    throw new Error("Перед проверкой режимов на канвасе не 3 жёлтых кластера: " +
+      freshClusters.length);
+
+  // Точка попадания — центр кластера.
+  const hit = i => ({ x: rect.left + freshClusters[i].x, y: rect.top + freshClusters[i].y });
+
+  // Габарит узлов: по нему строятся вершины полигона с запасом, поэтому контур
+  // заведомо накрывает все три узла. Жёсткие координаты углов («30, 30» и т. п.)
+  // НЕ годятся: после fitAll узлы лежат вокруг центра канваса, и фиксированный
+  // прямоугольник оказывается в пустом месте — проверка тогда падала бы на
+  // «выделено 0» при исправном коде.
+  const bounds = freshClusters.reduce((acc, point) => ({
+    minX: Math.min(acc.minX, point.x), maxX: Math.max(acc.maxX, point.x),
+    minY: Math.min(acc.minY, point.y), maxY: Math.max(acc.maxY, point.y)
+  }), { minX: Infinity, maxX: -Infinity, minY: Infinity, maxY: -Infinity });
+
+  const margin = 40;
+  const cornersOnCanvas = [
+    { x: bounds.minX - margin, y: bounds.minY - margin },
+    { x: bounds.maxX + margin, y: bounds.minY - margin },
+    { x: bounds.maxX + margin, y: bounds.maxY + margin },
+    { x: bounds.minX - margin, y: bounds.maxY + margin }
+  ].map(point => ({
+    // Углы прижимаются к видимой части канваса: клик за его пределами
+    // не доходит до обработчика и вершина не ставится.
+    x: Math.max(4, Math.min(900, point.x)),
+    y: Math.max(4, Math.min(600, point.y))
+  }));
+
+  const corners = cornersOnCanvas.map(point => ({
+    x: rect.left + point.x, y: rect.top + point.y
+  }));
+
+  // --- Хувер: курсор и подсветка ---
+  //
+  // Без подсветки автор не знает, какая из плотно стоящих точек отзовётся на
+  // клик, а в режиме удаления это означает потерю не той точки.
+  await page.mouse.move(hit(0).x, hit(0).y);
+  await page.waitForTimeout(120);
+
+  const hovered = await page.evaluate(() => window.__assistJunctionReview.getState().hovered);
+  if (hovered < 0)
+    throw new Error("Наведение на узел не подсвечивает его: hovered=" + hovered);
+
+  const hoverCursor = await page.evaluate(() =>
+    document.getElementById("junctionCanvas").style.cursor);
+  if (hoverCursor !== "pointer")
+    throw new Error("Курсор над узлом не меняется на «pointer»: " + JSON.stringify(hoverCursor));
+
+  // Красная подсветка обязана быть видна ПИКСЕЛЯМИ: одно состояние hovered
+  // прошло бы и при подсветке, которая ничего не рисует.
+  const hoverRed = await countColor({ r: 255, g: 123, b: 114 });
+  if (hoverRed < 20)
+    throw new Error("Подсветка узла под курсором не нарисована: " + hoverRed + " пикселей красного.");
+
+  // Уход курсора с КАНВАСА снимает подсветку. Именно с канваса, а не на пустое
+  // место картины: перемещение внутри канваса уже ловится pointermove, поэтому
+  // такой шаг не измерил бы обработчик pointerleave вообще. Уводим курсор на
+  // панель — там pointermove на канвасе не случается, и без pointerleave
+  // подсвеченная точка осталась бы красной и выглядела бы выбранной.
+  await page.mouse.move(rect.left + 5, rect.top - 30);
+  await page.waitForTimeout(150);
+
+  const afterLeave = await page.evaluate(() => window.__assistJunctionReview.getState().hovered);
+  if (afterLeave !== -1)
+    throw new Error("Уход курсора с канваса не снял подсветку: hovered=" + afterLeave);
+
+  // Возвращаем курсор на канвас: следующие шаги кликают по карте, и уход
+  // курсора на панель оставил бы его вне холста.
+  await page.mouse.move(hit(0).x, hit(0).y);
+  await page.waitForTimeout(100);
+
+  // --- Режим удаления: клик по узлу исключает сразу, без кнопок ---
+  await page.evaluate(() => window.__assistJunctionReview.setMode("delete"));
+  await page.waitForTimeout(80);
+
+  // Радиокнопка обязана показывать ТОТ ЖЕ режим, по которому работает клик.
+  // Расхождение — тихая ложь интерфейса: автор видит «Добавление», а клик
+  // исключает узлы. Проверяется и для программной установки режима, и для
+  // пользовательской (ниже, кликом по радиокнопке).
+  const deleteChecked = await page.evaluate(() =>
+    document.querySelector('input[name="junctionMode"]:checked')?.value);
+  if (deleteChecked !== "delete")
+    throw new Error("После setMode(\"delete\") радиокнопка показывает «" + deleteChecked +
+      "»: панель расходится с режимом, по которому работает клик.");
+
+  const beforeDelete = await page.evaluate(() => window.__assistJunctionReview.getState().excluded);
+  await page.mouse.click(hit(0).x, hit(0).y);
+  await page.waitForTimeout(120);
+
+  const afterDelete = await page.evaluate(() => window.__assistJunctionReview.getState());
+  if (afterDelete.excluded !== beforeDelete + 1)
+    throw new Error("Режим удаления не исключил узел кликом: было " + beforeDelete +
+      ", стало " + afterDelete.excluded);
+
+  // Клик по ПУСТОМУ месту в режиме удаления не должен добавлять узел: автор
+  // промахнулся мимо точки, а не просил создать новую.
+  const addedBefore = afterDelete.added;
+  await page.mouse.click(rect.left + 60, rect.top + 60);
+  await page.waitForTimeout(120);
+
+  const afterEmptyDelete = await page.evaluate(() => window.__assistJunctionReview.getState());
+  if (afterEmptyDelete.added !== addedBefore)
+    throw new Error("В режиме удаления клик по пустому месту добавил узел: " +
+      addedBefore + " -> " + afterEmptyDelete.added);
+
+  // --- Режим выделения многоугольником ---
+  await page.evaluate(() => window.__assistJunctionReview.setMode("polygon"));
+  await page.waitForTimeout(80);
+
+  // Кнопки полигона видны только в своём режиме.
+  const actionsVisible = await page.evaluate(() =>
+    document.getElementById("junctionPolygonActions").classList.contains("visible"));
+  if (!actionsVisible)
+    throw new Error("В режиме выделения кнопки полигона не показаны.");
+
+  // Многоугольник вокруг ВСЕХ узлов: углы посчитаны по габариту узлов с запасом,
+  // поэтому контур заведомо накрывает все три.
+  for (const corner of corners) {
+    await page.mouse.click(corner.x, corner.y);
+    await page.waitForTimeout(60);
+  }
+
+  const polygonState = await page.evaluate(() => window.__assistJunctionReview.getState());
+
+  // Проверка самозамыкания идёт ПЕРВОЙ: если многоугольник замкнулся сам после
+  // третьей вершины, четвёртый клик уже не добавит вершину, и проверка числа
+  // вершин свалилась бы на другой причине, замаскировав настоящий дефект.
+  if (polygonState.polygonClosed)
+    throw new Error("Полигон замкнулся сам, без клика по первой вершине: " +
+      "выделение сработает, пока автор ещё ставит вершины.");
+  if (polygonState.polygonVertices !== 4)
+    throw new Error("Клики в режиме выделения не поставили 4 вершины полигона: " +
+      polygonState.polygonVertices);
+  if (polygonState.selected !== 0)
+    throw new Error("Незамкнутый полигон уже что-то выделил: " + polygonState.selected);
+
+  // Замыкание: клик по первой вершине. Здесь выделяются все узлы внутри.
+  await page.mouse.click(corners[0].x, corners[0].y);
+  await page.waitForTimeout(150);
+
+  const closedState = await page.evaluate(() => window.__assistJunctionReview.getState());
+  if (!closedState.polygonClosed)
+    throw new Error("Клик по первой вершине не замкнул полигон.");
+  if (closedState.polygonVertices !== 4)
+    throw new Error("Замыкание добавило лишнюю вершину: " + closedState.polygonVertices);
+  if (closedState.selected !== 3)
+    throw new Error("Замыкание полигона выделило не все 3 узла: " + closedState.selected);
+
+  // Очистка полигона снимает и контур, и выделение.
+  //
+  // Проверяется ДО пакетного исключения намеренно: после «Исключить» выделение
+  // пусто по построению, и сброс в «Очистить» остался бы непроверенным.
+  await page.locator("#junctionPolygonClear").click();
+  await page.waitForTimeout(150);
+
+  const cleared = await page.evaluate(() => window.__assistJunctionReview.getState());
+  if (cleared.polygonVertices !== 0 || cleared.polygonClosed || cleared.selected !== 0)
+    throw new Error("«Очистить полигон» не сбросил контур и выделение: " +
+      JSON.stringify(cleared));
+
+  // Очистка полигона не трогает РАБОТУ автора: исключённые узлы и добавленные
+  // точки обязаны остаться. Кнопка называется «Очистить полигон», а не
+  // «отменить всё», и тихое стирание правок здесь было бы потерей работы.
+  if (cleared.excluded !== 1)
+    throw new Error("«Очистить полигон» тронул исключённые узлы: было 1, стало " +
+      cleared.excluded);
+
+  // Пакетное исключение: то, ради чего режим и заведён. Контур рисуется заново,
+  // потому что предыдущий только что очищен.
+  for (const corner of corners) {
+    await page.mouse.click(corner.x, corner.y);
+    await page.waitForTimeout(50);
+  }
+  await page.mouse.click(corners[0].x, corners[0].y);
+  await page.waitForTimeout(150);
+
+  const reselected = await page.evaluate(() => window.__assistJunctionReview.getState());
+  if (reselected.selected !== 3)
+    throw new Error("Повторное замыкание полигона выделило не все 3 узла: " +
+      reselected.selected);
+
+  const excludedBefore = reselected.excluded;
+  await page.locator("#junctionExclude").click();
+  await page.waitForTimeout(150);
+
+  const bulk = await page.evaluate(() => window.__assistJunctionReview.getState());
+
+  // Ровно +2, а не +3: один узел уже исключён в проверке режима удаления, и
+  // повторное исключение не должно добавлять дубль. Точное число проверяет СРАЗУ
+  // два инварианта — пакетное исключение работает и защита от двойного счёта
+  // держится (иначе в файле правок оказались бы две записи об одном узле).
+  if (bulk.excluded !== excludedBefore + 2)
+    throw new Error("Пакетное исключение по полигону: ожидалось +2 (третий узел уже " +
+      "был исключён ранее, дубль не должен появиться), было " + excludedBefore +
+      ", стало " + bulk.excluded);
+
+  // Смена режима убирает кнопки полигона И сбрасывает контур с выделением:
+  // незамкнутый контур в другом режиме не имеет смысла, а оставшееся выделение
+  // выглядело бы как результат нового режима.
+  for (const corner of corners) {
+    await page.mouse.click(corner.x, corner.y);
+    await page.waitForTimeout(50);
+  }
+  await page.mouse.click(corners[0].x, corners[0].y);
+  await page.waitForTimeout(150);
+
+  const beforeSwitch = await page.evaluate(() => window.__assistJunctionReview.getState());
+  if (!beforeSwitch.polygonClosed || beforeSwitch.polygonVertices !== 4)
+    throw new Error("Перед сменой режима полигон не нарисован: " +
+      JSON.stringify(beforeSwitch));
+
+  // Режим меняется КЛИКОМ по радиокнопке — так, как это делает автор. Это
+  // проверяет и обработчик change, и то, что панель остаётся согласованной.
+  await page.locator('input[name="junctionMode"][value="add"]').click();
+  await page.waitForTimeout(120);
+
+  const backToAdd = await page.evaluate(() => ({
+    visible: document.getElementById("junctionPolygonActions").classList.contains("visible"),
+    checked: document.querySelector('input[name="junctionMode"]:checked')?.value,
+    state: window.__assistJunctionReview.getState()
+  }));
+
+  // Порядок ассертов: СНАЧАЛА причина, потом следствие. Смена режима — причина,
+  // видимость кнопок полигона — следствие. При обратном порядке сломанный
+  // обработчик change сообщал бы «кнопки остались видны», и автор искал бы
+  // дефект в CSS вместо обработчика.
+  if (backToAdd.checked !== "add" || backToAdd.state.mode !== "add")
+    throw new Error("Клик по радиокнопке «Добавление» не переключил режим: " +
+      JSON.stringify(backToAdd.checked) + " / " + backToAdd.state.mode);
+  if (backToAdd.visible)
+    throw new Error("Кнопки полигона остались видны вне режима выделения.");
+  if (backToAdd.state.polygonVertices !== 0 || backToAdd.state.polygonClosed)
+    throw new Error("Смена режима не сбросила полигон: " + JSON.stringify(backToAdd.state));
+  if (backToAdd.state.selected !== 0)
+    throw new Error("Смена режима оставила выделение: " + backToAdd.state.selected);
+
+  if (errors.length)
+    throw new Error("pageerror: " + errors.join(" | "));
+
   console.log("Окно проверки перекрёстков: OK (узлы, порядок, мультивыбор, исключение, добавление)");
+  console.log("Режимы клика: OK (выделение полигоном, удаление кликом, добавление)");
+  console.log("Хувер: OK (курсор pointer, красная подсветка, снятие при уходе)");
 } finally {
   await browser.close();
 }

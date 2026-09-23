@@ -38,8 +38,32 @@
   let dragMoved = false;
   let dragStart = null;
 
+  /**
+   * Режим решает, что делает КЛИК по карте.
+   *
+   * "add" — добавление (поведение по умолчанию, как было), "delete" — клик по узлу
+   * сразу исключает его, "polygon" — рисование многоугольника с пакетным
+   * выделением узлов внутри.
+   *
+   * По умолчанию «Добавление», а не «Удаление», намеренно: окно открывается ради
+   * проверки списка, и случайный клик в режиме удаления уносил бы перекрёсток
+   * молча. Добавление видно (зелёная точка) и снимается повторным кликом.
+   */
+  let mode = "add";
+
+  let polygon = [];            // нарисованный многоугольник: [{x,z}]
+  let polygonClosed = false;   // замкнут ли он (замкнутый = выделение применено)
+  let hoverIndex = -1;         // узел под курсором (для подсветки); -1 — нет
+
+  /** Замкнут ли многоугольник и годится ли он как область. */
+  function polygonActive() {
+    return polygonClosed && polygon.length >= 3;
+  }
+
   const POINT_RADIUS = 6;      // радиус попадания курсора в узел, пиксели
   const ACCENT = "#ffcc00";    // жёлтая точка — найденный перекрёсток
+  const HOVER_COLOR = "#ff7b72";
+  const POLYGON_COLOR = "#4dc3ff";
 
   /** Радиус, в пределах которого координата считается тем же узлом. Должен
    *  совпадать с JunctionReview.MatchRadius в Host, иначе пометка «исключён»
@@ -78,6 +102,33 @@
       x: camera.cx + (x - s.width / 2) * camera.mpp,
       z: camera.cz + (y - s.height / 2) * camera.mpp
     };
+  }
+
+  /**
+   * Точка внутри многоугольника (трассировка луча).
+   *
+   * Условие (zi > z) !== (zj > z) отбирает рёбра, которые пересекает
+   * горизонтальный луч вправо от точки; каждое пересечение меняет ответ на
+   * противоположный. Чётность и есть ответ: для замкнутого контура нечётное
+   * число пересечений означает «внутри».
+   *
+   * Сравнение строгое (>), а не (>=), чтобы вершина, лежащая ровно на луче,
+   * попадала ровно в одно из двух смежных рёбер: иначе она посчиталась бы
+   * дважды, и чётность сломалась бы. Тот же алгоритм в домене
+   * (CityBoundaryGeometry.ContainsPoint) — расходиться они не должны.
+   */
+  function pointInPolygon(outline, x, z) {
+    if (!Array.isArray(outline) || outline.length < 3) return false;
+
+    let inside = false;
+    for (let i = 0, j = outline.length - 1; i < outline.length; j = i++) {
+      const xi = outline[i].x, zi = outline[i].z;
+      const xj = outline[j].x, zj = outline[j].z;
+
+      if ((zi > z) !== (zj > z) && x < ((xj - xi) * (z - zi)) / (zj - zi) + xi) inside = !inside;
+    }
+
+    return inside;
   }
 
   /** Подгоняет камеру под все данные: дороги, города и узлы. */
@@ -147,6 +198,7 @@
 
     drawRoads(ctx, width, height);
     drawCities(ctx);
+    drawPolygon(ctx);
     drawJunctions(ctx);
   }
 
@@ -208,12 +260,13 @@
 
       const isFocused = index === focused;
       const isSelected = selected.has(index);
+      const isHovered = index === hoverIndex;
 
       // Кольцо выбора рисуется ПОД точкой и крупнее её: иначе на плотной карте
       // выбранный узел не отличался бы от соседних.
       if (isSelected) {
         ctx.save();
-        ctx.strokeStyle = "#4dc3ff";
+        ctx.strokeStyle = POLYGON_COLOR;
         ctx.lineWidth = 2;
         ctx.beginPath();
         ctx.arc(screen.x, screen.y, 11, 0, Math.PI * 2);
@@ -231,6 +284,23 @@
         ctx.restore();
       }
 
+      // Подсветка под курсором: автор обязан видеть, КАКАЯ точка выделится,
+      // прежде чем нажмёт. Крупный красный маркер, а не тонкое кольцо — на
+      // плотной карте города тонкое кольцо теряется среди соседних узлов.
+      if (isHovered) {
+        ctx.save();
+        ctx.fillStyle = HOVER_COLOR;
+        ctx.beginPath();
+        ctx.arc(screen.x, screen.y, 9, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.strokeStyle = "#ffffff";
+        ctx.lineWidth = 4;
+        ctx.beginPath();
+        ctx.arc(screen.x, screen.y, 9, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.restore();
+      }
+
       ctx.beginPath();
       ctx.fillStyle = ACCENT;
       ctx.arc(screen.x, screen.y, 5, 0, Math.PI * 2);
@@ -238,6 +308,57 @@
     });
 
     drawAddedPoints(ctx);
+  }
+
+  /**
+   * Нарисованный многоугольник выделения.
+   *
+   * Незамкнутый рисуется линией (автор ещё ставит вершины), замкнутый —
+   * полупрозрачной заливкой: тогда видно саму ОБЛАСТЬ, и понятно, какие узлы в
+   * неё попали, ещё до того как автор нажмёт «Замкнуть».
+   */
+  function drawPolygon(ctx) {
+    if (!polygon.length) return;
+
+    const screens = polygon.map(point => worldToScreen(point.x, point.z));
+
+    ctx.save();
+
+    if (polygonActive()) {
+      ctx.beginPath();
+      ctx.moveTo(screens[0].x, screens[0].y);
+      for (let i = 1; i < screens.length; i++) ctx.lineTo(screens[i].x, screens[i].y);
+      ctx.closePath();
+      ctx.fillStyle = "rgba(77,195,255,.14)";
+      ctx.fill();
+    }
+
+    ctx.strokeStyle = POLYGON_COLOR;
+    ctx.lineWidth = 2;
+    ctx.lineJoin = "round";
+    ctx.beginPath();
+    ctx.moveTo(screens[0].x, screens[0].y);
+    for (let i = 1; i < screens.length; i++) ctx.lineTo(screens[i].x, screens[i].y);
+    if (polygonActive()) ctx.closePath();
+    ctx.stroke();
+
+    // Первая вершина крупнее и с кольцом: по ней замыкают многоугольник.
+    screens.forEach((screen, index) => {
+      ctx.beginPath();
+      ctx.fillStyle = index === 0 ? "#ffffff" : POLYGON_COLOR;
+      ctx.arc(screen.x, screen.y, index === 0 ? 5 : 4, 0, Math.PI * 2);
+      ctx.fill();
+
+      if (index === 0) {
+        ctx.strokeStyle = POLYGON_COLOR;
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(screen.x, screen.y, 11, 0, Math.PI * 2);
+        ctx.stroke();
+      }
+    });
+
+    ctx.restore();
   }
 
   /**
@@ -297,8 +418,94 @@
     counter.textContent = position;
     if (hint) {
       hint.textContent = ` · выбрано ${selected.size}` +
-        ` · исключено ${excluded.length} · добавлено ${added.length}`;
+        ` · исключено ${excluded.length} · добавлено ${added.length}` +
+        (mode === "polygon" ? ` · вершин полигона ${polygon.length}` : "");
     }
+  }
+
+  /**
+   * Обновляет курсор и подсветку под курсором.
+   *
+   * Автор должен видеть, ЧТО произойдёт при клике, до самого клика: в режиме
+   * удаления курсор становится перекрестием прицела над узлом (клик исключит
+   * именно его), в остальных режимах это обычный крестик рисования.
+   */
+  function updateCursor(px, py) {
+    if (!canvas) return;
+
+    const nextHover = junctionAt(px, py);
+
+    if (nextHover !== hoverIndex) {
+      hoverIndex = nextHover;
+      draw();
+    }
+
+    // Курсор: «указатель» над узлом (клик сработает), иначе прицел рисования.
+    canvas.style.cursor = hoverIndex >= 0 ? "pointer" : "crosshair";
+  }
+
+  /**
+   * Замыкает многоугольник и выделяет ВСЕ узлы внутри него.
+   *
+   * Пакетное выделение — то, ради чего режим и заведён: крупные развязки и
+   * логистические площадки автор вычищает пачками, а не по одному узлу.
+   */
+  function closePolygon() {
+    if (polygon.length < 3) {
+      if (hint) hint.textContent = " · для выделения нужно не меньше трёх вершин полигона";
+      return;
+    }
+
+    polygonClosed = true;
+    applyPolygonSelection();
+    log("INFO", "Многоугольник замкнут.", { vertices: polygon.length, selected: selected.size });
+    updateStatus();
+    draw();
+  }
+
+  /** Выделяет все узлы внутри замкнутого многоугольника. */
+  function applyPolygonSelection() {
+    if (!polygonActive()) return;
+
+    selected.clear();
+    junctions.forEach((junction, index) => {
+      if (pointInPolygon(polygon, junction.x, junction.z)) selected.add(index);
+    });
+  }
+
+  /** Стирает многоугольник и снимает выделение, которое он поставил. */
+  function clearPolygon() {
+    polygon = [];
+    polygonClosed = false;
+    selected.clear();
+    log("INFO", "Полигон выделения очищен.");
+    updateStatus();
+    draw();
+  }
+
+  /** Добавляет вершину многоугольника; клик рядом с первой ЗАМЫКАЕТ его. */
+  function addPolygonVertex(world) {
+    // Замкнутый многоугольник больше не перечерчивается: иначе автор случайно
+    // разрушил бы только что применённое выделение. Сначала «Очистить полигон».
+    if (polygonActive()) {
+      if (hint) hint.textContent = " · полигон замкнут: очистите его, чтобы нарисовать новый";
+      return;
+    }
+
+    // Клик рядом с первой вершиной замыкает многоугольник, а не добавляет
+    // вершину: промах на пару пикселей не должен портить область.
+    if (polygon.length >= 3) {
+      const first = worldToScreen(polygon[0].x, polygon[0].z);
+      const current = worldToScreen(world.x, world.z);
+      if (Math.hypot(first.x - current.x, first.y - current.y) <= POINT_RADIUS + 6) {
+        closePolygon();
+        return;
+      }
+    }
+
+    polygon.push(world);
+    updateStatus();
+    draw();
   }
 
   function moveFocus(step) {
@@ -315,6 +522,23 @@
   }
 
   /**
+   * Исключает ОДИН узел по индексу — для режима удаления.
+   *
+   * Общая часть с excludeSelected, чтобы правила не разъезжались: узел попадает
+   * в список исключений один раз, а если он был добавлен вручную, добавление
+   * снимается. Иначе узел остался бы и добавленным, и исключённым.
+   */
+  function excludeJunction(index) {
+    const junction = junctions[index];
+    if (!junction) return;
+
+    if (!excluded.some(point => Math.hypot(point.x - junction.x, point.z - junction.z) <= MATCH_RADIUS))
+      excluded.push({ x: junction.x, z: junction.z });
+
+    added = added.filter(point => Math.hypot(point.x - junction.x, point.z - junction.z) > MATCH_RADIUS);
+  }
+
+  /**
    * Исключает выбранные узлы.
    *
    * Выбранные узлы не удаляются из списка сразу: они убираются только при
@@ -324,15 +548,7 @@
   function excludeSelected() {
     if (!selected.size) return;
 
-    for (const index of selected) {
-      const junction = junctions[index];
-      if (!junction) continue;
-      if (!excluded.some(point => Math.hypot(point.x - junction.x, point.z - junction.z) <= MATCH_RADIUS))
-        excluded.push({ x: junction.x, z: junction.z });
-      // Если узел был добавлен вручную, исключение должно снять добавление:
-      // иначе он остался бы в списке как добавленный и как исключённый.
-      added = added.filter(point => Math.hypot(point.x - junction.x, point.z - junction.z) > MATCH_RADIUS);
-    }
+    for (const index of selected) excludeJunction(index);
 
     log("INFO", "Исключены перекрёстки.", { count: selected.size });
     selected.clear();
@@ -423,7 +639,16 @@
   });
 
   canvas?.addEventListener("pointermove", event => {
-    if (!dragging) return;
+    const rect = canvas.getBoundingClientRect();
+    const px = event.clientX - rect.left;
+    const py = event.clientY - rect.top;
+
+    if (!dragging) {
+      // Подсветка и курсор работают и без нажатой кнопки: автор ведёт мышь по
+      // карте и должен видеть, какая точка отзовётся на клик.
+      updateCursor(px, py);
+      return;
+    }
 
     const dx = event.clientX - dragStart.x;
     const dy = event.clientY - dragStart.y;
@@ -435,6 +660,14 @@
     dragMoved = true;
     camera.cx = dragStart.cx - dx * camera.mpp;
     camera.cz = dragStart.cz - dy * camera.mpp;
+    draw();
+  });
+
+  // Уход курсора с карты снимает подсветку: иначе последняя подсвеченная точка
+  // осталась бы красной и выглядела бы выбранной.
+  canvas?.addEventListener("pointerleave", () => {
+    if (hoverIndex < 0) return;
+    hoverIndex = -1;
     draw();
   });
 
@@ -451,6 +684,36 @@
     // одним нажатием. Обычный клик одиночный, иначе нельзя было бы перейти к
     // одному узлу, не потеряв предыдущий выбор.
     const multi = event.ctrlKey || event.metaKey;
+
+    // --- Режим удаления: клик по узлу сразу исключает его, без кнопок ---
+    //
+    // Клик по ПУСТОМУ месту здесь ничего не делает: иначе автор, промахнувшись
+    // мимо мелкой точки, ставил бы зелёный узел в режиме, где ожидает удаления.
+    if (mode === "delete") {
+      const removeIndex = junctionAt(px, py);
+      if (removeIndex >= 0) {
+        excludeJunction(removeIndex);
+        selected.delete(removeIndex);
+        if (focused === removeIndex) focused = -1;
+        // Пересчёт подсветки: исключённый узел остаётся в списке до сохранения,
+        // но повторный клик по нему уже ничего не изменит.
+        hoverIndex = junctionAt(px, py);
+        log("INFO", "Перекрёсток исключён кликом.", { index: removeIndex });
+        updateStatus();
+        draw();
+      }
+      return;
+    }
+
+    // --- Режим выделения многоугольником ---
+    if (mode === "polygon") {
+      // Клик по узлу внутри незамкнутого полигона не должен ставить вершину:
+      // автор промахнулся мимо контура, а не продолжил рисовать.
+      if (!polygonActive()) addPolygonVertex(screenToWorld(px, py));
+      return;
+    }
+
+    // --- Режим добавления (по умолчанию) ---
 
     // Сначала проверяем зелёные точки: они рисуются поверх и должны отзываться
     // на клик даже рядом с жёлтым узлом. Мультивыбор работает только по найденным
@@ -518,6 +781,55 @@
   document.getElementById("junctionSave")?.addEventListener("click", saveReview);
   document.getElementById("junctionFitAll")?.addEventListener("click", () => { fitAll(); draw(); });
   document.getElementById("junctionReload")?.addEventListener("click", () => send({ action: "reload_junction_review" }));
+
+  /**
+   * Переключает режим клика.
+   *
+   * При смене режима многоугольник и подсветка СБРАСЫВАЮТСЯ: незамкнутый контур
+   * в режиме удаления не имеет смысла, а оставшееся выделение выглядело бы как
+   * результат нового режима. Сброс — не «потеря работы»: выделение применяется
+   * при замыкании, и до этого оно ничего не значит.
+   */
+  function setMode(next) {
+    mode = next;
+
+    polygon = [];
+    polygonClosed = false;
+    hoverIndex = -1;
+    selected.clear();
+
+    // Радиокнопки синхронизируются ЗДЕСЬ, а не только обработчиком change:
+    // режим можно выставить и программно (из проверок), и тогда панель
+    // показывала бы один режим, а клик работал бы по другому — радиобокс врал бы.
+    document.querySelectorAll('input[name="junctionMode"]').forEach(input => {
+      input.checked = input.value === mode;
+    });
+
+    // Кнопки полигона видны только в своём режиме: в остальных они недействительны.
+    const actions = document.getElementById("junctionPolygonActions");
+    if (actions) actions.classList.toggle("visible", mode === "polygon");
+
+    if (hint) {
+      hint.textContent = mode === "polygon"
+        ? " · клик — вершина многоугольника, замкните его на первой точке"
+        : mode === "delete"
+          ? " · клик по узлу исключает его сразу"
+          : " · клик по узлу — выбрать, Ctrl+клик — мультивыбор, клик по пустому месту — добавить узел";
+    }
+
+    if (canvas) canvas.style.cursor = "crosshair";
+    updateStatus();
+    draw();
+  }
+
+  document.querySelectorAll('input[name="junctionMode"]').forEach(input => {
+    input.addEventListener("change", () => {
+      if (input.checked) setMode(input.value);
+    });
+  });
+
+  document.getElementById("junctionPolygonClose")?.addEventListener("click", closePolygon);
+  document.getElementById("junctionPolygonClear")?.addEventListener("click", clearPolygon);
 
   // --- Приём сообщений Host ---
 
@@ -602,6 +914,7 @@
   // сломанным, пока данные идут.
   window.__assistJunctionReview = {
     applyReview,
+    setMode,
     getState: () => ({
       junctions: junctions.length,
       selected: selected.size,
@@ -613,7 +926,16 @@
       // увеличивает счётчик. По одному индексу подмена порядка обхода
       // (например, сортировка по координатам) осталась бы незамеченной.
       focusX: focused >= 0 && junctions[focused] ? junctions[focused].x : null,
-      focusZ: focused >= 0 && junctions[focused] ? junctions[focused].z : null
+      focusZ: focused >= 0 && junctions[focused] ? junctions[focused].z : null,
+      // Режим и состояние многоугольника: по ним проверка видит, что клик
+      // обработан ИМЕННО тем режимом, который выбран.
+      mode,
+      polygonVertices: polygon.length,
+      polygonClosed,
+      hovered: hoverIndex,
+      // Сколько узлов выделено многоугольником — отдельно от общего selected,
+      // чтобы проверка могла отличить пакетное выделение от одиночного клика.
+      polygonSelected: polygonActive() && selected.size > 0
     })
   };
 
