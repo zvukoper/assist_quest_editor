@@ -984,7 +984,7 @@
     seconds: "Секунды", conditionId: "Condition Id", eventType: "Тип события",
     status: "Статус", step: "Этап", key: "Ключ", value: "Значение", sceneId: "Scene Id",
     rewardId: "Reward Id", itemId: "Предмет Id", count: "Количество",
-    faction: "Фракция", amount: "Количество", outputCount: "Количество выходов"
+    faction: "Фракция", npcId: "НПЦ Id", amount: "Количество", outputCount: "Количество выходов"
   };
 
   /**
@@ -1877,6 +1877,7 @@
     if (data?.type === "quest_graph") {
       questGraph = data.graph;
       questActivation = data.activation || null;
+      sceneCatalog = Array.isArray(data.sceneCatalog) ? data.sceneCatalog : sceneCatalog;
       itemCatalog = Array.isArray(data.itemCatalog) ? data.itemCatalog : [];
       npcCatalog = Array.isArray(data.npcCatalog) ? data.npcCatalog : [];
       worldPointCatalog = Array.isArray(data.worldPointCatalog) ? data.worldPointCatalog : [];
