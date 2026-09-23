@@ -594,6 +594,10 @@ public sealed class MainForm : WebViewForm
     {
         switch (e.Action)
         {
+            case "open_editor":
+                OpenEditor(e.Editor ?? "graph");
+                break;
+
             case "graph_open_scene":
                 // Источник нужен, чтобы вернуть Scene в тот Quest, из которого ушли:
                 // открытых нодовых редакторов может быть несколько.
