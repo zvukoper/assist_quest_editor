@@ -38,6 +38,7 @@ public sealed class QuestRuntime : IQuestRuntimeController
         _graphStore = graphStore ?? throw new ArgumentNullException(nameof(graphStore));
         _hub = hub ?? throw new ArgumentNullException(nameof(hub));
         _sceneRuntime = sceneRuntime;
+        _locationResolver = locationResolver;
         State = new QuestRuntimeState(
             graphStore.Value.Id,
             null,
@@ -640,10 +641,13 @@ public sealed class QuestRuntime : IQuestRuntimeController
 
     private bool EvaluateDistance(IReadOnlyDictionary<string, string> parameters)
     {
+        var locationId = GetParameter(parameters, "locationId");
         var pointId = GetParameter(parameters, "worldPointId", GetParameter(parameters, "right"));
         var radius = ParseDouble(GetParameter(parameters, "triggerRadius"), 35);
-        var point = _hub.Get<WorldState>("world").Value.Points
-            .FirstOrDefault(x => x.Id.Equals(pointId, StringComparison.OrdinalIgnoreCase));
+        var point = !string.IsNullOrWhiteSpace(locationId)
+            ? _locationResolver?.Resolve(locationId)
+            : _hub.Get<WorldState>("world").Value.Points
+                .FirstOrDefault(x => x.Id.Equals(pointId, StringComparison.OrdinalIgnoreCase));
         if (point is null)
         {
             return false;
@@ -660,15 +664,18 @@ public sealed class QuestRuntime : IQuestRuntimeController
     private bool EvaluateInteraction(QuestNode node)
     {
         var parameters = node.Parameters;
+        var locationId = GetParameter(parameters, "locationId");
         var pointId = GetParameter(parameters, "worldPointId");
         var radius = ParseDouble(GetParameter(parameters, "triggerRadius"), 35);
-        if (string.IsNullOrWhiteSpace(pointId))
+        if (string.IsNullOrWhiteSpace(locationId) && string.IsNullOrWhiteSpace(pointId))
         {
             return false;
         }
 
-        var point = _hub.Get<WorldState>("world").Value.Points
-            .FirstOrDefault(x => x.Id.Equals(pointId, StringComparison.OrdinalIgnoreCase));
+        var point = !string.IsNullOrWhiteSpace(locationId)
+            ? _locationResolver?.Resolve(locationId)
+            : _hub.Get<WorldState>("world").Value.Points
+                .FirstOrDefault(x => x.Id.Equals(pointId, StringComparison.OrdinalIgnoreCase));
         if (point is null)
         {
             return false;
