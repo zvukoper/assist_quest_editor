@@ -192,7 +192,9 @@
         "<span class='badge " + (questActivation ? "blue" : "accent") + "' id='activationBadge' " +
           "title='Точка и режим запуска квеста в игре. Именно это поле задаёт место маркера квеста на карте Симулятора; параметр worldPointId у ноды Interaction — только цель Runtime.'>" +
           escapeHtml(questActivation
-            ? "Запуск: " + questActivation.mode + (questActivation.worldPointId ? " · " + questActivation.worldPointId : "")
+            ? "Запуск: " + questActivation.mode +
+              (questActivation.locationId ? " · " + questActivation.locationId :
+                questActivation.worldPointId ? " · " + questActivation.worldPointId : "")
             : "Запуск не задан") + "</span>" +
         "<button class='toolButton' id='editActivation'>Активация…</button>" +
       "</div>" +
@@ -1293,9 +1295,10 @@
     // одном месте, а маркер квеста на карте берётся только из активации.
     ins.querySelector("#useNodeAsActivation")?.addEventListener("click", () => {
       const parameters = collectParameters(ins);
+      const locationId = (parameters.locationId || "").trim();
       const worldPointId = (parameters.worldPointId || "").trim();
-      if (!worldPointId) {
-        window.alert("У ноды не задан параметр worldPointId.");
+      if (!locationId && !worldPointId) {
+        window.alert("У ноды не задан параметр locationId или worldPointId.");
         return;
       }
 
@@ -1303,6 +1306,7 @@
       send({
         action: "set_activation",
         mode: "Proximity",
+        locationId,
         worldPointId,
         radius: Number.isFinite(radius) && radius > 0 ? radius : 35
       });
@@ -1929,6 +1933,7 @@
       sceneCatalog = Array.isArray(data.sceneCatalog) ? data.sceneCatalog : sceneCatalog;
       itemCatalog = Array.isArray(data.itemCatalog) ? data.itemCatalog : [];
       npcCatalog = Array.isArray(data.npcCatalog) ? data.npcCatalog : [];
+      locationCatalog = Array.isArray(data.locationCatalog) ? data.locationCatalog : locationCatalog;
       worldPointCatalog = Array.isArray(data.worldPointCatalog) ? data.worldPointCatalog : [];
       graphDocument = {
         path: data.documentPath || "",
