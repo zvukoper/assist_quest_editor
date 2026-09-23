@@ -112,6 +112,25 @@ public sealed class LocationStore
 
         EnsureInsideRoot(path);
 
+        if (_items.TryGetValue(definition.Id, out var existing) &&
+            !string.Equals(Path.GetFullPath(existing.Path), path, StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidOperationException(
+                "Location с ID «" + definition.Id + "» уже существует в другом файле.");
+        }
+
+        foreach (var stale in _items
+                     .Where(item => string.Equals(
+                         Path.GetFullPath(item.Value.Path),
+                         path,
+                         StringComparison.OrdinalIgnoreCase) &&
+                         !item.Key.Equals(definition.Id, StringComparison.OrdinalIgnoreCase))
+                     .Select(item => item.Key)
+                     .ToArray())
+        {
+            _items.Remove(stale);
+        }
+
         var document = new LocationDefinitionDocument(
             SupportedSchemaVersion,
             "aqlocation",
