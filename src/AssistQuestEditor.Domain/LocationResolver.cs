@@ -134,12 +134,6 @@ public sealed class LocationResolver
                 diagnostics.Add("Часть критериев требует capability текущего World Provider.");
             }
 
-            if (history is null &&
-                HasHistoryCriteria(location.Query?.History))
-            {
-                diagnostics.Add("История использования пока не подключена к этому Provider/Runtime.");
-            }
-
             diagnostics.Add("Подходящих кандидатов нет.");
             return new LocationTestResult(location.Id, !criteria.Any(IsUnsupportedCriterion),
                 rounds, Array.Empty<LocationTestCandidate>(), diagnostics);
@@ -319,6 +313,11 @@ public sealed class LocationResolver
 
         return true;
     }
+
+    private static bool HasUnsupportedHistoryCriteria(LocationHistoryConstraints? value) =>
+        value is not null &&
+        (value.MinGameHoursSinceLastVisit.HasValue ||
+         value.MinGameHoursSinceLastSelection.HasValue);
 
     private static bool HasHistoryCriteria(LocationHistoryConstraints? value) =>
         value is not null &&
