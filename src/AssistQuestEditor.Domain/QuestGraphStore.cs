@@ -76,13 +76,16 @@ public sealed class QuestGraphStore
         // Новый узел не должен каждый раз ломать уже вручную расставленный граф.
         // Но агентский/импортированный граф с явно плохими координатами должен
         // автоматически получить пригодный layout.
-        var nodes = QuestGraphLayout.IsObviouslyPoor(graph)
-            ? graph.Nodes
-                .Select(item => QuestGraphLayout.Compute(graph).TryGetValue(item.NodeId, out var position)
+        var positions = QuestGraphLayout.IsObviouslyPoor(graph)
+            ? QuestGraphLayout.Compute(graph)
+            : null;
+        var nodes = positions is null
+            ? graph.Nodes.ToArray()
+            : graph.Nodes
+                .Select(item => positions.TryGetValue(item.NodeId, out var position)
                     ? item with { X = position.X, Y = position.Y }
                     : item)
-                .ToArray()
-            : graph.Nodes.ToArray();
+                .ToArray();
 
         var addedNode = nodes.Single(item => item.NodeId.Equals(node.NodeId, StringComparison.OrdinalIgnoreCase));
         Apply(graph with { Nodes = nodes });
