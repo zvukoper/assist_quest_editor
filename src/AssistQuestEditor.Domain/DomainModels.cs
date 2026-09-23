@@ -30,7 +30,8 @@ public sealed record QuestActivation(
     double Radius = 35,
     string? RequiredReputationNpcId = null,
     int? RequiredReputation = null,
-    bool Repeatable = false);
+    bool Repeatable = false,
+    string? LocationId = null);
 
 public enum SocketDirection
 {
