@@ -908,3 +908,28 @@ input,select,textarea{padding:4px 5px;border-radius:4px;font-size:10px}textarea{
     border-bottom: 1px solid var(--border);
   }
 }
+
+/* лашка «одходящих кандидатов нет» в панели «оследний тест» Location.
+
+   Три вспышки ярко-красным, после чего плашка возвращается к обычному виду:
+   анимация конечная (iteration-count 3, fill-mode forwards с конечным кадром в
+   исходных цветах), а не бесконечная. ласс вешает locationEditor.js  раз
+   на новый результат теста — иначе пульсация перезапускалась бы на каждой
+   перерисовке панели.
+
+   вет вынесен в переменные: яркая вспышка и исходное состояние. ульсирует
+   только фон с рамкой и лёгким свечением, текст не мигает — читаемость
+   сообщения важнее эффекта. */
+@keyframes locationNoticeAlertPulse{
+  0%,100%{
+    background:rgba(250,176,3,.055);
+    border-left-color:var(--accent);
+    box-shadow:none;
+  }
+  50%{
+    background:rgba(207,12,12,.72);
+    border-left-color:#ff3030;
+    box-shadow:0 0 0 1px rgba(255,48,48,.55),0 0 22px rgba(207,12,12,.55);
+  }
+}
+.notice.noticePulseAlert{animation:locationNoticeAlertPulse .5s ease-in-out 3 both}

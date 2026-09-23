@@ -116,6 +116,9 @@ try {
   };
 
   const loadState = (def, context) => page.evaluate(([d, c, pts]) => {
+    // Мир сохраняется в window: проверки подсказок обязаны сравнивать список с
+    // ТЕМ ЖЕ набором точек, который получила панель, а не с литералом в тесте.
+    window.__lastWorldPoints = pts;
     window.__deliverFromHost({ type: "active_pane", pane: "locations" });
     window.__deliverFromHost({
       type: "location_editor_state",
@@ -550,6 +553,196 @@ try {
     });
     if (!(await page.locator("[data-criterion-capture-point='pointId']").isDisabled()))
       throw new Error("Захват точки в критерии активен для города: город не является СДО.");
+  }
+
+  // --- 7. Подсказки категорий и имён в полях критериев ---
+  //
+  // Симптом: «ввод текста в поле критериев с категориями не вызывает поиска и
+  // подсказок». Поле было голым <input placeholder='Значение'> — без списка
+  // значений вообще, поэтому категорию приходилось вводить по памяти, и любое
+  // расхождение в написании молча давало «кандидатов нет».
+  {
+    // У фикстуры всего две категории: camping (50 точек) и Города (город).
+    // Инвариант подсказок: ровно те категории, что есть в мире. Город тоже
+    // входит — resolver фильтрует по ВСЕМ точкам мира, включая справочные, так
+    // что исключить его из подсказок значило бы предложить неполный список и
+    // снова заставлять автора угадывать написание.
+    const categoryCriteria = { ...definition, mode: "Dynamic",
+      query: { criteria: [{ type: "CategoryIs", parameters: { value: "camp" }, negate: false }], history: {} } };
+    await loadState(categoryCriteria, null);
+
+    const categoryHints = await page.evaluate(() => {
+      const input = document.querySelector("[data-criterion-parameter='value']");
+      if (!input) return null;
+      const list = input.list;
+      return {
+        listId: input.getAttribute("list"),
+        values: list ? [...list.options].map(option => option.value) : null
+      };
+    });
+
+    if (!categoryHints)
+      throw new Error("У критерия «Категория равна» нет поля значения.");
+
+    // Ожидаемый набор берётся ИЗ ТОГО ЖЕ мира, который получила панель, а не
+    // задаётся литералом: иначе тест проверял бы фикстуру, а не поведение.
+    const expectedCategories = await page.evaluate(() => [...new Set(
+      window.__lastWorldPoints.map(point => String(point.category || "").trim()).filter(Boolean)
+    )].sort((a, b) => a.localeCompare(b, "ru")));
+
+    if (!categoryHints.values || !categoryHints.values.length)
+      throw new Error("Поле категории не даёт подсказок: список значений пуст. " +
+        JSON.stringify(categoryHints));
+
+    if (categoryHints.values.join("|") !== expectedCategories.join("|"))
+      throw new Error("Подсказки категорий не совпадают с категориями мира: " +
+        JSON.stringify(categoryHints.values) + " вместо " + JSON.stringify(expectedCategories));
+
+    // Поле обязано быть связано с этим списком: иначе подсказки не покажутся.
+    if (!categoryHints.listId)
+      throw new Error("Поле категории не связано со списком подсказок (нет list=).");
+
+    // Тот же список обязан быть у «Категория содержит» и «Исключить категорию»:
+    // это одно и то же поле категории, и разное поведение здесь было бы
+    // произвольным.
+    for (const type of ["CategoryContains", "ExcludeCategory"]) {
+      const otherCriteria = { ...definition, mode: "Dynamic",
+        query: { criteria: [{ type, parameters: { value: "camp" }, negate: false }], history: {} } };
+      await loadState(otherCriteria, null);
+
+      const values = await page.evaluate(() => {
+        const list = document.querySelector("[data-criterion-parameter='value']")?.list;
+        return list ? [...list.options].map(option => option.value) : null;
+      });
+      if (!values || !values.includes("camping"))
+        throw new Error("У критерия «" + type + "» нет подсказок категорий: " + JSON.stringify(values));
+    }
+
+    // Название точки: у фикстуры есть «Пятёрочка Урал». Подсказки должны быть,
+    // потому что критерий NameContains ищет по названию.
+    const nameCriteria = { ...definition, mode: "Dynamic",
+      query: { criteria: [{ type: "NameContains", parameters: { value: "Пятёрочка" }, negate: false }], history: {} } };
+    await loadState(nameCriteria, null);
+
+    const nameValues = await page.evaluate(() => {
+      const input = document.querySelector("[data-criterion-parameter='value']");
+      const list = input?.list;
+      return {
+        value: input?.value,
+        values: list ? [...list.options].map(option => option.value) : null
+      };
+    });
+    if (!nameValues.values || !nameValues.values.includes("Пятёрочка Урал"))
+      throw new Error("У критерия «Название содержит» нет подсказок названий: " +
+        JSON.stringify(nameValues.values));
+
+    // Введённое значение не должно сбиваться подсказками: список — помощник, а
+    // не замена ввода. Свободный текст обязан дойти до определения как есть.
+    await page.evaluate(() => { window.__messages.length = 0; });
+    await page.locator("#saveLocation").click();
+    await page.waitForTimeout(150);
+    const savedName = await send("location_save");
+    if (savedName[0]?.definition?.query?.criteria?.[0]?.parameters?.value !== "Пятёрочка")
+      throw new Error("Введённый текст не сохранился в определение: " +
+        JSON.stringify(savedName[0]?.definition?.query?.criteria));
+  }
+
+  // --- 8. Пульс плашки «Подходящих кандидатов нет» ---
+  //
+  // Пульс обязан быть ОДИН раз на новый результат теста. Панель перерисовывается
+  // и на посторонние сообщения, поэтому без одноразового флага (сгорающего в
+  // рендере) анимация перезапускалась бы и мигала постоянно.
+  {
+    const emptyDefinition = { ...definition, mode: "Dynamic",
+      query: { criteria: [{ type: "CategoryIs", parameters: { value: "неттакой" }, negate: false }], history: {} } };
+    await loadState(emptyDefinition, null);
+
+    const pulsingClass = "noticePulseAlert";
+
+    // До теста пульсации нет.
+    if (await page.evaluate(c => !!document.querySelector("." + c), pulsingClass))
+      throw new Error("Плашка пульсирует до теста: пульс привязан к результату, а не к рендеру.");
+
+    await page.evaluate(() => {
+      window.__deliverFromHost({
+        type: "location_test",
+        result: { locationId: "location_fixture", supported: true, requestedRounds: 8,
+          candidates: [], diagnostics: ["Подходящих кандидатов нет."] }
+      });
+    });
+    await page.waitForTimeout(150);
+
+    const pulsed = await page.evaluate(c => {
+      const element = document.querySelector("." + c);
+      if (!element) return null;
+      const style = getComputedStyle(element);
+
+      // Берётся ИМЕННО кадр 50%: вспышка обязана быть красной по ФОНУ.
+      // Проверять всю анимацию целиком нельзя — красный встречается ещё в
+      // border-left-color и box-shadow, поэтому такая проверка проходила бы даже
+      // при акцентном фоне (проверено негативным контролем: он не срабатывал).
+      const keyframes = [...document.styleSheets]
+        .flatMap(sheet => { try { return [...sheet.cssRules]; } catch { return []; } })
+        .find(rule => rule.type === CSSRule.KEYFRAMES_RULE &&
+          rule.name.includes("locationNoticeAlertPulse"));
+
+      const peak = keyframes
+        ? [...keyframes.cssRules].find(frame => frame.keyText === "50%")
+        : null;
+
+      return {
+        text: element.textContent,
+        animationName: style.animationName,
+        iterationCount: style.animationIterationCount,
+        peakBackground: peak?.style?.background || null
+      };
+    }, pulsingClass);
+
+    if (!pulsed)
+      throw new Error("Плашка «Подходящих кандидатов нет» не получила класс пульсации.");
+    if (!pulsed.text?.includes("Подходящих кандидатов нет"))
+      throw new Error("Пульсирует не та плашка: " + JSON.stringify(pulsed.text));
+    if (pulsed.animationName === "none" || !pulsed.animationName.includes("locationNoticeAlertPulse"))
+      throw new Error("Плашка не анимируется: " + JSON.stringify(pulsed.animationName));
+    // Ровно ТРИ вспышки, а не бесконечная пульсация.
+    if (pulsed.iterationCount !== "3")
+      throw new Error("Плашка пульсирует не три раза: " + pulsed.iterationCount);
+
+    // Фон пика вспышки обязан быть красным (207,12,12), а не акцентным (250,176,3).
+    if (!pulsed.peakBackground)
+      throw new Error("В анимации пульса нет кадра 50%: " + JSON.stringify(pulsed));
+    if (!/rgba?\(207,\s*12,\s*12/.test(pulsed.peakBackground))
+      throw new Error("Фон вспышки не красный: " + JSON.stringify(pulsed.peakBackground));
+    if (/rgba?\(250,\s*176,\s*3/.test(pulsed.peakBackground))
+      throw new Error("Фон вспышки акцентный, а не красный: " +
+        JSON.stringify(pulsed.peakBackground));
+
+    // Перерисовка от ПОСТОРОННЕГО сообщения не должна перезапускать пульс.
+    await page.evaluate(() => {
+      window.__deliverFromHost({ type: "simulator_context", player: null,
+        selection: { point: null } });
+    });
+    await page.waitForTimeout(150);
+
+    if (await page.evaluate(c => !!document.querySelector("." + c), pulsingClass))
+      throw new Error("Пульс перезапустился на посторонней перерисовке: он должен быть " +
+        "один раз на результат теста, иначе плашка мигает постоянно.");
+
+    // Новый результат с кандидатами — плашки пульсации быть не должно.
+    await page.evaluate(() => {
+      window.__deliverFromHost({
+        type: "location_test",
+        result: { locationId: "location_fixture", supported: true, requestedRounds: 1,
+          candidates: [{ candidateId: "sdo:test:0x7", name: "Пятёрочка Урал",
+            category: "camping", position: { x: 1, y: 2, z: 3 }, selected: true, message: "" }],
+          diagnostics: [] }
+      });
+    });
+    await page.waitForTimeout(150);
+
+    if (await page.evaluate(c => !!document.querySelector("." + c), pulsingClass))
+      throw new Error("Плашка пульсирует при успешном тесте: пульс привязан к пустому " +
+        "результату, а не к любой диагностике.");
   }
 
   if (errors.length)

@@ -24,6 +24,20 @@
   // в разметке как value='8', поэтому после каждого теста панель перерисовывалась
   // и введённое число сбрасывалось обратно к 8.
   let testRounds = 8;
+  // Пульс плашки «Подходящих кандидатов нет» показывается ОДИН раз на новый
+  // результат теста. Панель перерисовывается и на посторонние сообщения
+  // (simulator_context, состояние документа), а CSS-анимация перезапускается
+  // при каждом появлении класса — без этого флага плашка мигала бы постоянно.
+  let noCandidatesPulsePending = false;
+
+  // Текст диагностики, по которому узнаём пустой результат. Строка совпадает с
+  // формулировкой домена (LocationResolver.Test).
+  const NO_CANDIDATES_MARKER = "Подходящих кандидатов нет";
+
+  function hasNoCandidatesDiagnostic(result) {
+    const diagnostics = result?.diagnostics || [];
+    return diagnostics.some(message => String(message).includes(NO_CANDIDATES_MARKER));
+  }
 
   const CRITERIA = [
     ["CategoryIs", "Категория равна"],
@@ -81,6 +95,43 @@
   function findWorldPoint(id) {
     return state.worldPoints.find(point =>
       referenceId(point).toLowerCase() === String(id || "").toLowerCase()) || null;
+  }
+
+  /**
+   * Категории мира — уникальные, отсортированные.
+   *
+   * В мире их около семидесяти, поэтому <datalist> здесь работает хорошо.
+   * Подсказки обязательны: вручную введённое имя категории почти всегда
+   * расходится с реальным написанием (регистр, «_» против пробела), и критерий
+   * молча не находит ничего — именно так и выглядел симптом «поле не ищет».
+   */
+  function worldCategories() {
+    return [...new Set(
+      (state.worldPoints || []).map(point => String(point.category || "").trim()).filter(Boolean)
+    )].sort((a, b) => a.localeCompare(b, "ru"));
+  }
+
+  /** Имена точек мира — уникальные, отсортированные. Для критерия по названию. */
+  function worldNames() {
+    return [...new Set(
+      (state.worldPoints || []).map(point => String(referenceName(point) || "").trim()).filter(Boolean)
+    )].sort((a, b) => a.localeCompare(b, "ru"));
+  }
+
+  /**
+   * Поле со списком подсказок.
+   *
+   * Значения попадают в <datalist>, поэтому браузер фильтрует их по мере ввода.
+   * Подпись под полем говорит, откуда список: автор иначе не поймёт, почему в нём
+   * только то, что есть в текущем мире.
+   */
+  function suggestionFieldHtml(listId, values, value, placeholder, hint) {
+    return "<input class='toolButton' list='" + listId + "' data-criterion-parameter='value' " +
+        "style='min-width:200px' value='" + escapeHtml(value || "") + "' placeholder='" +
+        escapeHtml(placeholder) + "' title='" + escapeHtml(hint) + "'>" +
+      "<datalist id='" + listId + "'>" +
+        values.map(item => "<option value='" + escapeHtml(item) + "'></option>").join("") +
+      "</datalist>";
   }
 
   function clone(value) {
@@ -208,9 +259,28 @@
 
   function criterionParameterHtml(type, parameters, index) {
     const p = parameters || {};
-    if (type === "CategoryIs" || type === "CategoryContains" || type === "NameContains" || type === "ExcludeCategory") {
-      return "<input class='toolButton' data-criterion-parameter='value' value='" +
-        escapeHtml(p.value || "") + "' placeholder='Значение'>";
+
+    // Категории и названия предлагаются списком из мира.
+    //
+    // Раньше здесь было голое поле с placeholder='Значение': ни поиска, ни
+    // подсказок, поэтому категорию приходилось вводить по памяти, и любая
+    // опечатка или другой регистр молча давали «кандидатов нет».
+    if (type === "CategoryIs" || type === "CategoryContains" || type === "ExcludeCategory") {
+      return suggestionFieldHtml(
+        "location-category-value-" + index,
+        worldCategories(),
+        p.value,
+        "Начните вводить категорию",
+        "Категории текущего мира");
+    }
+
+    if (type === "NameContains") {
+      return suggestionFieldHtml(
+        "location-name-value-" + index,
+        worldNames(),
+        p.value,
+        "Начните вводить название",
+        "Названия точек текущего мира");
     }
 
     if (type === "WithinDistanceOfPoint" || type === "FartherThanPoint") {
@@ -237,18 +307,15 @@
     }
 
     // Соседство по категории: категория-сосед и радиус, в котором её искать.
-    // Категории предлагаются списком из мира: вручную введённое имя почти всегда
-    // расходилось бы с реальным написанием и критерий молча не находил ничего.
+    // Список категорий тот же, что и у «Категория равна» — берётся из мира.
     if (type === "NearbyCategory" || type === "NoNearbyCategory") {
-      const categories = [...new Set(
-        (state.worldPoints || []).map(point => String(point.category || "").trim()).filter(Boolean)
-      )].sort((a, b) => a.localeCompare(b, "ru"));
       const listId = "location-category-options-" + index;
       return "<input class='toolButton' list='" + listId + "' style='min-width:220px' " +
           "data-criterion-parameter='value' value='" + escapeHtml(p.value || "") +
-          "' placeholder='Категория рядом'>" +
+          "' placeholder='Начните вводить категорию' title='Категории текущего мира'>" +
         "<datalist id='" + listId + "'>" +
-          categories.map(category => "<option value='" + escapeHtml(category) + "'></option>").join("") +
+          worldCategories().map(category =>
+            "<option value='" + escapeHtml(category) + "'></option>").join("") +
         "</datalist>" +
         "<input class='toolButton' style='width:110px' type='number' min='1' " +
           "data-criterion-parameter='meters' value='" + escapeHtml(p.meters || "500") +
@@ -664,7 +731,9 @@
             "<div class='kv'><span>Выбрано</span><span>" + testResult.successfulRounds + "</span></div>" +
             "<div class='kv'><span>Supported</span><span>" + (testResult.supported ? "да" : "нет") + "</span></div>" +
             (testResult.diagnostics?.length
-              ? "<div class='notice' style='margin-top:8px'>" + testResult.diagnostics.map(escapeHtml).join("<br>") + "</div>"
+              ? "<div class='notice" + (noCandidatesPulsePending ? " noticePulseAlert" : "") +
+                "' style='margin-top:8px'>" +
+                testResult.diagnostics.map(escapeHtml).join("<br>") + "</div>"
               : "") +
           "</div>"
         : "") +
@@ -674,6 +743,10 @@
             "<div class='miniLabel' style='margin-top:3px'>" + formatPosition(currentPoint.position) + "</div></div>"
         : "") +
       "<div class='notice' style='margin-top:10px'>Location — логическая ссылка. Конкретный WorldPoint появляется только после разрешения.</div>";
+
+    // Флаг сгорает здесь: класс добавлен в разметку выше, следующая перерисовка
+    // (в том числе от постороннего сообщения) уже не перезапустит анимацию.
+    noCandidatesPulsePending = false;
 
     wire();
     renderMap(testResult);
@@ -854,6 +927,8 @@
 
     if (data.type === "location_test") {
       testResult = data.result || null;
+      // Флаг ставится только на НОВЫЙ результат: он сгорает в первом же рендере.
+      noCandidatesPulsePending = hasNoCandidatesDiagnostic(testResult);
       if (locationIsVisible())
         rerender();
       return;
