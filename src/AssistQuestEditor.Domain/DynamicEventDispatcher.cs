@@ -172,7 +172,7 @@ public sealed class DynamicEventDispatcher : IDynamicEventDispatcher
             }
         }
 
-        changed |= ExpireInstances(clock, now);
+        changed |= ExpireInstances(clock, now, schedules);
 
         _lastPlayerPosition = player.Position;
 
@@ -312,6 +312,9 @@ public sealed class DynamicEventDispatcher : IDynamicEventDispatcher
         var attempt = AttemptSpawn(definition, clock, now, schedules, "DynamicEventDiscovery");
         if (attempt == DynamicEventSpawnAttempt.Spawned)
         {
+            schedule = schedules.TryGetValue(definition.Id, out var afterAttemptDiscovery)
+                ? afterAttemptDiscovery
+                : schedule;
             schedules[definition.Id] = schedule with
             {
                 NextGameElapsed = null,
@@ -526,6 +529,9 @@ public sealed class DynamicEventDispatcher : IDynamicEventDispatcher
                 break;
             }
 
+            schedule = schedules.TryGetValue(definition.Id, out var afterAttemptDistance)
+                ? afterAttemptDistance
+                : schedule;
             schedule = schedule with
             {
                 DistanceBudgetMeters = Math.Max(0, schedule.DistanceBudgetMeters - threshold),
@@ -571,6 +577,9 @@ public sealed class DynamicEventDispatcher : IDynamicEventDispatcher
             return true;
         }
 
+        schedule = schedules.TryGetValue(definition.Id, out var afterAttemptGame)
+            ? afterAttemptGame
+            : schedule;
         var nextInterval = NextTimeInterval(definition.Trigger.MinGameHours, definition.Trigger.MaxGameHours);
         schedules[definition.Id] = schedule with
         {
@@ -604,6 +613,9 @@ public sealed class DynamicEventDispatcher : IDynamicEventDispatcher
             return true;
         }
 
+        schedule = schedules.TryGetValue(definition.Id, out var afterAttemptReal)
+            ? afterAttemptReal
+            : schedule;
         var nextInterval = NextTimeInterval(definition.Trigger.MinRealHours, definition.Trigger.MaxRealHours);
         schedules[definition.Id] = schedule with
         {
@@ -702,7 +714,10 @@ public sealed class DynamicEventDispatcher : IDynamicEventDispatcher
         return DynamicEventSpawnAttempt.Spawned;
     }
 
-    private bool ExpireInstances(WorldClockState clock, DateTimeOffset now)
+    private bool ExpireInstances(
+        WorldClockState clock,
+        DateTimeOffset now,
+        Dictionary<string, DynamicEventScheduleState> schedules)
     {
         var changed = false;
         var retained = new List<DynamicEventInstance>(State.Instances.Count);
@@ -769,7 +784,7 @@ public sealed class DynamicEventDispatcher : IDynamicEventDispatcher
         {
             WriteState(
                 cleaned,
-                State.Schedules,
+                schedules.Values.OrderBy(item => item.DefinitionId, StringComparer.OrdinalIgnoreCase).ToArray(),
                 "DynamicEventDispatcher.Expire");
         }
 
@@ -784,17 +799,9 @@ public sealed class DynamicEventDispatcher : IDynamicEventDispatcher
                     IsOccupyingRuntime(instance)))
                 continue;
 
-            var schedules = State.Schedules
-                .ToDictionary(item => item.DefinitionId, item => item, StringComparer.OrdinalIgnoreCase);
             var attempt = AttemptSpawn(definition, clock, now, schedules, "Expired");
             if (attempt == DynamicEventSpawnAttempt.Spawned)
-            {
-                WriteState(
-                    State.Instances,
-                    schedules.Values.OrderBy(item => item.DefinitionId, StringComparer.OrdinalIgnoreCase).ToArray(),
-                    "DynamicEventDispatcher.Respawn");
                 changed = true;
-            }
         }
 
         return changed;
