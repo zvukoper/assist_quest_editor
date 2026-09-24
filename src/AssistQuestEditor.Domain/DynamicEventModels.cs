@@ -106,7 +106,7 @@ public sealed record DynamicEventDefinition(
     public string LocationId { get; init; } = string.Empty;
 
     /// <summary>
-    /// Необязательный QuestId, который может быть активирован после engagement.
+    /// Необязательный QuestId, который может быть активирован после обнаружения/активации.
     /// Сам факт появления Dynamic Event не требует Quest.
     /// </summary>
     public string? QuestId { get; init; }
@@ -167,7 +167,7 @@ public sealed record DynamicEventScheduleState(
 }
 
 /// <summary>
-/// Полное состояние Director, входящее в Simulator/Data Channel и сохранение.
+/// Полное состояние Dispatcher, входящее в Simulator/Data Channel и сохранение.
 /// </summary>
 public sealed record DynamicEventRuntimeState(
     IReadOnlyList<DynamicEventInstance> Instances,
