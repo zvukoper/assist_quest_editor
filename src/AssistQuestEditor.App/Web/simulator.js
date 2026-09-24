@@ -2617,7 +2617,7 @@
               ? " <span class='hudClockSpeed' id='hudClockSpeed' title='Игровое время ускорено'>×" +
                 escapeHtml(formatSpeed(simulationSpeed)) + "</span>"
               : "") +
-            (simulationRunning ? "" : " (пауза)") + "</span>"
+            (simulationPaused ? " (пауза)" : "") + "</span>"
         : "",
       daylight
         ? "<span class='badge blue' title='Восход и закат по геокоординате кампании'>" +
