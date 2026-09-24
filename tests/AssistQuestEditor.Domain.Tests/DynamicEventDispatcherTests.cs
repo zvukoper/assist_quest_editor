@@ -238,6 +238,156 @@ public sealed class DynamicEventDispatcherTests
         Assert.Equal(100, director.State.Schedules[0].NextDistanceThresholdMeters);
     }
 
+    [Fact]
+    public void SimulationStartSpawnsInitialDispatcherEvent()
+    {
+        var point = Point("cache-1", "Тайник", "cache", 100);
+        var hub = new SimulatorDataChannelHub(new[] { point });
+        var definition = Definition(
+            "cache",
+            "Тайник",
+            "cache-location",
+            new DynamicEventTriggerDefinition
+            {
+                Type = "DynamicEventDiscovery",
+                SourceDefinitionId = "cache",
+                MinGameHours = 5d / 60d,
+                MaxGameHours = 5d / 60d
+            },
+            new DynamicEventSpawnPolicy
+            {
+                SpawnOnSimulationStart = true,
+                MaxActiveInstances = 1,
+                LifetimeGameHours = 10d / 60d
+            });
+
+        var dispatcher = new DynamicEventDispatcher(
+            hub,
+            new FakeLocationResolver(point),
+            () => new[] { definition });
+
+        dispatcher.SetSimulationRunning(true);
+
+        var instance = Assert.Single(dispatcher.State.Instances);
+        Assert.Equal(DynamicEventInstanceStatus.Active, instance.Status);
+        Assert.Equal("cache-1", instance.Point.Id);
+    }
+
+    [Fact]
+    public void DiscoverySchedulesNextSpawnAndStartsLinkedQuest()
+    {
+        var point = Point("cache-1", "Первый тайник", "cache", 100);
+        var nextPoint = Point("cache-2", "Второй тайник", "cache", 200);
+        var hub = new SimulatorDataChannelHub(new[] { point, nextPoint });
+        var quest = new FakeQuestRuntime();
+        var resolver = new ScopedFakeLocationResolver(point, nextPoint);
+
+        var definition = Definition(
+            "cache",
+            "Тайник",
+            "cache-location",
+            new DynamicEventTriggerDefinition
+            {
+                Type = "DynamicEventDiscovery",
+                SourceDefinitionId = "cache",
+                MinGameHours = 5d / 60d,
+                MaxGameHours = 5d / 60d
+            },
+            new DynamicEventSpawnPolicy
+            {
+                SpawnOnSimulationStart = true,
+                MaxActiveInstances = 1,
+                LifetimeGameHours = 10d / 60d,
+                RemoveOnCompleted = true
+            }) with
+            {
+                QuestId = "cache-quest"
+            };
+
+        var dispatcher = new DynamicEventDispatcher(
+            hub,
+            resolver,
+            () => new[] { definition },
+            questRuntime: quest);
+
+        dispatcher.SetSimulationRunning(true);
+        MovePlayer(hub, 100);
+        dispatcher.Tick();
+
+        Assert.Equal("cache-quest", quest.StartedQuestId);
+        Assert.Empty(dispatcher.State.Instances);
+
+        var schedule = Assert.Single(dispatcher.State.Schedules);
+        Assert.True(schedule.NextGameElapsed.HasValue);
+
+        var currentClock = hub.Get<WorldClockState>("sim-time").Value;
+        hub.Get<WorldClockState>("sim-time").Set(
+            currentClock with
+            {
+                Elapsed = currentClock.Elapsed + TimeSpan.FromMinutes(5)
+            },
+            "Test");
+
+        dispatcher.Tick();
+
+        var spawnedAgain = Assert.Single(
+            dispatcher.State.Instances.Where(item =>
+                item.DefinitionId == "cache" &&
+                item.Status == DynamicEventInstanceStatus.Active));
+        Assert.Equal("cache-2", spawnedAgain.Point.Id);
+    }
+
+    [Fact]
+    public void UnfoundEventExpiresAfterTenGameMinutesAndRespawnsElsewhere()
+    {
+        var first = Point("cache-1", "Первый тайник", "cache", 100);
+        var second = Point("cache-2", "Новый тайник", "cache", 200);
+        var hub = new SimulatorDataChannelHub(new[] { first, second });
+        var resolver = new ScopedFakeLocationResolver(first, second);
+
+        var definition = Definition(
+            "cache",
+            "Тайник",
+            "cache-location",
+            new DynamicEventTriggerDefinition
+            {
+                Type = "DynamicEventDiscovery",
+                SourceDefinitionId = "cache"
+            },
+            new DynamicEventSpawnPolicy
+            {
+                SpawnOnSimulationStart = true,
+                RespawnOnExpired = true,
+                LifetimeGameHours = 10d / 60d,
+                MaxActiveInstances = 1
+            });
+
+        var dispatcher = new DynamicEventDispatcher(
+            hub,
+            resolver,
+            () => new[] { definition });
+
+        dispatcher.SetSimulationRunning(true);
+        var start = hub.Get<WorldClockState>("sim-time").Value;
+
+        hub.Get<WorldClockState>("sim-time").Set(
+            start with
+            {
+                Elapsed = start.Elapsed + TimeSpan.FromMinutes(10)
+            },
+            "Ten game minutes passed");
+
+        dispatcher.Tick();
+
+        var instances = dispatcher.State.Instances.ToArray();
+        Assert.Contains(instances, item =>
+            item.Point.Id == "cache-1" &&
+            item.Status == DynamicEventInstanceStatus.Expired);
+        Assert.Contains(instances, item =>
+            item.Point.Id == "cache-2" &&
+            item.Status == DynamicEventInstanceStatus.Active);
+    }
+
     private static DynamicEventDefinition Definition(
         string id,
         string name,
@@ -260,6 +410,43 @@ public sealed class DynamicEventDispatcherTests
         hub.Get<PlayerState>("player").Set(
             current with { Position = new WorldCoordinate(x, 0, 0) },
             "Test");
+    }
+
+    private sealed class FakeQuestRuntime : IQuestRuntimeController
+    {
+        public QuestRuntimeState State { get; } =
+            new("fake", null, QuestRuntimeStatus.Stopped, null, string.Empty, string.Empty);
+
+        public QuestGraph? ActiveGraph => null;
+        public bool SimulationRunning => true;
+        public bool IsPaused => false;
+        public double SimulationSpeed => 1d;
+        public IReadOnlyCollection<string> EnabledQuestIds => Array.Empty<string>();
+        public string? StartedQuestId { get; private set; }
+
+        public event EventHandler<QuestRuntimeEvent>? Published;
+
+        public void Start() { }
+
+        public bool StartQuest(string questId)
+        {
+            StartedQuestId = questId;
+            return true;
+        }
+
+        public void Stop(string reason = "Runtime остановлен") { }
+        public void Reset() { }
+        public void Tick() { }
+        public void SetSimulationRunning(bool running) { }
+        public void PauseSimulation() { }
+        public void ResumeSimulation() { }
+        public void SetSimulationSpeed(double speed) { }
+        public void SetQuestEnabled(string questId, bool enabled) { }
+
+        public void Dispose()
+        {
+            Published = null;
+        }
     }
 
     private sealed class FakeLocationResolver(WorldPoint point) : ILocationResolver
