@@ -7,7 +7,7 @@ namespace AssistQuestEditor.App;
 public sealed class MainForm : WebViewForm
 {
     private readonly IDataChannelHub _hub;
-    private readonly CampaignStore _campaignStore;
+    private CampaignStore _campaignStore;
     private readonly QuestGraphStore _questGraph;
     private readonly SceneCatalog _sceneCatalog;
     private readonly SceneGraphStore _sceneGraph;
@@ -580,6 +580,7 @@ public sealed class MainForm : WebViewForm
         if (string.IsNullOrWhiteSpace(worldId))
             return;
 
+        var current = SelectedWorld;
         var target = _worldStore.FindWorld(worldId);
         if (target is null)
         {
@@ -592,32 +593,84 @@ public sealed class MainForm : WebViewForm
             return;
         }
 
-        if (string.Equals(target.Definition.Id, SelectedWorld?.Definition.Id, StringComparison.OrdinalIgnoreCase))
+        if (string.Equals(target.Definition.Id, current?.Definition.Id, StringComparison.OrdinalIgnoreCase))
             return;
 
-        AppLogger.Info("MainForm: запрошена смена мира без перезапуска.", $"worldId={worldId}");
+        var reopenSimulator = _simulator is not null && !_simulator.IsDisposed;
+        AppLogger.Info("MainForm: выполняется живая смена мира.",
+            $"from={current?.Definition.Id ?? "<none>"}; to={target.Definition.Id}; reopenSimulator={reopenSimulator}");
 
-        // Запись в настройки — чтобы выбор не потерялся и применился при
-        // следующем запуске. Это единственное, что сейчас можно сделать честно.
-        if (!_ciTest)
+        try
         {
-            _preferences = _preferences with { LastWorldId = target.Definition.Id };
-            AppUiPreferencesStore.Save(_preferences);
+            // Сначала закрываем окна, которые держат ссылки на старую кампанию.
+            // Симулятор сам выполнит нужное автосохранение перед закрытием.
+            foreach (var editor in _editors.ToArray())
+                editor.Close();
+            _simulator?.Close();
+            _simulator = null;
+
+            var author = string.IsNullOrWhiteSpace(_preferences.Author)
+                ? ResourceMetadata.DefaultAuthor(DateTimeOffset.Now)
+                : _preferences.Author!;
+            _campaignStore = new CampaignStore(AppPaths.UserQuestRoot, readOnly: _ciTest, author)
+                .ScopedTo(target.FolderPath);
+
+            var campaigns = _campaignStore.Records;
+            var activeCampaignId = ResourceSelectorRules.ResolveCampaignId(
+                target.Definition.LastCampaignId,
+                campaigns.Select(item => item.Definition.Id));
+            if (!_ciTest && activeCampaignId is not null)
+                _worldStore.RememberCampaign(target.Definition.Id, activeCampaignId);
+
+            _preferences = _preferences with
+            {
+                LastWorldId = target.Definition.Id,
+                LastCampaignId = activeCampaignId
+            };
+            if (!_ciTest)
+                AppUiPreferencesStore.Save(_preferences);
+
+            var questDefinitions = _campaignStore.LoadEnabledQuestDefinitions();
+            var selectedQuest = questDefinitions.FirstOrDefault();
+            var replacement = selectedQuest ?? QuestDefinitionLoader.LoadDocumentOrFallback().Definition;
+            _questGraph.Replace(replacement);
+
+            if (_runtime is QuestRuntimeCoordinator coordinator)
+            {
+                coordinator.RebindDefinitions(
+                    _campaignStore.LoadEnabledQuestDefinitions,
+                    selectedQuest?.Id ?? replacement.Id);
+            }
+
+            PostWorldSelection();
+            PostJson(JsonSerializer.Serialize(new
+            {
+                type = "world_switch_result",
+                ok = true,
+                worldId = target.Definition.Id,
+                campaignId = activeCampaignId ?? string.Empty
+            }));
+
+            if (reopenSimulator)
+                OpenSimulator();
         }
+        catch (Exception ex)
+        {
+            AppLogger.Error("MainForm: живая смена мира не выполнена.", ex,
+                $"target={target.Definition.Id}");
 
-        MessageBox.Show(this,
-            "Мир «" + target.DisplayName + "» запомнен, но переключение на живом окне " +
-            "пока не реализовано: редакторы и Симулятор держат объекты текущего мира." +
-            Environment.NewLine + Environment.NewLine +
-            "Перезапустите приложение — оно откроется с выбранным миром." +
-            Environment.NewLine + Environment.NewLine +
-            "Текущий мир: " + (SelectedWorld?.DisplayName ?? "не выбран"),
-            "Смена мира", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            PostJson(JsonSerializer.Serialize(new
+            {
+                type = "world_switch_result",
+                ok = false,
+                message = "Не удалось переключить мир: " + ex.Message
+            }));
+            PostWorldSelection();
 
-        // Селектор возвращается к фактическому состоянию: выбранный в списке
-        // мир не совпадает с открытым, и оставлять это расхождение нельзя —
-        // интерфейс начал бы показывать несуществующее.
-        PostWorldSelection();
+            MessageBox.Show(this,
+                "Не удалось переключить мир: " + ex.Message,
+                "Смена мира", MessageBoxButtons.OK, MessageBoxIcon.Error);
+        }
     }
 
     /// <summary>
@@ -1485,7 +1538,7 @@ public sealed class MainForm : WebViewForm
 
         try
         {
-            PostJson(JsonSerializer.Serialize(new
+            var payload = JsonSerializer.Serialize(new
             {
                 type = "world_selection",
                 worlds = _worldStore.Worlds
@@ -1494,7 +1547,9 @@ public sealed class MainForm : WebViewForm
                 campaigns,
                 worldId = world?.Definition.Id ?? string.Empty,
                 campaignId = activeCampaignId ?? string.Empty
-            }));
+            });
+            PostJson(payload);
+            _simulator?.SetWorldSelectionJson(payload);
         }
         catch (InvalidOperationException)
         {
@@ -1967,6 +2022,8 @@ public sealed class MainForm : WebViewForm
             // Мир передаётся явно: Симулятор показывает его кампании, и без
             // ссылки на мир он видел бы кампании ВСЕХ миров сразу.
             SelectedWorld);
+        _simulator.WorldSwitchRequested += (_, e) => RequestWorldSwitch(e.WorldId);
+        _simulator.CampaignSelectionRequested += (_, e) => SelectCampaign(e.CampaignId);
         _simulator.FormClosed += (_, _) => _simulator = null;
         // ℹ️ в дереве кампаний открывает то же окно свойств, что и меню главной
         // формы: список показывает несколько кампаний, и для каждой — своя
