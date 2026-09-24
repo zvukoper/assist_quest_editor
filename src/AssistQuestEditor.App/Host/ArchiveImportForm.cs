@@ -1,3 +1,4 @@
+using System.IO.Compression;
 using AssistQuestEditor.Domain;
 
 namespace AssistQuestEditor.App;
@@ -19,6 +20,7 @@ public sealed class ArchiveImportForm : Form
     private readonly ArchiveInspection _inspection;
     private readonly CheckBox _overwrite;
     private readonly Label _conflict;
+    private readonly PictureBox _imagePreview;
 
     public ArchiveImportForm(ArchiveInspection inspection)
     {
@@ -63,10 +65,26 @@ public sealed class ArchiveImportForm : Form
         {
             AutoSize = false,
             Location = new Point(18, 96),
-            Size = new Size(650, 130),
+            Size = new Size(505, 130),
             Text = BuildDescription(manifest, kindLabel, displayName, inspection),
             Font = new Font("Segoe UI", 9.2f)
         };
+
+        var imageFrame = new Panel
+        {
+            Location = new Point(540, 96),
+            Size = new Size(128, 128),
+            BorderStyle = BorderStyle.FixedSingle,
+            BackColor = Color.FromArgb(16, 18, 22)
+        };
+
+        _imagePreview = new PictureBox
+        {
+            Dock = DockStyle.Fill,
+            SizeMode = PictureBoxSizeMode.Zoom,
+            BackColor = Color.FromArgb(16, 18, 22)
+        };
+        imageFrame.Controls.Add(_imagePreview);
 
         var contentsHeader = new Label
         {
@@ -165,6 +183,7 @@ public sealed class ArchiveImportForm : Form
         Controls.Add(_overwrite);
         Controls.Add(contents);
         Controls.Add(contentsHeader);
+        Controls.Add(imageFrame);
         Controls.Add(info);
         Controls.Add(file);
         Controls.Add(title);
@@ -173,6 +192,7 @@ public sealed class ArchiveImportForm : Form
         CancelButton = cancel;
 
         UpdateConflictText();
+        RefreshImagePreview();
     }
 
     /// <summary>
@@ -181,6 +201,51 @@ public sealed class ArchiveImportForm : Form
     public bool OverwriteRequested => _overwrite.Checked;
 
     private bool _overwriteConfirms;
+
+    private void RefreshImagePreview()
+    {
+        _imagePreview.Image?.Dispose();
+        _imagePreview.Image = null;
+
+        try
+        {
+            using var archive = ZipFile.OpenRead(_inspection.ArchivePath);
+            var preferred = _inspection.Manifest.Kind switch
+            {
+                WorldArchiveKinds.World => new[] { "world.png" },
+                WorldArchiveKinds.Campaign => new[] { "campaign.png" },
+                _ => Array.Empty<string>()
+            };
+
+            var entry = preferred
+                .Select(name => archive.Entries.FirstOrDefault(item =>
+                    item.FullName.Equals(name, StringComparison.OrdinalIgnoreCase)))
+                .FirstOrDefault(item => item is not null);
+
+            entry ??= archive.Entries.FirstOrDefault(item =>
+                !string.IsNullOrWhiteSpace(item.Name) &&
+                IsImageExtension(Path.GetExtension(item.Name)));
+
+            if (entry is null)
+                return;
+
+            using var stream = entry.Open();
+            using var source = Image.FromStream(stream);
+            _imagePreview.Image = new Bitmap(source);
+        }
+        catch (Exception ex)
+        {
+            AppLogger.Warn(
+                "ArchiveImportForm: не удалось показать изображение из архива.",
+                _inspection.ArchivePath + ": " + ex.Message);
+        }
+    }
+
+    private static bool IsImageExtension(string extension) =>
+        extension.Equals(".png", StringComparison.OrdinalIgnoreCase) ||
+        extension.Equals(".jpg", StringComparison.OrdinalIgnoreCase) ||
+        extension.Equals(".jpeg", StringComparison.OrdinalIgnoreCase) ||
+        extension.Equals(".bmp", StringComparison.OrdinalIgnoreCase);
 
     private static string KindName(string kind) => kind.ToLowerInvariant() switch
     {
