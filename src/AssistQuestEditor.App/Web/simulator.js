@@ -3277,6 +3277,17 @@
       return;
     }
 
+    if (message.type === "world_selection") {
+      worldSelection = {
+        worlds: Array.isArray(message.worlds) ? message.worlds : [],
+        campaigns: Array.isArray(message.campaigns) ? message.campaigns : [],
+        worldId: message.worldId || "",
+        campaignId: message.campaignId || ""
+      };
+      renderWorldSelector();
+      return;
+    }
+
     if (message.type === "snapshot") {
       const hadSnapshot = !!snapshot;
       snapshot = message.snapshot;
@@ -3727,6 +3738,18 @@
   // действие, которое соответствует текущему режиму. Вычислять его на стороне
   // UI нельзя: источник истины один (Runtime), и локальное «угадывание» уже
   // приводило к расхождению подписи и реальности.
+  document.getElementById("simWorldSelect")?.addEventListener("change", event => {
+    send({ action: "select_world", worldId: event.target.value });
+  });
+
+  document.getElementById("simCampaignSelect")?.addEventListener("change", event => {
+    send({ action: "select_campaign", campaignId: event.target.value });
+  });
+
+  document.getElementById("simOpenCampaigns")?.addEventListener("click", () => {
+    send({ action: "open_campaigns" });
+  });
+
   document.getElementById("simPlay")?.addEventListener("click", () => {
     send({ action: simulationRunning ? "simulation_pause" : "simulation_start" });
   });
