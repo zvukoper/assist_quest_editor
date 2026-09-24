@@ -143,15 +143,26 @@ public sealed class MainForm : WebViewForm
         _sceneGraph = new SceneGraphStore(initialScene);
         _locationStore = ciTest
             ? new LocationStore(Path.Combine(Path.GetTempPath(), "AssistQuestEditor-CI-Locations"), readOnly: true)
-            : new LocationStore(AppPaths.UserLocationRoot);
+            : new LocationStore(
+                AppPaths.UserLocationRoot,
+                readOnly: false,
+                additionalRoots: SelectedWorld is null
+                    ? null
+                    : new[] { Path.Combine(SelectedWorld.FolderPath, WorldPaths.LocationsFolder) });
         _locationResolver = new LocationRuntimeResolver(_locationStore, _hub, _roads, _junctions, _cityBoundaries);
         _dynamicEventStore = ciTest
             ? new DynamicEventStore(Path.Combine(Path.GetTempPath(), "AssistQuestEditor-CI-DynamicEvents"), readOnly: true)
-            : new DynamicEventStore(AppPaths.UserDynamicEventRoot);
+            : new DynamicEventStore(
+                AppPaths.UserDynamicEventRoot,
+                readOnly: false,
+                additionalRoots: SelectedWorld is null
+                    ? null
+                    : new[] { Path.Combine(SelectedWorld.FolderPath, WorldPaths.DynamicEventsFolder) });
         _dynamicEventDispatcher = new DynamicEventDispatcher(
             _hub,
             _locationResolver,
-            () => _dynamicEventStore.Definitions);
+            () => _dynamicEventStore.Definitions,
+            questRuntime: null);
         _sceneDocument = new SceneDocumentSession(
             initialScene.Id,
             ResolveScenePath(initialScene.Id),
@@ -644,6 +655,16 @@ public sealed class MainForm : WebViewForm
                     _campaignStore.LoadEnabledQuestDefinitions,
                     runtimeDefinition.Id);
             }
+
+            _locationStore.SetAdditionalRoots(new[]
+            {
+                Path.Combine(target.FolderPath, WorldPaths.LocationsFolder)
+            });
+            _dynamicEventStore.SetAdditionalRoots(new[]
+            {
+                Path.Combine(target.FolderPath, WorldPaths.DynamicEventsFolder)
+            });
+            _locationResolver.Reset();
 
             PostWorldSelection();
             PostJson(JsonSerializer.Serialize(new
