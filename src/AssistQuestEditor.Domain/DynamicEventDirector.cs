@@ -54,6 +54,14 @@ public sealed class DynamicEventDirector : IDynamicEventDirector
     private readonly Dictionary<string, DynamicEventDefinition> _definitions =
         new(StringComparer.OrdinalIgnoreCase);
 
+    /// <summary>
+    /// Счётчик экземпляров по DefinitionId. Id обязан быть ВОСПРОИЗВОДИМЫМ и
+    /// уникальным: он уходит в <c>ILocationResolver.Resolve(locationId, resolutionKey)</c>
+    /// и в сохранение симуляции, поэтому Guid на роль идентификатора не годится.
+    /// </summary>
+    private readonly Dictionary<string, int> _instanceSequences =
+        new(StringComparer.OrdinalIgnoreCase);
+
     private bool _simulationRunning;
     private WorldCoordinate? _lastPlayerPosition;
     private bool _initialized;
@@ -80,7 +88,7 @@ public sealed class DynamicEventDirector : IDynamicEventDirector
 
     public bool SimulationRunning => _simulationRunning;
 
-    public event EventHandler<SimulatorEvent>? Published;
+    public event Action<SimulatorEvent>? Published;
 
     public void SetSimulationRunning(bool running)
     {
@@ -117,8 +125,8 @@ public sealed class DynamicEventDirector : IDynamicEventDirector
         if (!_initialized)
             InitializeFromCurrentWorld();
 
-        var distanceTravelled = _lastPlayerPosition.HasValue
-            ? Distance(_lastPlayerPosition.Value, player.Position)
+        var distanceTravelled = _lastPlayerPosition is { } previousPosition
+            ? Distance(previousPosition, player.Position)
             : 0d;
 
         // Нулевые/аномальные скачки не должны ломать бюджет. Телепорт в Simulator
@@ -130,18 +138,22 @@ public sealed class DynamicEventDirector : IDynamicEventDirector
             .ToDictionary(item => item.DefinitionId, item => item, StringComparer.OrdinalIgnoreCase);
         var changed = false;
 
-        foreach (var definition in _definitions.Values)
+        // Снимок обязателен: запись состояния внутри AttemptSpawn публикует
+        // ChannelChanged, приходит обратно в HubEvent_Published и вызывает
+        // RefreshDefinitions — то есть перестраивает _definitions ПРЯМО ВО ВРЕМЯ
+        // этого перебора («Collection was modified»).
+        foreach (var definition in _definitions.Values.ToArray())
         {
             var triggerType = Normalize(definition.Trigger.Type);
-            if (triggerType == "DistanceTravelled")
+            if (triggerType == "distancetravelled")
             {
                 changed |= EvaluateDistance(definition, distanceTravelled, clock, now, schedules);
             }
-            else if (triggerType == "GameTime")
+            else if (triggerType == "gametime")
             {
                 changed |= EvaluateGameTime(definition, clock, now, schedules);
             }
-            else if (triggerType == "RealTime")
+            else if (triggerType == "realtime")
             {
                 changed |= EvaluateRealTime(definition, now, schedules);
             }
@@ -493,7 +505,7 @@ public sealed class DynamicEventDirector : IDynamicEventDirector
                 $"Истёк срок жизни «{definition.Name}».",
                 definition.Id,
                 instance.InstanceId,
-                eventPoint);
+                instance.Point);
 
             changed = true;
         }
@@ -551,14 +563,14 @@ public sealed class DynamicEventDirector : IDynamicEventDirector
         var schedule = new DynamicEventScheduleState(definition.Id);
         var type = Normalize(definition.Trigger.Type);
 
-        if (type == "DistanceTravelled")
+        if (type == "distancetravelled")
         {
             schedule = schedule with
             {
                 NextDistanceThresholdMeters = NextDistanceThreshold(definition.Trigger)
             };
         }
-        else if (type == "GameTime")
+        else if (type == "gametime")
         {
             schedule = schedule with
             {
@@ -566,7 +578,7 @@ public sealed class DynamicEventDirector : IDynamicEventDirector
                     NextTimeInterval(definition.Trigger.MinGameHours, definition.Trigger.MaxGameHours)
             };
         }
-        else if (type == "RealTime")
+        else if (type == "realtime")
         {
             schedule = schedule with
             {
@@ -645,7 +657,7 @@ public sealed class DynamicEventDirector : IDynamicEventDirector
     private static bool NormalizeTriggerNeedsSchedule(DynamicEventDefinition definition)
     {
         var type = Normalize(definition.Trigger.Type);
-        return type is "DistanceTravelled" or "GameTime" or "RealTime";
+        return type is "distancetravelled" or "gametime" or "realtime";
     }
 
     private void AddInstance(DynamicEventInstance instance)
@@ -869,15 +881,11 @@ public sealed class DynamicEventDirector : IDynamicEventDirector
         var schedules = State.Schedules
             .ToDictionary(item => item.DefinitionId, item => item, StringComparer.OrdinalIgnoreCase);
 
-        var changed = false;
-
         foreach (var definition in matching)
-        {
-            var attempt = AttemptSpawn(definition, clock, now, schedules, "WorldEvent");
-            if (attempt == DynamicEventSpawnAttempt.Spawned)
-                changed = true;
-        }
+            AttemptSpawn(definition, clock, now, schedules, "WorldEvent");
 
+        // AttemptSpawn уже записал State через AddInstance; этот вызов
+        // синхронизирует расписания, обновлённые внутри попытки.
         WriteState(
             State.Instances,
             schedules.Values.OrderBy(item => item.DefinitionId, StringComparer.OrdinalIgnoreCase).ToArray(),
@@ -909,8 +917,36 @@ public sealed class DynamicEventDirector : IDynamicEventDirector
         Published?.Invoke(e);
     }
 
-    private static string CreateInstanceId(string definitionId) =>
-        definitionId + "#" + Guid.NewGuid().ToString("N")[..10];
+    private string CreateInstanceId(string definitionId)
+    {
+        _instanceSequences.TryGetValue(definitionId, out var sequence);
+
+        // Загруженное состояние могло прийти из сохранения: продолжаем нумерацию
+        // ПОСЛЕ уже существующих экземпляров, иначе новый id столкнётся со старым.
+        foreach (var instance in State.Instances)
+        {
+            if (!instance.DefinitionId.Equals(definitionId, StringComparison.OrdinalIgnoreCase))
+                continue;
+
+            var separator = instance.InstanceId.LastIndexOf('#');
+            if (separator < 0 || separator + 1 >= instance.InstanceId.Length)
+                continue;
+
+            if (int.TryParse(
+                    instance.InstanceId.AsSpan(separator + 1),
+                    System.Globalization.NumberStyles.Integer,
+                    System.Globalization.CultureInfo.InvariantCulture,
+                    out var existing) &&
+                existing > sequence)
+            {
+                sequence = existing;
+            }
+        }
+
+        sequence++;
+        _instanceSequences[definitionId] = sequence;
+        return definitionId + "#" + sequence.ToString(System.Globalization.CultureInfo.InvariantCulture);
+    }
 
     private void ThrowIfDisposed()
     {

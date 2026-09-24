@@ -159,12 +159,12 @@ public sealed class SimulationSaveCodecTests
         Assert.Equal(original.State.PlayerVitals, decoded.State.PlayerVitals);
         Assert.Equal(original.State.PlayerProgress, decoded.State.PlayerProgress);
 
-        Assert.Equal(1, decoded.State.DynamicEvents.Instances.Count);
-        Assert.Equal("cache#123", decoded.State.DynamicEvents.Instances[0].InstanceId);
-        Assert.Equal("wp-cache", decoded.State.DynamicEvents.Instances[0].Point.Id);
-        Assert.Equal(DynamicEventInstanceStatus.Active, decoded.State.DynamicEvents.Instances[0].Status);
-        Assert.Equal(1, decoded.State.DynamicEvents.Schedules.Count);
-        Assert.Equal(1200, decoded.State.DynamicEvents.Schedules[0].DistanceBudgetMeters);
+        var instance = Assert.Single(decoded.State.DynamicEvents.Instances);
+        Assert.Equal("cache#123", instance.InstanceId);
+        Assert.Equal("wp-cache", instance.Point.Id);
+        Assert.Equal(DynamicEventInstanceStatus.Active, instance.Status);
+        var schedule = Assert.Single(decoded.State.DynamicEvents.Schedules);
+        Assert.Equal(1200, schedule.DistanceBudgetMeters);
 
         Assert.Equal(original.State.QuestStatuses.Count, decoded.State.QuestStatuses.Count);
         for (var index = 0; index < original.State.QuestStatuses.Count; index++)

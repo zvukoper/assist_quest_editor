@@ -436,21 +436,33 @@ public static class SimulationSaveCodec
             var definitionId = strings[reader.ReadInt32()];
             var status = (DynamicEventInstanceStatus)reader.ReadInt32();
 
-            var point = new WorldPoint(
-                strings[reader.ReadInt32()],
-                strings[reader.ReadInt32()],
-                strings[reader.ReadInt32()],
-                new WorldCoordinate(
-                    ReadDouble(reader),
-                    ReadDouble(reader),
-                    ReadDouble(reader)),
-                ReadDouble(reader))
-            {
-                Color = strings[reader.ReadInt32()],
-                Editable = reader.ReadBoolean(),
-                IsCity = reader.ReadBoolean()
-            };
+            // Порядок чтения обязан совпадать с записью в WriteDynamicEvents:
+            // Id, Name, Category, Color, Editable, IsCity, X, Y, Z, TriggerRadius.
+            // Цвет читается ДО координат, поэтому он идёт в локальную переменную:
+            // в объектном инициализаторе он выполнялся бы уже после конструктора,
+            // то есть после ReadDouble, и порядок полей в потоке разъехался бы.
+            var pointId = strings[reader.ReadInt32()];
+            var pointName = strings[reader.ReadInt32()];
+            var pointCategory = strings[reader.ReadInt32()];
+            var pointColor = strings[reader.ReadInt32()];
+            var pointEditable = reader.ReadBoolean();
+            var pointIsCity = reader.ReadBoolean();
+            var pointX = ReadDouble(reader);
+            var pointY = ReadDouble(reader);
+            var pointZ = ReadDouble(reader);
+            var pointTriggerRadius = ReadDouble(reader);
 
+            var point = new WorldPoint(
+                pointId,
+                pointName,
+                pointCategory,
+                new WorldCoordinate(pointX, pointY, pointZ),
+                pointTriggerRadius)
+            {
+                Color = pointColor,
+                Editable = pointEditable,
+                IsCity = pointIsCity
+            };
             var spawnedUtc = ReadTimestamp(reader);
             var spawnedGameElapsed = TimeSpan.FromTicks(reader.ReadInt64());
 
