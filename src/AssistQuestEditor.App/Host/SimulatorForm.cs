@@ -211,9 +211,9 @@ public sealed class SimulatorForm : WebViewForm
             return;
 
         _closedAutosaved = true;
-        if (!_runtime.SimulationRunning)
+        if (!_runtime.SimulationRunning && !_runtime.IsPaused)
         {
-            AppLogger.Info("SimulatorForm: закрытие без автосохранения (симуляция выключена).");
+            AppLogger.Info("SimulatorForm: закрытие без автосохранения (симуляция уже остановлена).");
             return;
         }
 
