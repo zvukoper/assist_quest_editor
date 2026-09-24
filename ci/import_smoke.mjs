@@ -52,6 +52,186 @@ check(/WorldPaths\.CampaignFileName/.test(importService),
   "Имя файла кампании задано литералом вместо контракта.");
 // Квест переносится как ОДИН ФАЙЛ, а не папка: квесты кампании лежат в общей
 // папке quests, и удаление её целиком стёрло бы соседей.
+check(
+  /File\.Copy\(tempQuest, targetFile, overwrite: true\)/.test(importService) ||
+  /File\.Move\([^,]+, targetFile, overwrite: true\)/.test(importService),
+  "Квест должен устанавливаться как один отдельный файл; соседние квесты нельзя затрагивать."
+);Импорт кампании и квеста в родителя.
+//
+// Почему настоящий запуск: импорт — это ФАЙЛОВАЯ операция, и «правильный код»
+// ничего не говорит о том, куда лёг ресурс и уцелели ли соседи. Раскладка при
+// этом — контракт обмена (файл кампании в папке мира, файл квеста в папке
+// кампании), поэтому проверяется фактическое дерево на диске.
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import { execFileSync } from "node:child_process";
+
+const root = process.cwd();
+const read = rel => fs.readFileSync(path.join(root, ...rel.split("/")), "utf8");
+
+const failures = [];
+const check = (condition, message) => { if (!condition) failures.push(message); };
+
+const importService = read("src/AssistQuestEditor.App/ResourceImportService.cs");
+const parentForm = read("src/AssistQuestEditor.App/Host/ImportParentForm.cs");
+const mainForm = read("src/AssistQuestEditor.App/Host/MainForm.cs");
+const archiveService = read("src/AssistQuestEditor.App/WorldArchiveService.cs");
+
+// --- 1. Родитель спрашивается, а не выдумывается ---
+check(/class ImportParentForm/.test(parentForm),
+  "Нет выбора родителя: кампания и квест некуда положить.");
+check(/Импорт " \+ kindLabel \+ " — выберите родителя/.test(parentForm),
+  "Заголовок окна выбора родителя не объясняет, что выбирается.");
+// Мир из архива рекомендуется, но НЕ применяется автоматически: решение за
+// пользователем, иначе ресурс уедет в мир, которого он не выбирал.
+check(/указан в архиве/.test(parentForm) && /preferred < 0/.test(parentForm),
+  "Мир из архива не рекомендуется или навязывается: выбор не должен быть молчаливым.");
+// Список кампаний строится при смене мира: у разных миров разные кампании, и
+// список от прежнего мира отправил бы квест в чужую.
+check(/private void ReloadCampaigns/.test(parentForm) &&
+      /SelectedIndexChanged \+= \(_, _\) => ReloadCampaigns/.test(parentForm),
+  "Список кампаний не пересчитывается при смене мира.");
+// Проверка неполного выбора в FormClosing: кнопка с DialogResult закрывает окно
+// сама, и сообщить о неполном выборе из Click было бы негде.
+check(/FormClosing \+= \(_, e\) =>/.test(parentForm) && /e\.Cancel = true/.test(parentForm),
+  "Окно выбора родителя закрывается без проверки: импорт пойдёт некуда.");
+check(/без родителя у ресурса нет адреса/.test(parentForm),
+  "Отсутствие мира не объясняется словами.");
+check(/квест лежит внутри кампании/.test(parentForm),
+  "Отсутствие кампании не объясняется словами.");
+
+// --- 2. Раскладка берётся из контракта, а не собирается на месте ---
+check(/WorldPaths\.CampaignsRoot\(world\.FolderPath\)/.test(importService),
+  "Импорт кампании не использует контракт раскладки: путь может разойтись с каталогом.");
+check(/WorldPaths\.QuestsFolderPath\(campaign\.FolderPath\)/.test(importService),
+  "Импорт квеста не использует контракт раскладки.");
+check(/WorldPaths\.CampaignFileName/.test(importService),
+  "Имя файла кампании задано литералом вместо контракта.");
+// Квест переносится как ОДИН ФАЙЛ, а не папка: квесты кампании лежат в общей
+// папке quests, и удаление её целиком стёрло бы соседей.
+check(/File\.Move\(staged, targetFile, overwrite: true\)/.test(importService),
+  "Квест копируется не как отдельный файл: соседние квесты кампании пострадают.");
+check(!/Directory\.Delete\(questsFolder/.test(importService),
+  "Импорт квеста удаляет папку кампании целиком.");
+// Имя файла квеста — id плюс каноническое расширение: произвольное имя сделало
+// бы ресурс невидимым для каталога, хотя файл лежал бы на месте.
+check(
+  /QuestExtension = "\\.aqquest"/.test(importService) &&
+  /targetName \+ QuestExtension/.test(importService),
+  "Имя файла квеста должно формироваться из canonical target name + .aqquest."
+); Импорт кампании и квеста в родителя.
+//
+// Почему настоящий запуск: импорт — это ФАЙЛОВАЯ операция, и «правильный код»
+// ничего не говорит о том, куда лёг ресурс и уцелели ли соседи. Раскладка при
+// этом — контракт обмена (файл кампании в папке мира, файл квеста в папке
+// кампании), поэтому проверяется фактическое дерево на диске.
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import { execFileSync } from "node:child_process";
+
+const root = process.cwd();
+const read = rel => fs.readFileSync(path.join(root, ...rel.split("/")), "utf8");
+
+const failures = [];
+const check = (condition, message) => { if (!condition) failures.push(message); };
+
+const importService = read("src/AssistQuestEditor.App/ResourceImportService.cs");
+const parentForm = read("src/AssistQuestEditor.App/Host/ImportParentForm.cs");
+const mainForm = read("src/AssistQuestEditor.App/Host/MainForm.cs");
+const archiveService = read("src/AssistQuestEditor.App/WorldArchiveService.cs");
+
+// --- 1. Родитель спрашивается, а не выдумывается ---
+check(/class ImportParentForm/.test(parentForm),
+  "Нет выбора родителя: кампания и квест некуда положить.");
+check(/Импорт " \+ kindLabel \+ " — выберите родителя/.test(parentForm),
+  "Заголовок окна выбора родителя не объясняет, что выбирается.");
+// Мир из архива рекомендуется, но НЕ применяется автоматически: решение за
+// пользователем, иначе ресурс уедет в мир, которого он не выбирал.
+check(/указан в архиве/.test(parentForm) && /preferred < 0/.test(parentForm),
+  "Мир из архива не рекомендуется или навязывается: выбор не должен быть молчаливым.");
+// Список кампаний строится при смене мира: у разных миров разные кампании, и
+// список от прежнего мира отправил бы квест в чужую.
+check(/private void ReloadCampaigns/.test(parentForm) &&
+      /SelectedIndexChanged \+= \(_, _\) => ReloadCampaigns/.test(parentForm),
+  "Список кампаний не пересчитывается при смене мира.");
+// Проверка неполного выбора в FormClosing: кнопка с DialogResult закрывает окно
+// сама, и сообщить о неполном выборе из Click было бы негде.
+check(/FormClosing \+= \(_, e\) =>/.test(parentForm) && /e\.Cancel = true/.test(parentForm),
+  "Окно выбора родителя закрывается без проверки: импорт пойдёт некуда.");
+check(/без родителя у ресурса нет адреса/.test(parentForm),
+  "Отсутствие мира не объясняется словами.");
+check(/квест лежит внутри кампании/.test(parentForm),
+  "Отсутствие кампании не объясняется словами.");
+
+// --- 2. Раскладка берётся из контракта, а не собирается на месте ---
+check(/WorldPaths\.CampaignsRoot\(world\.FolderPath\)/.test(importService),
+  "Импорт кампании не использует контракт раскладки: путь может разойтись с каталогом.");
+check(/WorldPaths\.QuestsFolderPath\(campaign\.FolderPath\)/.test(importService),
+  "Импорт квеста не использует контракт раскладки.");
+check(/WorldPaths\.CampaignFileName/.test(importService),
+  "Имя файла кампании задано литералом вместо контракта.");
+// Квест переносится как ОДИН ФАЙЛ, а не папка: квесты кампании лежат в общей
+// папке quests, и удаление её целиком стёрло бы соседей.
+check(
+  /File\.Copy\(tempQuest, targetFile, overwrite: true\)/.test(importService) ||
+  /File\.Move\([^,]+, targetFile, overwrite: true\)/.test(importService),
+  "Квест должен устанавливаться как один отдельный файл; соседние квесты нельзя затрагивать."
+);Импорт кампании и квеста в родителя.
+//
+// Почему настоящий запуск: импорт — это ФАЙЛОВАЯ операция, и «правильный код»
+// ничего не говорит о том, куда лёг ресурс и уцелели ли соседи. Раскладка при
+// этом — контракт обмена (файл кампании в папке мира, файл квеста в папке
+// кампании), поэтому проверяется фактическое дерево на диске.
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import { execFileSync } from "node:child_process";
+
+const root = process.cwd();
+const read = rel => fs.readFileSync(path.join(root, ...rel.split("/")), "utf8");
+
+const failures = [];
+const check = (condition, message) => { if (!condition) failures.push(message); };
+
+const importService = read("src/AssistQuestEditor.App/ResourceImportService.cs");
+const parentForm = read("src/AssistQuestEditor.App/Host/ImportParentForm.cs");
+const mainForm = read("src/AssistQuestEditor.App/Host/MainForm.cs");
+const archiveService = read("src/AssistQuestEditor.App/WorldArchiveService.cs");
+
+// --- 1. Родитель спрашивается, а не выдумывается ---
+check(/class ImportParentForm/.test(parentForm),
+  "Нет выбора родителя: кампания и квест некуда положить.");
+check(/Импорт " \+ kindLabel \+ " — выберите родителя/.test(parentForm),
+  "Заголовок окна выбора родителя не объясняет, что выбирается.");
+// Мир из архива рекомендуется, но НЕ применяется автоматически: решение за
+// пользователем, иначе ресурс уедет в мир, которого он не выбирал.
+check(/указан в архиве/.test(parentForm) && /preferred < 0/.test(parentForm),
+  "Мир из архива не рекомендуется или навязывается: выбор не должен быть молчаливым.");
+// Список кампаний строится при смене мира: у разных миров разные кампании, и
+// список от прежнего мира отправил бы квест в чужую.
+check(/private void ReloadCampaigns/.test(parentForm) &&
+      /SelectedIndexChanged \+= \(_, _\) => ReloadCampaigns/.test(parentForm),
+  "Список кампаний не пересчитывается при смене мира.");
+// Проверка неполного выбора в FormClosing: кнопка с DialogResult закрывает окно
+// сама, и сообщить о неполном выборе из Click было бы негде.
+check(/FormClosing \+= \(_, e\) =>/.test(parentForm) && /e\.Cancel = true/.test(parentForm),
+  "Окно выбора родителя закрывается без проверки: импорт пойдёт некуда.");
+check(/без родителя у ресурса нет адреса/.test(parentForm),
+  "Отсутствие мира не объясняется словами.");
+check(/квест лежит внутри кампании/.test(parentForm),
+  "Отсутствие кампании не объясняется словами.");
+
+// --- 2. Раскладка берётся из контракта, а не собирается на месте ---
+check(/WorldPaths\.CampaignsRoot\(world\.FolderPath\)/.test(importService),
+  "Импорт кампании не использует контракт раскладки: путь может разойтись с каталогом.");
+check(/WorldPaths\.QuestsFolderPath\(campaign\.FolderPath\)/.test(importService),
+  "Импорт квеста не использует контракт раскладки.");
+check(/WorldPaths\.CampaignFileName/.test(importService),
+  "Имя файла кампании задано литералом вместо контракта.");
+// Квест переносится как ОДИН ФАЙЛ, а не папка: квесты кампании лежат в общей
+// папке quests, и удаление её целиком стёрло бы соседей.
 check(/File\.Move\(staged, targetFile, overwrite: true\)/.test(importService),
   "Квест копируется не как отдельный файл: соседние квесты кампании пострадают.");
 check(!/Directory\.Delete\(questsFolder/.test(importService),
