@@ -46,10 +46,11 @@ check(
   "Загрузка сохранения НЕ должна принудительно гасить часы: признак зеркалит симуляцию."
 );
 check(
-  /!\(simulationRunning\)/.test(simulatorJs) || /simulationRunning \? "" : " \(пауза\)"/.test(simulatorJs),
-  "Метка «(пауза)» должна зависеть от состояния симуляции, а не от флага канала."
+  /simulationRunning/.test(simulatorJs) &&
+  /simulationPaused/.test(simulatorJs) &&
+  /data-sim-state/.test(simulatorJs),
+  "Метка состояния должна зависеть от SimulationRunning/SimulationPaused, а не от WorldClock.Running."
 );
-
 // 2. Действия блока «Окружение» обрабатываются Host'ом.
 for (const action of ["set_world_time", "save_world_to_campaign", "load_world_from_campaign", "request_snapshot"]) {
   check(simulatorForm.includes('"' + action + '"'),
