@@ -37,6 +37,12 @@ public sealed record DynamicEventTriggerDefinition
     public double? MinRealHours { get; init; }
     public double? MaxRealHours { get; init; }
 
+    /// <summary>
+    /// DefinitionId события, обнаружение которого запускает этот таймер.
+    /// Используется с Type = DynamicEventDiscovery.
+    /// </summary>
+    public string? SourceDefinitionId { get; init; }
+
     public string? EventType { get; init; }
 
     /// <summary>
@@ -62,6 +68,20 @@ public sealed record DynamicEventSpawnPolicy
 
     public double? LifetimeGameHours { get; init; }
     public double? LifetimeRealHours { get; init; }
+
+    /// <summary>
+    /// Первый экземпляр создаётся при запуске Симулятора, после чего правило
+    /// ждёт обычного триггера. Это позволяет Dynamic Event с триггером
+    /// DynamicEventDiscovery иметь начальную точку без отдельного «стартового»
+    /// ресурса.
+    /// </summary>
+    public bool SpawnOnSimulationStart { get; init; }
+
+    /// <summary>
+    /// После истечения срока жизни экземпляра сразу разрешить новый экземпляр
+    /// через ту же Location. Используется для временных событий вроде тайников.
+    /// </summary>
+    public bool RespawnOnExpired { get; init; }
 
     /// <summary>
     /// После завершения экземпляр остаётся в Runtime State до следующего тика,
@@ -173,5 +193,6 @@ public static class DynamicEventDefinitionRules
          triggerType.Equals("DistanceTravelled", StringComparison.OrdinalIgnoreCase) ||
          triggerType.Equals("GameTime", StringComparison.OrdinalIgnoreCase) ||
          triggerType.Equals("RealTime", StringComparison.OrdinalIgnoreCase) ||
-         triggerType.Equals("WorldEvent", StringComparison.OrdinalIgnoreCase));
+         triggerType.Equals("WorldEvent", StringComparison.OrdinalIgnoreCase) ||
+         triggerType.Equals("DynamicEventDiscovery", StringComparison.OrdinalIgnoreCase));
 }
