@@ -88,8 +88,8 @@ if (extracted) {
       "Описание демо-мира должно сообщать, что ресурс в разработке: " + manifest.description);
     check(manifest.includesDependencies === true,
       "Демо-архив обязан быть самодостаточным (includesDependencies=true).");
-    check(Array.isArray(manifest.entries) && manifest.entries.length >= 2,
-      "Состав архива должен быть перечислен: " + JSON.stringify(manifest.entries));
+    check(Array.isArray(manifest.entries) && manifest.entries.some(entry => entry.path === "world.aqworld"),
+      "Состав архива должен содержать world.aqworld: " + JSON.stringify(manifest.entries));
     // Кириллица в манифесте — литералами: архив распаковывают и читают глазами.
     check(manifestText.includes("Демо Мир"),
       "Кириллица в манифесте должна остаться литералами, а не \\uXXXX.");
