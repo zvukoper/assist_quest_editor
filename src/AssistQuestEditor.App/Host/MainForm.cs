@@ -521,7 +521,7 @@ public sealed class MainForm : WebViewForm
                     ?? throw new InvalidOperationException("Родительская кампания не выбрана.");
 
                 imported = ResourceImportService.ImportQuest(
-                    parentCampaign, inspection, dialog.OverwriteRequested);
+                    _campaignStore, parentCampaign, inspection, dialog.OverwriteRequested);
             }
             else
             {
