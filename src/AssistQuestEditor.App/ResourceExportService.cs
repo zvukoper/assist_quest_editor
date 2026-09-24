@@ -237,6 +237,7 @@ public static class ResourceExportService
         string resourceFileName,
         WorldArchiveManifest manifest,
         DateTimeOffset moment,
+        bool asArchive,
         IReadOnlyList<ExportDependency>? dependencies = null)
     {
         if (!File.Exists(questPath))
@@ -257,7 +258,7 @@ public static class ResourceExportService
                 Path.GetFileNameWithoutExtension(leaf),
                 manifest,
                 moment,
-                asArchive: true,
+                asArchive,
                 dependencies);
         }
         finally
