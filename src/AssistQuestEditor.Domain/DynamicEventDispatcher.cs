@@ -352,9 +352,93 @@ public sealed class DynamicEventDispatcher : IDynamicEventDispatcher
         }
     }
 
-    public bool Discover(string instanceId) =>
-        Transition(instanceId, DynamicEventInstanceStatus.Active, DynamicEventInstanceStatus.Discovered, "Событие обнаружено.",
-            instance => instance with { DiscoveredUtc = DateTimeOffset.UtcNow });
+    public bool Discover(string instanceId)
+    {
+        ThrowIfDisposed();
+
+        var clock = _hub.Get<WorldClockState>("sim-time").Value;
+        var now = DateTimeOffset.UtcNow;
+        var schedules = State.Schedules
+            .ToDictionary(item => item.DefinitionId, item => item, StringComparer.OrdinalIgnoreCase);
+
+        return DiscoverInternal(instanceId, clock, schedules, now);
+    }
+
+    private bool DiscoverInternal(
+        string instanceId,
+        WorldClockState clock,
+        Dictionary<string, DynamicEventScheduleState> schedules,
+        DateTimeOffset? nowOverride = null)
+    {
+        var current = State.Instances.ToList();
+        var index = current.FindIndex(item =>
+            item.InstanceId.Equals(instanceId, StringComparison.OrdinalIgnoreCase));
+
+        if (index < 0 || current[index].Status != DynamicEventInstanceStatus.Active)
+            return false;
+
+        var now = nowOverride ?? DateTimeOffset.UtcNow;
+        var instance = current[index] with
+        {
+            Status = DynamicEventInstanceStatus.Discovered,
+            DiscoveredUtc = now,
+            LastReason = "Событие обнаружено."
+        };
+        current[index] = instance;
+
+        WriteState(
+            current,
+            schedules.Values.OrderBy(item => item.DefinitionId, StringComparer.OrdinalIgnoreCase).ToArray(),
+            "DynamicEventDispatcher.Discover");
+
+        Publish(
+            "DynamicEventDiscovered",
+            "Динамическое событие обнаружено.",
+            instance.DefinitionId,
+            instance.InstanceId,
+            instance.Point);
+
+        if (_definitions.TryGetValue(instance.DefinitionId, out var sourceDefinition))
+            ArmDiscoverySchedules(instance.DefinitionId, clock, now, schedules);
+
+        // Для Dynamic Event, который связан с QuestId, обнаружение является
+        // активацией: Dispatcher передаёт управление обычному Quest Runtime.
+        // При успешном запуске экземпляр сразу считается использованным, чтобы
+        // карта не показывала уже активированный тайник.
+        if (_definitions.TryGetValue(instance.DefinitionId, out var definition) &&
+            !string.IsNullOrWhiteSpace(definition.QuestId))
+        {
+            if (_questRuntime is null)
+            {
+                Publish(
+                    "DynamicEventActivationFailed",
+                    $"Нельзя активировать «{definition.Name}»: Quest Runtime не подключён.",
+                    definition.Id,
+                    instance.InstanceId,
+                    instance.Point);
+            }
+            else if (_questRuntime.StartQuest(definition.QuestId))
+            {
+                Complete(instance.InstanceId, consumed: true);
+            }
+            else
+            {
+                Publish(
+                    "DynamicEventActivationFailed",
+                    $"Квест «{definition.QuestId}» не удалось активировать после обнаружения «{definition.Name}».",
+                    definition.Id,
+                    instance.InstanceId,
+                    instance.Point);
+            }
+        }
+
+        WriteState(
+            State.Instances,
+            schedules.Values.OrderBy(item => item.DefinitionId, StringComparer.OrdinalIgnoreCase).ToArray(),
+            "DynamicEventDispatcher.DiscoverySchedule");
+
+        return true;
+    }
 
     public bool Engage(string instanceId) =>
         Transition(instanceId,
