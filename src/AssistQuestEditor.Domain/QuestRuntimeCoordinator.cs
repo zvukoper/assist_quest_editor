@@ -179,7 +179,8 @@ public sealed class QuestRuntimeCoordinator : IQuestRuntimeController
     {
         if (!_simulationRunning)
         {
-            _isPaused = true;
+            // «Пауза» имеет смысл только для реально работающей симуляции.
+            // После полной остановки отдельное состояние паузы не должно возникать.
             return;
         }
 
