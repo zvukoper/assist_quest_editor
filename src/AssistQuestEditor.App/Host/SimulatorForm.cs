@@ -1958,8 +1958,8 @@ public sealed class SimulatorForm : WebViewForm
         var path = Required(root, "path");
         var save = _saveStore.Load(path);
 
-        // Сначала останавливаем Director: применение сохранения публикует изменения
-        // каналов, и работающий Director мог бы воспринять их как WorldEvent ещё
+        // Сначала останавливаем Dispatcher: применение сохранения публикует изменения
+        // каналов, и работающий Dispatcher мог бы воспринять их как WorldEvent ещё
         // до того, как получил новое состояние.
         _dynamicEventDispatcher.SetSimulationRunning(false);
         SimulationSaveMapper.Apply(_hub, save.State);
