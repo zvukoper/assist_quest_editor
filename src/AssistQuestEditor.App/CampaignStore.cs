@@ -655,7 +655,20 @@ public sealed class CampaignStore
         }
 
         Directory.CreateDirectory(record.FolderPath);
-        var document = new CampaignDefinitionDocument(1, "aqcampaign", record.Definition);
+
+        var moment = DateTimeOffset.UtcNow;
+        var author = string.IsNullOrWhiteSpace(_author)
+            ? ResourceMetadata.DefaultAuthor(moment)
+            : _author!;
+        var definition = record.Definition with
+        {
+            Version = Math.Max(1, record.Definition.Version) + 1,
+            Metadata = (record.Definition.Metadata ?? new ResourceMetadata())
+                .WithModified(author, moment)
+        };
+        record.Replace(definition);
+
+        var document = new CampaignDefinitionDocument(1, "aqcampaign", definition);
         File.WriteAllText(
             record.CampaignFilePath,
             ResourceJsonFormat.Serialize(document));
