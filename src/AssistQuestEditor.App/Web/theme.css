@@ -215,6 +215,10 @@ input,select,textarea{padding:4px 5px;border-radius:4px;font-size:10px}textarea{
    Ширина ограничена: длинные имена миров не должны выдавливать чипы состояния
    за край окна. ------------------------------------------------------------- */
 
+.simWorldSelector{max-width:min(620px,58vw);}
+.simWorldSelector .worldSelectorSelect{max-width:145px;}
+.simWorldSelector #simOpenCampaigns{white-space:nowrap;}
+
 .worldSelector{
   display:flex;align-items:center;gap:5px;
   padding:3px 5px;border:1px solid var(--border);border-radius:8px;
