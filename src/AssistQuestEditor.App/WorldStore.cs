@@ -502,9 +502,8 @@ public static class WorldContentSeeder
 /// код импорта. Тогда «Пропустить» проверяет ту самую дорогу, которой пойдут
 /// архивы от других авторов, а не отдельную ветку, которая может расходиться.
 ///
-/// Пока содержимое — пустышка со структурой папок: файл мира, общая кампания с
-/// демо-квестом и пустые каталоги. Наполнение появится позже, и формат архива
-/// менять для этого не придётся.
+/// Содержимое — намеренно пустая структура: только файл мира, корень campaigns
+/// и каталог Saves. Общая кампания и демонстрационный квест здесь НЕ создаются.
 /// </summary>
 public static class DemoWorldSeeder
 {
@@ -522,9 +521,7 @@ public static class DemoWorldSeeder
 
     /// <summary>Описание честно говорит, что ресурс пока пустой.</summary>
     public const string WorldDescription =
-        "Пустой ресурс в разработке. Пока содержит только структуру папок и " +
-        "общую кампанию с демонстрационным квестом — на нём можно освоиться, " +
-        "ничего не сломав. Полезное содержимое добавим позже.";
+        "Пока пустой ресурс. Создан для знакомства со структурой Assist Quest Editor.";
 
     /// <summary>
     /// Момент создания демо-мира.
@@ -572,30 +569,18 @@ public static class DemoWorldSeeder
                 Description: WorldDescription,
                 Version: 1,
                 Metadata: new ResourceMetadata().WithCreated(author, moment),
-                LastCampaignId: WorldDefinitionRules.CommonCampaignIdValue);
+                LastCampaignId: null);
 
             File.WriteAllText(
                 WorldPaths.WorldFilePath(worldFolder),
                 ResourceJsonFormat.Serialize(new WorldDefinitionDocument(
                     1, WorldDefinitionRules.FormatName, world)));
 
-            // Общая кампания: тот же сеятель, что и у обычного мира. Демо
-            // обязано быть устроено как настоящий мир, иначе на нём нельзя
-            // научиться — а ради этого оно и существует.
-            WorldContentSeeder.SeedCommonCampaign(
-                WorldPaths.CampaignFolder(
-                    worldFolder,
-                    ResourceNaming.ToFolderName(WorldDefinitionRules.CommonCampaignIdValue)),
-                world.Id,
-                author,
-                moment);
-
-            // Структура папок появляется сразу, даже пустая: автор открывает мир
-            // и видит, куда класть квесты и сцены, а не пустой каталог.
-            var commonFolder = WorldPaths.CampaignFolder(
-                worldFolder,
-                ResourceNaming.ToFolderName(WorldDefinitionRules.CommonCampaignIdValue));
-            Directory.CreateDirectory(WorldPaths.ScenesFolderPath(commonFolder));
+            // Демо-архив намеренно ОСТАЁТСЯ ПУСТЫМ по содержимому:
+            // ни Common-кампании, ни квеста внутри него нет. Сохраняем только
+            // будущую структуру каталогов, чтобы первый запуск учил раскладке,
+            // но не подсовывал тестовый ресурс как часть нового мира.
+            Directory.CreateDirectory(WorldPaths.CampaignsRoot(worldFolder));
             Directory.CreateDirectory(WorldPaths.SavesFolderPath(worldFolder));
 
             Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(archivePath))!);
