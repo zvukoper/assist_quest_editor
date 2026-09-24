@@ -30,6 +30,13 @@ public interface IQuestRuntimeController : IDisposable
     event EventHandler<QuestRuntimeEvent>? Published;
 
     void Start();
+
+    /// <summary>
+    /// Запускает конкретный квест по его id. Нужен Dispatcher для событий,
+    /// которые при обнаружении материализуют обычный Quest Runtime.
+    /// </summary>
+    bool StartQuest(string questId);
+
     void Stop(string reason = "Runtime остановлен");
     void Reset();
     void Tick();
