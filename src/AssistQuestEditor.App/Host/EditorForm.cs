@@ -1858,7 +1858,7 @@ public sealed class EditorForm : WebViewForm
             case "dynamic_event_spawn":
                 if (_currentDynamicEventDefinition is not null)
                 {
-                    // Ручная генерация — диагностический вызов Director. В отличие
+                    // Ручная генерация — диагностический вызов Dispatcher. В отличие
                     // от Location Editor она не меняет канонический Definition.
                     _dynamicEventDispatcher.TrySpawn(_currentDynamicEventDefinition.Id);
                 }
