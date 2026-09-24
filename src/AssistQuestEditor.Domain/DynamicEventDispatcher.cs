@@ -695,6 +695,7 @@ public sealed class DynamicEventDispatcher : IDynamicEventDispatcher
     {
         var changed = false;
         var retained = new List<DynamicEventInstance>(State.Instances.Count);
+        var expiredDefinitions = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
         foreach (var instance in State.Instances)
         {
@@ -706,8 +707,12 @@ public sealed class DynamicEventDispatcher : IDynamicEventDispatcher
             }
 
             var expired =
-                IsLifetimeReached(definition.SpawnPolicy.LifetimeGameHours, clock.Elapsed - instance.SpawnedGameElapsed) ||
-                IsLifetimeReached(definition.SpawnPolicy.LifetimeRealHours, now - instance.SpawnedUtc);
+                IsLifetimeReached(
+                    definition.SpawnPolicy.LifetimeGameHours,
+                    clock.Elapsed - instance.SpawnedGameElapsed) ||
+                IsLifetimeReached(
+                    definition.SpawnPolicy.LifetimeRealHours,
+                    now - instance.SpawnedUtc);
 
             if (!expired)
             {
@@ -720,6 +725,7 @@ public sealed class DynamicEventDispatcher : IDynamicEventDispatcher
                 Status = DynamicEventInstanceStatus.Expired,
                 LastReason = "Истёк срок жизни динамического события."
             });
+            expiredDefinitions.Add(definition.Id);
 
             Publish(
                 "DynamicEventExpired",
@@ -729,25 +735,6 @@ public sealed class DynamicEventDispatcher : IDynamicEventDispatcher
                 instance.Point);
 
             changed = true;
-        }
-
-        // Завершённые/отменённые состояния удаляются только на СЛЕДУЮЩЕМ тике.
-        // Это даёт presentation слой ровно один кадр, чтобы показать итог.
-        foreach (var instance in State.Instances)
-        {
-            if (instance.Status is DynamicEventInstanceStatus.Completed or
-                DynamicEventInstanceStatus.Consumed or
-                DynamicEventInstanceStatus.Cancelled or
-                DynamicEventInstanceStatus.Abandoned)
-            {
-                if (_definitions.TryGetValue(instance.DefinitionId, out var definition) &&
-                    definition.SpawnPolicy.RemoveOnCompleted)
-                {
-                    // Добавление уже закрытого экземпляра выше не требуется:
-                    // retained получает его из первого foreach только потому,
-                    // что IsOccupyingRuntime=false. Удаляем ниже.
-                }
-            }
         }
 
         var cleaned = retained
@@ -764,10 +751,40 @@ public sealed class DynamicEventDispatcher : IDynamicEventDispatcher
         if (cleaned.Length != State.Instances.Count)
             changed = true;
 
+        // Сначала фиксируем Expired/удалённые экземпляры. После этого
+        // RespawnOnExpired может честно увидеть, что лимит активных экземпляров
+        // освободился.
         if (changed)
-            _hub.Get<DynamicEventRuntimeState>("dynamic-events").Set(
-                new DynamicEventRuntimeState(cleaned, State.Schedules),
+        {
+            WriteState(
+                cleaned,
+                State.Schedules,
                 "DynamicEventDispatcher.Expire");
+        }
+
+        foreach (var definitionId in expiredDefinitions)
+        {
+            if (!_definitions.TryGetValue(definitionId, out var definition) ||
+                !definition.SpawnPolicy.RespawnOnExpired)
+                continue;
+
+            if (State.Instances.Any(instance =>
+                    instance.DefinitionId.Equals(definitionId, StringComparison.OrdinalIgnoreCase) &&
+                    IsOccupyingRuntime(instance)))
+                continue;
+
+            var schedules = State.Schedules
+                .ToDictionary(item => item.DefinitionId, item => item, StringComparer.OrdinalIgnoreCase);
+            var attempt = AttemptSpawn(definition, clock, now, schedules, "Expired");
+            if (attempt == DynamicEventSpawnAttempt.Spawned)
+            {
+                WriteState(
+                    State.Instances,
+                    schedules.Values.OrderBy(item => item.DefinitionId, StringComparer.OrdinalIgnoreCase).ToArray(),
+                    "DynamicEventDispatcher.Respawn");
+                changed = true;
+            }
+        }
 
         return changed;
     }
