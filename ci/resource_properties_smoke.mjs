@@ -105,9 +105,11 @@ check(!/File\.(Write|Copy|Delete|Move)\s*\(/.test(form),
 // квесты, и активность, и стартовые условия мира.
 check(/record\.Replace\(record\.Definition with[\s\S]{0,600}?Name = name\.Trim\(\)/.test(campaignStore),
   "Правка кампании не собирает определение через `with`: часть полей могла бы обнулиться.");
+const updateStart = campaignStore.indexOf("public void UpdateCampaign(");
+const updateEnd = campaignStore.indexOf("public void RegisterQuest(", updateStart);
 const campaignUpdate = campaignStore.slice(
-  campaignStore.indexOf("public void UpdateCampaign("),
-  campaignStore.indexOf("public void SetQuestEnabled("));
+  updateStart,
+  updateEnd > updateStart ? updateEnd : campaignStore.indexOf("public void SetQuestEnabled(", updateStart));
 check(campaignUpdate.length > 0, "Метод правки кампании не найден.");
 for (const forbidden of ["Quests = ", "Active = ", "Geo = ", "StartDate = ", "StartConditions = ",
                          "WorldId = "]) {
