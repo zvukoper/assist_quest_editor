@@ -26,7 +26,7 @@ public sealed class EditorForm : WebViewForm
     private readonly IQuestRuntimeController _runtime;
     private readonly LocationStore _locationStore;
     private readonly DynamicEventStore _dynamicEventStore;
-    private readonly IDynamicEventDirector _dynamicEventDirector;
+    private readonly IDynamicEventDispatcher _dynamicEventDispatcher;
 
     /// <summary>
     /// Дорожная геометрия мира для критерия «рядом с дорогой».
@@ -160,7 +160,7 @@ public sealed class EditorForm : WebViewForm
         IQuestRuntimeController runtime,
         LocationStore locationStore,
         DynamicEventStore dynamicEventStore,
-        IDynamicEventDirector dynamicEventDirector,
+        IDynamicEventDispatcher dynamicEventDispatcher,
         RoadIndex? roads = null,
         JunctionIndex? junctions = null,
         ICityBoundarySource? cityBoundaries = null)
@@ -177,7 +177,7 @@ public sealed class EditorForm : WebViewForm
         _runtime = runtime;
         _locationStore = locationStore ?? throw new ArgumentNullException(nameof(locationStore));
         _dynamicEventStore = dynamicEventStore ?? throw new ArgumentNullException(nameof(dynamicEventStore));
-        _dynamicEventDirector = dynamicEventDirector ?? throw new ArgumentNullException(nameof(dynamicEventDirector));
+        _dynamicEventDispatcher = dynamicEventDispatcher ?? throw new ArgumentNullException(nameof(dynamicEventDispatcher));
         _roads = roads ?? new RoadIndex(Array.Empty<RoadSegment>());
         _junctions = junctions ?? new JunctionIndex(Array.Empty<JunctionPoint>());
         _cityBoundaries = cityBoundaries ?? new StaticCityBoundarySource();
@@ -1860,7 +1860,7 @@ public sealed class EditorForm : WebViewForm
                 {
                     // Ручная генерация — диагностический вызов Director. В отличие
                     // от Location Editor она не меняет канонический Definition.
-                    _dynamicEventDirector.TrySpawn(_currentDynamicEventDefinition.Id);
+                    _dynamicEventDispatcher.TrySpawn(_currentDynamicEventDefinition.Id);
                 }
                 break;
 
@@ -2056,7 +2056,7 @@ public sealed class EditorForm : WebViewForm
                 name = item.Name,
                 mode = item.Mode
             }).ToArray(),
-            runtime = _dynamicEventDirector.State
+            runtime = _dynamicEventDispatcher.State
         }, WebJsonOptions));
     }
 
