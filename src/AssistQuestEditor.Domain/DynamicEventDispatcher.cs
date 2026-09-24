@@ -225,6 +225,133 @@ public sealed class DynamicEventDispatcher : IDynamicEventDispatcher
         return result == DynamicEventSpawnAttempt.Spawned;
     }
 
+    /// <summary>
+    /// Материализует правила, которым нужен первый экземпляр сразу после запуска
+    /// симуляции. Дальше жизненный цикл этого экземпляра управляется обычными
+    /// триггерами Dispatcher.
+    /// </summary>
+    private void SpawnOnSimulationStart()
+    {
+        var clock = _hub.Get<WorldClockState>("sim-time").Value;
+        var now = DateTimeOffset.UtcNow;
+        var schedules = State.Schedules
+            .ToDictionary(item => item.DefinitionId, item => item, StringComparer.OrdinalIgnoreCase);
+
+        var changed = false;
+        foreach (var definition in _definitions.Values.ToArray())
+        {
+            if (!definition.SpawnPolicy.SpawnOnSimulationStart)
+                continue;
+
+            if (State.Instances.Any(instance =>
+                    instance.DefinitionId.Equals(definition.Id, StringComparison.OrdinalIgnoreCase) &&
+                    IsOccupyingRuntime(instance)))
+                continue;
+
+            var attempt = AttemptSpawn(definition, clock, now, schedules, "SimulationStarted");
+            if (attempt == DynamicEventSpawnAttempt.Spawned)
+                changed = true;
+        }
+
+        if (changed)
+        {
+            WriteState(
+                State.Instances,
+                schedules.Values.OrderBy(item => item.DefinitionId, StringComparer.OrdinalIgnoreCase).ToArray(),
+                "DynamicEventDispatcher.SpawnOnSimulationStart");
+        }
+    }
+
+    /// <summary>
+    /// Обнаружение автоматическое по расстоянию до фактической точки экземпляра.
+    /// Это делает Dynamic Event именно мировым объектом: автору не приходится
+    /// вручную отправлять Discover из Simulator.
+    /// </summary>
+    private bool AutoDiscoverNearbyInstances(
+        WorldCoordinate playerPosition,
+        WorldClockState clock,
+        Dictionary<string, DynamicEventScheduleState> schedules)
+    {
+        var changed = false;
+        var nearby = State.Instances
+            .Where(instance => instance.Status == DynamicEventInstanceStatus.Active)
+            .Where(instance => Distance(playerPosition, instance.Point.Position) <=
+                Math.Max(0, instance.Point.TriggerRadius))
+            .Select(instance => instance.InstanceId)
+            .ToArray();
+
+        foreach (var instanceId in nearby)
+        {
+            changed |= DiscoverInternal(instanceId, clock, schedules);
+        }
+
+        return changed;
+    }
+
+    private bool EvaluateDynamicEventDiscovery(
+        DynamicEventDefinition definition,
+        WorldClockState clock,
+        DateTimeOffset now,
+        Dictionary<string, DynamicEventScheduleState> schedules)
+    {
+        var schedule = GetOrCreateSchedule(definition, clock, now, schedules);
+        if (schedule.NextGameElapsed is not { } next || clock.Elapsed < next)
+            return false;
+
+        var attempt = AttemptSpawn(definition, clock, now, schedules, "DynamicEventDiscovery");
+        if (attempt == DynamicEventSpawnAttempt.Spawned)
+        {
+            schedules[definition.Id] = schedule with
+            {
+                NextGameElapsed = null,
+                TriggerPending = false
+            };
+            return true;
+        }
+
+        // Активный лимит и cooldown должны перепроверяться на следующем тике.
+        // Ошибка разрешения Location тоже оставляется pending: мир может
+        // измениться, и новый кандидат появится без изменения Definition.
+        schedules[definition.Id] = schedule with
+        {
+            TriggerPending = true
+        };
+        return true;
+    }
+
+    /// <summary>
+    /// После обнаружения источника армается ровно один следующий запуск.
+    /// Несколько одинаковых discovery triggers независимы по DefinitionId.
+    /// </summary>
+    private void ArmDiscoverySchedules(
+        string sourceDefinitionId,
+        WorldClockState clock,
+        DateTimeOffset now,
+        Dictionary<string, DynamicEventScheduleState> schedules)
+    {
+        foreach (var definition in _definitions.Values)
+        {
+            var trigger = definition.Trigger;
+            if (!Normalize(trigger.Type).Equals("dynamiceventdiscovery", StringComparison.OrdinalIgnoreCase))
+                continue;
+
+            if (!string.IsNullOrWhiteSpace(trigger.SourceDefinitionId) &&
+                !trigger.SourceDefinitionId.Equals(sourceDefinitionId, StringComparison.OrdinalIgnoreCase))
+                continue;
+
+            var schedule = schedules.TryGetValue(definition.Id, out var existing)
+                ? existing
+                : GetOrCreateSchedule(definition, clock, now, schedules);
+
+            schedules[definition.Id] = schedule with
+            {
+                NextGameElapsed = clock.Elapsed +
+                    NextTimeInterval(trigger.MinGameHours, trigger.MaxGameHours),
+                TriggerPending = false
+            };
+        }
+    }
+
     public bool Discover(string instanceId) =>
         Transition(instanceId, DynamicEventInstanceStatus.Active, DynamicEventInstanceStatus.Discovered, "Событие обнаружено.",
             instance => instance with { DiscoveredUtc = DateTimeOffset.UtcNow });
