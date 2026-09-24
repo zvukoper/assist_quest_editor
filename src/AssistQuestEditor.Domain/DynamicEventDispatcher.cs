@@ -824,6 +824,12 @@ public sealed class DynamicEventDispatcher : IDynamicEventDispatcher
                     NextTimeInterval(definition.Trigger.MinRealHours, definition.Trigger.MaxRealHours)
             };
         }
+        else if (type == "dynamiceventdiscovery")
+        {
+            // Первоначальное значение не задаём: оно появляется только после
+            // обнаружения sourceDefinitionId.
+            schedule = schedule with { NextGameElapsed = null };
+        }
 
         schedules[definition.Id] = schedule;
         return schedule;
@@ -895,7 +901,7 @@ public sealed class DynamicEventDispatcher : IDynamicEventDispatcher
     private static bool NormalizeTriggerNeedsSchedule(DynamicEventDefinition definition)
     {
         var type = Normalize(definition.Trigger.Type);
-        return type is "distancetravelled" or "gametime" or "realtime";
+        return type is "distancetravelled" or "gametime" or "realtime" or "dynamiceventdiscovery";
     }
 
     private void AddInstance(DynamicEventInstance instance)
