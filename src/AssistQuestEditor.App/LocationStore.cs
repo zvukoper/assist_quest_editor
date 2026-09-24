@@ -15,17 +15,47 @@ public sealed class LocationStore
 
     private readonly string _root;
     private readonly bool _readOnly;
+    private IReadOnlyList<string> _additionalRoots = Array.Empty<string>();
     private readonly Dictionary<string, (LocationDefinition Definition, string Path)> _items =
         new(StringComparer.OrdinalIgnoreCase);
 
-    public LocationStore(string root, bool readOnly = false)
+    public LocationStore(
+        string root,
+        bool readOnly = false,
+        IEnumerable<string>? additionalRoots = null)
     {
         if (string.IsNullOrWhiteSpace(root))
             throw new ArgumentException("Каталог Location не задан.", nameof(root));
 
         _root = Path.GetFullPath(root);
         _readOnly = readOnly;
+        SetAdditionalRoots(additionalRoots, reload: false);
         Reload();
+    }
+
+    /// <summary>
+    /// Добавляет/заменяет дополнительные каталоги чтения текущего мира.
+    ///
+    /// Основная библиотека остаётся общей и записываемой, а world-local resources
+    /// могут ехать внутри demo/user world и одновременно участвовать в общем
+    /// каталоге редактора.
+    /// </summary>
+    public void SetAdditionalRoots(IEnumerable<string>? roots)
+    {
+        SetAdditionalRoots(roots, reload: true);
+    }
+
+    private void SetAdditionalRoots(IEnumerable<string>? roots, bool reload)
+    {
+        _additionalRoots = (roots ?? Array.Empty<string>())
+            .Where(path => !string.IsNullOrWhiteSpace(path))
+            .Select(Path.GetFullPath)
+            .Where(path => !path.Equals(_root, StringComparison.OrdinalIgnoreCase))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+        if (reload)
+            Reload();
     }
 
     public bool IsReadOnly => _readOnly;
@@ -46,7 +76,7 @@ public sealed class LocationStore
 
         try
         {
-            EnsureInsideRoot(Path.GetFullPath(path));
+            EnsureInsideAnyRoot(Path.GetFullPath(path));
             return true;
         }
         catch (InvalidOperationException)
@@ -68,41 +98,48 @@ public sealed class LocationStore
         if (!_readOnly)
             Directory.CreateDirectory(_root);
 
-        if (!Directory.Exists(_root))
-            return;
+        var roots = new[] { _root }.Concat(_additionalRoots)
+            .Where(Directory.Exists)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
 
-        foreach (var path in Directory.EnumerateFiles(
-                     _root,
-                     "*" + Extension,
-                     SearchOption.AllDirectories)
-                 .OrderBy(path => path, StringComparer.OrdinalIgnoreCase))
+        foreach (var root in roots)
         {
-            try
+            foreach (var path in Directory.EnumerateFiles(
+                         root,
+                         "*" + Extension,
+                         SearchOption.AllDirectories)
+                     .OrderBy(path => path, StringComparer.OrdinalIgnoreCase))
             {
-                var document = ResourceJsonFormat.Deserialize<LocationDefinitionDocument>(
-                    File.ReadAllText(path));
-
-                if (document?.Definition is null ||
-                    document.SchemaVersion != SupportedSchemaVersion ||
-                    !document.Format.Equals("aqlocation", StringComparison.OrdinalIgnoreCase) ||
-                    string.IsNullOrWhiteSpace(document.Definition.Id))
+                try
                 {
-                    AppLogger.Warn("LocationStore: пропущен некорректный Location.", path);
-                    continue;
-                }
+                    var document = ResourceJsonFormat.Deserialize<LocationDefinitionDocument>(
+                        File.ReadAllText(path));
 
-                if (!_items.ContainsKey(document.Definition.Id))
-                    _items.Add(document.Definition.Id, (document.Definition, path));
-            }
-            catch (Exception ex)
-            {
-                AppLogger.Error("LocationStore: ошибка чтения Location.", ex, path);
+                    if (document?.Definition is null ||
+                        document.SchemaVersion != SupportedSchemaVersion ||
+                        !document.Format.Equals("aqlocation", StringComparison.OrdinalIgnoreCase) ||
+                        string.IsNullOrWhiteSpace(document.Definition.Id))
+                    {
+                        AppLogger.Warn("LocationStore: пропущен некорректный Location.", path);
+                        continue;
+                    }
+
+                    // Primary writable library wins when a world-local overlay
+                    // happens to use the same id.
+                    if (!_items.ContainsKey(document.Definition.Id))
+                        _items.Add(document.Definition.Id, (document.Definition, path));
+                }
+                catch (Exception ex)
+                {
+                    AppLogger.Error("LocationStore: ошибка чтения Location.", ex, path);
+                }
             }
         }
 
         AppLogger.Info(
             "LocationStore: библиотека загружена.",
-            $"root={_root}; count={_items.Count}; readOnly={_readOnly}");
+            $"root={_root}; overlays={_additionalRoots.Count}; count={_items.Count}; readOnly={_readOnly}");
     }
 
     public bool TryGet(string id, out LocationDefinition definition)
@@ -135,7 +172,7 @@ public sealed class LocationStore
             ? Path.Combine(_root, SanitizeFileName(definition.Id) + Extension)
             : Path.GetFullPath(existingPath);
 
-        EnsureInsideRoot(path);
+        EnsureInsideAnyRoot(path);
 
         if (_items.TryGetValue(definition.Id, out var existing) &&
             !string.Equals(Path.GetFullPath(existing.Path), path, StringComparison.OrdinalIgnoreCase))
@@ -203,13 +240,18 @@ public sealed class LocationStore
             throw new InvalidOperationException("Для Dynamic Location нужен Location Query.");
     }
 
-    private void EnsureInsideRoot(string path)
+    private void EnsureInsideAnyRoot(string path)
     {
-        var root = _root.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar) +
-            Path.DirectorySeparatorChar;
+        var roots = new[] { _root }.Concat(_additionalRoots);
+        foreach (var root in roots)
+        {
+            var normalizedRoot = root.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar) +
+                Path.DirectorySeparatorChar;
+            if (path.StartsWith(normalizedRoot, StringComparison.OrdinalIgnoreCase))
+                return;
+        }
 
-        if (!path.StartsWith(root, StringComparison.OrdinalIgnoreCase))
-            throw new InvalidOperationException("Путь Location выходит за пределы библиотеки.");
+        throw new InvalidOperationException("Путь Location выходит за пределы библиотеки.");
     }
 
     private static string SanitizeFileName(string value)
