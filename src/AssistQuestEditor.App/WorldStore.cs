@@ -577,72 +577,51 @@ public static class WorldContentSeeder
 }
 
 /// <summary>
-/// Демонстрационный мир, поставляемый рядом с приложением в виде архива
-/// <c>data/DemoWorld.aqezip</c>.
-///
-/// Зачем архив, а не папка: демо-мир должен попадать в пользовательскую папку
-/// ровно так же, как любой другой импортируемый мир, — то есть через тот же
-/// код импорта. Тогда «Пропустить» проверяет ту самую дорогу, которой пойдут
-/// архивы от других авторов, а не отдельную ветку, которая может расходиться.
-///
-/// Содержимое — намеренно пустая структура: только файл мира, корень campaigns
-/// и каталог Saves. Общая кампания и демонстрационный квест здесь НЕ создаются.
+/// Демонстрационный мир, поставляемый рядом с приложением в виде архива.
+/// Внутри есть минимальный учебный контент: кампания «Обучение», квест
+/// «Тестовый динамический тайник», отдельная Location и Dynamic Event.
 /// </summary>
 public static class DemoWorldSeeder
 {
-    /// <summary>Id демо-мира. Фиксированный: по нему «Пропустить» его находит.</summary>
     public const string WorldId = "demo";
-
-    /// <summary>Короткое имя мира (папка и адресация).</summary>
     public const string WorldName = "DemoWorld";
-
-    /// <summary>
-    /// Имя для человека. Именно оно становится именем папки при импорте, потому
-    /// что пользователь видит папки глазами.
-    /// </summary>
     public const string WorldFullName = "Демо Мир";
-
-    /// <summary>Описание честно говорит, что ресурс пока пустой.</summary>
     public const string WorldDescription =
-        "Пока пустой ресурс. Создан для знакомства со структурой Assist Quest Editor.";
+        "Учебный мир для проверки Location, Dynamic Event Dispatcher и Quest Runtime.";
 
-    /// <summary>
-    /// Момент создания демо-мира.
-    ///
-    /// ФИКСИРОВАННЫЙ, а не текущее время: иначе архив менялся бы при каждой
-    /// пересборке, и проверить «тот ли файл лежит в поставке» стало бы
-    /// невозможно — пришлось бы сверять содержимое вручную с выгруженным
-    /// файлом. Вместе с фиксированными метками записей архива
-    /// (<see cref="WorldArchiveService"/>) это даёт побайтово воспроизводимый
-    /// результат, а значит проверку «код и файл совпадают» в CI.
-    /// </summary>
+    public const string TrainingCampaignId = "training";
+    public const string CacheQuestId = "test_dynamic_cache";
+    public const string CacheLocationId = "training_dynamic_cache_location";
+    public const string CacheEventId = "test_dynamic_cache";
+
     public static readonly DateTimeOffset DemoMoment =
         new(2026, 9, 24, 12, 0, 0, TimeSpan.Zero);
 
-    /// <summary>Подпись демо-мира. Фиксированная по той же причине, что и момент.</summary>
     public const string DemoAuthor = "Assist Quest Editor";
 
-    /// <summary>Путь поставляемого архива рядом с приложением.</summary>
     public static string BundledArchivePath =>
         Path.Combine(AppPaths.ResourceRoot, WorldArchiveRules.DemoWorldFileName);
 
-    /// <summary>Есть ли поставляемый архив. Его отсутствие — не ошибка: сборка могла быть без демо.</summary>
     public static bool BundledArchiveExists => File.Exists(BundledArchivePath);
 
     /// <summary>
-    /// Собирает демо-мир в папке и упаковывает его в архив.
-    ///
-    /// Сборка идёт через обычные писатели ресурсов
-    /// (<see cref="WorldContentSeeder"/>), а не через отдельные шаблоны: только
-    /// так гарантируется, что демо-мир — это валидный мир, а не набор строк,
-    /// который придётся поддерживать отдельно.
+    /// Собирает демо-мир обычным WorldArchiveService. Эти же canonical resource
+    /// writers используются в пользовательском контенте.
     /// </summary>
-    public static ArchivePackResult BuildArchive(string archivePath, string author, DateTimeOffset moment)
+    public static ArchivePackResult BuildArchive(
+        string archivePath,
+        string author,
+        DateTimeOffset moment)
     {
-        var staging = Path.Combine(Path.GetTempPath(), "aq-demo-" + Guid.NewGuid().ToString("N"));
+        var staging = Path.Combine(
+            Path.GetTempPath(),
+            "aq-demo-" + Guid.NewGuid().ToString("N"));
+
         try
         {
-            var worldFolder = Path.Combine(staging, ResourceNaming.ToFolderName(WorldFullName));
+            var worldFolder = Path.Combine(
+                staging,
+                ResourceNaming.ToFolderName(WorldFullName));
             Directory.CreateDirectory(worldFolder);
 
             var world = new WorldDefinition(
@@ -652,21 +631,101 @@ public static class DemoWorldSeeder
                 Description: WorldDescription,
                 Version: 1,
                 Metadata: new ResourceMetadata().WithCreated(author, moment),
-                LastCampaignId: null);
+                LastCampaignId: TrainingCampaignId);
 
             File.WriteAllText(
                 WorldPaths.WorldFilePath(worldFolder),
-                ResourceJsonFormat.Serialize(new WorldDefinitionDocument(
-                    1, WorldDefinitionRules.FormatName, world)));
+                ResourceJsonFormat.Serialize(
+                    new WorldDefinitionDocument(
+                        1,
+                        WorldDefinitionRules.FormatName,
+                        world)));
 
-            // Демо-архив намеренно ОСТАЁТСЯ ПУСТЫМ по содержимому:
-            // ни Common-кампании, ни квеста внутри него нет. Сохраняем только
-            // будущую структуру каталогов, чтобы первый запуск учил раскладке,
-            // но не подсовывал тестовый ресурс как часть нового мира.
-            Directory.CreateDirectory(WorldPaths.CampaignsRoot(worldFolder));
             Directory.CreateDirectory(WorldPaths.SavesFolderPath(worldFolder));
 
-            Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(archivePath))!);
+            var campaignFolder = WorldPaths.CampaignFolder(
+                worldFolder,
+                TrainingCampaignId);
+            var questsFolder = WorldPaths.QuestsFolderPath(campaignFolder);
+            Directory.CreateDirectory(questsFolder);
+            Directory.CreateDirectory(WorldPaths.ScenesFolderPath(campaignFolder));
+
+            var campaign = new CampaignDefinition(
+                Id: TrainingCampaignId,
+                Name: TrainingCampaignId,
+                Version: 1,
+                Active: true,
+                Quests: new[]
+                {
+                    new CampaignQuestEntry(
+                        CacheQuestId,
+                        Path.Combine(
+                            WorldPaths.QuestsFolder,
+                            CacheQuestId + ".aqquest"),
+                        1,
+                        CampaignQuestStatus.Enabled,
+                        1)
+                },
+                Files: new[]
+                {
+                    WorldPaths.CampaignFileName,
+                    Path.Combine(
+                        WorldPaths.QuestsFolder,
+                        CacheQuestId + ".aqquest")
+                },
+                Geo: GeoCoordinate.CreateDefault(),
+                StartDate: GameCalendar.DefaultStartDate,
+                StartConditions: new WorldStartConditions(
+                    Weather: "Ясно",
+                    RainPercent: 0,
+                    VisibilityMeters: 10000),
+                WorldId: WorldId,
+                FullName: "Обучение",
+                Description: "Учебная кампания для проверки Диспетчера динамических событий.",
+                Metadata: new ResourceMetadata().WithCreated(author, moment));
+
+            WorldContentSeeder.WriteCampaign(campaignFolder, campaign, WorldId);
+
+            var quest = CreateTrainingQuest(author, moment);
+            File.WriteAllText(
+                Path.Combine(questsFolder, CacheQuestId + ".aqquest"),
+                ResourceJsonFormat.Serialize(
+                    new QuestDefinitionDocument(1, "aqquest", quest)));
+
+            var locationFolder = Path.Combine(
+                worldFolder,
+                WorldPaths.LocationsFolder);
+            Directory.CreateDirectory(locationFolder);
+
+            var location = CreateTrainingLocation();
+            File.WriteAllText(
+                Path.Combine(
+                    locationFolder,
+                    CacheLocationId + LocationStore.Extension),
+                ResourceJsonFormat.Serialize(
+                    new LocationDefinitionDocument(
+                        1,
+                        "aqlocation",
+                        location)));
+
+            var eventFolder = Path.Combine(
+                worldFolder,
+                WorldPaths.DynamicEventsFolder);
+            Directory.CreateDirectory(eventFolder);
+
+            var dynamicEvent = CreateTrainingDynamicEvent();
+            File.WriteAllText(
+                Path.Combine(
+                    eventFolder,
+                    CacheEventId + DynamicEventStore.Extension),
+                ResourceJsonFormat.Serialize(
+                    new DynamicEventDefinitionDocument(
+                        1,
+                        DynamicEventDefinitionRules.FormatName,
+                        dynamicEvent)));
+
+            Directory.CreateDirectory(
+                Path.GetDirectoryName(Path.GetFullPath(archivePath))!);
 
             return WorldArchiveService.Pack(
                 worldFolder,
@@ -690,10 +749,213 @@ public static class DemoWorldSeeder
             }
             catch (Exception ex)
             {
-                // Не убирать временную папку неприятно, но уронить из-за этого
-                // сборку демо-мира — хуже: результат уже получен.
-                AppLogger.Warn("DemoWorldSeeder: не удалось удалить временную папку.", staging + "; " + ex.Message);
+                AppLogger.Warn(
+                    "DemoWorldSeeder: не удалось удалить временную папку.",
+                    staging + "; " + ex.Message);
             }
         }
     }
+
+    private static QuestDefinition CreateTrainingQuest(
+        string author,
+        DateTimeOffset moment)
+    {
+        var nodes = new[]
+        {
+            Node("start", "Start", "01. Тайник появился", 80, 220),
+            Node(
+                "notify",
+                "Notify",
+                "02. Тайник обнаружен",
+                340,
+                220,
+                ("message", "Ты обнаружил динамический тайник. Загляни внутрь и забери находки.")),
+            Node(
+                "note",
+                "GiveItem",
+                "03. Записка",
+                600,
+                170,
+                ("itemId", "note"),
+                ("count", "1")),
+            Node(
+                "money",
+                "AddMoney",
+                "04. 5 000 рублей",
+                860,
+                170,
+                ("amount", "5000")),
+            Node(
+                "scout",
+                "AddSkill",
+                "05. Разведчик +50",
+                1120,
+                170,
+                ("skillId", "scout"),
+                ("name", "Разведчик"),
+                ("description", "Навык поиска и обнаружения скрытых тайников."),
+                ("kind", "Levelled"),
+                ("amount", "50"),
+                ("maxLevel", "100")),
+            Node("end", "End", "06. Тайник завершён", 1380, 170)
+        };
+
+        var connections = new[]
+        {
+            Connection("start", "out", "notify", "in"),
+            Connection("notify", "out", "note", "in"),
+            Connection("note", "out", "money", "in"),
+            Connection("money", "out", "scout", "in"),
+            Connection("scout", "out", "end", "in")
+        };
+
+        return new QuestDefinition(
+            CacheQuestId,
+            "Тестовый динамический тайник",
+            "Демонстрационный квест, запускаемый Dispatcher при обнаружении динамического тайника.",
+            new QuestGraph(
+                CacheQuestId,
+                "Тестовый динамический тайник",
+                nodes,
+                connections),
+            Array.Empty<string>(),
+            Activation: new QuestActivation(QuestStartMode.Manual),
+            Version: 1,
+            WorldId: WorldId,
+            CampaignId: TrainingCampaignId,
+            Metadata: new ResourceMetadata().WithCreated(author, moment));
+    }
+
+    private static LocationDefinition CreateTrainingLocation() =>
+        new(
+            CacheLocationId,
+            "Точки тестовых динамических тайников")
+        {
+            Description =
+                "Кандидаты рядом с дорогой, не ближе 1 км к ближайшему городу, " +
+                "в пределах 1–5 км от игрока и только в заданных типах объектов.",
+            Mode = LocationMode.Dynamic,
+            TriggerRadius = 35,
+            Query = new LocationQueryDefinition
+            {
+                Criteria = new[]
+                {
+                    new LocationCriterion(
+                        "categoryisany",
+                        new Dictionary<string, string>(
+                            StringComparer.OrdinalIgnoreCase)
+                        {
+                            ["value"] =
+                                "ruined_civ|ruins_ind|crashed_car|dead_car|" +
+                                "forest_fire|graveyard|road_grave"
+                        }),
+                    new LocationCriterion(
+                        "nearbyroad",
+                        new Dictionary<string, string>(
+                            StringComparer.OrdinalIgnoreCase)
+                        {
+                            ["meters"] = "150"
+                        }),
+                    new LocationCriterion(
+                        "distancefromnearestcity",
+                        new Dictionary<string, string>(
+                            StringComparer.OrdinalIgnoreCase)
+                        {
+                            ["meters"] = "1000"
+                        }),
+                    new LocationCriterion(
+                        "distancefromplayer",
+                        new Dictionary<string, string>(
+                            StringComparer.OrdinalIgnoreCase)
+                        {
+                            ["meters"] = "1000-5000"
+                        })
+                },
+                History = new LocationHistoryConstraints
+                {
+                    MaxSelectionCount = 0
+                }
+            }
+        };
+
+    private static DynamicEventDefinition CreateTrainingDynamicEvent() =>
+        new(
+            CacheEventId,
+            "Тестовый динамический тайник")
+        {
+            Description =
+                "Тайник для проверки полного цикла Dispatcher: первичное создание, " +
+                "автообнаружение, Quest Runtime, задержка 5 минут и пересоздание через 10 минут.",
+            LocationId = CacheLocationId,
+            QuestId = CacheQuestId,
+            TriggerRadius = 35,
+            Category = "Тайник",
+            Trigger = new DynamicEventTriggerDefinition
+            {
+                Type = "DynamicEventDiscovery",
+                SourceDefinitionId = CacheEventId,
+                MinGameHours = 5d / 60d,
+                MaxGameHours = 5d / 60d
+            },
+            SpawnPolicy = new DynamicEventSpawnPolicy
+            {
+                MaxActiveInstances = 1,
+                SpawnChance = 1d,
+                LifetimeGameHours = 10d / 60d,
+                SpawnOnSimulationStart = true,
+                RespawnOnExpired = true,
+                RemoveOnCompleted = true
+            },
+            Presentation = new Dictionary<string, string>(
+                StringComparer.OrdinalIgnoreCase)
+            {
+                ["discovery"] = "WorldMarker",
+                ["category"] = "Тайник"
+            }
+        };
+
+    private static QuestNode Node(
+        string id,
+        string type,
+        string title,
+        double x,
+        double y,
+        params (string Key, string Value)[] parameters)
+    {
+        var sockets = type switch
+        {
+            "Start" => new[]
+            {
+                new SocketDefinition(id + ".out", "Далее", SocketDirection.Output)
+            },
+            "End" => new[]
+            {
+                new SocketDefinition(id + ".in", "Вход", SocketDirection.Input)
+            },
+            _ => new[]
+            {
+                new SocketDefinition(id + ".in", "Вход", SocketDirection.Input),
+                new SocketDefinition(id + ".out", "Далее", SocketDirection.Output)
+            }
+        };
+
+        return new QuestNode(id, type, title, x, y, sockets)
+        {
+            Parameters = parameters.ToDictionary(
+                pair => pair.Key,
+                pair => pair.Value,
+                StringComparer.OrdinalIgnoreCase)
+        };
+    }
+
+    private static QuestConnection Connection(
+        string fromNode,
+        string fromSocket,
+        string toNode,
+        string toSocket) =>
+        new(
+            fromNode,
+            fromNode + "." + fromSocket,
+            toNode,
+            toNode + "." + toSocket);
 }
