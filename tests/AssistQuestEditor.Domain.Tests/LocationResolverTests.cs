@@ -1377,6 +1377,60 @@ public sealed class LocationResolverTests
         Assert.NotEmpty(result.Candidates);
     }
 
+    [Fact]
+    public void CategoryIsAnyMatchesConfiguredCacheCategories()
+    {
+        var points = new[]
+        {
+            Point("ruin", "Разрушенное здание", "ruined_civ", 0),
+            Point("crashed", "Разбитая машина", "crashed_car", 100),
+            Point("shop", "Магазин", "shop", 200)
+        };
+
+        var location = DynamicLocation(("CategoryIsAny", new Dictionary<string, string>
+        {
+            ["value"] = "ruined_civ|crashed_car|dead_car"
+        }));
+
+        var result = new LocationResolver(1).Test(location, points, 3);
+
+        Assert.True(result.Supported);
+        var ids = result.Candidates.Select(item => item.CandidateId).Distinct().ToArray();
+        Assert.Contains("ruin", ids);
+        Assert.Contains("crashed", ids);
+        Assert.DoesNotContain("shop", ids);
+    }
+
+    [Fact]
+    public void DistanceFromNearestCityEnforcesMinimumDistance()
+    {
+        var points = new[]
+        {
+            Point("near-city", "Рядом с городом", "ruined_civ", 900),
+            Point("far-city", "Далеко от города", "ruined_civ", 1500)
+        };
+        points = points.Select(point => point with
+        {
+            IsCity = false
+        }).ToArray();
+
+        var cities = new[]
+        {
+            Point("city", "Город", "Города", 0) with { IsCity = true }
+        };
+
+        var world = points.Concat(cities).ToArray();
+        var location = DynamicLocation(("DistanceFromNearestCity", new Dictionary<string, string>
+        {
+            ["meters"] = "1000"
+        }));
+
+        var result = new LocationResolver(1).Test(location, world, 2);
+
+        Assert.True(result.Supported);
+        Assert.Equal("far-city", result.Candidates.Single().CandidateId);
+    }
+
     private static LocationDefinition DynamicLocation(
         params (string Type, Dictionary<string, string> Parameters)[] criteria) =>
         new("location_test", "Тестовая локация")
