@@ -209,10 +209,53 @@ public sealed class WorldStore
                 }
             }
 
+            var stagedDefinitionPath = WorldPaths.WorldFilePath(staging);
+            var stagedDefinition = File.Exists(stagedDefinitionPath)
+                ? ReadWorldDefinition(staging)
+                : null;
+
+            if (stagedDefinition is null)
+                throw new InvalidDataException("Импортируемый world.aqworld не читается.");
+
+            if (!overwrite && !string.Equals(targetName, desired, StringComparison.OrdinalIgnoreCase))
+            {
+                // «Рядом» означает действительно НОВЫЙ ресурс: новый каталог
+                // должен получить новый стабильный Id, иначе WorldStore сольёт
+                // оригинал и копию по одному Id и одну из них скроет.
+                stagedDefinition = stagedDefinition with
+                {
+                    Id = MakeId(targetName),
+                    Name = targetName,
+                    FullName = null,
+                    LastCampaignId = null
+                };
+
+                File.WriteAllText(
+                    stagedDefinitionPath,
+                    ResourceJsonFormat.Serialize(new WorldDefinitionDocument(
+                        1, WorldDefinitionRules.FormatName, stagedDefinition)));
+            }
+
             if (Directory.Exists(targetFolder))
             {
-                Directory.Delete(targetFolder, recursive: true);
-                AppLogger.Info("WorldStore: существующий мир заменяется при импорте.", targetFolder);
+                if (overwrite)
+                {
+                    var existingDefinition = ReadWorldDefinition(targetFolder);
+                    EnsureOverwriteDiffers(
+                        inspection.Manifest.Version,
+                        inspection.Manifest.Metadata?.ModifiedOn,
+                        existingDefinition?.Version,
+                        existingDefinition?.Metadata?.ModifiedOn,
+                        "Мир");
+
+                    Directory.Delete(targetFolder, recursive: true);
+                    AppLogger.Info("WorldStore: существующий мир заменяется при импорте.", targetFolder);
+                }
+                else
+                {
+                    throw new InvalidOperationException(
+                        "Папка назначения занята: " + targetFolder);
+                }
             }
 
             Directory.CreateDirectory(Path.GetDirectoryName(targetFolder)!);
@@ -421,6 +464,43 @@ public sealed class WorldStore
     /// уникальность обеспечивается именем папки, которое проверяется на
     /// существование до создания.
     /// </summary>
+    private static WorldDefinition? ReadWorldDefinition(string folder)
+    {
+        var path = WorldPaths.WorldFilePath(folder);
+        if (!File.Exists(path))
+            return null;
+
+        try
+        {
+            var document = ResourceJsonFormat.Deserialize<WorldDefinitionDocument>(File.ReadAllText(path));
+            return document?.Definition;
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    private static void EnsureOverwriteDiffers(
+        int incomingVersion,
+        DateTimeOffset? incomingModified,
+        int? existingVersion,
+        DateTimeOffset? existingModified,
+        string kind)
+    {
+        var sameVersion = existingVersion.HasValue && existingVersion.Value == incomingVersion;
+        var sameDate = incomingModified.HasValue &&
+                       existingModified.HasValue &&
+                       incomingModified.Value == existingModified.Value;
+
+        if (sameVersion && sameDate)
+        {
+            throw new InvalidOperationException(
+                $"{kind} с такой же версией ({incomingVersion}) и датой изменения уже существует. " +
+                "Перезапись не выполнена: импортируйте ресурс как новый.");
+        }
+    }
+
     private static string MakeId(string folderName) =>
         folderName.Trim().Replace(' ', '_').ToLowerInvariant();
 }
