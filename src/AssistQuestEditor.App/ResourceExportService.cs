@@ -231,6 +231,69 @@ public static class ResourceExportService
         }
     }
 
+    public static ResourceExportResult ExportQuest(
+        string userRoot,
+        string questPath,
+        string resourceFileName,
+        WorldArchiveManifest manifest,
+        DateTimeOffset moment,
+        IReadOnlyList<ExportDependency>? dependencies = null)
+    {
+        if (!File.Exists(questPath))
+            throw new FileNotFoundException("Файл квеста не найден.", questPath);
+
+        var staging = Path.Combine(Path.GetTempPath(), "aq-export-quest-" + Guid.NewGuid().ToString("N"));
+        try
+        {
+            Directory.CreateDirectory(staging);
+            var leaf = SafeLeaf(resourceFileName);
+            if (!leaf.EndsWith(WorldArchiveRules.Extension, StringComparison.OrdinalIgnoreCase))
+                leaf += ".aqquest";
+            File.Copy(questPath, Path.Combine(staging, leaf), overwrite: true);
+
+            return ExportResource(
+                userRoot,
+                staging,
+                Path.GetFileNameWithoutExtension(leaf),
+                manifest,
+                moment,
+                asArchive: true,
+                dependencies);
+        }
+        finally
+        {
+            try
+            {
+                if (Directory.Exists(staging))
+                    Directory.Delete(staging, recursive: true);
+            }
+            catch (Exception ex)
+            {
+                AppLogger.Warn("ResourceExportService: временная папка Quest не удалена.",
+                    staging + "; " + ex.Message);
+            }
+        }
+    }
+
+    /// <summary>Манифест standalone Quest с его declared parent World/Campaign.</summary>
+    public static WorldArchiveManifest ManifestForQuest(QuestDefinition quest)
+    {
+        ArgumentNullException.ThrowIfNull(quest);
+
+        return new WorldArchiveManifest(
+            Kind: WorldArchiveKinds.Quest,
+            Id: quest.Id,
+            Name: quest.Title,
+            FullName: quest.Title,
+            Description: quest.Description,
+            Version: quest.Version,
+            IncludesDependencies: false,
+            Entries: Array.Empty<WorldArchiveEntry>(),
+            ParentWorldId: quest.WorldId,
+            ParentCampaignId: quest.CampaignId,
+            Metadata: quest.Metadata);
+    }
+
     /// <summary>
     /// Собирает манифест мира по фактически лежащему определению.
     ///
