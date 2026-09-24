@@ -680,6 +680,17 @@ public sealed class LocationResolver
                 message = string.Empty;
                 return parameters.ContainsKey("value");
 
+            case "categoryisany":
+            case "categoryany":
+            {
+                var categories = SplitCategories(parameters.TryGetValue("value", out var rawCategories)
+                    ? rawCategories
+                    : string.Empty);
+                result = categories.Contains(candidate.Category, StringComparer.OrdinalIgnoreCase);
+                message = string.Empty;
+                return categories.Count > 0;
+            }
+
             case "namecontains":
             case "worldpointnamecontains":
                 result = parameters.TryGetValue("value", out var name) &&
@@ -749,6 +760,31 @@ public sealed class LocationResolver
             // дальше второго — например 100-1000 метров от игрока. Одно число
             // задаёт только минимум («не ближе 150 м»), максимум тогда
             // бесконечен: иначе нельзя было бы искать «что-нибудь подальше».
+            case "distancefromnearestcity":
+            case "nearestcitydistance":
+            {
+                if (!parameters.TryGetValue("meters", out var cityRangeText) ||
+                    !TryParseDistanceRange(cityRangeText, out var cityRange))
+                {
+                    result = false;
+                    message = $"Критерий {type}: расстояние задаётся числом или диапазоном.";
+                    return false;
+                }
+
+                var cities = worldPoints.Where(point => point.IsCity).ToArray();
+                if (cities.Length == 0)
+                {
+                    result = false;
+                    message = $"Критерий {type}: в WorldState нет точек городов.";
+                    return false;
+                }
+
+                var nearest = cities.Min(city => Distance(candidate.Position, city.Position));
+                result = cityRange.Contains(nearest);
+                message = string.Empty;
+                return true;
+            }
+
             case "distancefromplayer":
             case "playerdistance":
                 // Проверка нужна компилятору (nullable), но недостижима: отсутствие
@@ -988,6 +1024,8 @@ public sealed class LocationResolver
                type.Equals("worldpointcategoryis", StringComparison.OrdinalIgnoreCase) ||
                type.Equals("categorycontains", StringComparison.OrdinalIgnoreCase) ||
                type.Equals("worldpointcategorycontains", StringComparison.OrdinalIgnoreCase) ||
+               type.Equals("categoryisany", StringComparison.OrdinalIgnoreCase) ||
+               type.Equals("categoryany", StringComparison.OrdinalIgnoreCase) ||
                type.Equals("excludecategory", StringComparison.OrdinalIgnoreCase) ||
                type.Equals("categorywithinnearby", StringComparison.OrdinalIgnoreCase) ||
                type.Equals("nearbycategory", StringComparison.OrdinalIgnoreCase) ||
@@ -1049,6 +1087,13 @@ public sealed class LocationResolver
         range = new DistanceRange(min, max);
         return true;
     }
+
+    private static IReadOnlyList<string> SplitCategories(string? raw) =>
+        (raw ?? string.Empty)
+            .Split(new[] { '|', ',', ';' }, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Where(item => !string.IsNullOrWhiteSpace(item))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
 
     private static bool TryGetNumber(string text, out double value)
     {
@@ -1202,6 +1247,22 @@ public sealed class LocationResolver
                 return $"Критерий {type}: радиус должен быть больше нуля.";
         }
 
+        if (type.Equals("categoryisany", StringComparison.OrdinalIgnoreCase) ||
+            type.Equals("categoryany", StringComparison.OrdinalIgnoreCase))
+        {
+            if (!parameters.TryGetValue("value", out var categories) ||
+                !SplitCategories(categories).Any())
+                return $"Критерий {type}: не задан список категорий value.";
+        }
+
+        if (type.Equals("distancefromnearestcity", StringComparison.OrdinalIgnoreCase) ||
+            type.Equals("nearestcitydistance", StringComparison.OrdinalIgnoreCase))
+        {
+            if (!parameters.TryGetValue("meters", out var cityRange) ||
+                !TryParseDistanceRange(cityRange, out _))
+                return $"Критерий {type}: расстояние задаётся числом или диапазоном, например 1000 или 1000-5000.";
+        }
+
         if (type.Equals(MinDistanceCriterion, StringComparison.OrdinalIgnoreCase) &&
             !TryGetDouble(parameters, "meters", out _))
         {
@@ -1276,12 +1337,14 @@ public sealed class LocationResolver
     [
         "categoryis", "worldpointcategoryis",
         "categorycontains", "worldpointcategorycontains",
+        "categoryisany", "categoryany",
         "namecontains", "worldpointnamecontains",
         "withindistanceofpoint", "fartherthanpoint",
         "excludecategory",
         "categorywithinnearby", "nearbycategory",
         "categorynotwithinnearby", "nonearbycategory",
         "distancefromplayer", "playerdistance",
+        "distancefromnearestcity", "nearestcitydistance",
         "nearbyroad", "maxroaddistance",
         "nearbyjunction", "junctionradius", "junctiondistance",
         "inanycity", "citycontains",
