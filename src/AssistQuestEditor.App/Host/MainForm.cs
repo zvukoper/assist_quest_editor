@@ -158,11 +158,6 @@ public sealed class MainForm : WebViewForm
                 additionalRoots: SelectedWorld is null
                     ? null
                     : new[] { Path.Combine(SelectedWorld.FolderPath, WorldPaths.DynamicEventsFolder) });
-        _dynamicEventDispatcher = new DynamicEventDispatcher(
-            _hub,
-            _locationResolver,
-            () => _dynamicEventStore.Definitions,
-            questRuntime: null);
         _sceneDocument = new SceneDocumentSession(
             initialScene.Id,
             ResolveScenePath(initialScene.Id),
@@ -175,6 +170,12 @@ public sealed class MainForm : WebViewForm
             _campaignStore.LoadEnabledQuestDefinitions,
             "tutorial_ruslan_shashlik",
             _locationResolver);
+
+        _dynamicEventDispatcher = new DynamicEventDispatcher(
+            _hub,
+            _locationResolver,
+            () => _dynamicEventStore.Definitions,
+            questRuntime: _runtime);
 
         foreach (var campaign in _campaignStore.BuildSimulatorCatalog())
         {
