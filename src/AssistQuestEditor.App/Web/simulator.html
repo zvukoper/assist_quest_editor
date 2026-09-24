@@ -24,6 +24,17 @@
         <div class="simSub">СДО fixture → Data Channels → Quest Runtime → редакторы</div>
       </div>
       <div class="topSpacer"></div>
+      <div class="worldSelector simWorldSelector" id="simWorldSelector" aria-label="Контекст мира">
+        <label class="worldSelectorField" title="Мир — это проект: внутри него живут кампании, а в кампаниях — квесты">
+          <span class="worldSelectorLabel">МИР</span>
+          <select class="worldSelectorSelect" id="simWorldSelect"></select>
+        </label>
+        <label class="worldSelectorField" title="Кампания внутри мира">
+          <span class="worldSelectorLabel">КАМПАНИЯ</span>
+          <select class="worldSelectorSelect" id="simCampaignSelect"></select>
+        </label>
+        <button class="worldSelectorButton" id="simOpenCampaigns" type="button" title="Открыть кампании и квесты">Кампании и квесты</button>
+      </div>
       <div class="hud" id="hud"></div>
     </div>
 
@@ -49,7 +60,6 @@
         <span class="simStatusText" id="simStatusText">Игровое время</span>
       </div>
       <div class="topSpacer"></div>
-      <button class="toolButton" id="openCampaigns" title="Кампании и квесты мира">Кампании и квесты</button>
       <button class="toolButton" id="reloadCatalog" title="Перечитать файлы квестов с диска: точка активации и статусы берутся из файла">Обновить квесты</button>
       <button class="toolButton" id="openSaves" title="Сохранения симуляции: создать, загрузить, переименовать, удалить">Сохранения</button>
       <button class="toolButton" id="reset" title="Очистить прохождение, не выключая симуляцию">Сбросить</button>
