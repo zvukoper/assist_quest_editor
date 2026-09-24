@@ -19,6 +19,7 @@ namespace AssistQuestEditor.App;
 public sealed class ResourceExportForm : Form
 {
     private readonly CheckBox _archive;
+    private readonly CheckBox _dependencies;
     private readonly Label _destination;
     private readonly Label _contents;
     private readonly string _folderDestinationPreview;
@@ -89,13 +90,27 @@ public sealed class ResourceExportForm : Form
         };
         _archive.CheckedChanged += (_, _) => UpdateDestination();
 
+        _dependencies = new CheckBox
+        {
+            AutoSize = false,
+            Location = new Point(18, 198),
+            Size = new Size(610, 26),
+            Text = "Экспорт с зависимостями",
+            Checked = kindLabel.Equals("мира", StringComparison.OrdinalIgnoreCase),
+            Enabled = !kindLabel.Equals("мира", StringComparison.OrdinalIgnoreCase),
+            ForeColor = Color.FromArgb(238, 243, 248),
+            Font = new Font("Segoe UI", 10f, FontStyle.Bold)
+        };
+
         var hint = new Label
         {
             AutoSize = false,
-            Location = new Point(38, 196),
-            Size = new Size(590, 44),
-            Text = "Без галочки ресурс выгружается папкой и файлами — их видно и можно править. " +
-                   "С галочкой содержимое сжимается в один файл .aqezip для пересылки.",
+            Location = new Point(38, 226),
+            Size = new Size(590, 48),
+            Text = kindLabel.Equals("мира", StringComparison.OrdinalIgnoreCase)
+                ? "Мир экспортируется полностью: все его кампании, квесты и сцены входят в состав."
+                : "Без этой галочки экспортируется только сам ресурс. С ней добавляются " +
+                  "только его родительские зависимости — без соседних кампаний и квестов.",
             ForeColor = Color.FromArgb(150, 160, 172),
             Font = new Font("Segoe UI", 8.4f, FontStyle.Italic)
         };
@@ -103,7 +118,7 @@ public sealed class ResourceExportForm : Form
         var destinationHeader = new Label
         {
             AutoSize = false,
-            Location = new Point(18, 248),
+            Location = new Point(18, 282),
             Size = new Size(610, 20),
             Text = "Куда сохранится",
             ForeColor = Color.FromArgb(170, 180, 192),
@@ -113,7 +128,7 @@ public sealed class ResourceExportForm : Form
         _destination = new Label
         {
             AutoSize = false,
-            Location = new Point(18, 270),
+            Location = new Point(18, 304),
             Size = new Size(610, 78),
             Font = new Font("Consolas", 8.6f),
             ForeColor = Color.FromArgb(139, 216, 255)
@@ -122,7 +137,7 @@ public sealed class ResourceExportForm : Form
         var unique = new Label
         {
             AutoSize = false,
-            Location = new Point(18, 352),
+            Location = new Point(18, 386),
             Size = new Size(610, 34),
             Text = "Метка времени в пути не даёт двум выгрузкам перемешаться: «до» и «после» " +
                    "правки сравнимы. Если имя занято, добавляется «(2)» — существующее не затирается.",
@@ -132,7 +147,7 @@ public sealed class ResourceExportForm : Form
 
         var export = new DarkFlatButton
         {
-            Location = new Point(18, 396),
+            Location = new Point(18, 430),
             Size = new Size(170, 38),
             Text = "Экспортировать",
             BackColor = Color.FromArgb(250, 176, 3),
@@ -144,7 +159,7 @@ public sealed class ResourceExportForm : Form
 
         var cancel = new DarkFlatButton
         {
-            Location = new Point(520, 396),
+            Location = new Point(520, 430),
             Size = new Size(108, 38),
             Text = "Отмена",
             DialogResult = DialogResult.Cancel
@@ -156,6 +171,7 @@ public sealed class ResourceExportForm : Form
         Controls.Add(_destination);
         Controls.Add(destinationHeader);
         Controls.Add(hint);
+        Controls.Add(_dependencies);
         Controls.Add(_archive);
         Controls.Add(_contents);
         Controls.Add(title);
@@ -168,6 +184,9 @@ public sealed class ResourceExportForm : Form
 
     /// <summary>Выгрузка архивом. По умолчанию — нет: папка читаема, архив — один файл.</summary>
     public bool ArchiveRequested => _archive.Checked;
+
+    /// <summary>Вошли ли в выгрузку родительские зависимости.</summary>
+    public bool DependenciesRequested => _dependencies.Checked || _dependencies.Enabled == false;
 
     /// <summary>Пункт меню, которым диалог открыт — «мир» или «кампания».</summary>
     public bool IsArchive => _archive.Checked;
@@ -197,9 +216,10 @@ public sealed class ResourceExportForm : Form
         };
 
         lines.Add(dependencies.Count == 0
-            ? "Зависимостей нет: выгружается только сам ресурс."
-            : "Вместе с ресурсом уйдут: " + string.Join(", ", dependencies));
-        lines.Add("Зависимости включаются всегда — без них пересланный ресурс не работает.");
+            ? "Зависимости: нет."
+            : "Доступные зависимости: " + string.Join(", ", dependencies));
+        lines.Add("Режим «Экспорт с зависимостями» добавляет только перечисленные родительские ресурсы; " +
+                  "соседние кампании и квесты в экспорт не попадают.");
 
         return string.Join(Environment.NewLine, lines);
     }
