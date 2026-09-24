@@ -1349,8 +1349,7 @@ public sealed class MainForm : WebViewForm
                 world.FolderPath + Environment.NewLine + Environment.NewLine +
                 "Общая кампания с демонстрационным квестом создана автоматически." +
                 Environment.NewLine + Environment.NewLine +
-                "Мир запомнен: он откроется при следующем запуске приложения — " +
-                "смена мира в открытом окне пока не реализована.",
+                "Мир выбран и запомнен. Переключить мир можно в верхнем селекторе без перезапуска приложения.",
                 "Мир создан", MessageBoxButtons.OK, MessageBoxIcon.Information);
         }
         catch (Exception ex)
