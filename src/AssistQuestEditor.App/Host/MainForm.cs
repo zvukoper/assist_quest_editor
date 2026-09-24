@@ -666,6 +666,8 @@ public sealed class MainForm : WebViewForm
                 Path.Combine(target.FolderPath, WorldPaths.DynamicEventsFolder)
             });
             _locationResolver.Reset();
+            _dynamicEventDispatcher.SetSimulationRunning(false);
+            _dynamicEventDispatcher.Reset();
 
             PostWorldSelection();
             PostJson(JsonSerializer.Serialize(new
