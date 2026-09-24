@@ -2208,6 +2208,7 @@ public sealed class MainForm : WebViewForm
         _simulator.ImportArchiveRequested += (_, _) => ImportArchiveFromDialog();
         PlaceOnSecondaryScreen(_simulator);
         _simulator.Show(this);
+        PostWorldSelection();
     }
 
     /// <summary>
