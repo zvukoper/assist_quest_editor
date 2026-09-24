@@ -189,10 +189,13 @@ public sealed class DynamicEventDispatcher : IDynamicEventDispatcher
         _initialized = true;
 
         var schedules = BuildInitialSchedules(_hub.Get<WorldClockState>("sim-time").Value);
+        if (_locationResolver is ILocationResolutionSession locationSession)
+            locationSession.Reset();
+
         WriteState(
             Array.Empty<DynamicEventInstance>(),
             schedules,
-            "Сброс Dynamic Event Director");
+            "Сброс Dispatcher Dynamic Events");
 
         Publish("DynamicEventDispatcherReset", "Диспетчер динамических событий сброшен.");
     }
