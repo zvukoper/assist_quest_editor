@@ -80,6 +80,8 @@ if (extracted) {
     check(manifest.kind === "world", "Демо-архив должен содержать мир, а не " + manifest.kind);
     check(manifest.id === "demo", "Id демо-мира должен быть demo: " + manifest.id);
     check(manifest.fullName === "Демо Мир", "Полное имя демо-мира: " + manifest.fullName);
+    check(!/common|intro/i.test(manifestText),
+      "Пустой демо-мир не должен содержать старые ссылки на Common/demo quest.");
     // Описание обязано говорить, что ресурс пустой: иначе автор ищет в нём
     // содержимое, которого нет.
     check(/разработке|пустой/i.test(manifest.description || ""),
@@ -118,8 +120,8 @@ if (extracted) {
       const doc = JSON.parse(worldText);
       check(doc.format === "aqworld", "Файл мира должен иметь формат aqworld: " + doc.format);
       check(doc.definition?.id === "demo", "Id мира в файле: " + doc.definition?.id);
-      check(doc.definition?.lastCampaignId === "common",
-        "Мир должен помнить общую кампанию как последнюю: " + doc.definition?.lastCampaignId);
+      check(doc.definition?.lastCampaignId === null,
+        "Пустой демо-мир не должен ссылаться на Common-кампанию: " + doc.definition?.lastCampaignId);
       // Файлы архива должны быть каноническими: LF и завершающий перевод строки.
       // Архив собирается тем же писателем, что и обычные миры, поэтому
       // расхождение здесь означало бы, что путь записи разошёлся.
