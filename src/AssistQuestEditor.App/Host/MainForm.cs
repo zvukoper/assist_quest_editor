@@ -959,7 +959,7 @@ public sealed class MainForm : WebViewForm
 
         try
         {
-            var dependencies = dialog.DependenciesRequested
+            var exportDependencies = dialog.DependenciesRequested
                 ? new[]
                 {
                     new ResourceExportService.ExportDependency(
@@ -980,13 +980,13 @@ public sealed class MainForm : WebViewForm
                         world.Definition.Id,
                         campaign.Definition.Metadata),
                     moment,
-                    dependencies)
+                    exportDependencies)
                 : ResourceExportService.ExportFolder(
                     AppPaths.UserRoot,
                     source,
                     displayName,
                     moment,
-                    dependencies);
+                    exportDependencies);
 
             AppLogger.Info("MainForm: кампания выгружена.",
                 $"worldId={world.Definition.Id}; campaignId={record.Definition.Id}; " +
