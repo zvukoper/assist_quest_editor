@@ -63,6 +63,9 @@ public sealed class DynamicEventDispatcher : IDynamicEventDispatcher
     private readonly Dictionary<string, int> _instanceSequences =
         new(StringComparer.OrdinalIgnoreCase);
 
+    private readonly HashSet<string> _simulationStartSpawnedDefinitions =
+        new(StringComparer.OrdinalIgnoreCase);
+
     private bool _simulationRunning;
     private WorldCoordinate? _lastPlayerPosition;
     private bool _initialized;
@@ -187,6 +190,7 @@ public sealed class DynamicEventDispatcher : IDynamicEventDispatcher
         var player = _hub.Get<PlayerState>("player").Value;
         _lastPlayerPosition = player.Position;
         _initialized = true;
+        _simulationStartSpawnedDefinitions.Clear();
 
         var schedules = BuildInitialSchedules(_hub.Get<WorldClockState>("sim-time").Value);
         if (_locationResolver is ILocationResolutionSession locationSession)
@@ -243,7 +247,8 @@ public sealed class DynamicEventDispatcher : IDynamicEventDispatcher
         var changed = false;
         foreach (var definition in _definitions.Values.ToArray())
         {
-            if (!definition.SpawnPolicy.SpawnOnSimulationStart)
+            if (!definition.SpawnPolicy.SpawnOnSimulationStart ||
+                _simulationStartSpawnedDefinitions.Contains(definition.Id))
                 continue;
 
             if (State.Instances.Any(instance =>
@@ -253,7 +258,10 @@ public sealed class DynamicEventDispatcher : IDynamicEventDispatcher
 
             var attempt = AttemptSpawn(definition, clock, now, schedules, "SimulationStarted");
             if (attempt == DynamicEventSpawnAttempt.Spawned)
+            {
+                _simulationStartSpawnedDefinitions.Add(definition.Id);
                 changed = true;
+            }
         }
 
         if (changed)
