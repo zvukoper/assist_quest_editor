@@ -202,11 +202,13 @@ public static class ResourceExportService
                     Entries = Array.Empty<WorldArchiveEntry>()
                 };
 
+                // An archive is a transferable package. The GUI has already placed
+                // declared parent dependencies into staging when archiving.
                 var packed = WorldArchiveService.Pack(
                     staging,
                     target,
                     effectiveManifest,
-                    effectiveManifest.IncludesDependencies);
+                    includeDependencies: true);
 
                 result = new ResourceExportResult(
                     packed.Path, true, packed.ArchiveBytes, packed.FileCount);
