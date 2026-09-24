@@ -108,9 +108,11 @@ public sealed class ResourceExportForm : Form
             Location = new Point(38, 226),
             Size = new Size(590, 48),
             Text = kindLabel.Equals("мира", StringComparison.OrdinalIgnoreCase)
-                ? "Мир экспортируется полностью: все его кампании, квесты и сцены входят в состав."
-                : "Без этой галочки экспортируется только сам ресурс. С ней добавляются " +
-                  "только его родительские зависимости — без соседних кампаний и квестов.",
+                ? "Мир экспортируется полностью. В обычном режиме остаётся папка с файлами; " +
+                  "при архивации содержимое сжимается в один файл .aqezip для пересылки."
+                : "Без этой галочки экспортируется только сам ресурс и остаётся папкой с файлами. " +
+                  "С галочкой добавляются родительские зависимости. При архивации содержимое " +
+                  "сжимается в один файл .aqezip для пересылки.",
             ForeColor = Color.FromArgb(150, 160, 172),
             Font = new Font("Segoe UI", 8.4f, FontStyle.Italic)
         };
@@ -186,7 +188,8 @@ public sealed class ResourceExportForm : Form
     public bool ArchiveRequested => _archive.Checked;
 
     /// <summary>Вошли ли в выгрузку родительские зависимости.</summary>
-    public bool DependenciesRequested => _dependencies.Checked || _dependencies.Enabled == false;
+    public bool DependenciesRequested =>
+        ArchiveRequested || _dependencies.Checked || _dependencies.Enabled == false;
 
     /// <summary>Пункт меню, которым диалог открыт — «мир» или «кампания».</summary>
     public bool IsArchive => _archive.Checked;
