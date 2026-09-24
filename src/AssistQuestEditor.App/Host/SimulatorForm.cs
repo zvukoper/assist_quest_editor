@@ -6,6 +6,18 @@ using AssistQuestEditor.Domain;
 
 namespace AssistQuestEditor.App;
 
+public sealed class WorldSelectionRequestedEventArgs : EventArgs
+{
+    public WorldSelectionRequestedEventArgs(string worldId) => WorldId = worldId;
+    public string WorldId { get; }
+}
+
+public sealed class CampaignSelectionRequestedEventArgs : EventArgs
+{
+    public CampaignSelectionRequestedEventArgs(string campaignId) => CampaignId = campaignId;
+    public string CampaignId { get; }
+}
+
 public sealed class SimulatorForm : WebViewForm
 {
     private readonly IDataChannelHub _hub;
@@ -22,6 +34,7 @@ public sealed class SimulatorForm : WebViewForm
     // выглядя как «автосохранение не работает». Без мира (режим CI) остаётся
     // прежний корень: там мир не выбран, и терять нечего.
     private readonly SimulationSaveStore _saveStore;
+    private string _worldSelectionJson = "{\\\"type\\\":\\\"world_selection\\\",\\\"worlds\\\":[],\\\"campaigns\\\":[],\\\"worldId\\\":\\\"\\\",\\\"campaignId\\\":\\\"\\\"}";
     private readonly Action<string> _openQuestEditor;
     private readonly System.Windows.Forms.Timer _runtimeTimer;
     private static readonly JsonSerializerOptions SnapshotJsonOptions = new()
@@ -179,6 +192,7 @@ public sealed class SimulatorForm : WebViewForm
         AutoLoadWorld();
         PushRoads();
         PushSnapshot();
+        PostJson(_worldSelectionJson);
         if (_journalDetached)
         {
             BeginInvoke((Action)OpenJournalWindow);
@@ -237,6 +251,17 @@ public sealed class SimulatorForm : WebViewForm
         AppLogger.Info("SimulatorForm: отправляю дорожную геометрию.",
             $"segments={_roads.SegmentCount}; jsonChars={payload.Length}");
         PostJson(payload);
+    }
+
+    /// <summary>Передаёт Симулятору тот же селектор мира и кампании, что видит MainForm.</summary>
+    public void SetWorldSelectionJson(string json)
+    {
+        if (string.IsNullOrWhiteSpace(json))
+            return;
+
+        _worldSelectionJson = json;
+        if (Browser.CoreWebView2 is not null)
+            PostJson(json);
     }
 
     public void PushSnapshot()
@@ -543,6 +568,14 @@ public sealed class SimulatorForm : WebViewForm
                     RequestSnapshot("simulation speed changed");
                     break;
 
+                case "select_world":
+                    WorldSwitchRequested?.Invoke(this, new WorldSelectionRequestedEventArgs(Required(root, "worldId")));
+                    break;
+
+                case "select_campaign":
+                    CampaignSelectionRequested?.Invoke(this, new CampaignSelectionRequestedEventArgs(Required(root, "campaignId")));
+                    break;
+
                 case "set_quest_enabled":
                     SetQuestEnabled(root);
                     break;
@@ -833,6 +866,8 @@ public sealed class SimulatorForm : WebViewForm
     /// сохранения в симуляторе неизбежно разошлась бы с первой.
     /// </summary>
     public event EventHandler? WorldPropertiesRequested;
+    public event EventHandler<WorldSelectionRequestedEventArgs>? WorldSwitchRequested;
+    public event EventHandler<CampaignSelectionRequestedEventArgs>? CampaignSelectionRequested;
 
     /// <summary>Просьба открыть свойства конкретной кампании из дерева.</summary>
     public event EventHandler<CampaignPropertiesRequestedEventArgs>? CampaignPropertiesRequested;
