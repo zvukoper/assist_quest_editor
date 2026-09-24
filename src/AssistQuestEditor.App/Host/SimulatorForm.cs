@@ -100,6 +100,9 @@ public sealed class SimulatorForm : WebViewForm
         _world = world;
         _campaignStore = (campaignStore ?? throw new ArgumentNullException(nameof(campaignStore)))
             .ScopedTo(world?.FolderPath);
+        // Симулятор при каждом открытии обязан начинаться выключенным:
+        // автозагрузка восстанавливает данные мира, но сама симуляция не стартует.
+        _runtime.SetSimulationRunning(false);
         _saveStore = new SimulationSaveStore(
             world is null
                 ? AppPaths.SimulationSaveRoot
@@ -2023,9 +2026,14 @@ public sealed class SimulatorForm : WebViewForm
     /// </summary>
     private void StopSimulation(string reason)
     {
+        // Если симуляция уже полностью выключена, «Стоп» не должен создавать
+        // новое автосохранение. Пауза считается активным прохождением и при Stop
+        // фиксируется как обычное выключение.
+        var wasActive = _runtime.SimulationRunning || _runtime.IsPaused;
         _runtime.SetSimulationRunning(false);
         _dynamicEventDirector.SetSimulationRunning(false);
-        AutosaveWorld(reason);
+        if (wasActive)
+            AutosaveWorld(reason);
         RequestSnapshot("simulation stopped");
     }
 
