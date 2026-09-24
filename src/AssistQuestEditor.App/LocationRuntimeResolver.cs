@@ -19,6 +19,7 @@ public sealed class LocationRuntimeResolver : ILocationResolver, ILocationResolu
     private readonly LocationResolver _resolver = new();
     private readonly Dictionary<(string LocationId, string? ResolutionKey), WorldPoint> _resolved =
         new();
+    private readonly RuntimeLocationUsageHistory _history = new();
 
     /// <summary>Индекс черт, по которому построен кэш разрешений.</summary>
     private CityBoundaryIndex? _lastCities;
@@ -74,12 +75,16 @@ public sealed class LocationRuntimeResolver : ILocationResolver, ILocationResolu
             definition,
             _world.Value.Points,
             _player.Value.Position,
+            history: _history,
             roads: _roads,
             junctions: _junctions,
             cities: cities).Point;
 
         if (point is not null)
+        {
             _resolved[key] = point;
+            _history.RecordSelection(locationId, point.Id);
+        }
 
         return point;
     }
@@ -101,7 +106,43 @@ public sealed class LocationRuntimeResolver : ILocationResolver, ILocationResolu
         return double.IsFinite(definition.TriggerRadius) ? definition.TriggerRadius : null;
     }
 
-    public void Reset() => _resolved.Clear();
+    public void Reset()
+    {
+        _resolved.Clear();
+        _history.Reset();
+    }
+
+    private sealed class RuntimeLocationUsageHistory : ILocationUsageHistory
+    {
+        private readonly Dictionary<(string LocationId, string CandidateId), LocationUsageRecord> _records =
+            new();
+
+        public bool TryGet(
+            string locationId,
+            string candidateId,
+            out LocationUsageRecord record)
+        {
+            return _records.TryGetValue(
+                (locationId, candidateId),
+                out record!);
+        }
+
+        public void RecordSelection(string locationId, string candidateId)
+        {
+            var key = (locationId, candidateId);
+            var current = _records.TryGetValue(key, out var existing)
+                ? existing
+                : new LocationUsageRecord(locationId, candidateId);
+
+            _records[key] = current with
+            {
+                SelectionCount = current.SelectionCount + 1,
+                LastSelectedUtc = DateTimeOffset.UtcNow
+            };
+        }
+
+        public void Reset() => _records.Clear();
+    }
 
     public void Invalidate(string locationId)
     {
