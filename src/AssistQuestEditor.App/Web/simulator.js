@@ -2571,6 +2571,31 @@
     }
   }
 
+  function renderWorldSelector() {
+    const worldSelect = document.getElementById("simWorldSelect");
+    const campaignSelect = document.getElementById("simCampaignSelect");
+    if (!worldSelect || !campaignSelect) return;
+
+    worldSelect.innerHTML = "";
+    (worldSelection.worlds || []).forEach(function (world) {
+      const option = document.createElement("option");
+      option.value = world.id;
+      option.textContent = world.name || world.id;
+      worldSelect.appendChild(option);
+    });
+    if (worldSelection.worldId) worldSelect.value = worldSelection.worldId;
+    worldSelect.disabled = (worldSelection.worlds || []).length === 0;
+
+    campaignSelect.innerHTML = "";
+    (worldSelection.campaigns || []).forEach(function (campaign) {
+      const option = document.createElement("option");
+      option.value = campaign.id;
+      option.textContent = campaign.name || campaign.id;
+      campaignSelect.appendChild(option);
+    });
+    if (worldSelection.campaignId) campaignSelect.value = worldSelection.campaignId;
+    campaignSelect.disabled = (worldSelection.campaigns || []).length === 0;
+  }
   function formatSpeed(value) {
     const numeric = Number(value);
     if (!Number.isFinite(numeric)) return "1";
