@@ -13,6 +13,7 @@ public sealed class QuestGraphStore
     private IReadOnlyList<string> _sceneIds = Array.Empty<string>();
     private QuestActivation? _activation;
     private int _version = 1;
+    private ResourceMetadata? _metadata;
     private readonly Stack<QuestGraph> _undo = new();
     private readonly Stack<QuestGraph> _redo = new();
 
@@ -30,6 +31,7 @@ public sealed class QuestGraphStore
         _sceneIds = initial.SceneIds ?? Array.Empty<string>();
         _activation = initial.Activation;
         _version = Math.Max(1, initial.Version);
+        _metadata = initial.Metadata;
     }
 
     public QuestGraph Value => _value;
@@ -43,7 +45,8 @@ public sealed class QuestGraphStore
     /// файле. По той же причине SceneGraphStore хранит весь SceneDefinition.
     /// </summary>
     public QuestDefinition Definition =>
-        new(_value.Id, _value.Name, _description, _value, _sceneIds, _activation, _version);
+        new(_value.Id, _value.Name, _description, _value, _sceneIds, _activation, _version,
+            Metadata: _metadata);
 
     public string Description => _description;
     public IReadOnlyList<string> SceneIds => _sceneIds;
@@ -262,6 +265,7 @@ public sealed class QuestGraphStore
         _sceneIds = Array.Empty<string>();
         _activation = null;
         _version = 1;
+        _metadata = null;
         _undo.Clear();
         _redo.Clear();
         Changed?.Invoke(this, EventArgs.Empty);
@@ -298,6 +302,7 @@ public sealed class QuestGraphStore
         _sceneIds = definition.SceneIds ?? Array.Empty<string>();
         _activation = definition.Activation;
         _version = Math.Max(1, definition.Version);
+        _metadata = definition.Metadata;
         _undo.Clear();
         _redo.Clear();
         Changed?.Invoke(this, EventArgs.Empty);
