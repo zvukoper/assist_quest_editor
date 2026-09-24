@@ -34,6 +34,7 @@
         maxGameHours: null,
         minRealHours: null,
         maxRealHours: null,
+        sourceDefinitionId: "",
         eventType: "",
         eventPayload: {}
       },
@@ -44,6 +45,8 @@
         cooldownRealHours: null,
         lifetimeGameHours: 24,
         lifetimeRealHours: null,
+        spawnOnSimulationStart: false,
+        respawnOnExpired: false,
         removeOnCompleted: true
       },
       presentation: {
@@ -88,6 +91,7 @@
         maxGameHours: optionalNumber("dynamicEventMaxGame"),
         minRealHours: optionalNumber("dynamicEventMinReal"),
         maxRealHours: optionalNumber("dynamicEventMaxReal"),
+        sourceDefinitionId: document.getElementById("dynamicEventSourceDefinition")?.value.trim() || null,
         eventType: document.getElementById("dynamicEventEventType")?.value.trim() || null,
         eventPayload: current.trigger?.eventPayload || {}
       },
@@ -99,6 +103,8 @@
         cooldownRealHours: optionalNumber("dynamicEventCooldownReal"),
         lifetimeGameHours: optionalNumber("dynamicEventLifetimeGame"),
         lifetimeRealHours: optionalNumber("dynamicEventLifetimeReal"),
+        spawnOnSimulationStart: Boolean(document.getElementById("dynamicEventSpawnOnStart")?.checked),
+        respawnOnExpired: Boolean(document.getElementById("dynamicEventRespawnOnExpired")?.checked),
         removeOnCompleted: Boolean(document.getElementById("dynamicEventRemove")?.checked)
       },
       presentation: {
@@ -175,7 +181,7 @@
       "</div>" +
 
       "<div class='notice'>" +
-        "<strong>Это правило, а не созданная точка.</strong> Здесь задаётся, когда Director должен " +
+        "<strong>Это правило, а не созданная точка.</strong> Здесь задаётся, когда Dispatcher должен " +
         "создать runtime-экземпляр и через какой Location найти конкретный WorldPoint. " +
         "Результат «Создать сейчас» не записывается обратно в .aqevent." +
       "</div>" +
@@ -186,13 +192,13 @@
       "<div class='field'><label>Location</label><select id='dynamicEventLocation'>" +
         "<option value=''>— не выбрано —</option>" + locationOptions(definition.locationId) +
       "</select></div>" +
-      "<div class='field'><label>Связанный Quest (необязательно)</label><input id='dynamicEventQuest' value='" + esc(definition.questId || "") + "' placeholder='Quest ID после engagement'></div>" +
+      "<div class='field'><label>Связанный Quest (необязательно)</label><input id='dynamicEventQuest' value='" + esc(definition.questId || "") + "' placeholder='Quest ID после обнаружения'></div>" +
       "<div class='field'><label>Радиус события, м</label><input id='dynamicEventRadius' type='number' min='0' value='" + esc(number(definition.triggerRadius, 35)) + "'></div>" +
       "<div class='field'><label>Категория</label><input id='dynamicEventCategory' value='" + esc(definition.category || "Dynamic Event") + "'></div>" +
 
       "<div class='sectionTitle' style='margin-top:16px'>Триггер генерации</div>" +
       "<div class='field'><label>Тип</label><select id='dynamicEventTrigger'>" +
-        ["Manual","DistanceTravelled","GameTime","RealTime","WorldEvent"].map(type =>
+        ["Manual","DistanceTravelled","GameTime","RealTime","WorldEvent","DynamicEventDiscovery"].map(type =>
           "<option value='" + type + "'" + (type === (trigger.type || "Manual") ? " selected" : "") + ">" + type + "</option>"
         ).join("") +
       "</select></div>" +
@@ -200,6 +206,10 @@
       "<div id='dynamicEventDistanceFields'>" +
         "<div class='field'><label>Минимальная дистанция, м</label><input id='dynamicEventMinDistance' type='number' min='0' value='" + esc(trigger.minDistanceMeters ?? 5000) + "'></div>" +
         "<div class='field'><label>Максимальная дистанция, м</label><input id='dynamicEventMaxDistance' type='number' min='0' value='" + esc(trigger.maxDistanceMeters ?? 10000) + "'></div>" +
+      "</div>" +
+
+      "<div id='dynamicEventDiscoveryFields' style='display:none'>" +
+        "<div class='field'><label>Источник обнаружения</label><input id='dynamicEventSourceDefinition' value='" + esc(trigger.sourceDefinitionId || "") + "' placeholder='ID Dynamic Event'></div>" +
       "</div>" +
 
       "<div id='dynamicEventGameFields' style='display:none'>" +
@@ -224,6 +234,8 @@
       "<div class='field'><label>Cooldown, реальных часов</label><input id='dynamicEventCooldownReal' type='number' min='0' value='" + esc(policy.cooldownRealHours ?? "") + "'></div>" +
       "<div class='field'><label>Lifetime, игровых часов</label><input id='dynamicEventLifetimeGame' type='number' min='0' value='" + esc(policy.lifetimeGameHours ?? "") + "'></div>" +
       "<div class='field'><label>Lifetime, реальных часов</label><input id='dynamicEventLifetimeReal' type='number' min='0' value='" + esc(policy.lifetimeRealHours ?? "") + "'></div>" +
+      "<label class='checkRow'><input id='dynamicEventSpawnOnStart' type='checkbox' " + (policy.spawnOnSimulationStart ? "checked" : "") + "> создать первый экземпляр при запуске симуляции</label>" +
+      "<label class='checkRow'><input id='dynamicEventRespawnOnExpired' type='checkbox' " + (policy.respawnOnExpired ? "checked" : "") + "> пересоздавать после истечения lifetime</label>" +
       "<label class='checkRow'><input id='dynamicEventRemove' type='checkbox' " + (policy.removeOnCompleted !== false ? "checked" : "") + "> удалять экземпляр после завершения</label>" +
       "<div class='field'><label>Presentation discovery</label><select id='dynamicEventDiscovery'>" +
         ["WorldMarker","Hidden","Minimap","AR","Radio"].map(type =>
@@ -232,7 +244,7 @@
       "</select></div>" +
 
       "<div class='notice' style='margin-top:14px'>" +
-        "<strong>Runtime Test:</strong> «Создать сейчас» материализует экземпляр через Director. " +
+        "<strong>Runtime Test:</strong> «Создать сейчас» материализует экземпляр через Dispatcher. " +
         "Кнопка не меняет Location и не сохраняет resolved WorldPoint в этот ресурс." +
       "</div>";
 
@@ -240,7 +252,9 @@
     const syncTriggerFields = () => {
       const type = triggerSelect.value;
       ws.querySelector("#dynamicEventDistanceFields").style.display = type === "DistanceTravelled" ? "" : "none";
-      ws.querySelector("#dynamicEventGameFields").style.display = type === "GameTime" ? "" : "none";
+      ws.querySelector("#dynamicEventDiscoveryFields").style.display = type === "DynamicEventDiscovery" ? "" : "none";
+      ws.querySelector("#dynamicEventGameFields").style.display =
+        type === "GameTime" || type === "DynamicEventDiscovery" ? "" : "none";
       ws.querySelector("#dynamicEventRealFields").style.display = type === "RealTime" ? "" : "none";
       ws.querySelector("#dynamicEventWorldFields").style.display = type === "WorldEvent" ? "" : "none";
     };
