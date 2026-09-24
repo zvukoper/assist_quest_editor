@@ -55,6 +55,26 @@ public sealed class CampaignFolderOpenRequestedEventArgs : EventArgs
     public string CampaignId { get; }
 }
 
+public sealed class CampaignExportRequestedEventArgs : EventArgs
+{
+    public CampaignExportRequestedEventArgs(string campaignId) => CampaignId = campaignId;
+    public string CampaignId { get; }
+}
+
+public sealed class QuestExportRequestedEventArgs : EventArgs
+{
+    public QuestExportRequestedEventArgs(string campaignId, string questId, string path)
+    {
+        CampaignId = campaignId;
+        QuestId = questId;
+        Path = path;
+    }
+
+    public string CampaignId { get; }
+    public string QuestId { get; }
+    public string Path { get; }
+}
+
 /// <summary>
 /// Просьба открыть окно свойств кампании из списка.
 ///
@@ -167,7 +187,11 @@ public sealed class CampaignsForm : Form
         // мира подряд и состав кампаний похож.
         _title = new Label { Dock = DockStyle.Left, AutoSize = true, Text = "Кампании и квесты", ForeColor = AccentColor, Font = new Font("Segoe UI", 9f, FontStyle.Bold), TextAlign = ContentAlignment.MiddleLeft };
         var hint = new Label { Dock = DockStyle.Right, AutoSize = true, Text = "ЛКМ по кампании — свернуть", ForeColor = Color.FromArgb(125, 135, 148), Font = new Font("Segoe UI", 8f), TextAlign = ContentAlignment.MiddleRight };
-        toolbar.Controls.Add(hint); toolbar.Controls.Add(_title);
+        var import = CreateMicroButton("Импорт");
+        import.Dock = DockStyle.Right;
+        import.Margin = new Padding(0, 1, 8, 1);
+        import.Click += (_, _) => ImportArchiveRequested?.Invoke(this, EventArgs.Empty);
+        toolbar.Controls.Add(hint); toolbar.Controls.Add(import); toolbar.Controls.Add(_title);
         _list = new FlowLayoutPanel { Dock = DockStyle.Fill, AutoScroll = true, FlowDirection = FlowDirection.TopDown, WrapContents = false, Padding = new Padding(8), BackColor = Color.FromArgb(13, 16, 20), BorderStyle = BorderStyle.None };
         _list.Resize += (_, _) => ResizeBlocks();
         Controls.Add(_list); Controls.Add(toolbar);
@@ -210,6 +234,10 @@ public sealed class CampaignsForm : Form
     public event EventHandler<QuestEnabledChangedEventArgs>? QuestEnabledChanged;
     public event EventHandler<QuestOpenRequestedEventArgs>? QuestOpenRequested;
     public event EventHandler<CampaignFolderOpenRequestedEventArgs>? CampaignFolderOpenRequested;
+    public event EventHandler<CampaignExportRequestedEventArgs>? CampaignExportRequested;
+    public event EventHandler<QuestExportRequestedEventArgs>? QuestExportRequested;
+    public event EventHandler? ImportArchiveRequested;
+    public event EventHandler? WorldExportRequested;
     public event EventHandler<QuestSelectedEventArgs>? QuestSelected;
     public event EventHandler? WorldFolderOpenRequested;
     public event EventHandler? WorldPropertiesRequested;
@@ -382,13 +410,14 @@ public sealed class CampaignsForm : Form
         {
             Dock = DockStyle.Top,
             Height = CampaignHeaderHeight,
-            ColumnCount = 4,
+            ColumnCount = 5,
             Padding = new Padding(8, 4, 7, 4),
             BackColor = WorldHeaderColor,
             Cursor = Cursors.Hand
         };
         header.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
         header.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+        header.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
         header.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
         header.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
 
@@ -435,13 +464,17 @@ public sealed class CampaignsForm : Form
         info.Margin = new Padding(4, 0, 8, 0);
         info.Click += (_, _) => WorldPropertiesRequested?.Invoke(this, EventArgs.Empty);
 
-        var folder = CreateMicroButton("ПАПКА");
+        var folder = CreateMicroButton("Папка");
         folder.Click += (_, _) => WorldFolderOpenRequested?.Invoke(this, EventArgs.Empty);
+
+        var export = CreateMicroButton("Экспорт");
+        export.Click += (_, _) => WorldExportRequested?.Invoke(this, EventArgs.Empty);
 
         header.Controls.Add(marker, 0, 0);
         header.Controls.Add(text, 1, 0);
         header.Controls.Add(info, 2, 0);
         header.Controls.Add(folder, 3, 0);
+        header.Controls.Add(export, 4, 0);
 
         // Сворачивание — по заголовку, названию и стрелке. Кнопки исключены:
         // у них своё действие, и сворачивание по нажатию ℹ️ было бы неожиданным.
@@ -684,7 +717,7 @@ public sealed class CampaignsForm : Form
         // стоит растяжимая распорка. Без неё колонка с названием растягивалась на
         // всю ширину, и иконка уезжала к правому краю — далеко от имени, к
         // которому относится.
-        var header = new TableLayoutPanel { Dock = DockStyle.Top, Height = CampaignHeaderHeight, ColumnCount = 7, Padding = new Padding(8, 4, 7, 4), BackColor = Color.FromArgb(20, 32, 38), Cursor = Cursors.Hand };
+        var header = new TableLayoutPanel { Dock = DockStyle.Top, Height = CampaignHeaderHeight, ColumnCount = 8, Padding = new Padding(8, 4, 7, 4), BackColor = Color.FromArgb(20, 32, 38), Cursor = Cursors.Hand };
         header.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));   // стрелка
         header.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));   // галочка
         header.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));   // название
@@ -692,6 +725,7 @@ public sealed class CampaignsForm : Form
         header.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100)); // распорка
         header.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));   // статус
         header.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));   // папка
+        header.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));   // экспорт
 
         // Выравнивание по ОДНОЙ вертикали: Anchor = Left (без Top/Bottom) в
         // TableLayoutPanel означает «по центру ячейки по вертикали». Прежде
@@ -719,9 +753,13 @@ public sealed class CampaignsForm : Form
         folder.Anchor = AnchorStyles.Left;
         folder.Margin = new Padding(0, 0, 0, 0);
         folder.Click += (_, _) => CampaignFolderOpenRequested?.Invoke(this, new CampaignFolderOpenRequestedEventArgs(campaign.Id));
+        var export = CreateMicroButton("Экспорт");
+        export.Anchor = AnchorStyles.Left;
+        export.Margin = new Padding(0, 0, 0, 0);
+        export.Click += (_, _) => CampaignExportRequested?.Invoke(this, new CampaignExportRequestedEventArgs(campaign.Id));
         header.Controls.Add(marker, 0, 0); header.Controls.Add(active, 1, 0);
         header.Controls.Add(text, 2, 0); header.Controls.Add(info, 3, 0);
-        header.Controls.Add(state, 5, 0); header.Controls.Add(folder, 6, 0);
+        header.Controls.Add(state, 5, 0); header.Controls.Add(folder, 6, 0); header.Controls.Add(export, 7, 0);
         // ЛКМ по заголовку (кроме галочки, статуса и кнопок) сворачивает список
         // квестов кампании: это позволяет держать длинный каталог компактным.
         // Кнопка ℹ️ исключена: у неё своё действие, и сворачивание по нажатию
@@ -823,7 +861,7 @@ public sealed class CampaignsForm : Form
         var selected = quest.QuestId.Equals(_selectedQuestId, StringComparison.OrdinalIgnoreCase) &&
             campaign.Id.Equals(_selectedCampaignId, StringComparison.OrdinalIgnoreCase);
         var enabled = quest.Status == CampaignQuestStatus.Enabled;
-        var row = new TableLayoutPanel { Height = QuestRowMinHeight - 3, ColumnCount = 4, CellBorderStyle = TableLayoutPanelCellBorderStyle.None, Padding = new Padding(4, 2, 4, 2), BackColor = selected ? RowSelectedBackColor : RowBackColor, Margin = new Padding(0, 0, 0, 3), Cursor = Cursors.Hand, AutoSize = false };
+        var row = new TableLayoutPanel { Height = QuestRowMinHeight - 3, ColumnCount = 5, CellBorderStyle = TableLayoutPanelCellBorderStyle.None, Padding = new Padding(4, 2, 4, 2), BackColor = selected ? RowSelectedBackColor : RowBackColor, Margin = new Padding(0, 0, 0, 3), Cursor = Cursors.Hand, AutoSize = false };
         // Выделенный квест подсвечивается оранжевой рамкой СКРУГЛЁННОЙ формы:
         // прямоугольная обводка спорила со скруглениями кнопок и выглядела как
         // чужой элемент. Радиус тот же, что у кнопок (ButtonRadius).
@@ -844,7 +882,7 @@ public sealed class CampaignsForm : Form
         row.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
         row.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
         row.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
-        row.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+        row.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));        row.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
         var check = new CheckBox { AutoSize = true, Checked = enabled, Anchor = AnchorStyles.Left, Margin = new Padding(0, 0, 5, 0) };
         check.CheckedChanged += (_, _) => QuestEnabledChanged?.Invoke(this, new QuestEnabledChangedEventArgs(campaign.Id, quest.QuestId, check.Checked));
         var activation = quest.Activation;
@@ -887,9 +925,14 @@ public sealed class CampaignsForm : Form
         edit.Anchor = AnchorStyles.Right;
         edit.Margin = new Padding(0, 0, 0, 0);
         edit.Click += (_, _) => QuestOpenRequested?.Invoke(this, new QuestOpenRequestedEventArgs(quest.FullPath));
+        var export = CreateMicroButton("Экспорт");
+        export.Anchor = AnchorStyles.Right;
+        export.Margin = new Padding(0, 0, 0, 0);
+        export.Click += (_, _) => QuestExportRequested?.Invoke(
+            this, new QuestExportRequestedEventArgs(campaign.Id, quest.QuestId, quest.FullPath));
         // Правое выравнивание задаётся TextAlign, а не RightToLeft: RightToLeft.Yes
         // переставляет знаки в строках вида «#1 · v1» и ломает детали квеста.
-        row.Controls.Add(check, 0, 0); row.Controls.Add(name, 1, 0); row.Controls.Add(status, 2, 0); row.Controls.Add(edit, 3, 0);
+        row.Controls.Add(check, 0, 0); row.Controls.Add(name, 1, 0); row.Controls.Add(status, 2, 0); row.Controls.Add(edit, 3, 0); row.Controls.Add(export, 4, 0);
         // Выделение по ЛКМ на любом элементе строки, кроме галочки и кнопки:
         // клик по ним уже означает другое действие.
         foreach (Control element in new Control[] { row, name, status })
