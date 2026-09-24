@@ -614,7 +614,7 @@ public sealed class MainForm : WebViewForm
 
             var author = string.IsNullOrWhiteSpace(_preferences.Author)
                 ? ResourceMetadata.DefaultAuthor(DateTimeOffset.Now)
-                : _preferences.Author;
+                : _preferences.Author!;
             _campaignStore = new CampaignStore(AppPaths.UserQuestRoot, readOnly: _ciTest, author)
                 .ScopedTo(target.FolderPath);
 
@@ -635,14 +635,14 @@ public sealed class MainForm : WebViewForm
 
             var questDefinitions = _campaignStore.LoadEnabledQuestDefinitions();
             var selectedQuest = questDefinitions.FirstOrDefault();
-            if (selectedQuest is not null)
-                _questGraph.Replace(selectedQuest);
+            var runtimeDefinition = selectedQuest ?? QuestDefinitionLoader.LoadDocumentOrFallback().Definition;
+            _questGraph.Replace(runtimeDefinition);
 
             if (_runtime is QuestRuntimeCoordinator coordinator)
             {
                 coordinator.RebindDefinitions(
                     _campaignStore.LoadEnabledQuestDefinitions,
-                    selectedQuest?.Id);
+                    runtimeDefinition.Id);
             }
 
             PostWorldSelection();
