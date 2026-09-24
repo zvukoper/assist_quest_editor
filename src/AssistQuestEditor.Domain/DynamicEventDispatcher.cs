@@ -5,7 +5,7 @@ namespace AssistQuestEditor.Domain;
 /// instances. Он не является Quest Runtime и не меняет canonical Location/Quest
 /// definitions.
 ///
-/// Director работает поверх Data Channels и Event Bus. Поэтому Simulator и
+/// Dispatcher работает поверх Data Channels и Event Bus. Поэтому Simulator и
 /// будущий игровой адаптер подают в него одинаковое состояние мира.
 /// </summary>
 public interface IDynamicEventDispatcher : IDisposable
@@ -41,7 +41,7 @@ internal enum DynamicEventSpawnAttempt
 }
 
 /// <summary>
-/// Реализация Director с дешёвым наблюдением на каждом Tick и редким запуском
+/// Реализация Dispatcher с дешёвым наблюдением на каждом Tick и редким запуском
 /// тяжёлого Location resolution только когда сработал триггер.
 /// </summary>
 public sealed class DynamicEventDispatcher : IDynamicEventDispatcher
@@ -49,6 +49,7 @@ public sealed class DynamicEventDispatcher : IDynamicEventDispatcher
     private readonly IDataChannelHub _hub;
     private readonly ILocationResolver _locationResolver;
     private readonly Func<IReadOnlyList<DynamicEventDefinition>> _definitionsProvider;
+    private readonly IQuestRuntimeController? _questRuntime;
     private readonly Random _random;
 
     private readonly Dictionary<string, DynamicEventDefinition> _definitions =
@@ -71,11 +72,13 @@ public sealed class DynamicEventDispatcher : IDynamicEventDispatcher
         IDataChannelHub hub,
         ILocationResolver locationResolver,
         Func<IReadOnlyList<DynamicEventDefinition>> definitionsProvider,
-        Random? random = null)
+        Random? random = null,
+        IQuestRuntimeController? questRuntime = null)
     {
         _hub = hub ?? throw new ArgumentNullException(nameof(hub));
         _locationResolver = locationResolver ?? throw new ArgumentNullException(nameof(locationResolver));
         _definitionsProvider = definitionsProvider ?? throw new ArgumentNullException(nameof(definitionsProvider));
+        _questRuntime = questRuntime;
         _random = random ?? Random.Shared;
 
         RefreshDefinitions();
@@ -104,9 +107,12 @@ public sealed class DynamicEventDispatcher : IDynamicEventDispatcher
         _simulationRunning = running;
         InitializeFromCurrentWorld();
 
+        if (running)
+            SpawnOnSimulationStart();
+
         Publish(
             running ? "DynamicEventDispatcherStarted" : "DynamicEventDispatcherStopped",
-            "Система генерации динамических событий " + (running ? "запущена." : "остановлена."));
+            "Диспетчер динамических событий " + (running ? "запущен." : "остановлен."));
     }
 
     public void Tick()
@@ -184,7 +190,7 @@ public sealed class DynamicEventDispatcher : IDynamicEventDispatcher
             schedules,
             "Сброс Dynamic Event Director");
 
-        Publish("DynamicEventDispatcherReset", "Система генерации динамических событий сброшена.");
+        Publish("DynamicEventDispatcherReset", "Диспетчер динамических событий сброшен.");
     }
 
     public bool TrySpawn(string definitionId)
