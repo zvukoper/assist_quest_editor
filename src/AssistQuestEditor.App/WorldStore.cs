@@ -313,9 +313,11 @@ public sealed class WorldStore
 
         var existing = FindWorld(record.Definition.Id);
         var previous = existing?.Definition.Metadata;
+        var moment = DateTimeOffset.UtcNow;
         var next = record.Definition with
         {
-            Metadata = (previous ?? new ResourceMetadata()).WithModified(_author, DateTimeOffset.UtcNow)
+            Version = Math.Max(1, record.Definition.Version) + 1,
+            Metadata = (previous ?? new ResourceMetadata()).WithModified(_author, moment)
         };
 
         WriteWorld(record with { Definition = next });
@@ -358,6 +360,7 @@ public sealed class WorldStore
             FullName = string.IsNullOrWhiteSpace(fullName) ? null : fullName.Trim(),
             Description = string.IsNullOrWhiteSpace(description) ? null : description.Trim(),
             ImageFile = string.IsNullOrWhiteSpace(imageFileName) ? null : imageFileName,
+            Version = Math.Max(1, record.Definition.Version) + 1,
             Metadata = (record.Definition.Metadata ?? new ResourceMetadata())
                 .WithModified(_author, moment)
         };
