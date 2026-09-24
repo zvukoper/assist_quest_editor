@@ -942,6 +942,21 @@ public sealed class MainForm : WebViewForm
 
         try
         {
+            var dependencies = dialog.DependenciesRequested
+                ? new[]
+                {
+                    new ResourceExportService.ExportDependency(
+                        world.FolderPath,
+                        "world",
+                        "мир «" + world.DisplayName + "»",
+                        new[]
+                        {
+                            WorldPaths.WorldFileName,
+                            WorldPaths.WorldImageFileName
+                        })
+                }
+                : Array.Empty<ResourceExportService.ExportDependency>();
+
             var result = dialog.ArchiveRequested
                 ? ResourceExportService.ExportArchive(
                     AppPaths.UserRoot,
@@ -951,12 +966,14 @@ public sealed class MainForm : WebViewForm
                         campaign,
                         world.Definition.Id,
                         campaign.Definition.Metadata),
-                    moment)
+                    moment,
+                    dependencies)
                 : ResourceExportService.ExportFolder(
                     AppPaths.UserRoot,
                     source,
                     displayName,
-                    moment);
+                    moment,
+                    dependencies);
 
             AppLogger.Info("MainForm: кампания выгружена.",
                 $"worldId={world.Definition.Id}; campaignId={record.Definition.Id}; " +
