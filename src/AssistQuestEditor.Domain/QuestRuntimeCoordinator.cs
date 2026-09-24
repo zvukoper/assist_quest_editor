@@ -12,8 +12,8 @@ public sealed class QuestRuntimeCoordinator : IQuestRuntimeController
 {
     private readonly IDataChannelHub _hub;
     private readonly SceneRuntime _sceneRuntime;
-    private readonly Func<IReadOnlyList<QuestDefinition>> _definitionsProvider;
-    private readonly string _defaultQuestId;
+    private Func<IReadOnlyList<QuestDefinition>> _definitionsProvider;
+    private string _defaultQuestId;
     private readonly ILocationResolver? _locationResolver;
 
     private QuestRuntime? _activeRuntime;
@@ -80,6 +80,39 @@ public sealed class QuestRuntimeCoordinator : IQuestRuntimeController
         _enabledQuestIds.ToArray();
 
     public event EventHandler<QuestRuntimeEvent>? Published;
+
+    /// <summary>
+    /// Перепривязывает Runtime к каталогу другого мира без перезапуска приложения.
+    /// Старый Runtime-проход сбрасывается, а список доступных квестов перечитывается
+    /// из нового CampaignStore. Состояние симуляции после смены мира всегда выключено.
+    /// </summary>
+    public void RebindDefinitions(
+        Func<IReadOnlyList<QuestDefinition>> definitionsProvider,
+        string? defaultQuestId = null)
+    {
+        _definitionsProvider = definitionsProvider ?? throw new ArgumentNullException(nameof(definitionsProvider));
+
+        SetSimulationRunning(false);
+        _activeRuntime?.Stop("Смена мира: старый Quest Runtime остановлен.");
+        _activeRuntime = null;
+
+        if (!string.IsNullOrWhiteSpace(defaultQuestId))
+            _defaultQuestId = defaultQuestId;
+
+        _activationReady.Clear();
+        _enabledQuestIds.Clear();
+        _lastState = new QuestRuntimeState(
+            _defaultQuestId,
+            null,
+            QuestRuntimeStatus.Stopped,
+            null,
+            "WorldChanged",
+            "Мир переключён.");
+
+        RefreshQuestStatuses();
+        InitializeEnabledQuestIds();
+        PublishSynthetic("WorldChanged", null, "Каталог Quest Runtime перепривязан к новому миру.");
+    }
 
     /// <summary>
     /// Manual test/start command: starts the configured main quest even if it was
