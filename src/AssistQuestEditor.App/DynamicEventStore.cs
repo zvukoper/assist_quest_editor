@@ -16,17 +16,46 @@ public sealed class DynamicEventStore
 
     private readonly string _root;
     private readonly bool _readOnly;
+    private IReadOnlyList<string> _additionalRoots = Array.Empty<string>();
     private readonly Dictionary<string, (DynamicEventDefinition Definition, string Path)> _items =
         new(StringComparer.OrdinalIgnoreCase);
 
-    public DynamicEventStore(string root, bool readOnly = false)
+    public DynamicEventStore(
+        string root,
+        bool readOnly = false,
+        IEnumerable<string>? additionalRoots = null)
     {
         if (string.IsNullOrWhiteSpace(root))
             throw new ArgumentException("Каталог Dynamic Events не задан.", nameof(root));
 
         _root = Path.GetFullPath(root);
         _readOnly = readOnly;
+        SetAdditionalRoots(additionalRoots, reload: false);
         Reload();
+    }
+
+    /// <summary>
+    /// Подключает ресурсы текущего мира к общей библиотеке.
+    ///
+    /// Global Event Library остаётся основной записываемой библиотекой, а
+    /// world-local .aqevent файлы становятся её прозрачным overlay.
+    /// </summary>
+    public void SetAdditionalRoots(IEnumerable<string>? roots)
+    {
+        SetAdditionalRoots(roots, reload: true);
+    }
+
+    private void SetAdditionalRoots(IEnumerable<string>? roots, bool reload)
+    {
+        _additionalRoots = (roots ?? Array.Empty<string>())
+            .Where(path => !string.IsNullOrWhiteSpace(path))
+            .Select(Path.GetFullPath)
+            .Where(path => !path.Equals(_root, StringComparison.OrdinalIgnoreCase))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+        if (reload)
+            Reload();
     }
 
     public bool IsReadOnly => _readOnly;
@@ -40,7 +69,7 @@ public sealed class DynamicEventStore
 
         try
         {
-            EnsureInsideRoot(Path.GetFullPath(path));
+            EnsureInsideAnyRoot(Path.GetFullPath(path));
             return true;
         }
         catch (InvalidOperationException)
@@ -63,41 +92,47 @@ public sealed class DynamicEventStore
         if (!_readOnly)
             Directory.CreateDirectory(_root);
 
-        if (!Directory.Exists(_root))
-            return;
+        var roots = new[] { _root }.Concat(_additionalRoots)
+            .Where(Directory.Exists)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
 
-        foreach (var path in Directory.EnumerateFiles(
-                     _root,
-                     "*" + Extension,
-                     SearchOption.AllDirectories)
-                 .OrderBy(path => path, StringComparer.OrdinalIgnoreCase))
+        foreach (var root in roots)
         {
-            try
+            foreach (var path in Directory.EnumerateFiles(
+                         root,
+                         "*" + Extension,
+                         SearchOption.AllDirectories)
+                     .OrderBy(path => path, StringComparer.OrdinalIgnoreCase))
             {
-                var document = ResourceJsonFormat.Deserialize<DynamicEventDefinitionDocument>(
-                    File.ReadAllText(path));
-
-                if (document?.Definition is null ||
-                    document.SchemaVersion != SupportedSchemaVersion ||
-                    !document.Format.Equals(DynamicEventDefinitionRules.FormatName, StringComparison.OrdinalIgnoreCase) ||
-                    string.IsNullOrWhiteSpace(document.Definition.Id))
+                try
                 {
-                    AppLogger.Warn("DynamicEventStore: пропущен некорректный Dynamic Event.", path);
-                    continue;
-                }
+                    var document = ResourceJsonFormat.Deserialize<DynamicEventDefinitionDocument>(
+                        File.ReadAllText(path));
 
-                if (!_items.ContainsKey(document.Definition.Id))
-                    _items.Add(document.Definition.Id, (document.Definition, path));
-            }
-            catch (Exception ex)
-            {
-                AppLogger.Error("DynamicEventStore: ошибка чтения Dynamic Event.", ex, path);
+                    if (document?.Definition is null ||
+                        document.SchemaVersion != SupportedSchemaVersion ||
+                        !document.Format.Equals(DynamicEventDefinitionRules.FormatName, StringComparison.OrdinalIgnoreCase) ||
+                        string.IsNullOrWhiteSpace(document.Definition.Id))
+                    {
+                        AppLogger.Warn("DynamicEventStore: пропущен некорректный Dynamic Event.", path);
+                        continue;
+                    }
+
+                    // Primary library wins over a world overlay on id collision.
+                    if (!_items.ContainsKey(document.Definition.Id))
+                        _items.Add(document.Definition.Id, (document.Definition, path));
+                }
+                catch (Exception ex)
+                {
+                    AppLogger.Error("DynamicEventStore: ошибка чтения Dynamic Event.", ex, path);
+                }
             }
         }
 
         AppLogger.Info(
             "DynamicEventStore: библиотека загружена.",
-            $"root={_root}; count={_items.Count}; readOnly={_readOnly}");
+            $"root={_root}; overlays={_additionalRoots.Count}; count={_items.Count}; readOnly={_readOnly}");
     }
 
     public bool TryGet(string id, out DynamicEventDefinition definition)
@@ -130,7 +165,7 @@ public sealed class DynamicEventStore
             ? Path.Combine(_root, SanitizeFileName(definition.Id) + Extension)
             : Path.GetFullPath(existingPath);
 
-        EnsureInsideRoot(path);
+        EnsureInsideAnyRoot(path);
 
         if (_items.TryGetValue(definition.Id, out var existing) &&
             !string.Equals(Path.GetFullPath(existing.Path), path, StringComparison.OrdinalIgnoreCase))
@@ -207,14 +242,18 @@ public sealed class DynamicEventStore
             throw new InvalidOperationException("Вероятность генерации должна быть от 0 до 1.");
     }
 
-    private void EnsureInsideRoot(string path)
+    private void EnsureInsideAnyRoot(string path)
     {
-        var root = _root.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar) +
-            Path.DirectorySeparatorChar;
+        foreach (var root in new[] { _root }.Concat(_additionalRoots))
+        {
+            var normalizedRoot = root.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar) +
+                Path.DirectorySeparatorChar;
+            if (path.StartsWith(normalizedRoot, StringComparison.OrdinalIgnoreCase))
+                return;
+        }
 
-        if (!path.StartsWith(root, StringComparison.OrdinalIgnoreCase))
-            throw new InvalidOperationException(
-                "Путь Dynamic Event выходит за пределы библиотеки.");
+        throw new InvalidOperationException(
+            "Путь Dynamic Event выходит за пределы библиотеки.");
     }
 
     private static string SanitizeFileName(string value)
