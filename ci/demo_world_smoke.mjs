@@ -102,13 +102,15 @@ if (extracted) {
   // который импортёру пришлось бы срезать, а имя папки в архиве могло бы не
   // совпасть с желаемым («Демо Мир (2)» при импорте рядом).
   check(exists("world.aqworld"), "В архиве нет файла мира world.aqworld.");
-  check(exists("campaigns/common/campaign.aqcampaign"),
-    "В архиве нет общей кампании common.");
-  check(exists("campaigns/common/quests/common_intro.aqquest"),
-    "В архиве нет демонстрационного квеста common_intro.");
-  // Пустые каталоги обязаны сохраниться: ZIP знает только файлы, поэтому без
-  // явных записей каталогов автор не увидел бы, куда класть сцены и сохранения,
-  // — а именно ради этого структура и запаковывается.
+  // Демо-архив действительно ПУСТОЙ: он учит структуре, но не подмешивает
+  // Common/Quest, которые являются пользовательским содержимым мира.
+  check(!exists("campaigns/common/campaign.aqcampaign"),
+    "Демо-архив не должен содержать Common-кампанию.");
+  check(!exists("campaigns/common/quests/common_intro.aqquest"),
+    "Демо-архив не должен содержать демонстрационный квест common_intro.");
+  check(exists("campaigns/common/"),
+    "В архиве нет корня будущих Common-ресурсов.");
+  // Пустые каталоги обязаны сохраниться: ZIP знает только файлы.
   check(exists("campaigns/common/scenes"),
     "В архиве нет каталога scenes: автор не увидит, куда класть сцены.");
   check(exists("Saves"),
