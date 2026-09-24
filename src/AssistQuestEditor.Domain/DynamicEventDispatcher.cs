@@ -142,7 +142,7 @@ public sealed class DynamicEventDispatcher : IDynamicEventDispatcher
 
         var schedules = State.Schedules
             .ToDictionary(item => item.DefinitionId, item => item, StringComparer.OrdinalIgnoreCase);
-        var changed = false;
+        var changed = AutoDiscoverNearbyInstances(player.Position, clock, schedules);
 
         // Снимок обязателен: запись состояния внутри AttemptSpawn публикует
         // ChannelChanged, приходит обратно в HubEvent_Published и вызывает
@@ -162,6 +162,10 @@ public sealed class DynamicEventDispatcher : IDynamicEventDispatcher
             else if (triggerType == "realtime")
             {
                 changed |= EvaluateRealTime(definition, now, schedules);
+            }
+            else if (triggerType == "dynamiceventdiscovery")
+            {
+                changed |= EvaluateDynamicEventDiscovery(definition, clock, now, schedules);
             }
         }
 
