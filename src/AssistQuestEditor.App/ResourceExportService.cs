@@ -76,7 +76,11 @@ public static class ResourceExportService
             dependencies);
     }
 
-    public sealed record ExportDependency(string SourceFolder, string RelativeTarget, string Description);
+    public sealed record ExportDependency(
+        string SourceFolder,
+        string RelativeTarget,
+        string Description,
+        IReadOnlyList<string>? IncludeRelativeFiles = null);
 
     private static ResourceExportResult ExportResource(
         string userRoot,
@@ -106,7 +110,37 @@ public static class ResourceExportService
 
                     var target = Path.Combine(staging, "dependencies", SafeLeaf(dependency.RelativeTarget));
                     EnsureInside(staging, target);
-                    CopyTree(dependency.SourceFolder, target);
+                    if (dependency.IncludeRelativeFiles is null)
+                    {
+                        CopyTree(dependency.SourceFolder, target);
+                    }
+                    else
+                    {
+                        Directory.CreateDirectory(target);
+                        foreach (var relativeFile in dependency.IncludeRelativeFiles)
+                        {
+                            if (!WorldArchiveRules.IsSafeEntryPath(relativeFile.Replace('\\', '/')))
+                                throw new InvalidOperationException(
+                                    "Путь зависимости небезопасен: " + relativeFile);
+
+                            var sourceFile = Path.GetFullPath(Path.Combine(dependency.SourceFolder, relativeFile));
+                            if (!sourceFile.StartsWith(
+                                    Path.GetFullPath(dependency.SourceFolder).TrimEnd(Path.DirectorySeparatorChar) +
+                                    Path.DirectorySeparatorChar,
+                                    StringComparison.OrdinalIgnoreCase))
+                            {
+                                throw new InvalidOperationException(
+                                    "Путь зависимости выходит за пределы источника: " + relativeFile);
+                            }
+
+                            if (!File.Exists(sourceFile))
+                                continue;
+
+                            var destinationFile = Path.Combine(target, relativeFile);
+                            Directory.CreateDirectory(Path.GetDirectoryName(destinationFile)!);
+                            File.Copy(sourceFile, destinationFile, overwrite: true);
+                        }
+                    }
                 }
             }
 
