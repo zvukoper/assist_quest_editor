@@ -19,6 +19,7 @@ const worldStore = read("src/AssistQuestEditor.App/WorldStore.cs");
 const campaignStore = read("src/AssistQuestEditor.App/CampaignStore.cs");
 const program = read("src/AssistQuestEditor.App/Program.cs");
 const prefs = read("src/AssistQuestEditor.App/Core/AppUiPreferencesStore.cs");
+const themeCssForTree = read("src/AssistQuestEditor.App/Web/theme.css");
 
 const failures = [];
 const check = (condition, message) => { if (!condition) failures.push(message); };
@@ -252,21 +253,61 @@ check(/ResourceMetadata\? Metadata = null/.test(read("src/AssistQuestEditor.App/
 
 // --- 9б. Иконка ℹ️ у названия мира и кампании ---
 
-check(/CreateMicroButton\("ℹ️"\)/.test(worldBlock),
-  "У названия мира должна быть иконка ℹ️ для открытия свойств.");
-check(/CreateMicroButton\("ℹ️"\)/.test(campaignBlock),
-  "У названия кампании должна быть иконка ℹ️ для открытия свойств.");
+check(/CreateInfoIcon\("Свойства мира"\)/.test(worldBlock),
+  "У названия мира должна быть иконка информации для открытия свойств.");
+check(/CreateInfoIcon\("Свойства кампании"\)/.test(campaignBlock),
+  "У названия кампании должна быть иконка информации для открытия свойств.");
+// Иконка — МАЛЕНЬКАЯ СИНЯЯ иконка, а не кнопка во всю высоту строки: кнопка
+// спорила с названием за место и выглядела органом управления, а не справкой.
+const infoIconBody = campaignsForm.slice(
+  campaignsForm.indexOf("private static Label CreateInfoIcon"),
+  campaignsForm.indexOf("private const int InfoIconSize")
+);
+check(/InfoIconSize/.test(infoIconBody),
+  "Иконка информации должна ограничивать свой размер, иначе она растянет строку.");
+check(/var\(--blue\)/.test(themeCssForTree) || /18, 171, 229/.test(infoIconBody),
+  "Иконка информации должна быть синей: это цвет справки в интерфейсе.");
+check(!/CreateMicroButton\("ℹ️"\)/.test(campaignsForm),
+  "Осталась прежняя кнопка ℹ️ во всю высоту строки.");
 // Иконка у кампании обязана нести ЕЁ id: иконок столько же, сколько кампаний, и
 // «открыть свойства текущей» открывало бы не ту.
 check(/CampaignPropertiesRequested\?\.Invoke\(this,\s*new CampaignPropertiesRequestedEventArgs\(campaign\.Id\)\)/.test(campaignBlock),
   "Иконка ℹ️ кампании не передаёт её id: откроются свойства не той кампании.");
 check(/WorldPropertiesRequested\?\.Invoke/.test(worldBlock),
   "Иконка ℹ️ мира не запрашивает свойства мира.");
-// Сворачивание по иконке ℹ️ было бы неожиданным: у неё своё действие.
-check(!/header\.Click \+= \(_, _\) => ToggleCollapsed\(campaign\.Id\)/.test(campaignBlock),
-  "Сворачивание повешено на весь заголовок, включая кнопки: клик по ℹ️ свернёт кампанию.");
+// Сворачивание по иконке информации было бы неожиданным: у неё своё действие.
+check(/foreach \(Control element in new Control\[\] \{ header, text, marker \}\)\s*\r?\n?\s*\{/.test(campaignBlock),
+  "Сворачивание повешено на весь заголовок, включая кнопки: клик по иконке свернёт кампанию.");
 check(/new Control\[\] \{ header, text, marker \}/.test(campaignBlock),
   "Сворачивание должно быть только на заголовке, названии и стрелке.");
+
+// Уровневость дерева задаётся ОТСТУПОМ СЛЕВА: без него кампании выглядят как
+// плоский список, выровненный по левому краю, — именно на это жаловался автор.
+// Проверяется КОНСТРУКЦИЯ отступа, а не вхождение имени константы: имя
+// встречается и в пояснении к правке, и такая проверка прошла бы впустую.
+check(/Margin = new Padding\(TreeLevelIndent, 0, 0, 8\)/.test(campaignBlock),
+  "Пункт кампании не имеет отступа вложенности: уровни дерева не читаются.");
+check(/var total = LayoutPanelChildren\(rows, innerWidth, QuestRowIndent\)/.test(campaignsForm),
+  "Строки квестов не получают отступ вложенности при раскладке.");
+check(/private static int LayoutPanelChildren\(FlowLayoutPanel rows, int availableWidth, int indent\)/.test(campaignsForm),
+  "Раскладка строк не принимает отступ уровня: каждый уровень пришлось бы править отдельно.");
+
+// Обводка выделенной строки квеста обязана быть СКРУГЛЁННОЙ и того же радиуса,
+// что кнопки: прямоугольная спорила со скруглениями рядом.
+const questRowBody = campaignsForm.slice(
+  campaignsForm.indexOf("private Control CreateQuestRow"),
+  campaignsForm.indexOf("private static Label CreateNotice")
+);
+check(/RoundedPath\(bounds, ButtonRadius\)/.test(questRowBody),
+  "Обводка выделенной строки квеста должна быть скруглённой.");
+check(/DrawPath\(pen, path\)/.test(questRowBody),
+  "Обводка строки квеста должна рисоваться скруглённым путём, а не прямоугольником.");
+// Выравнивание однотипных элементов одной строки — ЯКОРЕМ, а не подобранным
+// отступом: отступы разъезжаются при любой правке высоты строки.
+check(!/Margin = new Padding\(0, 1[14], /.test(questRowBody),
+  "В строке квеста остались ПОДОБРАННЫЕ вертикальные отступы: элементы разъезжаются.");
+check(/Anchor = AnchorStyles\.(Left|Right)/.test(questRowBody),
+  "Элементы строки квеста не выровнены якорем: вертикаль задана отступами.");
 
 // События обязаны доходить до окна свойств, а не теряться на середине пути.
 const simulatorFormForInfo = read("src/AssistQuestEditor.App/Host/SimulatorForm.cs");

@@ -4,19 +4,17 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Инвентарь</title>
-<link rel="stylesheet" href="theme.css?v=1.0.40.183">
+<link rel="stylesheet" href="theme.css?v=1.0.40.184">
 <style>
   /* Окно инвентаря — самостоятельное окно Windows, а не панель поверх карты.
      Поэтому страница занимает ровно размер окна и не имеет прокрутки: сетка
-     6×3 рассчитана на этот размер, и прокрутка здесь означала бы, что размеры
-     разъехались. */
+     рассчитана на этот размер, и прокрутка СТРАНИЦЫ здесь означала бы, что
+     размеры разъехались. Прокручивается только сама сетка, и только когда
+     предметов больше, чем помещается. */
   html, body { height:100%; margin:0; overflow:hidden; }
   .inventoryWindow { height:100%; display:flex; flex-direction:column; }
   /* Панель растягивается на всё окно: она — единственное содержимое. */
   .inventoryWindow .gamePanel { flex:1 1 auto; border-radius:0; border:none; }
-  /* Прокрутка ЗАПРЕЩЕНА: размер окна подобран под сетку. Если содержимое не
-     влезает, это дефект размеров, и его надо видеть, а не прятать за полосой. */
-  .inventoryWindow .inventoryGrid { overflow:hidden; }
 </style>
 </head>
 <body>
@@ -25,7 +23,7 @@
 </div>
 <div class="inventoryNotifications" id="inventoryNotifications" aria-live="polite"></div>
 
-<script src="inventory.js?v=1.0.40.183"></script>
+<script src="inventory.js?v=1.0.40.184"></script>
 <script>
 (function () {
   "use strict";
@@ -143,6 +141,40 @@
   // Готовность окна: Host присылает снимок после этого сообщения, иначе первое
   // состояние потерялось бы — окно ещё не подписано.
   send({ action: "inventory_ready" });
+
+  /**
+   * Клавиша I закрывает окно ИЗ САМОГО ОКНА.
+   *
+   * Прежде горячая клавиша работала только в окне Симулятора: обработчик жил в
+   * его странице, а окно инвентаря — отдельная форма со своей страницей, и
+   * нажатие в нём уходило в никуда. «Открывать и закрывать по I» означает, что
+   * клавиша обязана действовать в обоих окнах, иначе закрыть инвентарь можно
+   * только мышью, а это ровно то, ради чего клавиша и заведена.
+   *
+   * Раскладка не важна: `event.code` привязан к позиции клавиши, поэтому
+   * проверяются оба варианта `event.key` — латинский и русский.
+   */
+  var HOTKEY_CODES = new Set(["KeyI", "Escape"]);
+  var HOTKEY_KEYS = new Set(["i", "ш"]);
+
+  document.addEventListener("keydown", function (event) {
+    if (event.repeat) return;
+
+    // Поля ввода не перехватываем: в них «i» — это буква, а не команда.
+    var tag = event.target && event.target.tagName;
+    if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" ||
+        (event.target && event.target.isContentEditable)) return;
+
+    var isHotkey = HOTKEY_CODES.has(event.code) ||
+      HOTKEY_KEYS.has(String(event.key || "").toLowerCase());
+    if (!isHotkey) return;
+
+    event.preventDefault();
+    // Закрывает окно Host: страница не может закрыть форму Windows. Escape
+    // ведёт себя так же — это привычный способ закрыть окно.
+    send({ action: "close_inventory" });
+  });
+
   render();
 })();
 </script>

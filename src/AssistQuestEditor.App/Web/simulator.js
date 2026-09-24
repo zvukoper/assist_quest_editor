@@ -5,6 +5,9 @@
   const runtimeSide = document.getElementById("runtimeSide");
   const playerOverlay = document.getElementById("playerOverlay");
   const backpackButton = document.getElementById("backpackButton");
+  // Кнопка персонажа: своя, потому что инвентарь уехал в отдельное окно и
+  // рюкзак стал открывать ЕГО, оставив панель персонажа без открывальщика.
+  const characterButton = document.getElementById("characterButton");
   const backpackNewDot = document.getElementById("backpackNewDot");
   const characterPanel = document.getElementById("characterPanel");
   const characterTabs = document.getElementById("characterTabs");
@@ -1902,21 +1905,18 @@
   }
 
   function toggleGameplayInventory(force = null) {
-    // Инвентарь теперь ОТДЕЛЬНОЕ ОКНО (клавиша I), и открывает его Host:
+    // Инвентарь — ОТДЕЛЬНОЕ ОКНО (клавиша I), и открывает его Host:
     // страница не может создать форму Windows. Здесь только запрос, а
     // состояние окна знает Симулятор — он же и отвечает снимком.
-    //
-    // Прежняя панель-оверлей осталась контейнером для панели ПЕРСОНАЖА:
-    // она открывается по кнопке в левом сайдбаре и не связана с клавишей I.
     send({ action: "toggle_inventory", open: force === null ? null : !!force });
   }
 
   /**
-   * Панель персонажа: единственное, что осталось в оверлее.
+   * Панель персонажа: характеристики и репутация.
    *
-   * Отделена от инвентаря намеренно: инвентарь уехал в своё окно, а персонаж
-   * остался на карте — он читается вместе с ней (характеристики зависят от
-   * того, где находится игрок).
+   * Своя кнопка и своё состояние: прежде её открывал тот же рюкзак, что и
+   * инвентарь, и когда инвентарь уехал в отдельное окно, панель стала
+   * недостижимой — открывальщик исчез, а функция осталась.
    */
   function toggleCharacterPanel(force = null) {
     gameplayInventoryOpen = force === null ? !gameplayInventoryOpen : !!force;
@@ -2424,30 +2424,33 @@
    * столько их знает мир.
    *
    * Состояния заданы атрибутом data-sim-state — на него вешается оформление
-   * (серый / зелёный / пульсирующий оранжевый), поэтому цвета не дублируются
-   * в JS.
+   * (синий, когда симуляции нет / оранжевый идёт или пауза), поэтому цвета не
+   * дублируются в JS.
    */
   function renderSimulationTransport() {
     const play = document.getElementById("simPlay");
     const stop = document.getElementById("simStop");
     const fastForward = document.getElementById("simFastForward");
     const plate = document.getElementById("simStatusPlate");
-    const text = document.getElementById("simStatusText");
     const autoSave = document.getElementById("simAutoSave");
 
     let state;
-    let textValue;
     if (simulationRunning) {
       state = "running";
-      textValue = "Идет симуляция";
     } else if (simulationPaused) {
       state = "paused";
-      textValue = "На паузе";
     } else {
       state = "stopped";
-      textValue = "Симуляция не запущена";
     }
 
+    // Текст плашки СТАТИЧЕСКИЙ — «Игровое время», из разметки.
+    //
+    // Прежде JS подставлял «Идет симуляция» и «На паузе», и после остановки
+    // оставалось «На паузе» — мир показывался приостановленным, хотя статус уже
+    // другой. Подпись называет ЭЛЕМЕНТ (игровое время), а состояние выражается
+    // ЦВЕТОМ: синий — симуляции нет, оранжевый — идёт или пауза; пауза
+    // дополнительно пульсирует, иначе ход и пауза выглядели бы одинаково.
+    //
     // Иконка play отражает ДЕЙСТВИЕ кнопки: идёт симуляция — нажатие поставит
     // паузу (⏸️), иначе нажатие запустит или продолжит (▶️). Подсветка кнопки
     // НЕ выставляется: состояние показывает плашка, а подсвеченная кнопка
@@ -2475,7 +2478,6 @@
 
     if (plate) {
       plate.dataset.simState = state;
-      if (text) text.textContent = textValue;
     }
 
     // Оранжевые часы при ускоренном времени задаются классом на самом HUD, а не
@@ -3547,6 +3549,7 @@
   map.addEventListener("contextmenu", event => event.preventDefault());
 
   backpackButton?.addEventListener("click", () => toggleGameplayInventory());
+  characterButton?.addEventListener("click", () => toggleCharacterPanel());
 
   // Горячая клавиша инвентаря не должна зависеть от языка ввода.
   // `event.key` содержит символ текущей раскладки: в русской ЙЦУКЕН та же

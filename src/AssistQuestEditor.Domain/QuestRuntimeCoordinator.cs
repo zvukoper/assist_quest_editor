@@ -92,13 +92,34 @@ public sealed class QuestRuntimeCoordinator : IQuestRuntimeController
 
     public void SetSimulationRunning(bool running)
     {
+        // Флаг паузы снимается ЛЮБЫМ переходом состояния, а не только запуском.
+        //
+        // Прежде здесь стоял ранний выход «уже выключено — ничего не делаем», и
+        // он ломал остановку из паузы: пауза оставляет `_simulationRunning =
+        // false`, поэтому нажатие «стоп» не делало НИЧЕГО — мир оставался
+        // помеченным паузой, плашка продолжала пульсировать оранжевым, и выйти
+        // из этого состояния кнопкой остановки было нельзя.
+        //
+        // «Пауза» — признак приостановленного мира, и жить она может только
+        // рядом с ним: любое явное решение о состоянии её снимает.
         if (_simulationRunning == running)
+        {
+            if (!_isPaused)
+                return;
+
+            _isPaused = false;
+            _activeRuntime?.SetSimulationRunning(running);
+            SetClockRunning(running);
+
+            PublishSynthetic(
+                running ? "SimulationStarted" : "SimulationStopped",
+                null,
+                running ? "Симуляция запущена." : "Симуляция остановлена.");
+
             return;
+        }
 
         _simulationRunning = running;
-        // Любой явный старт снимает паузу, любая остановка её больше не несёт:
-        // «пауза» — это признак остановленного, но не сброшенного мира, и жить
-        // она может только рядом с остановкой.
         _isPaused = false;
         _activeRuntime?.SetSimulationRunning(running);
         SetClockRunning(running);

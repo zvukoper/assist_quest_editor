@@ -1301,6 +1301,55 @@ internal static class Program
             }
         }
 
+        // Отдельно проверяется ВЫРАВНИВАНИЕ по вертикали: галочка, статус и
+        // кнопки в одной строке обязаны стоять на одном уровне. Прежде это
+        // задавалось подобранными отступами Margin, и они разъезжались при любой
+        // правке высоты строки. Здесь сравниваются ЦЕНТРЫ контролов.
+        //
+        // Сравниваются ОДНОСТРОЧНЫЕ контролы: название квеста занимает две строки
+        // (заголовок и детали) и по построению выше остальных — его центр не
+        // обязан совпадать с центром кнопки «Ред.». Именно на этой строке
+        // автор и заметил расхождение: кнопка уехала вниз.
+        var inlineControls = new List<(Control Control, Rectangle Bounds, Control Row)>();
+        foreach (var (header, _) in headers)
+        {
+            foreach (Control child in header.Controls)
+            {
+                if (child is CheckBox || child is Button)
+                    inlineControls.Add((child, header.RectangleToScreen(child.Bounds), header));
+            }
+
+            // Из подписей берутся только ОДНОСТРОЧНЫЕ: у названия квеста текст с
+            // переводом строки, и выравнивать его центр с кнопкой не требуется.
+            foreach (Control child in header.Controls)
+            {
+                if (child is Label label && !label.Text.Contains('\n'))
+                    inlineControls.Add((label, header.RectangleToScreen(label.Bounds), header));
+            }
+        }
+
+        // Сравнение ВНУТРИ одной строки: центры заголовков кампаний между собой
+        // сравнивать нельзя — они лежат на разных высотах дерева.
+        foreach (var group in inlineControls.GroupBy(entry => entry.Row))
+        {
+            var first = group.First();
+            var rowCenter = first.Bounds.Top + first.Bounds.Height / 2;
+
+            foreach (var entry in group)
+            {
+                var center = entry.Bounds.Top + entry.Bounds.Height / 2;
+
+                // Допуск 6 px: разные шрифты дают разную высоту строки, и
+                // требовать совпадения до пикселя значило бы ловить округление.
+                if (Math.Abs(center - rowCenter) > 6)
+                {
+                    lines.Add("misaligned: в строке " + Describe(entry.Row) + " — " +
+                        Describe(entry.Control) + " центр " + center +
+                        " против " + rowCenter);
+                }
+            }
+        }
+
         // Полоса прокрутки должна быть РОВНО одна — у корневого списка дерева.
         lines.Add("scrolling containers: " + scrolling.Count);
         if (scrolling.Count != 1)
@@ -1369,8 +1418,37 @@ internal static class Program
                 "cell: " + InventoryLayoutRules.CellSize,
                 "gap: " + InventoryLayoutRules.CellGap,
                 "grid: " + InventoryLayoutRules.GridWidth + "x" + InventoryLayoutRules.GridHeight,
-                "window: " + InventoryLayoutRules.WindowWidth + "x" + InventoryLayoutRules.WindowHeight
+                "client: " + InventoryLayoutRules.ClientWidth + "x" + InventoryLayoutRules.ClientHeight,
+                "window: " + InventoryLayoutRules.WindowWidth + "x" + InventoryLayoutRules.WindowHeight,
+                "minimum-window-height: " + InventoryLayoutRules.MinimumWindowHeight
             };
+
+            // Связность проверяется ЗДЕСЬ же: клиентская ширина задана образцом
+            // автора, и если сетка вдруг окажется шире клиента, ячейки уедут за
+            // край, а полоса прокрутки будет ГОРИЗОНТАЛЬНОЙ — она запрещена.
+            var checks = new List<string>();
+            if (InventoryLayoutRules.ClientWidth < InventoryLayoutRules.GridWidth)
+                checks.Add("клиентская ширина меньше сетки");
+            if (InventoryLayoutRules.ClientHeight < InventoryLayoutRules.GridHeight)
+                checks.Add("клиентская высота меньше сетки");
+            if (InventoryLayoutRules.WindowWidth <= InventoryLayoutRules.ClientWidth)
+                checks.Add("окно не шире клиента");
+            if (InventoryLayoutRules.WindowHeight <= InventoryLayoutRules.ClientHeight)
+                checks.Add("окно не выше клиента");
+            if (InventoryLayoutRules.MinimumWindowHeight > InventoryLayoutRules.WindowHeight)
+                checks.Add("минимум больше исходного размера");
+            // Одна строка сетки плюс шапка, потребности и кошелёк: меньший
+            // минимум позволил бы сжать окно так, что кошелёк исчез.
+            var expectedMinimum = InventoryLayoutRules.HeaderHeight + InventoryLayoutRules.VitalsHeight +
+                InventoryLayoutRules.CellSize + InventoryLayoutRules.GridPadding * 2 +
+                InventoryLayoutRules.WalletHeight + InventoryLayoutRules.WindowPadding * 2 +
+                InventoryLayoutRules.TitleBarAllowance;
+            if (InventoryLayoutRules.MinimumWindowHeight != expectedMinimum)
+                checks.Add("минимум не сходится с составом окна");
+
+            lines.Add(checks.Count == 0
+                ? "consistency: ok"
+                : "consistency: " + string.Join("; ", checks));
 
             foreach (var line in lines)
                 Console.WriteLine(line);

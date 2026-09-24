@@ -152,6 +152,24 @@ check(/\.simStatusPlate\[data-sim-state="running"\]/.test(themeCss),
   "theme.css должен оформлять состояние «идёт».");
 check(/\.simStatusPlate\[data-sim-state="stopped"\]/.test(themeCss),
   "theme.css должен оформлять состояние «не запущено».");
+// Требование автора: СИНИЙ — симуляции нет, ОРАНЖЕВЫЙ — идёт или пауза.
+// Проверяются ВЫЧИСЛЕННЫЕ стили в браузере (ниже), а здесь — что оба правила
+// вообще присутствуют и используют разные цвета.
+const runningStyle = themeCss.slice(
+  themeCss.indexOf('.simStatusPlate[data-sim-state="running"]'),
+  themeCss.indexOf('.simStatusPlate[data-sim-state="paused"]')
+);
+const stoppedStyle = themeCss.slice(
+  themeCss.indexOf('.simStatusPlate[data-sim-state="stopped"]'),
+  themeCss.indexOf('.simStatusPlate[data-sim-state="running"]')
+);
+check(/var\(--accent\)/.test(runningStyle),
+  "Идущая симуляция должна быть оранжевой (акцентной): " + runningStyle);
+check(/var\(--blue\)/.test(stoppedStyle),
+  "Состояние «симуляции нет» должно быть СИНИМ, а не серым: " + stoppedStyle);
+// Пульсация — ТОЛЬКО у паузы: если она есть и у хода, состояния не отличить.
+check(!/animation/.test(runningStyle),
+  "Ход симуляции НЕ должен пульсировать: пульсация отличает паузу.");
 const pausedStyle = themeCss.slice(
   themeCss.indexOf('.simStatusPlate[data-sim-state="paused"]'),
   themeCss.indexOf("@keyframes simPausePulse")
@@ -181,8 +199,24 @@ check(/id="simAutoSave"/.test(simulatorHtml),
   "Под кнопкой запуска должна быть подпись «Автосохранение: дата и время».");
 check(/autoSaveLabel/.test(simulatorForm) && /autoSaveLabel/.test(simulatorJs),
   "Подпись автосохранения должна приходить в снимке (Host → Web).");
-check(/На паузе/.test(simulatorJs),
-  "Web должен уметь показать состояние «На паузе».");
+// Подпись в плашке НЕ должна меняться по состояниям: именно смена подписи
+// оставляла «На паузе» висеть после остановки. Проверяется ТЕЛО функции
+// отрисовки транспорта — и БЕЗ КОММЕНТАРИЕВ: пояснение, описывающее дефект,
+// само содержит те же слова, и поиск по тексту с комментариями ловил бы
+// объяснение вместо кода (это уже случалось в этом проекте).
+const stripComments = source => source
+  .replace(/\/\*[\s\S]*?\*\//g, " ")
+  .replace(/\/\/[^\n]*/g, " ");
+const transportBody = stripComments(simulatorJs.slice(
+  simulatorJs.indexOf("function renderSimulationTransport()"),
+  simulatorJs.indexOf("function formatSpeed(")
+));
+check(transportBody.length > 0,
+  "В simulator.js должна быть функция renderSimulationTransport().");
+check(!/simStatusText/.test(transportBody),
+  "Отрисовка транспорта не должна переписывать текст плашки.");
+check(!/На паузе|Идет симуляция|не запущена/.test(transportBody),
+  "Отрисовка транспорта не должна подставлять текст состояния: состояние — это цвет.");
 
 // Вспышка автосохранения: LIME, ОДИН раз, 2 секунды.
 const autoSaveStyle = themeCss.slice(
@@ -323,7 +357,7 @@ try {
               <button id="simFastForward" class="toolButton simTransportButton">⏩</button>
             </div>
             <div class="simStatusPlate" id="simStatusPlate" data-sim-state="stopped">
-              <span class="simStatusText" id="simStatusText">Симуляция не запущена</span>
+              <span class="simStatusText" id="simStatusText">Игровое время</span>
             </div>
             <div class="topSpacer"></div>
             <button class="toolButton" id="openCampaigns">Кампании и квесты</button>
@@ -432,7 +466,7 @@ try {
     hudAccelerated: document.getElementById("hud").classList.contains("hudAccelerated")
   }));
 
-  // Симуляция ВКЛ: метки «(пауза)» быть НЕ должно, плашка зелёная, play — ⏸️.
+  // Симуляция ВКЛ: метки «(пауза)» быть НЕ должно, плашка оранжевая, play — ⏸️.
   await pushSnapshot({ running: true });
   await page.waitForTimeout(300);
 
@@ -444,15 +478,21 @@ try {
     "Часы в шапке должны показывать время с секундами (чч:мм:сс): " + runningState.hud);
   check(runningState.state === "running",
     "При идущей симуляции плашка должна быть в состоянии running: " + runningState.state);
-  check(/Идет симуляция/.test(runningState.text),
-    "Статус идущей симуляции должен быть «Идет симуляция»: " + runningState.text);
+  // Подпись СТАТИЧЕСКАЯ и не сообщает состояние: состояние — цвет и значок.
+  check(/Игровое время/.test(runningState.text),
+    "Подпись плашки должна быть нейтральной («Игровое время»): " + runningState.text);
   check(runningState.play === "⏸️",
     "Иконка play при идущей симуляции должна стать ⏸️ (следующее действие — пауза): " + runningState.play);
-  // Требование по цвету: зелёный. Проверяем вычисленный стиль, а не имя класса.
+  // Требование автора: идёт симуляция — оранжевая. Проверяем вычисленный
+  // стиль, а не имя класса.
   const runningColor = await page.evaluate(() =>
     getComputedStyle(document.getElementById("simStatusPlate")).color);
-  check(/rgb\(\s*17,\s*251,\s*6\s*\)/.test(runningColor),
-    "Статус идущей симуляции должен быть зелёным (LIME #11fb06): " + runningColor);
+  check(/rgb\(\s*250,\s*176,\s*3\s*\)/.test(runningColor),
+    "Идущая симуляция должна быть оранжевой (#fab003): " + runningColor);
+  const runningAnimation = await page.evaluate(() =>
+    getComputedStyle(document.getElementById("simStatusPlate")).animationName);
+  check(!/simPausePulse/.test(runningAnimation),
+    "Ход НЕ должен пульсировать: пульсация отличает паузу: " + runningAnimation);
 
   // Пауза: оранжевая пульсация 1500 мс, статус «На паузе», play снова ▶️.
   await pushSnapshot({ running: false, paused: true, speed: 1 });
@@ -472,8 +512,8 @@ try {
   });
   check(pausedState.state === "paused",
     "Плашка должна быть в состоянии paused: " + pausedState.state);
-  check(/На паузе/.test(pausedState.text),
-    "Статус паузы должен быть «На паузе»: " + pausedState.text);
+  check(/Игровое время/.test(pausedState.text),
+    "Подпись плашки не должна меняться на паузе: " + pausedState.text);
   check(pausedState.play === "▶️",
     "Иконка play на паузе должна быть ▶️ (следующее действие — продолжить): " + pausedState.play);
   check(/rgb\(\s*250,\s*176,\s*3\s*\)/.test(pausedComputed.color),
@@ -481,7 +521,7 @@ try {
   check(pausedComputed.animationName === "simPausePulse" && pausedComputed.duration === "1.5s",
     "Пульсация паузы должна быть 1500 мс: " + pausedComputed.animationName + "/" + pausedComputed.duration);
 
-  // Симуляция ВЫКЛ: серая плашка, статус начальный, пульсации нет.
+  // Симуляция ВЫКЛ: СИНЯЯ плашка, подпись нейтральная, пульсации нет.
   await pushSnapshot({ running: false, paused: false, autoSaveLabel: "24.09.2026 11:37:05" });
   await page.waitForTimeout(300);
 
@@ -494,10 +534,10 @@ try {
     "При выключенной симуляции метка «(пауза)» должна быть: " + stoppedState.hud);
   check(stoppedState.state === "stopped",
     "Плашка должна быть в состоянии stopped: " + stoppedState.state);
-  check(/Симуляция не запущена/.test(stoppedState.text),
-    "Статус должен быть «Симуляция не запущена»: " + stoppedState.text);
-  check(/rgb\(\s*139,\s*151,\s*163\s*\)/.test(stoppedComputed.color),
-    "Статус незапущенной симуляции должен быть серым: " + stoppedComputed.color);
+  check(/Игровое время/.test(stoppedState.text),
+    "Подпись плашки должна остаться нейтральной после остановки: " + stoppedState.text);
+  check(/rgb\(\s*18,\s*171,\s*229\s*\)/.test(stoppedComputed.color),
+    "Состояние «симуляции нет» должно быть СИНИМ (#12abe5): " + stoppedComputed.color);
   check(!/simPausePulse/.test(stoppedComputed.animationName),
     "У незапущенной симуляции пульсации быть не должно.");
 

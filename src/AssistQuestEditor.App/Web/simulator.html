@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Симулятор</title>
-<link rel="stylesheet" href="theme.css?v=1.0.40.183">
+<link rel="stylesheet" href="theme.css?v=1.0.40.184">
 <style>
   .mapSurface { position:relative; overflow:hidden; }
   #mapCanvas { display:block; width:100%; height:100%; cursor:default; touch-action:none; background:#0d1014; }
@@ -42,10 +42,11 @@
         <button class="toolButton simTransportButton" id="simFastForward" type="button"
                 aria-label="Ускорить игровое время">⏩</button>
       </div>
-      <!-- Иконка в плашке не дублируется: состояние уже выражено цветом и
-           текстом, а третий носитель того же смысла только шумит. -->
+      <!-- Текст в плашке СТАТИЧЕСКИЙ: подпись «Симуляция не запущена» оставалась
+           на месте после остановки, и мир выглядел приостановленным. Состояние
+           показывают цвет и значок; текст называет сам элемент, а не состояние. -->
       <div class="simStatusPlate" id="simStatusPlate" data-sim-state="stopped" aria-live="polite">
-        <span class="simStatusText" id="simStatusText">Симуляция не запущена</span>
+        <span class="simStatusText" id="simStatusText">Игровое время</span>
       </div>
       <div class="topSpacer"></div>
       <button class="toolButton" id="openCampaigns" title="Кампании и квесты мира">Кампании и квесты</button>
@@ -87,7 +88,7 @@
         <span class="mapStatusHint" id="mapStatusHint"></span>
       </div>
       <button class="backpackButton" id="backpackButton" type="button"
-              aria-controls="playerOverlay" aria-expanded="false"
+              aria-controls="inventoryWindowLink" aria-expanded="false"
               data-game-tooltip="Инвентарь — клавиша I (в любой раскладке)">
         <svg viewBox="0 0 24 24" aria-hidden="true">
           <path d="M7.5 8.5V7a4.5 4.5 0 0 1 9 0v1.5"/>
@@ -96,6 +97,20 @@
           <path d="M9.5 11.5v2h5v-2"/>
         </svg>
         <span class="backpackNewDot" id="backpackNewDot"></span>
+      </button>
+      <!-- Персонаж — ОТДЕЛЬНАЯ кнопка, а не тот же рюкзак.
+           Прежде панель персонажа открывалась кнопкой инвентаря, а когда
+           инвентарь уехал в своё окно, рюкзак стал открывать ЕГО — и панель
+           персонажа с вкладками «Персонаж/Репутация» оказалась недостижимой:
+           её открывальщик исчез, а функция осталась. Две кнопки рядом, каждая
+           со своим значком: сумка и человек. -->
+      <button class="backpackButton characterButton" id="characterButton" type="button"
+              aria-controls="playerOverlay" aria-expanded="false"
+              data-game-tooltip="Персонаж и репутация">
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <circle cx="12" cy="8" r="3.6"/>
+          <path d="M5 20.5c0-3.6 3.1-5.6 7-5.6s7 2 7 5.6"/>
+        </svg>
       </button>
       <div class="playerOverlay" id="playerOverlay" aria-hidden="true">
         <!-- Инвентаря здесь больше НЕТ: он открывается отдельным окном по
@@ -136,8 +151,8 @@
     </div>
   </div>
 </div>
-<script src="web_log.js?v=1.0.40.183"></script>
-<script src="simulator.js?v=1.0.40.183"></script>
-<script src="interface.js?v=1.0.40.183"></script>
+<script src="web_log.js?v=1.0.40.184"></script>
+<script src="simulator.js?v=1.0.40.184"></script>
+<script src="interface.js?v=1.0.40.184"></script>
 </body>
 </html>

@@ -11,10 +11,10 @@
     <Prefer32Bit>false</Prefer32Bit>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
 
-    <Version>1.0.40.183</Version>
-    <AssemblyVersion>1.0.40.183</AssemblyVersion>
-    <FileVersion>1.0.40.183</FileVersion>
-    <AssemblyInformationalVersion>1.0.40.183-AQE-ICONS-R31</AssemblyInformationalVersion>
+    <Version>1.0.40.184</Version>
+    <AssemblyVersion>1.0.40.184</AssemblyVersion>
+    <FileVersion>1.0.40.184</FileVersion>
+    <AssemblyInformationalVersion>1.0.40.184-DIALOG-TREE-POLISH-R32</AssemblyInformationalVersion>
     <PublishSingleFile>true</PublishSingleFile>
     <SelfContained>true</SelfContained>
     <RuntimeIdentifier>win-x64</RuntimeIdentifier>

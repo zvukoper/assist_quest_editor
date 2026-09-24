@@ -326,15 +326,26 @@ input,select,textarea{padding:4px 5px;border-radius:4px;font-size:10px}textarea{
 }
 
 /* Плашка статуса симуляции. Цвет задаётся атрибутом data-sim-state, поэтому
-   ни одно из трёх состояний не «забывается» при правке JS. */
+   ни одно из трёх состояний не «забывается» при правке JS.
+   Цвета по требованию автора: СИНИЙ — симуляции нет, ОРАНЖЕВЫЙ — идёт или
+   пауза. Прежде «идёт» было зелёным (lime): зелёный в интерфейсе читается как
+   «готово/успех», и он же используется для вспышки автосохранения — один цвет
+   на два разных смысла. Пауза отличается от хода ПУЛЬСАЦИЕЙ, а не цветом:
+   идёт работа и идёт пауза — оба состояния «симуляция есть».
+
+   Текста в плашке НЕТ: подпись состояния дублировала значок и мешала читать
+   время. Состояние показывают значок и цвет. */
 .simStatusPlate{
   display:inline-flex;align-items:center;gap:7px;
   padding:5px 11px;border-radius:8px;
   border:1px solid var(--border);background:rgba(255,255,255,.03);
   font-size:11px;font-weight:700;min-height:30px;
 }
-.simStatusPlate[data-sim-state="stopped"]{color:#8b97a3;border-color:rgba(255,255,255,.12)}
-.simStatusPlate[data-sim-state="running"]{color:var(--lime);border-color:rgba(17,251,6,.35);background:rgba(17,251,6,.06)}
+/* Симуляции нет — обычный синий. */
+.simStatusPlate[data-sim-state="stopped"]{color:var(--blue);border-color:rgba(18,171,229,.45);background:rgba(18,171,229,.08)}
+/* Идёт симуляция — оранжевый, БЕЗ пульсации: пульсирует только пауза, иначе
+   ход и пауза выглядели бы одинаково. */
+.simStatusPlate[data-sim-state="running"]{color:var(--accent);border-color:rgba(250,176,3,.45);background:rgba(250,176,3,.08)}
 /* Пауза пульсирует оранжевым 1500 мс. Шаг в 1.5 с задан намеренно медленным:
    быстрое мигание читается как «ошибка», а пауза — нормальное состояние. */
 .simStatusPlate[data-sim-state="paused"]{
@@ -645,6 +656,11 @@ input,select,textarea{padding:4px 5px;border-radius:4px;font-size:10px}textarea{
 }
 .backpackButton:hover{border-color:rgba(250,176,3,.72);color:#fff;background:#20252a}
 .backpackButton svg{width:25px;height:25px;fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
+/* Кнопка персонажа стоит РЯДОМ с инвентарём, а не поверх него: у каждой своё
+   действие (сумка и человек), и наложение сделало бы вторую недостижимой.
+   Отступ считается от ширины кнопки (48) плюс зазор, а не подбирается. */
+.backpackButton.characterButton{left:calc(16px + 48px + 8px)}
+.backpackButton.characterButton svg{stroke-width:1.8}
 .backpackNewDot{
   position:absolute;right:5px;top:5px;width:8px;height:8px;border-radius:50%;
   background:#fab003;box-shadow:0 0 9px rgba(250,176,3,.8);display:none;
@@ -716,14 +732,16 @@ input,select,textarea{padding:4px 5px;border-radius:4px;font-size:10px}textarea{
 .vitalDual{display:grid;grid-template-columns:1fr 1fr;gap:5px}
 .vitalDualCell{min-width:0}
 .vitalDualCell .vitalLabel{display:block;margin-bottom:3px}
-/* Сетка инвентаря — 6 столбцов × 3 строки = 18 ячеек.
+/* Сетка инвентаря — 6 столбцов. Число строк считается от содержимого:
+   три по умолчанию, больше — если предметов не влезает. Прокрутка здесь
+   ВЕРТИКАЛЬНАЯ и только она: горизонтальная запрещена, потому что сетка по
+   ширине рассчитана точно и вылезать вбок ей нечем.
    Прежние столбцы были minmax(54px,1fr) при auto-rows minmax(78px,1fr): ячейка
    получалась 78 px, и сетка из 24 таких занимала почти весь экран.
    Размер ячейки уменьшен вчетверо ПО ПЛОЩАДИ — то есть сторона вдвое:
-   четверть площади 78×78 — это 39×39. Сторона берётся явно, а не «примерно»,
-   потому что от неё зависит размер всего окна инвентаря. */
+   четверть площади 78×78 — это 39×39. */
 .inventoryGrid{
-  flex:1;min-height:0;overflow:auto;padding:10px;
+  flex:1;min-height:0;overflow-y:auto;overflow-x:hidden;padding:10px;
   display:grid;grid-template-columns:repeat(6,var(--inventory-cell));
   grid-auto-rows:var(--inventory-cell);gap:7px;align-content:start;
   justify-content:center;

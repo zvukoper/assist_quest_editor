@@ -43,17 +43,26 @@ public sealed class InventoryForm : WebViewForm
                 InventoryLayoutRules.WindowHeight),
             "inventory")
     {
-        // Минимальный размер равен расчётному: окно уже сетки быть не может —
-        // иначе часть ячеек уезжала бы за край, и «18 ячеек» превращались бы в 15.
+        // Минимальный размер — по ОДНОЙ строке сетки: содержимое может требовать
+        // больше строк, и тогда появляется прокрутка (см. inventory.js). Требовать
+        // минимум в три строки значило бы запретить уменьшать окно, хотя прокрутка
+        // это уже позволяет.
         MinimumSize = new Size(
             InventoryLayoutRules.WindowWidth,
-            InventoryLayoutRules.WindowHeight);
+            InventoryLayoutRules.MinimumWindowHeight);
         // Явного максимума нет: окно можно растянуть, и сетка останется
         // квадратной — растянутся поля, а не ячейки.
         MaximizeBox = true;
         MinimizeBox = false;
 
-        PlaceOnSecondaryScreen();
+        // Начальная позиция ставится ТОЛЬКО когда сохранённой геометрии нет.
+        //
+        // Базовый конструктор уже восстановил сохранённые координаты и размер, и
+        // безусловный PlaceOnSecondaryScreen их ПЕРЕЗАПИСЫВАЛ — окно каждый раз
+        // возвращалось на одно и то же место «по умолчанию», и сохранение
+        // геометрии не работало, хотя она исправно записывалась.
+        if (!WindowGeometryStore.HasSaved("inventory"))
+            PlaceOnSecondaryScreen();
     }
 
     /// <summary>
@@ -61,6 +70,8 @@ public sealed class InventoryForm : WebViewForm
     ///
     /// Инвентарь открывают РЯДОМ с картой, а не вместо неё: на одном экране он
     /// перекрывал бы карту, ради которой его и открыли.
+    /// Вызывается ТОЛЬКО при первом открытии — дальше место и размер берутся из
+    /// сохранённой геометрии.
     /// </summary>
     private void PlaceOnSecondaryScreen()
     {
@@ -129,6 +140,14 @@ public sealed class InventoryForm : WebViewForm
                         PostJson(_lastSnapshotJson);
                     break;
 
+                // Клавиша I и Escape действуют и в окне инвентаря: «открывать и
+                // закрывать по I» означает, что клавиша обязана работать в обоих
+                // окнах. Закрывает форма Host — страница форму Windows закрыть
+                // не может.
+                case "close_inventory":
+                    CloseRequested?.Invoke(this, EventArgs.Empty);
+                    break;
+
                 case "mark_inventory_seen":
                     InventoryItemSeenRequested?.Invoke(this, new InventoryItemSeenEventArgs(
                         root.TryGetProperty("itemId", out var itemId) ? itemId.GetString() ?? string.Empty : string.Empty));
@@ -147,6 +166,15 @@ public sealed class InventoryForm : WebViewForm
 
     /// <summary>Игрок увидел предмет: значок «новый» надо снять.</summary>
     public event EventHandler<InventoryItemSeenEventArgs>? InventoryItemSeenRequested;
+
+    /// <summary>
+    /// Просьба закрыть окно (клавиша I или Escape внутри окна).
+    ///
+    /// Наружу, а не закрытием в самой форме: окно закрывает Симулятор — он
+    /// владеет ссылкой на него и после закрытия отправляет снимок, чтобы карта
+    /// узнала об этом.
+    /// </summary>
+    public event EventHandler? CloseRequested;
 }
 
 public sealed class InventoryItemSeenEventArgs : EventArgs

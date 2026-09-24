@@ -319,6 +319,10 @@ public sealed class SimulatorForm : WebViewForm
 
         _inventoryForm = new InventoryForm();
         _inventoryForm.InventoryItemSeenRequested += InventoryForm_ItemSeenRequested;
+        // Клавиша I и Escape внутри окна закрывают его: страница шлёт просьбу, а
+        // закрывает Симулятор — он владеет ссылкой и после закрытия отвечает
+        // снимком.
+        _inventoryForm.CloseRequested += (_, _) => CloseInventoryWindow();
         _inventoryForm.FormClosed += (_, _) =>
         {
             _inventoryForm = null;

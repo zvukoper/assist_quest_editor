@@ -62,6 +62,11 @@
    * быть СТАБИЛЬНЫМ между обновлениями снимка. При сортировке по количеству
    * ячейки перескакивали бы при каждом изменении, и попасть курсором в предмет
    * было бы невозможно.
+   *
+   * Если предметов БОЛЬШЕ, чем ячеек в трёх строках, снизу добавляются новые
+   * ряды, а лишнее уходит в прокрутку. Число рядов считается от содержимого, а
+   * не берётся постоянным: иначе девятнадцатый предмет было бы некуда положить,
+   * и он молча исчезал бы из инвентаря.
    */
   function slotMarkup(snapshot, catalog, options) {
     var opts = options || {};
@@ -74,8 +79,13 @@
       .filter(function (pair) { return Number(pair[1]) > 0; })
       .sort(function (a, b) { return a[0].localeCompare(b[0]); });
 
+    // Округляем ВВЕРХ до целых рядов: неполный ряд остаётся рядом с пустыми
+    // ячейками, и форма сетки (6 столбцов) не ломается.
+    var rows = Math.max(ROWS, Math.ceil(items.length / COLUMNS));
+    var capacity = rows * COLUMNS;
+
     var slots = [];
-    for (var index = 0; index < CAPACITY; index++) {
+    for (var index = 0; index < capacity; index++) {
       var pair = items[index];
       if (!pair) {
         slots.push("<div class='inventorySlot empty' data-game-tooltip='Свободная ячейка инвентаря.'></div>");

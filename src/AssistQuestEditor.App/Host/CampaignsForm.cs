@@ -79,7 +79,6 @@ public sealed class CampaignsForm : Form
     private static readonly Color RowSelectedBackColor = Color.FromArgb(58, 44, 14);
     // Строка квеста идёт от отступа слева до правого края плашки кампании:
     // отступ показывает вложенность, правый край образует общую линию.
-    private const int QuestRowIndent = 30;
     private const int CampaignHeaderHeight = 48;
     // Раздел мира выше строки кампании: имя мира — заголовок дерева, а не
     // равноправный пункт списка.
@@ -107,6 +106,29 @@ public sealed class CampaignsForm : Form
     /// </summary>
     private const int CampaignStackHeight = 200;
 
+    // --- Оформление в стиле основной формы редактора ---
+    //
+    // Кнопки повторяют кнопки веб-интерфейса: скругление 7 px, фон #262626,
+    // рамка rgba(255,255,255,.10), шрифт 12 px. Прежде это были плоские
+    // прямоугольники с собственным размером, и окно выглядело из другого
+    // приложения, чем редактор.
+    private const int ButtonRadius = 7;
+    private static readonly Color ButtonBackColor = Color.FromArgb(38, 38, 38);
+    private static readonly Color ButtonHoverColor = Color.FromArgb(24, 31, 35);
+    private static readonly Color ButtonBorderColor = Color.FromArgb(70, 70, 70);
+
+    /// <summary>
+    /// Отступ ВЛОЖЕННОГО уровня, в пикселях на уровень.
+    ///
+    /// Требование автора: развёрнутый список сдвигается не только вниз, но и
+    /// влево-вправо — иначе пропадает древовидность. Без этого отступа все
+    /// строки выравнивались по левому краю и уровни становились неразличимы.
+    /// </summary>
+    private const int TreeLevelIndent = 16;
+
+    /// <summary>Отступ строк квестов ВНУТРИ кампании.</summary>
+    private const int QuestRowIndent = 30;
+
     private readonly FlowLayoutPanel _list;
     private readonly Label _title;
     private readonly HashSet<string> _collapsed = new(StringComparer.OrdinalIgnoreCase);
@@ -114,6 +136,17 @@ public sealed class CampaignsForm : Form
     private WorldRecord? _world;
     private string _selectedCampaignId = string.Empty;
     private string _selectedQuestId = string.Empty;
+
+    /// <summary>
+    /// Отпечаток последнего показанного каталога.
+    ///
+    /// Нужен, чтобы НЕ перестраивать дерево на каждом снимке. Симулятор
+    /// присылает снимок несколько раз в секунду и каждый раз передаёт каталог:
+    /// безусловная перестройка пересоздавала все контролы, и список МЕРЦАЛ —
+    /// особенно заметно при выделении пунктов, потому что выделение сбрасывалось
+    /// и возвращалось.
+    /// </summary>
+    private string _catalogFingerprint = string.Empty;
 
     public CampaignsForm()
     {
@@ -138,6 +171,40 @@ public sealed class CampaignsForm : Form
         _list = new FlowLayoutPanel { Dock = DockStyle.Fill, AutoScroll = true, FlowDirection = FlowDirection.TopDown, WrapContents = false, Padding = new Padding(8), BackColor = Color.FromArgb(13, 16, 20), BorderStyle = BorderStyle.None };
         _list.Resize += (_, _) => ResizeBlocks();
         Controls.Add(_list); Controls.Add(toolbar);
+
+        // Двойная буферизация окна и списка.
+        //
+        // Без неё перестройка дерева и смена выделения проходят через
+        // перерисовку «по частям»: сначала стирается фон, затем рисуются контролы,
+        // и глаз успевает увидеть промежуточные кадры — то самое МЕРЦАНИЕ при
+        // выделении пунктов. Свойство защищено, поэтому включается отражением.
+        EnableDoubleBuffering(this);
+        EnableDoubleBuffering(_list);
+    }
+
+    /// <summary>
+    /// Включает двойную буферизацию контрола.
+    ///
+    /// <c>DoubleBuffered</c> — защищённое свойство Control, и напрямую из другого
+    /// класса его не выставить. Отражение здесь оправдано: без него остаётся
+    /// либо свой наследник FlowLayoutPanel, либо мигание.
+    /// </summary>
+    private static void EnableDoubleBuffering(Control control)
+    {
+        try
+        {
+            var property = typeof(Control).GetProperty(
+                "DoubleBuffered",
+                System.Reflection.BindingFlags.Instance |
+                System.Reflection.BindingFlags.NonPublic);
+
+            property?.SetValue(control, true);
+        }
+        catch (Exception ex)
+        {
+            // Не критично: без буферизации окно работает, только мигает.
+            AppLogger.Warn("CampaignsForm: двойная буферизация не включена.", ex.Message);
+        }
     }
     public event EventHandler<CampaignActiveChangedEventArgs>? CampaignActiveChanged;
     public event EventHandler<QuestEnabledChangedEventArgs>? QuestEnabledChanged;
@@ -169,13 +236,71 @@ public sealed class CampaignsForm : Form
             ? "Кампании и квесты"
             : "Кампании и квесты — " + world.DisplayName;
         Text = _title.Text;
+        // Смена мира меняет всё содержимое: отпечаток сбрасывается явно, иначе
+        // дерево старого мира осталось бы на экране.
+        _catalogFingerprint = string.Empty;
         Rebuild();
     }
 
+    /// <summary>
+    /// Показывает каталог кампаний.
+    ///
+    /// Перестройка идёт ТОЛЬКО если каталог изменился.
+    ///
+    /// Симулятор присылает снимок несколько раз в секунду и каждый раз передаёт
+    /// каталог заново. Безусловная перестройка пересоздавала все контролы по
+    /// нескольку раз в секунду: выделение сбрасывалось и возвращалось, а список
+    /// МЕРЦАЛ. Отпечаток сравнивается по значимым полям, а не по ссылке: снимок
+    /// каждый раз новый объект, поэтому сравнение ссылок не дало бы ничего.
+    /// </summary>
     public void SetCatalog(IReadOnlyList<InstalledCampaignView> catalog)
     {
-        _catalog = catalog ?? Array.Empty<InstalledCampaignView>();
+        var next = catalog ?? Array.Empty<InstalledCampaignView>();
+        var fingerprint = BuildFingerprint(next);
+
+        if (fingerprint == _catalogFingerprint)
+            return;
+
+        _catalogFingerprint = fingerprint;
+        _catalog = next;
         Rebuild();
+    }
+
+    /// <summary>
+    /// Отпечаток каталога: всё, что видно в дереве.
+    ///
+    /// Входят имена, статусы, даты, состав квестов и родитель кампании — если
+    /// пропустить хотя бы одно из них, изменение не отразилось бы в списке, и
+    /// это выглядело бы как «правка не сохранилась».
+    /// </summary>
+    private static string BuildFingerprint(IReadOnlyList<InstalledCampaignView> catalog)
+    {
+        var builder = new System.Text.StringBuilder();
+
+        foreach (var campaign in catalog)
+        {
+            builder.Append(campaign.Id).Append('|')
+                .Append(campaign.Name).Append('|')
+                .Append(campaign.Active ? '1' : '0').Append('|')
+                .Append(campaign.Version).Append('|')
+                .Append(campaign.FullName).Append('|')
+                .Append(campaign.ParentWorldId).Append('|')
+                .Append(campaign.Metadata?.CreatedOn?.Ticks ?? 0).Append('|')
+                .Append(campaign.Metadata?.EffectiveModifiedOn?.Ticks ?? 0).Append('|')
+                .Append(campaign.FolderPath).Append('\n');
+
+            foreach (var quest in campaign.Quests)
+            {
+                builder.Append(' ').Append(quest.QuestId).Append('|')
+                    .Append(quest.Title).Append('|')
+                    .Append(quest.Status).Append('|')
+                    .Append(quest.Version).Append('|')
+                    .Append(quest.Order).Append('|')
+                    .Append(quest.FullPath).Append('\n');
+            }
+        }
+
+        return builder.ToString();
     }
 
     /// <summary>
@@ -233,17 +358,20 @@ public sealed class CampaignsForm : Form
     /// <summary>
     /// Пункт мира: ТОТ ЖЕ вид, что у кампании, но уровнем выше в дереве.
     ///
-    /// Раньше это был отдельный раздел с крупным (13pt) заголовком, и мир
-    /// выглядел не пунктом дерева, а посторонним блоком над списком. Теперь
-    /// различие только двумя признаками: оранжевый текст (мир — корень) и
-    /// отступ кампаний, которые идут ВНУТРИ его рамки.
+    /// Различие только двумя признаками: оранжевый текст (мир — корень) и
+    /// отступ: кампании идут внутри его пункта И сдвинуты вправо, поэтому
+    /// принадлежность видна без подписи.
+    ///
+    /// Рамки уровня НЕТ. Прежде блок был обведён прямоугольником, и вместе с
+    /// рамками кампаний окно превращалось в набор вложенных рамок — уровни
+    /// читались хуже, чем без них, а требование автора было именно убрать рамки
+    /// и показать уровень ОТСТУПОМ.
     /// </summary>
     private Control CreateWorldBlock(WorldRecord world)
     {
         var collapsed = _collapsed.Contains(WorldCollapseKey);
         var block = new Panel
         {
-            BorderStyle = BorderStyle.FixedSingle,
             BackColor = WorldRowBackColor,
             Margin = new Padding(0, 0, 0, 10)
         };
@@ -270,7 +398,11 @@ public sealed class CampaignsForm : Form
             Text = collapsed ? "▸" : "▾",
             ForeColor = AccentColor,
             Font = new Font("Segoe UI", 9f, FontStyle.Bold),
-            Margin = new Padding(0, 9, 6, 0),
+            // Якорь Left центрирует стрелку в строке. Отдельный отступ сверху
+            // (был Margin.Top = 9) привязывал её к конкретной высоте строки: при
+            // смене CampaignHeaderHeight стрелка съезжала, а название — нет.
+            Anchor = AnchorStyles.Left,
+            Margin = new Padding(0, 0, 6, 0),
             Cursor = Cursors.Hand
         };
 
@@ -295,11 +427,12 @@ public sealed class CampaignsForm : Form
             Margin = new Padding(0, 2, 6, 2)
         };
 
-        // ℹ️ открывает окно свойств мира: то же действие, что у кампаний, и
-        // стоит на том же месте строки.
-        var info = CreateMicroButton("ℹ️");
-        info.TextAlign = ContentAlignment.MiddleCenter;
-        info.Margin = new Padding(0, 4, 6, 4);
+        // ℹ️ открывает окно свойств мира: маленькая иконка, а не кнопка во всю
+        // высоту строки — она не должна спорить с названием за место.
+        // Отступ сверху НЕ подбирается: Anchor = Left центрирует иконку, а её
+        // высота совпадает с высотой названия (RowContentHeight).
+        var info = CreateInfoIcon("Свойства мира");
+        info.Margin = new Padding(4, 0, 8, 0);
         info.Click += (_, _) => WorldPropertiesRequested?.Invoke(this, EventArgs.Empty);
 
         var folder = CreateMicroButton("ПАПКА");
@@ -398,7 +531,130 @@ public sealed class CampaignsForm : Form
             rows.Controls.Add(control);
     }
 
-    /// <summary>Подпись автора/даты. null означает «подписывать нечем» — строку не рисуем.</summary>
+    /// <summary>
+    /// Кнопка в стиле основной формы: скруглённые углы, серый фон, рамка.
+    ///
+    /// Скругление рисуется <c>OnPaint</c>, а не задаётся регионом: у Button нет
+    /// свойства радиуса, и «обрезка» через Region давала рваные края при
+    /// перерисовке. Кнопка перерисовывается сама при наведении и нажатии —
+    /// обработчики меняют только состояние и вызывают Invalidate.
+    /// </summary>
+    private static Button CreateRoundedButton(string text, int width, int height, int fontSize = 12)
+    {
+        var button = new Button
+        {
+            Text = text,
+            FlatStyle = FlatStyle.Flat,
+            BackColor = ButtonBackColor,
+            ForeColor = Color.FromArgb(231, 237, 244),
+            Font = new Font("Segoe UI", fontSize / 1.15f),
+            Size = new Size(width, height),
+            UseVisualStyleBackColor = false
+        };
+
+        button.FlatAppearance.BorderSize = 0;
+        button.FlatAppearance.MouseOverBackColor = ButtonHoverColor;
+        button.FlatAppearance.MouseDownBackColor = ButtonHoverColor;
+
+        // Скруглённая рамка рисуется поверх фона: у плоской кнопки своего
+        // скругления нет, а прямоугольная рамка выдавала бы её за чужой элемент.
+        button.Paint += (_, e) =>
+        {
+            var bounds = new Rectangle(0, 0, button.Width - 1, button.Height - 1);
+            using var path = RoundedPath(bounds, ButtonRadius);
+            using var pen = new Pen(ButtonBorderColor);
+            e.Graphics.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
+            e.Graphics.DrawPath(pen, path);
+        };
+
+        return button;
+    }
+
+    /// <summary>Микро-кнопка в стиле основной формы: маленькая и скруглённая.</summary>
+    private static Button CreateMicroButton(string text)
+    {
+        var button = CreateRoundedButton(text, 0, 0, fontSize: 10);
+        button.AutoSize = true;
+        button.Padding = new Padding(7, 2, 7, 2);
+        button.Font = new Font("Segoe UI", 8.6f);
+        return button;
+    }
+
+    /// <summary>
+    /// Маленькая СИНЯЯ иконка «i» вместо огромной кнопки.
+    ///
+    /// Требование автора: иконка информации должна быть иконкой, а не кнопкой во
+    /// всю высоту строки. Синий — цвет справки в этом интерфейсе.
+    ///
+    /// Высота равна высоте ТЕКСТА строки (<see cref=«RowContentHeight»>), а не
+    /// стороне значка: иначе якорь Left центрирует квадратик 16 px в области
+    /// 40 px, и он оказывается на 8 px ниже названия. Проверено пробой раскладки:
+    /// она сообщила расхождение центров именно на 8 px. Высота в строку текста
+    /// делает выравнивание арифметическим, а не подбором отступа.
+    /// </summary>
+    private static Label CreateInfoIcon(string tooltip)
+    {
+        var icon = new Label
+        {
+            AutoSize = false,
+            Size = new Size(InfoIconSize, RowContentHeight),
+            Text = "i",
+            TextAlign = ContentAlignment.MiddleCenter,
+            Anchor = AnchorStyles.Left,
+            ForeColor = Color.FromArgb(18, 171, 229),
+            Font = new Font("Segoe UI", 8.5f, FontStyle.Bold),
+            Cursor = Cursors.Hand,
+            BackColor = Color.Transparent
+        };
+
+        var tooltipComponent = new ToolTip();
+        tooltipComponent.SetToolTip(icon, tooltip);
+        // Подсказка живёт вместе с иконкой: без явного Dispose она утекла бы на
+        // каждой перестройке дерева, а перестроек в этом окне было много.
+        icon.Disposed += (_, _) => tooltipComponent.Dispose();
+
+        icon.Paint += (_, e) =>
+        {
+            e.Graphics.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
+
+            // Квадрат рисуется по центру области: сама область выше значка, чтобы
+            // совпадать по вертикали с названием.
+            var top = (icon.Height - InfoIconSize) / 2;
+            var bounds = new Rectangle(0, top, InfoIconSize - 1, InfoIconSize - 1);
+            using var path = RoundedPath(bounds, 4);
+            using var pen = new Pen(Color.FromArgb(18, 171, 229));
+            e.Graphics.DrawPath(pen, path);
+        };
+
+        return icon;
+    }
+
+    /// <summary>Сторона квадрата иконки «i».</summary>
+    private const int InfoIconSize = 16;
+
+    /// <summary>
+    /// Высота содержимого строки заголовка (названия и иконки).
+    ///
+    /// Общая константа для названия и иконки: если задать их разными числами,
+    /// выравнивание по вертикали снова станет подбором, и пробная проверка
+    /// покажет расхождение.
+    /// </summary>
+    private const int RowContentHeight = 24;
+
+    /// <summary>Путь со скруглёнными углами для рисования кнопок и иконок.</summary>
+    private static System.Drawing.Drawing2D.GraphicsPath RoundedPath(Rectangle bounds, int radius)
+    {
+        var path = new System.Drawing.Drawing2D.GraphicsPath();
+        var diameter = radius * 2;
+
+        path.AddArc(bounds.X, bounds.Y, diameter, diameter, 180, 90);
+        path.AddArc(bounds.Right - diameter, bounds.Y, diameter, diameter, 270, 90);
+        path.AddArc(bounds.Right - diameter, bounds.Bottom - diameter, diameter, diameter, 0, 90);
+        path.AddArc(bounds.X, bounds.Bottom - diameter, diameter, diameter, 90, 90);
+        path.CloseFigure();
+
+        return path;
+    }
     private Control? CreateSignatureRow(string? text)
     {
         if (string.IsNullOrEmpty(text))
@@ -420,31 +676,52 @@ public sealed class CampaignsForm : Form
     {
         var collapsed = _collapsed.Contains(campaign.Id);
         var activeCount = campaign.Quests.Count(quest => quest.Status == CampaignQuestStatus.Enabled);
-        var block = new Panel { BorderStyle = BorderStyle.FixedSingle, BackColor = Color.FromArgb(23, 24, 25), Margin = new Padding(0, 0, 0, 8) };
-        // Шесть колонок: стрелка, галочка активности, название, ℹ️, статус, папка.
-        // Стрелка отдельной колонкой нужна потому, что название без AutoEllipsis
-        // переносится по словам, и значок свернуть/развернуть внутри него
-        // уезжал бы в середину строки при переносе.
-        var header = new TableLayoutPanel { Dock = DockStyle.Top, Height = CampaignHeaderHeight, ColumnCount = 6, Padding = new Padding(8, 4, 7, 4), BackColor = Color.FromArgb(20, 32, 38), Cursor = Cursors.Hand };
-        header.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize)); header.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize)); header.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100)); header.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize)); header.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize)); header.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
-        var active = new CheckBox { AutoSize = true, Checked = campaign.Active, Margin = new Padding(0, 6, 6, 0) };
+        // Рамки у плашки кампании НЕТ: уровень показывается ОТСТУПОМ слева
+        // (Margin), а не рамкой. Обводка вокруг каждого пункта превращала дерево
+        // в набор прямоугольников, и уровни читались хуже.
+        var block = new Panel { BackColor = Color.FromArgb(23, 24, 25), Margin = new Padding(TreeLevelIndent, 0, 0, 8) };
+        // Колонок СЕМЬ, а не шесть: между иконкой информации и правыми кнопками
+        // стоит растяжимая распорка. Без неё колонка с названием растягивалась на
+        // всю ширину, и иконка уезжала к правому краю — далеко от имени, к
+        // которому относится.
+        var header = new TableLayoutPanel { Dock = DockStyle.Top, Height = CampaignHeaderHeight, ColumnCount = 7, Padding = new Padding(8, 4, 7, 4), BackColor = Color.FromArgb(20, 32, 38), Cursor = Cursors.Hand };
+        header.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));   // стрелка
+        header.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));   // галочка
+        header.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));   // название
+        header.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));   // ℹ️ сразу за именем
+        header.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100)); // распорка
+        header.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));   // статус
+        header.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));   // папка
+
+        // Выравнивание по ОДНОЙ вертикали: Anchor = Left (без Top/Bottom) в
+        // TableLayoutPanel означает «по центру ячейки по вертикали». Прежде
+        // галочка и статус сдвигались вверх подобранными отступами Margin, а
+        // кнопка «Ред.» в строках квестов — вниз, и в одной строке они стояли на
+        // разных уровнях.
+        var active = new CheckBox { AutoSize = true, Checked = campaign.Active, Anchor = AnchorStyles.Left, Margin = new Padding(0, 0, 6, 0) };
         active.CheckedChanged += (_, _) => CampaignActiveChanged?.Invoke(this, new CampaignActiveChangedEventArgs(campaign.Id, active.Checked));
-        var marker = new Label { AutoSize = true, Text = collapsed ? "▸" : "▾", ForeColor = Color.FromArgb(200, 208, 216), Font = new Font("Segoe UI", 9f, FontStyle.Bold), Margin = new Padding(0, 9, 6, 0), Cursor = Cursors.Hand };
+        var marker = new Label { AutoSize = true, Text = collapsed ? "▸" : "▾", ForeColor = Color.FromArgb(200, 208, 216), Font = new Font("Segoe UI", 9f, FontStyle.Bold), Anchor = AnchorStyles.Left, Margin = new Padding(0, 0, 6, 0), Cursor = Cursors.Hand };
         // AutoEllipsis ВЫКЛЮЧен вместе с AutoSize: название должно ПЕРЕНОСИТЬСЯ.
         // При AutoSize = true Label сам подстраивает ширину под текст, Dock
         // игнорируется, и перенос не работает — текст вылезал за строку.
-        var text = new Label { Dock = DockStyle.Fill, AutoSize = false, AutoEllipsis = false, Cursor = Cursors.Hand, TextAlign = ContentAlignment.MiddleLeft, Text = campaign.Name, ForeColor = Color.FromArgb(238, 243, 248), Font = new Font("Segoe UI", 9f, FontStyle.Bold), Margin = new Padding(0, 2, 6, 2) };
-        var info = CreateMicroButton("ℹ️");
-        info.TextAlign = ContentAlignment.MiddleCenter;
-        info.Margin = new Padding(0, 4, 6, 4);
-        // Id передаётся явно: кнопок ℹ️ столько же, сколько кампаний, и
+        var text = new Label { AutoSize = false, Size = new Size(140, 24), AutoEllipsis = false, Cursor = Cursors.Hand, TextAlign = ContentAlignment.MiddleLeft, Text = campaign.Name, ForeColor = Color.FromArgb(238, 243, 248), Font = new Font("Segoe UI", 9f, FontStyle.Bold), Anchor = AnchorStyles.Left, Margin = new Padding(0, 0, 0, 0) };
+        // ℹ️ — маленькая синяя иконка возле ИМЕНИ (сразу после названия), а не
+        // кнопка справа: она относится к названию, и место рядом с ним читается
+        // как его пометка, а не как отдельное действие окна.
+        var info = CreateInfoIcon("Свойства кампании");
+        info.Anchor = AnchorStyles.Left;
+        info.Margin = new Padding(4, 0, 8, 0);
+        // Id передаётся явно: иконок столько же, сколько кампаний, и
         // «открыть свойства текущей» открывало бы не ту.
         info.Click += (_, _) => CampaignPropertiesRequested?.Invoke(this, new CampaignPropertiesRequestedEventArgs(campaign.Id));
-        var state = new Label { AutoSize = true, Text = campaign.Active ? "Активна" : "Отключена", ForeColor = campaign.Active ? Color.FromArgb(139, 216, 255) : Color.FromArgb(135, 145, 157), Font = new Font("Segoe UI", 8f), Margin = new Padding(0, 7, 8, 0) };
+        var state = new Label { AutoSize = true, Text = campaign.Active ? "Активна" : "Отключена", ForeColor = campaign.Active ? Color.FromArgb(139, 216, 255) : Color.FromArgb(135, 145, 157), Font = new Font("Segoe UI", 8f), Anchor = AnchorStyles.Left, Margin = new Padding(0, 0, 8, 0) };
         var folder = CreateMicroButton("Папка");
+        folder.Anchor = AnchorStyles.Left;
+        folder.Margin = new Padding(0, 0, 0, 0);
         folder.Click += (_, _) => CampaignFolderOpenRequested?.Invoke(this, new CampaignFolderOpenRequestedEventArgs(campaign.Id));
         header.Controls.Add(marker, 0, 0); header.Controls.Add(active, 1, 0);
-        header.Controls.Add(text, 2, 0); header.Controls.Add(info, 3, 0); header.Controls.Add(state, 4, 0); header.Controls.Add(folder, 5, 0);
+        header.Controls.Add(text, 2, 0); header.Controls.Add(info, 3, 0);
+        header.Controls.Add(state, 5, 0); header.Controls.Add(folder, 6, 0);
         // ЛКМ по заголовку (кроме галочки, статуса и кнопок) сворачивает список
         // квестов кампании: это позволяет держать длинный каталог компактным.
         // Кнопка ℹ️ исключена: у неё своё действие, и сворачивание по нажатию
@@ -547,14 +824,18 @@ public sealed class CampaignsForm : Form
             campaign.Id.Equals(_selectedCampaignId, StringComparison.OrdinalIgnoreCase);
         var enabled = quest.Status == CampaignQuestStatus.Enabled;
         var row = new TableLayoutPanel { Height = QuestRowMinHeight - 3, ColumnCount = 4, CellBorderStyle = TableLayoutPanelCellBorderStyle.None, Padding = new Padding(4, 2, 4, 2), BackColor = selected ? RowSelectedBackColor : RowBackColor, Margin = new Padding(0, 0, 0, 3), Cursor = Cursors.Hand, AutoSize = false };
-        // Выделенный квест подсвечивается оранжевой рамкой: раньше выделение
-        // хранилось только на карте, и связать список с картой было нечем.
+        // Выделенный квест подсвечивается оранжевой рамкой СКРУГЛЁННОЙ формы:
+        // прямоугольная обводка спорила со скруглениями кнопок и выглядела как
+        // чужой элемент. Радиус тот же, что у кнопок (ButtonRadius).
         row.Paint += (_, e) =>
         {
             if (!selected) return;
+
+            e.Graphics.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
             using var pen = new Pen(AccentColor, 2f);
-            var bounds = row.ClientRectangle;
-            e.Graphics.DrawRectangle(pen, bounds.X + 1, bounds.Y + 1, bounds.Width - 3, bounds.Height - 3);
+            var bounds = new Rectangle(1, 1, row.Width - 3, row.Height - 3);
+            using var path = RoundedPath(bounds, ButtonRadius);
+            e.Graphics.DrawPath(pen, path);
         };
         // Колонки: галочка, название (растягивается и переносится по словам),
         // статус, кнопка. Раньше название стояло в растягивающейся колонке, но
@@ -564,7 +845,7 @@ public sealed class CampaignsForm : Form
         row.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
         row.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
         row.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
-        var check = new CheckBox { AutoSize = true, Checked = enabled, Margin = new Padding(0, 8, 5, 0) };
+        var check = new CheckBox { AutoSize = true, Checked = enabled, Anchor = AnchorStyles.Left, Margin = new Padding(0, 0, 5, 0) };
         check.CheckedChanged += (_, _) => QuestEnabledChanged?.Invoke(this, new QuestEnabledChangedEventArgs(campaign.Id, quest.QuestId, check.Checked));
         var activation = quest.Activation;
         var details = activation is null
@@ -597,9 +878,14 @@ public sealed class CampaignsForm : Form
             Margin = new Padding(0, 2, 5, 2),
             UseMnemonic = false
         };
-        var status = new Label { AutoSize = true, Text = enabled ? "Включён" : "Отключён", TextAlign = ContentAlignment.MiddleRight, ForeColor = enabled ? Color.FromArgb(139, 216, 255) : Color.FromArgb(165, 172, 182), Font = new Font("Segoe UI", 8f, enabled ? FontStyle.Regular : FontStyle.Italic), Margin = new Padding(0, 14, 7, 0) };
+        // Статус и кнопка выровнены по ОДНОЙ вертикали с галочкой и названием:
+        // Anchor = Left центрирует контрол в строке таблицы. Прежде вертикаль
+        // задавалась подобранными отступами Margin — галочка уезжала вверх, а
+        // «Ред.» вниз, и в одной строке они стояли на разных уровнях.
+        var status = new Label { AutoSize = true, Text = enabled ? "Включён" : "Отключён", TextAlign = ContentAlignment.MiddleRight, ForeColor = enabled ? Color.FromArgb(139, 216, 255) : Color.FromArgb(165, 172, 182), Font = new Font("Segoe UI", 8f, enabled ? FontStyle.Regular : FontStyle.Italic), Anchor = AnchorStyles.Right, Margin = new Padding(0, 0, 7, 0) };
         var edit = CreateMicroButton("Ред.");
-        edit.Margin = new Padding(0, 11, 0, 0);
+        edit.Anchor = AnchorStyles.Right;
+        edit.Margin = new Padding(0, 0, 0, 0);
         edit.Click += (_, _) => QuestOpenRequested?.Invoke(this, new QuestOpenRequestedEventArgs(quest.FullPath));
         // Правое выравнивание задаётся TextAlign, а не RightToLeft: RightToLeft.Yes
         // переставляет знаки в строках вида «#1 · v1» и ломает детали квеста.
@@ -611,11 +897,6 @@ public sealed class CampaignsForm : Form
             element.Click += (_, _) => QuestSelected?.Invoke(this, new QuestSelectedEventArgs(campaign.Id, quest.QuestId));
         }
         return row;
-    }
-    private static Button CreateMicroButton(string text)
-    {
-        var button = new Button { AutoSize = true, Text = text, FlatStyle = FlatStyle.Flat, BackColor = Color.FromArgb(38, 38, 38), ForeColor = Color.FromArgb(231, 237, 244), Font = new Font("Segoe UI", 8f), Padding = new Padding(6, 2, 6, 2), Margin = new Padding(0, 4, 0, 4) };
-        button.FlatAppearance.BorderColor = Color.FromArgb(70, 70, 70); return button;
     }
     private static Label CreateNotice(string message) => new() { AutoSize = true, Text = message, ForeColor = Color.FromArgb(165, 175, 185), Font = new Font("Segoe UI", 8.5f), Padding = new Padding(4, 6, 4, 6), Margin = new Padding(0, 0, 0, 8) };
     private void ResizeBlocks()

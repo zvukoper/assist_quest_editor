@@ -2,9 +2,13 @@
 //
 // Проверка ПОВЕДЕНЧЕСКАЯ в той части, где дело касается раскладки: размер ячейки
 // задают ДВА места — CSS для страницы и InventoryLayoutRules для окна WinForms.
-// Разойдись они, и содержимое либо не влезет (появится полоса прокрутки там, где
-// сетка рассчитана на весь размер окна), либо останется пустая полоса.
+// Разойдись они, и содержимое либо не влезет, либо останется пустая полоса.
 // Такое расхождение видно только сравнением, а не чтением кода.
+//
+// Размер окна сверяется с КЛИЕНТСКОЙ областью, а не с шириной сетки: ширина 478
+// задана образцом автора, и сетка выровнена по центру, то есть заведомо уже окна.
+// Лишние предметы обязаны давать НОВЫЙ РЯД и вертикальную прокрутку — прежде
+// девятнадцатый предмет просто исчезал.
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -25,6 +29,8 @@ const simulatorJs = read("src/AssistQuestEditor.App/Web/simulator.js");
 const layout = read("src/AssistQuestEditor.Domain/InventoryLayoutRules.cs");
 const inventoryForm = read("src/AssistQuestEditor.App/Host/InventoryForm.cs");
 const simulatorForm = read("src/AssistQuestEditor.App/Host/SimulatorForm.cs");
+// Базовый класс окон: именно он подключает хранилище геометрии по ключу окна.
+const webViewForm = read("src/AssistQuestEditor.App/Host/WebViewForm.cs");
 
 // --- 1. Отдельное ОКНО, а не панель поверх карты ---
 
@@ -45,7 +51,7 @@ check(/MinimumSize = new Size\([\s\S]{0,120}?InventoryLayoutRules\.WindowWidth/.
 check(!/id="inventoryPanel"/.test(simulatorHtml),
   "Панель инвентаря осталась на карте: она должна переехать в отдельное окно.");
 check(/id="characterPanel"/.test(simulatorHtml),
-  "Панель персонажа должна остаться на карте: она читается вместе с地图.");
+  "Панель персонажа должна остаться на карте: она читается вместе с картой.");
 check(!/const inventoryPanel = document\.getElementById/.test(simulatorJs),
   "Симулятор всё ещё ищет панель инвентаря, которой больше нет.");
 
@@ -71,6 +77,35 @@ check(/private InventoryForm\? _inventoryForm;/.test(simulatorForm) &&
 // устаревшими данными, обновлять которые некому.
 check(/_inventoryForm\.Close\(\)[\s\S]{0,60}?_inventoryForm = null/.test(simulatorForm),
   "Окно инвентаря не закрывается вместе с Симулятором.");
+
+// Окно страницы просит закрыть себя тем же способом, каким сообщает о
+// просмотренном предмете: страница не может закрыть окно сама, решение
+// принимает Host. Это нужно для клавиши I, нажатой ВНУТРИ окна: иначе клавиша
+// работала бы только в Симуляторе, а в самом инвентаре — нет.
+check(/case "close_inventory":/.test(inventoryForm) &&
+      /CloseRequested\?\.Invoke/.test(inventoryForm),
+  "Окно инвентаря не обрабатывает запрос close_inventory: клавиша I внутри окна не закроет его.");
+check(/CloseRequested \+=/.test(simulatorForm) && /CloseInventoryWindow\(\)/.test(simulatorForm),
+  "Симулятор не подписан на закрытие окна инвентаря: Escape внутри окна не сработает.");
+check(/KeyI/.test(inventoryHtml) && /close_inventory/.test(inventoryHtml),
+  "Страница инвентаря должна отправлять close_inventory по клавише I.");
+
+// Размер и положение окна ОБЯЗАНЫ сохраняться. Прежде базовый конструктор
+// восстанавливал запомненные размеры, а следующий за ним PlaceOnSecondaryScreen
+// их перезаписывал — поэтому окно каждый раз открывалось заново в углу.
+// Ключ геометрии — "inventory": по нему запись ищется при следующем открытии.
+check(/WindowGeometryStore\.HasSaved\("inventory"\)/.test(inventoryForm),
+  "Окно инвентаря не проверяет сохранённую геометрию перед установкой позиции по умолчанию.");
+// Проверяется САМА конструкция «если не сохранено — поставить по умолчанию».
+// Сравнение позиций в файле не годится: имя метода упоминается ещё и в
+// пояснении к правке, и пояснение оказалось бы «раньше» вызова.
+check(/if \(!WindowGeometryStore\.HasSaved\("inventory"\)\)[\r\n\s]*PlaceOnSecondaryScreen\(\)/.test(inventoryForm),
+  "Установка позиции по умолчанию должна выполняться ТОЛЬКО при отсутствии сохранённой геометрии.");
+// Подключение к хранилищу делает БАЗОВЫЙ класс по ключу, переданному в base(...).
+// Поэтому проверяется передача ключа, а не вызов Attach в самой форме: искать
+// его здесь значило бы требовать дублирования уже сделанного базой.
+check(/"inventory"\)/.test(inventoryForm) && /WindowGeometryStore\.Attach/.test(webViewForm),
+  "Окно инвентаря не подключено к хранилищу геометрии: размер не сохранится.");
 
 // --- 3. Сетка 6×3 и четверть площади ячейки ---
 
@@ -100,11 +135,30 @@ check(/grid-template-columns:repeat\(6/.test(themeCss),
 check(/\.inventoryItemName\{[^}]*white-space:nowrap/.test(themeCss),
   "Подпись предмета переносится и увеличивает строку сетки: форма станет не 6×3.");
 
-// --- 4. Прокрутки в окне быть не должно: размер подобран под сетку ---
+// --- 4. Прокрутка: ВЕРТИКАЛЬНАЯ разрешена, ГОРИЗОНТАЛЬНАЯ запрещена ---
 
-check(/\.inventoryWindow \.inventoryGrid \{ overflow:hidden; \}/.test(inventoryHtml),
-  "В окне инвентаря запрещена прокрутка: размер подобран под сетку, и полоса " +
-  "означала бы, что размеры разъехались.");
+// Раньше здесь требовалось отсутствие любой прокрутки. Требование автора
+// изменилось: если предметов больше, чем ячеек, снизу добавляется ряд и
+// появляется прокрутка. Горизонтальная остаётся запрещённой: она означала бы,
+// что сетка шире окна, и часть ячеек уехала бы за край.
+const gridRules = (() => {
+  const start = themeCss.indexOf(".inventoryGrid{");
+  return start < 0 ? "" : themeCss.slice(start, themeCss.indexOf("}", start));
+})();
+check(gridRules.length > 0, "В theme.css должно быть правило .inventoryGrid.");
+check(/overflow-y:auto/.test(gridRules),
+  "Сетка инвентаря должна прокручиваться по вертикали: " + gridRules);
+check(!/overflow-y:hidden/.test(gridRules),
+  "Вертикальная прокрутка сетки запрещена, а без неё лишние ряды недоступны: " + gridRules);
+check(/overflow-x:hidden/.test(gridRules),
+  "Горизонтальная прокрутка сетки должна быть запрещена: " + gridRules);
+// Число столбцов в CSS и в правиле раскладки обязано совпадать: расхождение
+// дало бы либо пустую колонку, либо перенос строки и лишний ряд.
+const cssColumns = /grid-template-columns:repeat\((\d+)/.exec(gridRules);
+const ruleColumns = /Columns = (\d+);/.exec(layout);
+check(cssColumns && ruleColumns && cssColumns[1] === ruleColumns[1],
+  "Число столбцов в CSS и в InventoryLayoutRules разошлось: " +
+  `${cssColumns?.[1]} против ${ruleColumns?.[1]}.`);
 
 // --- 5. Отрисовка одна на два места ---
 
@@ -144,16 +198,24 @@ if (exe === null) {
   const capacity = number("capacity");
   const cell = number("cell");
   const grid = /grid:\s*(\d+)x(\d+)/.exec(probe);
+  const client = /client:\s*(\d+)x(\d+)/.exec(probe);
   const window = /window:\s*(\d+)x(\d+)/.exec(probe);
+  const minimum = number("minimum-window-height");
 
   check(columns === 6 && rows === 3, `Сетка должна быть 6×3, а не ${columns}×${rows}.`);
   check(capacity === 18, `Ячеек должно быть 18, а не ${capacity}.`);
   check(cell === 39, `Ячейка должна быть 39 px, а не ${cell} (четверть площади 78×78).`);
+  // Согласованность размеров проверяется в самой пробе: она сравнивает
+  // клиента с сеткой и минимум с составом окна.
+  check(/consistency: ok/.test(probe),
+    "Размеры инвентаря несогласованы: " + (/consistency:.*/.exec(probe) || ["нет строки"])[0]);
 
   // Размер окна обязан ВМЕЩАТЬ сетку, а не быть подобранным на глаз.
-  if (grid && window) {
+  if (grid && window && client) {
     const gridWidth = Number(grid[1]);
     const gridHeight = Number(grid[2]);
+    const clientWidth = Number(client[1]);
+    const clientHeight = Number(client[2]);
     const windowWidth = Number(window[1]);
     const windowHeight = Number(window[2]);
 
@@ -161,17 +223,25 @@ if (exe === null) {
       `Ширина сетки не сходится: ${gridWidth}.`);
     check(gridHeight === 3 * 39 + 2 * 7 + 20,
       `Высота сетки не сходится: ${gridHeight}.`);
-    check(windowWidth >= gridWidth,
-      `Окно (${windowWidth}) уже сетки (${gridWidth}): ячейки уедут за край.`);
-    check(windowHeight >= gridHeight,
-      `Окно (${windowHeight}) ниже сетки (${gridHeight}): ячейки уедут за край.`);
-    // Правой панели в окне больше нет, поэтому окно не должно быть вдвое шире
-    // сетки: это признак того, что размер считался под прежние две панели.
+    // Клиент берётся из образца автора, а не «по сетке»: ширина 478 означает,
+    // что сетка выровнена по центру и по бокам есть свободное место.
+    check(clientWidth === 478 && clientHeight === 392,
+      `Клиентская область должна быть 478×392 (образец автора): ${clientWidth}×${clientHeight}.`);
+    check(clientWidth >= gridWidth,
+      `Клиент (${clientWidth}) уже сетки (${gridWidth}): появится горизонтальная прокрутка.`);
+    check(clientHeight >= gridHeight,
+      `Клиент (${clientHeight}) ниже сетки (${gridHeight}): ячейки уедут за край.`);
+    check(windowWidth === clientWidth + 4 && windowHeight === clientHeight + 4 + 31,
+      `Внешний размер окна не сходится с клиентом: ${windowWidth}×${windowHeight}.`);
     check(windowWidth < gridWidth * 2,
       `Окно (${windowWidth}) вдвое шире сетки (${gridWidth}): размер считался ` +
       "под две панели, а в окне панель одна.");
+    // Минимум — ровно одна строка сетки: меньше нельзя, больше запрещало бы
+    // уменьшать окно, хотя прокрутка это уже позволяет.
+    check(minimum > 0 && minimum < windowHeight,
+      `Минимум высоты (${minimum}) должен быть меньше исходного размера (${windowHeight}).`);
   } else {
-    failures.push("Проба не сообщила размеры сетки или окна: " + probe);
+    failures.push("Проба не сообщила размеры сетки, клиента или окна: " + probe);
   }
 }
 
@@ -180,7 +250,7 @@ if (exe === null) {
 const browser = await chromium.launch({ headless: true });
 
 try {
-  const page = await browser.newPage({ viewport: { width: 293, height: 323 } });
+  const page = await browser.newPage({ viewport: { width: 478, height: 392 } });
   const pageErrors = [];
   page.on("pageerror", error => pageErrors.push(String(error)));
 
@@ -236,8 +306,8 @@ try {
     };
   });
 
-  check(layoutReport.slots === 18,
-    `Ячеек должно быть 18 (6×3), отрисовано ${layoutReport.slots}.`);
+  check(layoutReport.slots >= 18,
+    `Ячеек должно быть НЕ МЕНЬШЕ 18 (6×3), отрисовано ${layoutReport.slots}.`);
   check(layoutReport.columns === 6,
     `Столбцов должно быть 6, отрисовано ${layoutReport.columns}.`);
   check(layoutReport.square,
@@ -248,15 +318,56 @@ try {
     "Заполненных ячеек должно быть 2, отрисовано " + layoutReport.filled + ".");
   check(layoutReport.hasQty === 2,
     "У обоих предметов должно показываться количество.");
-  // Прокрутки быть не должно: размер окна подобран под сетку.
+  // Прокрутка по вертикали ДОПУСКАЕТСЯ (предметов может быть больше), а по
+  // горизонтали — нет: она означала бы, что сетка шире окна.
   check(layoutReport.scrollWidth <= layoutReport.clientWidth + 1,
     `Появилась горизонтальная прокрутка: ${layoutReport.scrollWidth} > ${layoutReport.clientWidth}.`);
-  check(layoutReport.scrollHeight <= layoutReport.clientHeight + 1,
-    `Появилась вертикальная прокрутка: ${layoutReport.scrollHeight} > ${layoutReport.clientHeight}.`);
   check(layoutReport.notificationsPresent,
     "Контейнер уведомлений инвентаря отсутствует: выдача предмета не покажется.");
 
   check(pageErrors.length === 0, "Ошибки страницы инвентаря: " + pageErrors.join("; "));
+
+  // Предметов БОЛЬШЕ, чем ячеек: снизу добавляется ряд, появляется вертикальная
+  // прокрутка. Раньше девятнадцатый предмет просто исчезал: сетка была жёстко
+  // 6×3, и места под него не было.
+  // Пять рядов (243 px) ещё УМЕЩАЮТСЯ в отведённую высоту, поэтому для
+  // проверки прокрутки нужно больше предметов: 60 штук дают 10 рядов.
+  const manyItems = {};
+  for (let index = 0; index < 60; index += 1) manyItems["item." + index] = 1;
+  await page.evaluate(items => {
+    window.dispatchEvent(new MessageEvent("message", {
+      data: JSON.stringify({
+        type: "snapshot",
+        snapshot: { player: {}, inventory: { items }, itemCatalog: [] },
+        itemCatalog: []
+      })
+    }));
+  }, manyItems);
+  await page.waitForTimeout(250);
+
+  const overflowReport = await page.evaluate(() => {
+    const grid = document.querySelector(".inventoryGrid");
+    const slots = [...document.querySelectorAll(".inventorySlot")];
+    const rows = slots.length / 6;
+    return {
+      slots: slots.length,
+      rows,
+      scrollHeight: grid ? grid.scrollHeight : 0,
+      clientHeight: grid ? grid.clientHeight : 0,
+      scrollWidth: grid ? grid.scrollWidth : 0,
+      clientWidth: grid ? grid.clientWidth : 0
+    };
+  });
+
+  check(overflowReport.slots >= 60,
+    `При 60 предметах должно быть не меньше 60 ячеек, отрисовано ${overflowReport.slots}.`);
+  check(overflowReport.rows > 3,
+    `При 60 предметах рядов должно стать больше трёх, а не ${overflowReport.rows}.`);
+  check(overflowReport.scrollHeight > overflowReport.clientHeight,
+    "При 60 предметах должна появиться вертикальная прокрутка: " +
+    `${overflowReport.scrollHeight} против ${overflowReport.clientHeight}.`);
+  check(overflowReport.scrollWidth <= overflowReport.clientWidth + 1,
+    `Горизонтальная прокрутка при 25 предметах: ${overflowReport.scrollWidth} > ${overflowReport.clientWidth}.`);
 } finally {
   await browser.close();
 }
@@ -267,7 +378,7 @@ if (failures.length) {
   process.exit(1);
 }
 
-console.log("Инвентарь: OK отдельное окно, сетка 6x3, ячейка 39px, прокрутки нет, разметка одна.");
+console.log("Инвентарь: OK отдельное окно, сетка 6x3, ячейка 39px, лишние ряды с прокруткой, разметка одна.");
 
 function findExecutable() {
   const base = path.join(root, "src", "AssistQuestEditor.App", "bin");
