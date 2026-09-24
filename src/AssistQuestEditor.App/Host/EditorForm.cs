@@ -2148,11 +2148,25 @@ public sealed class EditorForm : WebViewForm
             path = dialog.FileName;
         }
 
-        // Метаданные документа хранит стор, а не форма: Description и SceneIds
-        // восстанавливаются из загруженного файла. Раньше здесь стояли
-        // string.Empty и Array.Empty<string>(), поэтому каждое сохранение
-        // затирало метаданные квеста.
+        // Метаданные документа хранит стор, а форма не собирает их заново.
+        // При реальном изменении содержимого меняем версию и last-modified;
+        // Save As без изменения документа не должен искусственно поднимать версию.
         var definition = _questGraph.Definition;
+        if (_documentDirty)
+        {
+            var moment = DateTimeOffset.UtcNow;
+            var preferences = AppUiPreferencesStore.Load();
+            var author = string.IsNullOrWhiteSpace(preferences.Author)
+                ? ResourceMetadata.DefaultAuthor(moment)
+                : preferences.Author!;
+            definition = definition with
+            {
+                Version = Math.Max(1, definition.Version) + 1,
+                Metadata = (definition.Metadata ?? new ResourceMetadata())
+                    .WithModified(author, moment)
+            };
+            _questGraph.Replace(definition);
+        }
 
         var document = new QuestDefinitionDocument(DefinitionSchemaVersion, "aqquest", definition);
         var output = ResourceJsonFormat.Serialize(document);
