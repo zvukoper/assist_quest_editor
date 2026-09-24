@@ -22,26 +22,26 @@ public sealed class DynamicEventDispatcherTests
                 MaxDistanceMeters = 100
             });
 
-        var director = new DynamicEventDispatcher(
+        var dispatcher = new DynamicEventDispatcher(
             hub,
             new FakeLocationResolver(point),
             () => new[] { definition },
             new Random(1));
 
         MovePlayer(hub, 0);
-        director.SetSimulationRunning(true);
+        dispatcher.SetSimulationRunning(true);
         MovePlayer(hub, 99);
-        director.Tick();
-        Assert.Empty(director.State.Instances);
+        dispatcher.Tick();
+        Assert.Empty(dispatcher.State.Instances);
 
         MovePlayer(hub, 101);
-        director.Tick();
+        dispatcher.Tick();
 
-        var instance = Assert.Single(director.State.Instances);
+        var instance = Assert.Single(dispatcher.State.Instances);
         Assert.Equal("cache", instance.DefinitionId);
         Assert.Equal("cache-a", instance.Point.Id);
         Assert.Contains(
-            director.State.Schedules,
+            dispatcher.State.Schedules,
             schedule => schedule.DefinitionId == "cache" &&
                 schedule.DistanceBudgetMeters == 1);
     }
@@ -61,15 +61,15 @@ public sealed class DynamicEventDispatcherTests
             trigger: new DynamicEventTriggerDefinition { Type = "Manual" },
             policy: new DynamicEventSpawnPolicy { MaxActiveInstances = 2 });
 
-        var director = new DynamicEventDispatcher(
+        var dispatcher = new DynamicEventDispatcher(
             hub,
             resolver,
             () => new[] { definition });
 
-        Assert.True(director.TrySpawn("cache"));
-        Assert.True(director.TrySpawn("cache"));
+        Assert.True(dispatcher.TrySpawn("cache"));
+        Assert.True(dispatcher.TrySpawn("cache"));
 
-        var instances = director.State.Instances;
+        var instances = dispatcher.State.Instances;
         Assert.Equal(2, instances.Count);
         Assert.Equal(
             new[] { "cache-1", "cache-2" },
@@ -102,30 +102,30 @@ public sealed class DynamicEventDispatcherTests
                 RemoveOnCompleted = false
             });
 
-        var director = new DynamicEventDispatcher(
+        var dispatcher = new DynamicEventDispatcher(
             hub,
             new FakeLocationResolver(point),
             () => new[] { definition });
 
-        director.SetSimulationRunning(true);
+        dispatcher.SetSimulationRunning(true);
         MovePlayer(hub, 100);
-        director.Tick();
+        dispatcher.Tick();
 
-        Assert.Single(director.State.Instances);
+        Assert.Single(dispatcher.State.Instances);
 
         MovePlayer(hub, 200);
-        director.Tick();
+        dispatcher.Tick();
 
-        var schedule = Assert.Single(director.State.Schedules);
+        var schedule = Assert.Single(dispatcher.State.Schedules);
         Assert.True(schedule.TriggerPending);
         Assert.Equal(100, schedule.DistanceBudgetMeters);
 
-        Assert.True(director.Complete(
-            director.State.Instances[0].InstanceId));
+        Assert.True(dispatcher.Complete(
+            dispatcher.State.Instances[0].InstanceId));
 
-        director.Tick();
+        dispatcher.Tick();
 
-        Assert.Equal(2, director.State.Instances.Count(item =>
+        Assert.Equal(2, dispatcher.State.Instances.Count(item =>
             item.DefinitionId == "cache"));
     }
 
@@ -145,12 +145,12 @@ public sealed class DynamicEventDispatcherTests
                 EventType = "PlayerStopped"
             });
 
-        var director = new DynamicEventDispatcher(
+        var dispatcher = new DynamicEventDispatcher(
             hub,
             new FakeLocationResolver(point),
             () => new[] { definition });
 
-        director.SetSimulationRunning(true);
+        dispatcher.SetSimulationRunning(true);
 
         hub.Events.Publish(new SimulatorEvent(
             "HornPressed",
@@ -158,7 +158,7 @@ public sealed class DynamicEventDispatcherTests
             "Test",
             new Dictionary<string, string>()));
 
-        Assert.Empty(director.State.Instances);
+        Assert.Empty(dispatcher.State.Instances);
 
         hub.Events.Publish(new SimulatorEvent(
             "PlayerStopped",
@@ -166,8 +166,8 @@ public sealed class DynamicEventDispatcherTests
             "Test",
             new Dictionary<string, string>()));
 
-        Assert.Single(director.State.Instances);
-        Assert.Equal("hitch", director.State.Instances[0].DefinitionId);
+        Assert.Single(dispatcher.State.Instances);
+        Assert.Equal("hitch", dispatcher.State.Instances[0].DefinitionId);
     }
 
     [Fact]
@@ -187,22 +187,22 @@ public sealed class DynamicEventDispatcherTests
                 LifetimeGameHours = 1
             });
 
-        var director = new DynamicEventDispatcher(
+        var dispatcher = new DynamicEventDispatcher(
             hub,
             new FakeLocationResolver(point),
             () => new[] { definition });
 
-        Assert.True(director.TrySpawn("cache"));
+        Assert.True(dispatcher.TrySpawn("cache"));
         var start = hub.Get<WorldClockState>("sim-time").Value;
 
         hub.Get<WorldClockState>("sim-time").Set(
             start with { Elapsed = start.Elapsed + TimeSpan.FromHours(2) },
             "Test");
 
-        director.SetSimulationRunning(true);
-        director.Tick();
+        dispatcher.SetSimulationRunning(true);
+        dispatcher.Tick();
 
-        var instance = Assert.Single(director.State.Instances);
+        var instance = Assert.Single(dispatcher.State.Instances);
         Assert.Equal(DynamicEventInstanceStatus.Expired, instance.Status);
     }
 
@@ -223,19 +223,19 @@ public sealed class DynamicEventDispatcherTests
                 MaxDistanceMeters = 100
             });
 
-        var director = new DynamicEventDispatcher(
+        var dispatcher = new DynamicEventDispatcher(
             hub,
             new FakeLocationResolver(point),
             () => new[] { definition });
 
-        Assert.True(director.TrySpawn("cache"));
-        Assert.Single(director.State.Instances);
+        Assert.True(dispatcher.TrySpawn("cache"));
+        Assert.Single(dispatcher.State.Instances);
 
-        director.Reset();
+        dispatcher.Reset();
 
-        Assert.Empty(director.State.Instances);
-        Assert.Single(director.State.Schedules);
-        Assert.Equal(100, director.State.Schedules[0].NextDistanceThresholdMeters);
+        Assert.Empty(dispatcher.State.Instances);
+        Assert.Single(dispatcher.State.Schedules);
+        Assert.Equal(100, dispatcher.State.Schedules[0].NextDistanceThresholdMeters);
     }
 
     [Fact]
