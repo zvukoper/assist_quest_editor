@@ -205,7 +205,7 @@ public sealed class MainForm : WebViewForm
         _recentSceneFiles.Changed += RecentSceneFiles_Changed;
 
         // Simulator сохраняет состояние мира при штатном закрытии, поэтому он
-        // должен получить событие FormClosing MainForm до Dispose Runtime/Director.
+        // должен получить событие FormClosing MainForm до Dispose Runtime/Dispatcher.
         FormClosing += (_, _) => _simulator?.Close();
 
         BrowserReady += MainForm_BrowserReady;
