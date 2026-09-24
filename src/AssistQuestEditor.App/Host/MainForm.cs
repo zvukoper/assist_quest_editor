@@ -749,6 +749,20 @@ public sealed class MainForm : WebViewForm
     /// содержимому папки мира, а не по каталогу в памяти: выгружается диск, и
     /// обещать в диалоге то, чего на диске нет, нельзя.
     /// </summary>
+    private void ImportArchiveFromDialog()
+    {
+        using var dialog = new OpenFileDialog
+        {
+            Title = "Импорт Assist Quest архива",
+            Filter = "Assist Quest archive (*.aqezip)|*.aqezip|Все файлы (*.*)|*.*",
+            CheckFileExists = true,
+            Multiselect = false
+        };
+
+        if (dialog.ShowDialog(this) == DialogResult.OK)
+            ImportArchive(dialog.FileName);
+    }
+
     private void ExportWorld()
     {
         var world = SelectedWorld;
@@ -2189,6 +2203,10 @@ public sealed class MainForm : WebViewForm
             ShowResourceProperties(kind: "world", edit: false);
         _simulator.CampaignPropertiesRequested += (_, e) =>
             ShowResourceProperties(kind: "campaign", edit: false, campaignId: e.CampaignId);
+        _simulator.WorldExportRequested += (_, _) => ExportWorld();
+        _simulator.CampaignExportRequested += (_, e) => ExportCampaign(e.CampaignId);
+        _simulator.QuestExportRequested += (_, e) => ExportQuest(e.CampaignId, e.QuestId, e.Path);
+        _simulator.ImportArchiveRequested += (_, _) => ImportArchiveFromDialog();
         PlaceOnSecondaryScreen(_simulator);
         _simulator.Show(this);
     }
