@@ -339,6 +339,77 @@ public sealed class CampaignStore
             $"image={record.Definition.ImageFile}");
     }
 
+    /// <summary>
+    /// Регистрирует импортированный Quest в campaign.aqcampaign.
+    ///
+    /// Один файл в папке quests недостаточен: каталог строится из Quests в
+    /// определении кампании. Метод обновляет и файл, и метаданные кампании,
+    /// поэтому импортированный ресурс появляется без перезапуска.
+    /// </summary>
+    public void RegisterQuest(
+        CampaignRecord record,
+        QuestDefinition quest,
+        string relativePath,
+        CampaignQuestStatus status = CampaignQuestStatus.Enabled)
+    {
+        ArgumentNullException.ThrowIfNull(record);
+        ArgumentNullException.ThrowIfNull(quest);
+
+        if (_readOnly)
+            throw new InvalidOperationException("Каталог кампаний открыт только для чтения.");
+
+        if (string.IsNullOrWhiteSpace(quest.Id))
+            throw new InvalidOperationException("Импортируемый Quest не имеет Id.");
+
+        var existing = record.Definition.Quests.FirstOrDefault(item =>
+            item.QuestId.Equals(quest.Id, StringComparison.OrdinalIgnoreCase));
+
+        var next = existing is null
+            ? record.Definition.Quests.Append(new CampaignQuestEntry(
+                quest.Id,
+                relativePath,
+                quest.Version,
+                status,
+                NextQuestOrder(record.Definition.Quests)))
+                .ToArray()
+            : record.Definition.Quests
+                .Select(item => item.QuestId.Equals(quest.Id, StringComparison.OrdinalIgnoreCase)
+                    ? item with
+                    {
+                        RelativePath = relativePath,
+                        Version = quest.Version,
+                        Status = status
+                    }
+                    : item)
+                .ToArray();
+
+        record.Replace(record.Definition with
+        {
+            Quests = next,
+            Metadata = (record.Definition.Metadata ?? new ResourceMetadata())
+                .WithModified(
+                    string.IsNullOrWhiteSpace(_author)
+                        ? ResourceMetadata.DefaultAuthor(DateTimeOffset.UtcNow)
+                        : _author,
+                    DateTimeOffset.UtcNow)
+        });
+        Save(record);
+
+        AppLogger.Info("CampaignStore: импортированный Quest зарегистрирован.",
+            $"campaignId={record.Definition.Id}; questId={quest.Id}; relativePath={relativePath}; status={status}");
+    }
+
+    private static int NextQuestOrder(IReadOnlyList<CampaignQuestEntry> entries)
+    {
+        var max = entries
+            .Select(item => item.Order)
+            .Where(order => order > 0)
+            .DefaultIfEmpty(0)
+            .Max();
+
+        return max + 1;
+    }
+
     public void SetQuestEnabled(string campaignId, string questId, bool enabled)
     {        var record = GetRecord(campaignId);
         var entry = record.Definition.Quests.FirstOrDefault(item =>
