@@ -44,7 +44,9 @@ public static class ResourceImportService
             ? desired
             : WorldArchiveImportRules.UniqueFolderName(
                 desired,
-                name => Directory.Exists(Path.Combine(campaignsRoot, name)));
+                name =>
+                    Directory.Exists(Path.Combine(campaignsRoot, name)) ||
+                    _CampaignIdExists(world, name));
 
         var targetFolder = Path.Combine(campaignsRoot, targetName);
         if (overwrite && Directory.Exists(targetFolder))
@@ -70,8 +72,12 @@ public static class ResourceImportService
                 definition = definition with
                 {
                     Id = ToResourceId(targetName),
-                    Name = targetName,
-                    FullName = null,
+                    Name = string.Equals(targetName, desired, StringComparison.OrdinalIgnoreCase)
+                        ? definition.Name
+                        : targetName,
+                    FullName = string.Equals(targetName, desired, StringComparison.OrdinalIgnoreCase)
+                        ? definition.FullName
+                        : null,
                     WorldId = world.Definition.Id
                 };
                 RewriteCampaign(staging, definition);
@@ -130,7 +136,10 @@ public static class ResourceImportService
             ? desired
             : WorldArchiveImportRules.UniqueFolderName(
                 desired,
-                name => File.Exists(Path.Combine(questsFolder, name + QuestExtension)));
+                name =>
+                    File.Exists(Path.Combine(questsFolder, name + QuestExtension)) ||
+                    campaign.Definition.Quests.Any(item =>
+                        item.QuestId.Equals(name, StringComparison.OrdinalIgnoreCase)));
 
         var targetFile = Path.Combine(questsFolder, targetName + QuestExtension);
         var existingEntry = campaign.Definition.Quests.FirstOrDefault(item =>
@@ -168,7 +177,9 @@ public static class ResourceImportService
                 quest = quest with
                 {
                     Id = newId,
-                    Title = targetName,
+                    Title = string.Equals(targetName, desired, StringComparison.OrdinalIgnoreCase)
+                        ? quest.Title
+                        : targetName,
                     WorldId = campaign.Definition.WorldId,
                     CampaignId = campaign.Definition.Id,
                     Graph = quest.Graph with { Id = newId, Name = targetName }
@@ -235,6 +246,22 @@ public static class ResourceImportService
                 $"{kind} с такой же версией ({incomingVersion}) и датой изменения уже существует. " +
                 "Перезапись не выполнена: импортируйте ресурс как новый.");
         }
+    }
+
+    private static bool _CampaignIdExists(WorldRecord world, string candidate)
+    {
+        var root = WorldPaths.CampaignsRoot(world.FolderPath);
+        if (!Directory.Exists(root))
+            return false;
+
+        foreach (var folder in Directory.EnumerateDirectories(root))
+        {
+            var definition = ReadCampaign(folder);
+            if (definition?.Id.Equals(candidate, StringComparison.OrdinalIgnoreCase) == true)
+                return true;
+        }
+
+        return false;
     }
 
     private static string ToResourceId(string value) =>
