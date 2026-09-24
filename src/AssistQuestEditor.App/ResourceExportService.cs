@@ -38,92 +38,163 @@ public static class ResourceExportService
         string userRoot,
         string sourceFolder,
         string resourceFolderName,
-        DateTimeOffset moment)
+        DateTimeOffset moment,
+        IReadOnlyList<ExportDependency>? dependencies = null)
     {
-        if (!Directory.Exists(sourceFolder))
-            throw new DirectoryNotFoundException("Нет папки для выгрузки: " + sourceFolder);
-
-        var root = WorldPaths.ExportFolder(userRoot, moment);
-        Directory.CreateDirectory(root);
-
-        var target = Path.Combine(root, SafeLeaf(resourceFolderName));
-        // Проверка ДО нумерации: номер «(2)» к «../побег» ничего не исправляет,
-        // он бы лишь отодвинул выход за корень на один шаг.
-        EnsureInside(root, target);
-
-        if (PathTaken(target))
-        {
-            target = Path.Combine(root, WorldArchiveImportRules.UniqueFolderName(
-                SafeLeaf(resourceFolderName),
-                name => PathTaken(Path.Combine(root, name))));
-            EnsureInside(root, target);
-        }
-
-        CopyTree(sourceFolder, target);
-
-        var files = Directory
-            .EnumerateFiles(target, "*", SearchOption.AllDirectories)
-            .ToArray();
-
-        return new ResourceExportResult(
-            target,
-            IsArchive: false,
-            Bytes: files.Sum(file => new FileInfo(file).Length),
-            FileCount: files.Length);
+        return ExportResource(
+            userRoot,
+            sourceFolder,
+            resourceFolderName,
+            manifest: null,
+            moment,
+            asArchive: false,
+            dependencies);
     }
 
     /// <summary>
-    /// Выгружает ресурс архивом `.aqezip`.
-    ///
-    /// Имя файла строится из имени ресурса, а не берётся от исходной папки: папка
-    /// мира уже пронумерована при импорте («Демо Мир (2)»), и тащить эту
-    /// случайность в имя файла значило бы пересылать её дальше как имя ресурса.
+    /// Выгружает ресурс архивом. В отличие от старой реализации флаг зависимостей
+    /// влияет на ФАКТИЧЕСКИЙ состав, а не только на IncludesDependencies в манифесте.
+    /// Зависимости складываются в отдельный каталог, поэтому при импорте ресурс
+    /// остаётся однозначно определимым, а входящие данные не смешиваются с его
+    /// собственными файлами.
     /// </summary>
     public static ResourceExportResult ExportArchive(
         string userRoot,
         string sourceFolder,
         string resourceFileName,
         WorldArchiveManifest manifest,
-        DateTimeOffset moment)
+        DateTimeOffset moment,
+        IReadOnlyList<ExportDependency>? dependencies = null)
+    {
+        return ExportResource(
+            userRoot,
+            sourceFolder,
+            resourceFileName,
+            manifest,
+            moment,
+            asArchive: true,
+            dependencies);
+    }
+
+    public sealed record ExportDependency(string SourceFolder, string RelativeTarget, string Description);
+
+    private static ResourceExportResult ExportResource(
+        string userRoot,
+        string sourceFolder,
+        string resourceName,
+        WorldArchiveManifest? manifest,
+        DateTimeOffset moment,
+        bool asArchive,
+        IReadOnlyList<ExportDependency>? dependencies)
     {
         if (!Directory.Exists(sourceFolder))
-            throw new DirectoryNotFoundException("Нет папки для упаковки: " + sourceFolder);
+            throw new DirectoryNotFoundException("Нет папки для выгрузки: " + sourceFolder);
 
-        var root = WorldPaths.ExportFolder(userRoot, moment);
-        Directory.CreateDirectory(root);
+        var staging = Path.Combine(Path.GetTempPath(), "aq-export-" + Guid.NewGuid().ToString("N"));
+        try
+        {
+            CopyTree(sourceFolder, staging);
 
-        var leaf = SafeLeaf(resourceFileName);
+            var dependencyList = dependencies ?? Array.Empty<ExportDependency>();
+            if (dependencyList.Count > 0)
+            {
+                foreach (var dependency in dependencyList)
+                {
+                    if (string.IsNullOrWhiteSpace(dependency.SourceFolder) ||
+                        !Directory.Exists(dependency.SourceFolder))
+                        throw new DirectoryNotFoundException("Нет папки зависимости: " + dependency.SourceFolder);
 
-        // Расширение гарантируется здесь, а не вызывающим кодом. Архив без
-        // .aqezip система не связывает с приложением, и двойной клик по нему не
-        // откроет диалог импорта — то есть файл перестаёт быть переносимым, а
-        // заметно это только у получателя. Заодно это разводит имена: папка
-        // «Мир» и архив «Мир.aqezip» не конфликтуют.
-        if (!leaf.EndsWith(WorldArchiveRules.Extension, StringComparison.OrdinalIgnoreCase))
-            leaf += WorldArchiveRules.Extension;
+                    var target = Path.Combine(staging, "dependencies", SafeLeaf(dependency.RelativeTarget));
+                    EnsureInside(staging, target);
+                    CopyTree(dependency.SourceFolder, target);
+                }
+            }
 
-        EnsureInside(root, Path.Combine(root, leaf));
+            var info = Path.Combine(staging, "DEPENDENCIES.txt");
+            var lines = dependencyList.Count == 0
+                ? new[]
+                {
+                    "Зависимости не включены в выгрузку.",
+                    "Устанавливайте/передавайте ресурс вместе с родителями, указанными в манифесте."
+                }
+                : new[]
+                {
+                    "Зависимости выгрузки:",
+                    ""
+                }.Concat(dependencyList.Select(item => "- " + item.Description));
 
-        var target = WorldArchiveImportRules.UniqueFolderName(
-            leaf,
-            name => PathTaken(Path.Combine(root, name)));
-        var archivePath = Path.Combine(root, target);
-        EnsureInside(root, archivePath);
+            File.WriteAllLines(info, lines, new System.Text.UTF8Encoding(false));
 
-        // Зависимости включаются ВСЕГДА для архива. Причина в назначении архива:
-        // его пересылают одним файлом, и «квест без своих сцен» — это не
-        // усечённый ресурс, а неработающий.
-        var packed = WorldArchiveService.Pack(
-            sourceFolder,
-            archivePath,
-            manifest,
-            includeDependencies: true);
+            var root = WorldPaths.ExportFolder(userRoot, moment);
+            Directory.CreateDirectory(root);
+            var leaf = SafeLeaf(resourceName);
+            ResourceExportResult result;
 
-        return new ResourceExportResult(
-            packed.Path,
-            IsArchive: true,
-            Bytes: packed.ArchiveBytes,
-            FileCount: packed.FileCount);
+            if (!asArchive)
+            {
+                var target = Path.Combine(root, leaf);
+                EnsureInside(root, target);
+                if (PathTaken(target))
+                {
+                    target = Path.Combine(root, WorldArchiveImportRules.UniqueFolderName(
+                        leaf, name => PathTaken(Path.Combine(root, name))));
+                    EnsureInside(root, target);
+                }
+
+                CopyTree(staging, target);
+                var files = Directory.EnumerateFiles(target, "*", SearchOption.AllDirectories).ToArray();
+                result = new ResourceExportResult(
+                    target, false,
+                    files.Sum(file => new FileInfo(file).Length),
+                    files.Length);
+            }
+            else
+            {
+                if (!leaf.EndsWith(WorldArchiveRules.Extension, StringComparison.OrdinalIgnoreCase))
+                    leaf += WorldArchiveRules.Extension;
+
+                var target = Path.Combine(root, leaf);
+                EnsureInside(root, target);
+                if (PathTaken(target))
+                {
+                    target = Path.Combine(root, WorldArchiveImportRules.UniqueFolderName(
+                        leaf, name => PathTaken(Path.Combine(root, name))));
+                    EnsureInside(root, target);
+                }
+
+                var effectiveManifest = (manifest ?? throw new ArgumentNullException(nameof(manifest))) with
+                {
+                    IncludesDependencies = dependencyList.Count > 0 || manifest.IncludesDependencies,
+                    Entries = Array.Empty<WorldArchiveEntry>()
+                };
+
+                var packed = WorldArchiveService.Pack(
+                    staging,
+                    target,
+                    effectiveManifest,
+                    effectiveManifest.IncludesDependencies);
+
+                result = new ResourceExportResult(
+                    packed.Path, true, packed.ArchiveBytes, packed.FileCount);
+            }
+
+            AppLogger.Info("ResourceExportService: ресурс выгружен.",
+                $"resource={resourceName}; archive={asArchive}; dependencies={dependencyList.Count}; path={result.Path}");
+            return result;
+        }
+        finally
+        {
+            try
+            {
+                if (Directory.Exists(staging))
+                    Directory.Delete(staging, recursive: true);
+            }
+            catch (Exception ex)
+            {
+                AppLogger.Warn("ResourceExportService: не удалось удалить временную выгрузку.",
+                    staging + "; " + ex.Message);
+            }
+        }
     }
 
     /// <summary>
