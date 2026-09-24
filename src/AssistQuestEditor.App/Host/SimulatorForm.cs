@@ -25,7 +25,7 @@ public sealed class SimulatorForm : WebViewForm
     private readonly QuestGraphStore _questGraph;
     private readonly CampaignStore _campaignStore;
     private readonly ILocationResolver _locationResolver;
-    private readonly IDynamicEventDirector _dynamicEventDirector;
+    private readonly IDynamicEventDispatcher _dynamicEventDispatcher;
     private readonly RoadIndex _roads;
     // Сохранения принадлежат МИРУ: снимок одного мира нельзя загрузить в
     // другой, где другие квесты и точки. Раньше стор брал общий каталог
@@ -95,7 +95,7 @@ public sealed class SimulatorForm : WebViewForm
         CampaignStore campaignStore,
         Action<string> openQuestEditor,
         ILocationResolver locationResolver,
-        IDynamicEventDirector dynamicEventDirector,
+        IDynamicEventDispatcher dynamicEventDispatcher,
         RoadIndex? roads = null,
         WorldRecord? world = null)
         : base(
@@ -122,7 +122,7 @@ public sealed class SimulatorForm : WebViewForm
                 : WorldPaths.SavesFolderPath(world.FolderPath));
         _openQuestEditor = openQuestEditor ?? throw new ArgumentNullException(nameof(openQuestEditor));
         _locationResolver = locationResolver ?? throw new ArgumentNullException(nameof(locationResolver));
-        _dynamicEventDirector = dynamicEventDirector ?? throw new ArgumentNullException(nameof(dynamicEventDirector));
+        _dynamicEventDispatcher = dynamicEventDispatcher ?? throw new ArgumentNullException(nameof(dynamicEventDispatcher));
         _roads = roads ?? new RoadIndex(Array.Empty<RoadSegment>());
         _journalDetached = AppUiPreferencesStore.Load().JournalDetached;
         Opacity = 0;
@@ -132,7 +132,7 @@ public sealed class SimulatorForm : WebViewForm
         _runtimeTimer.Tick += (_, _) =>
         {
             _runtime.Tick();
-            _dynamicEventDirector.Tick();
+            _dynamicEventDispatcher.Tick();
         };
         _runtimeTimer.Start();
 
@@ -601,7 +601,7 @@ public sealed class SimulatorForm : WebViewForm
                         simulatorHub.Reset();
                     }
                     _runtime.Reset();
-                    _dynamicEventDirector.Reset();
+                    _dynamicEventDispatcher.Reset();
                     // «Сбросить» обнуляет сохранённое прохождение, но НЕ выключает
                     // симуляцию: пользователь продолжает работу в чистом мире с
                     // той же сессией.
@@ -1961,7 +1961,7 @@ public sealed class SimulatorForm : WebViewForm
         // Сначала останавливаем Director: применение сохранения публикует изменения
         // каналов, и работающий Director мог бы воспринять их как WorldEvent ещё
         // до того, как получил новое состояние.
-        _dynamicEventDirector.SetSimulationRunning(false);
+        _dynamicEventDispatcher.SetSimulationRunning(false);
         SimulationSaveMapper.Apply(_hub, save.State);
         // Пауза вместо полной остановки: мир сохранён, продолжить можно одним
         // нажатием. Автосохранение при этом НЕ делается — загрузка не является
@@ -2049,13 +2049,13 @@ public sealed class SimulatorForm : WebViewForm
         if (_runtime.IsPaused)
         {
             _runtime.ResumeSimulation();
-            _dynamicEventDirector.SetSimulationRunning(true);
+            _dynamicEventDispatcher.SetSimulationRunning(true);
             AppLogger.Info("SimulatorForm: симуляция продолжена после паузы.");
         }
         else
         {
             _runtime.SetSimulationRunning(true);
-            _dynamicEventDirector.SetSimulationRunning(true);
+            _dynamicEventDispatcher.SetSimulationRunning(true);
             AppLogger.Info("SimulatorForm: симуляция запущена.");
         }
 
@@ -2076,7 +2076,7 @@ public sealed class SimulatorForm : WebViewForm
         // фиксируется как обычное выключение.
         var wasActive = _runtime.SimulationRunning || _runtime.IsPaused;
         _runtime.SetSimulationRunning(false);
-        _dynamicEventDirector.SetSimulationRunning(false);
+        _dynamicEventDispatcher.SetSimulationRunning(false);
         if (wasActive)
             AutosaveWorld(reason);
         RequestSnapshot("simulation stopped");
@@ -2091,7 +2091,7 @@ public sealed class SimulatorForm : WebViewForm
     private void PauseSimulation()
     {
         _runtime.PauseSimulation();
-        _dynamicEventDirector.SetSimulationRunning(false);
+        _dynamicEventDispatcher.SetSimulationRunning(false);
         AppLogger.Info("SimulatorForm: симуляция поставлена на паузу.");
         RequestSnapshot("simulation paused");
     }
@@ -2099,7 +2099,7 @@ public sealed class SimulatorForm : WebViewForm
     private void ResumeSimulation()
     {
         _runtime.ResumeSimulation();
-        _dynamicEventDirector.SetSimulationRunning(true);
+        _dynamicEventDispatcher.SetSimulationRunning(true);
         AppLogger.Info("SimulatorForm: симуляция продолжена.");
         RequestSnapshot("simulation resumed");
     }
