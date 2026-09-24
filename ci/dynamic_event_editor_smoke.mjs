@@ -5,7 +5,7 @@ import { chromium } from "playwright";
 // Smoke-проверка нового Authoring слоя Dynamic Event:
 // Definition отделён от runtime instance, Location выбирается ссылкой,
 // read-only режим не открывает операции записи, а «Создать сейчас» отправляет
-// именно диагностическую команду Director.
+// именно диагностическую команду Dispatcher.
 const root = process.cwd();
 const read = rel => fs.readFileSync(path.join(root, ...rel.split("/")), "utf8");
 
@@ -14,6 +14,12 @@ const sceneJs = read("src/AssistQuestEditor.App/Web/sceneEditor.js");
 const dialogueJs = read("src/AssistQuestEditor.App/Web/dialogueWorkspace.js");
 const locationJs = read("src/AssistQuestEditor.App/Web/locationEditor.js");
 const dynamicJs = read("src/AssistQuestEditor.App/Web/dynamicEventEditor.js");
+check(/DynamicEventDiscovery/.test(dynamicJs),
+  "Dynamic Event editor must expose DynamicEventDiscovery trigger.");
+check(/dynamicEventSourceDefinition/.test(dynamicJs),
+  "Dynamic Event editor must expose discovery source DefinitionId.");
+check(/spawnOnSimulationStart/.test(dynamicJs) && /respawnOnExpired/.test(dynamicJs),
+  "Dynamic Event editor must expose first-spawn and expiry-respawn policies.");
 const theme = read("src/AssistQuestEditor.App/Web/theme.css");
 
 const browser = await chromium.launch({ headless: true });
