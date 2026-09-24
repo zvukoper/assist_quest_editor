@@ -997,6 +997,156 @@ public sealed class MainForm : WebViewForm
         }
     }
 
+    private void ExportQuest(string campaignId, string questId, string path)
+    {
+        var world = SelectedWorld;
+        if (world is null)
+        {
+            MessageBox.Show(this, "Мир не выбран — квест выгружать не из чего.",
+                "Экспорт квеста", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            return;
+        }
+
+        if (!File.Exists(path))
+        {
+            MessageBox.Show(this, "Файл квеста не найден: " + path,
+                "Экспорт квеста", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            return;
+        }
+
+        var campaign = _campaignStore.Records.FirstOrDefault(record =>
+            record.Definition.Id.Equals(campaignId, StringComparison.OrdinalIgnoreCase));
+        if (campaign is null)
+        {
+            MessageBox.Show(this, "Родительская кампания не найдена: " + campaignId,
+                "Экспорт квеста", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            return;
+        }
+
+        QuestDefinition quest;
+        try
+        {
+            var document = ResourceJsonFormat.Deserialize<QuestDefinitionDocument>(File.ReadAllText(path));
+            quest = document?.Definition ?? throw new InvalidDataException("Файл Quest не содержит определения.");
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(this, "Не удалось прочитать квест: " + ex.Message,
+                "Экспорт квеста", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            return;
+        }
+
+        var moment = DateTimeOffset.UtcNow;
+        var exportRoot = WorldPaths.ExportFolder(AppPaths.UserRoot, moment);
+        var displayName = string.IsNullOrWhiteSpace(quest.Title) ? quest.Id : quest.Title;
+        var fileSize = new FileInfo(path).Length;
+
+        var sceneFiles = Directory.Exists(WorldPaths.ScenesFolderPath(campaign.FolderPath))
+            ? Directory.EnumerateFiles(WorldPaths.ScenesFolderPath(campaign.FolderPath), "*.aqscene", SearchOption.AllDirectories)
+                .Select(file => Path.GetRelativePath(campaign.FolderPath, file).Replace('\\', '/'))
+                .ToArray()
+            : Array.Empty<string>();
+
+        var parentDependencies = new List<ResourceExportService.ExportDependency>();
+        // World dependency: only the world definition/image, never other campaigns.
+        parentDependencies.Add(new ResourceExportService.ExportDependency(
+            world.FolderPath,
+            "world",
+            "мир «" + world.DisplayName + "»",
+            new[] { WorldPaths.WorldFileName, WorldPaths.WorldImageFileName }));
+
+        // Campaign dependency: campaign definition/image + scenes, but NO other quests.
+        var campaignFiles = new List<string> { WorldPaths.CampaignFileName, WorldPaths.CampaignImageFileName };
+        campaignFiles.AddRange(sceneFiles);
+        parentDependencies.Add(new ResourceExportService.ExportDependency(
+            campaign.FolderPath,
+            "campaign",
+            "кампания «" + WorldDisplayRules.DisplayName(campaign.Definition.Name, campaign.Definition.FullName) + "» без соседних квестов",
+            campaignFiles));
+
+        var dependencyNames = new List<string>
+        {
+            "мир «" + world.DisplayName + "»",
+            "кампания «" + WorldDisplayRules.DisplayName(campaign.Definition.Name, campaign.Definition.FullName) + "»",
+            "сцены кампании (" + sceneFiles.Length + ")"
+        };
+
+        using var dialog = new ResourceExportForm(
+            kindLabel: "квеста",
+            displayName: displayName,
+            sourceFolder: Path.GetDirectoryName(path) ?? campaign.FolderPath,
+            fileCount: 1,
+            totalBytes: fileSize,
+            dependencies: dependencyNames,
+            folderDestination: Path.Combine(exportRoot, ResourceNaming.ToFolderName(displayName)) + Path.DirectorySeparatorChar,
+            archiveDestination: Path.Combine(exportRoot, ResourceNaming.ToFolderName(displayName) + WorldArchiveRules.Extension));
+
+        if (dialog.ShowDialog(this) != DialogResult.OK)
+            return;
+
+        try
+        {
+            var result = ExportQuestWithMode(
+                world,
+                campaign,
+                path,
+                quest,
+                displayName,
+                dialog.ArchiveRequested,
+                dialog.DependenciesRequested,
+                parentDependencies,
+                moment);
+
+            MessageBox.Show(this,
+                "Квест «" + displayName + "» выгружен " + (result.IsArchive ? "архивом" : "папкой") + "." +
+                Environment.NewLine + Environment.NewLine +
+                result.Path,
+                "Экспорт завершён", MessageBoxButtons.OK, MessageBoxIcon.Information);
+        }
+        catch (Exception ex)
+        {
+            AppLogger.Warn("MainForm: экспорт квеста не удался.",
+                $"questId={quest.Id}; error={ex.Message}");
+            MessageBox.Show(this, "Не удалось выгрузить квест: " + ex.Message,
+                "Экспорт квеста", MessageBoxButtons.OK, MessageBoxIcon.Error);
+        }
+    }
+
+    private static ResourceExportResult ExportQuestWithMode(
+        WorldRecord world,
+        CampaignStore.CampaignRecord campaign,
+        string questPath,
+        QuestDefinition quest,
+        string displayName,
+        bool asArchive,
+        bool includeDependencies,
+        IReadOnlyList<ResourceExportService.ExportDependency> allDependencies,
+        DateTimeOffset moment)
+    {
+        var dependencies = includeDependencies ? allDependencies : Array.Empty<ResourceExportService.ExportDependency>();
+
+        // Quest exporter requires a real staging directory only for the selected Quest file.
+        var temp = Path.Combine(Path.GetTempPath(), "aq-quest-source-" + Guid.NewGuid().ToString("N"));
+        try
+        {
+            Directory.CreateDirectory(temp);
+            File.Copy(questPath, Path.Combine(temp, Path.GetFileName(questPath)), overwrite: true);
+
+            return ResourceExportService.ExportArchive(
+                AppPaths.UserRoot,
+                temp,
+                displayName,
+                ResourceExportService.ManifestForQuest(quest),
+                moment,
+                dependencies).WithArchiveMode(asArchive);
+        }
+        finally
+        {
+            try { if (Directory.Exists(temp)) Directory.Delete(temp, true); }
+            catch { }
+        }
+    }
+
     private static string FormatBytes(long bytes)
     {
         if (bytes < 1024) return bytes + " Б";
