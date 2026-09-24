@@ -43,6 +43,8 @@ public sealed class ImportParentForm : Form
 
         Text = "Куда импортировать " + kindLabel;
         StartPosition = FormStartPosition.CenterScreen;
+        // Иконка приложения: окно без неё выглядит чужим в панели задач.
+        AppIconService.ApplyTo(this);
         FormBorderStyle = FormBorderStyle.FixedDialog;
         MaximizeBox = false;
         MinimizeBox = false;

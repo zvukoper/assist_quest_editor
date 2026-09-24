@@ -6,7 +6,6 @@
   const playerOverlay = document.getElementById("playerOverlay");
   const backpackButton = document.getElementById("backpackButton");
   const backpackNewDot = document.getElementById("backpackNewDot");
-  const inventoryPanel = document.getElementById("inventoryPanel");
   const characterPanel = document.getElementById("characterPanel");
   const characterTabs = document.getElementById("characterTabs");
   const characterTabBody = document.getElementById("characterTabBody");
@@ -1690,101 +1689,16 @@
   };
 
   function itemCatalogDefinition(itemId) {
-    const key = String(itemId || "").toLowerCase();
-    const found = (window.__assistItemCatalog || []).find(item =>
-      String(item.id || "").toLowerCase() === key);
-    return found || {
-      id: itemId,
-      name: itemId,
-      description: "Предмет без зарегистрированного описания.",
-      category: "Неизвестный предмет",
-      color: "#59636d"
-    };
+    // Отрисовка инвентаря живёт в общем модуле inventory.js: тот же код
+    // собирает содержимое отдельного окна (клавиша I), и две копии разметки
+    // разошлись бы — автор видел бы разное содержимое в зависимости от способа
+    // открытия.
+    return AssistInventory.itemDefinition(window.__assistItemCatalog, itemId);
   }
 
   function inventoryNewItemIds() {
     return new Set((snapshot?.inventory?.newItemIds || []).map(value =>
       String(value).toLowerCase()));
-  }
-
-  function isInventoryItemNew(itemId) {
-    return inventoryNewItemIds().has(String(itemId).toLowerCase()) &&
-      !locallySeenInventoryItems.has(String(itemId).toLowerCase());
-  }
-
-  function percent(value, max) {
-    const maximum = Number(max);
-    return Math.max(0, Math.min(100,
-      maximum > 0 ? Number(value || 0) / maximum * 100 : 0));
-  }
-
-  function renderVitalsPanel() {
-    const v = snapshot?.playerVitals || {};
-    const n = value => Math.round(Number(value || 0));
-    return [
-      "<div class='gamePanelHeader'><div><div class='gamePanelTitle'>Инвентарь</div><div class='gamePanelSub'>Состояние и содержимое</div></div><div class='gamePanelSub'>I — открыть / закрыть</div></div>",
-      "<div class='gameVitals'>",
-        "<div class='vitalRow' data-game-tooltip='Здоровье: текущее значение от 0 до максимума.'><span class='vitalLabel'>Здоровье</span><div class='vitalTrack'><div class='vitalFill health' style='width:" + percent(v.health, v.maxHealth) + "%'></div></div><span class='vitalValue'>" + n(v.health) + "%</span></div>",
-        "<div class='vitalDual'>",
-          "<div class='vitalDualCell' data-game-tooltip='Энергия: запас сил игрока.'><span class='vitalLabel'>Энергия</span><div class='vitalTrack'><div class='vitalFill energy' style='width:" + percent(v.energy, v.maxEnergy) + "%'></div></div></div>",
-          "<div class='vitalDualCell' data-game-tooltip='Жидкость: уровень гидратации игрока.'><span class='vitalLabel'>Жидкость</span><div class='vitalTrack'><div class='vitalFill hydration' style='width:" + percent(v.hydration, v.maxHydration) + "%'></div></div></div>",
-        "</div>",
-        "<div class='vitalRow' data-game-tooltip='Усталость: 0 — полностью отдохнул, 100 — максимальная усталость.'><span class='vitalLabel'>Усталость</span><div class='vitalTrack'><div class='vitalFill fatigue' style='width:" + percent(v.fatigue, v.maxFatigue) + "%'></div></div><span class='vitalValue'>" + n(v.fatigue) + "%</span></div>",
-      "</div>"
-    ].join("");
-  }
-
-  function renderInventoryGrid() {
-    const items = Object.entries(snapshot?.inventory?.items || {})
-      .filter(([, quantity]) => Number(quantity) > 0)
-      .sort(([a], [b]) => a.localeCompare(b));
-
-    const slots = [];
-    for (let index = 0; index < 24; index++) {
-      const pair = items[index];
-      if (!pair) {
-        slots.push("<div class='inventorySlot empty' data-game-tooltip='Свободная ячейка инвентаря.'></div>");
-        continue;
-      }
-
-      const [itemId, quantity] = pair;
-      const item = itemCatalogDefinition(itemId);
-      const isNew = isInventoryItemNew(itemId);
-      slots.push(
-        "<div class='inventorySlot' data-game-tooltip='" + escapeHtml(item.description || item.name) + "'>" +
-          "<button class='inventoryItemButton' type='button' data-inventory-item='" + escapeHtml(itemId) + "' data-game-tooltip='" + escapeHtml((item.name || itemId) + ". " + (item.description || "")) + "'>" +
-            "<span class='inventoryItemSquare' style='background:" + escapeHtml(item.color || "#59636d") + "'>" + (String(itemId).toLowerCase() === "ruslan.raw_meat" ? "М" : "") + "</span>" +
-            "<span class='inventoryItemName'>" + escapeHtml(item.name || itemId) + (isNew ? " <span class='inventoryNewDot' aria-label='Новый предмет'></span>" : "") + "</span>" +
-            "<span class='inventoryItemQty'>×" + Number(quantity) + "</span>" +
-
-          "</button>" +
-        "</div>"
-      );
-    }
-    return slots.join("");
-  }
-
-  function renderInventoryPanel() {
-    if (!inventoryPanel || !snapshot) return;
-    const progress = snapshot.playerProgress || {};
-    inventoryPanel.innerHTML =
-      renderVitalsPanel() +
-      "<div class='inventoryGrid'>" + renderInventoryGrid() + "</div>" +
-      "<div class='inventoryFooter'>" +
-        "<div class='inventoryFooterCell' data-game-tooltip='Деньги игрока.'>₽ <strong>" + Number(progress.money || 0).toLocaleString("ru-RU") + "</strong></div>" +
-        "<div class='inventoryFooterCell' data-game-tooltip='Опыт игрока. Увеличивается через AddExperience.'>XP <strong>" + Number(progress.experience || 0).toLocaleString("ru-RU") + "</strong></div>" +
-        "<div class='inventoryFooterCell' data-game-tooltip='Резервный ресурс для будущих механик.'>Резерв <strong>" + Number(progress.reserve || 0).toLocaleString("ru-RU") + "</strong></div>" +
-      "</div>";
-
-    inventoryPanel.querySelectorAll("[data-inventory-item]").forEach(button => {
-      button.addEventListener("mouseenter", () => {
-        const id = String(button.dataset.inventoryItem || "").toLowerCase();
-        if (!id) return;
-        locallySeenInventoryItems.add(id);
-        send({ action: "mark_inventory_seen", itemId: id });
-        renderGameplayPanels();
-      });
-    });
   }
 
   // Активный таб правой панели: "character" или "reputation".
@@ -1984,11 +1898,27 @@
       !locallySeenInventoryItems.has(id));
     backpackButton.classList.toggle("hasNew", hasNew && !gameplayInventoryOpen);
 
-    renderInventoryPanel();
     renderCharacterPanel();
   }
 
   function toggleGameplayInventory(force = null) {
+    // Инвентарь теперь ОТДЕЛЬНОЕ ОКНО (клавиша I), и открывает его Host:
+    // страница не может создать форму Windows. Здесь только запрос, а
+    // состояние окна знает Симулятор — он же и отвечает снимком.
+    //
+    // Прежняя панель-оверлей осталась контейнером для панели ПЕРСОНАЖА:
+    // она открывается по кнопке в левом сайдбаре и не связана с клавишей I.
+    send({ action: "toggle_inventory", open: force === null ? null : !!force });
+  }
+
+  /**
+   * Панель персонажа: единственное, что осталось в оверлее.
+   *
+   * Отделена от инвентаря намеренно: инвентарь уехал в своё окно, а персонаж
+   * остался на карте — он читается вместе с ней (характеристики зависят от
+   * того, где находится игрок).
+   */
+  function toggleCharacterPanel(force = null) {
     gameplayInventoryOpen = force === null ? !gameplayInventoryOpen : !!force;
     renderGameplayPanels();
   }
@@ -2627,6 +2557,10 @@
         ? "<span class='badge blue' title='Восход и закат по геокоординате кампании'>" +
             "☀ " + escapeHtml(daylight.sunriseLabel) + "–" + escapeHtml(daylight.sunsetLabel) + "</span>"
         : "",
+      // Индикатор фазы дня — МЕЖДУ восходом/закатом и временем года: он
+      // объясняет промежуток, который эти две подписи зададют. Отдельной
+      // плашки у него нет (он сам значок), поэтому живёт прямо в ряду бейджей.
+      daylight ? "<span class='daylightSlot' id='daylightIndicator'></span>" : "",
       daylight
         ? "<span class='badge blue'>" + escapeHtml(daylight.seasonLabel) + "</span>"
         : "",
@@ -2699,9 +2633,12 @@
 
     const fraction = Number(daylight.dayFraction);
     const isNight = !daylight.isDay;
-    const size = 42;
+    // Размер равен высоте плашки-бейджа: индикатор стоит в одном ряду с ними и
+    // не должен менять высоту шапки. Прежние 42 px задавали размер КНОПКИ, и
+    // индикатор выглядел ещё одним элементом управления.
+    const size = 22;
     const center = size / 2;
-    const radius = 15;
+    const radius = 8.5;
 
     // Смещение обрезающей окружности. 0 — полное светило (полдень),
     // ±радиус*2 — серп нулевой толщины (восход и закат).

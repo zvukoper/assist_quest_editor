@@ -156,7 +156,7 @@ check(/private WorldRecord\? SelectedWorld/.test(mainForm),
 check(/сохранённый мир недоступен, выбран первый доступный/.test(mainForm),
   "Недоступный сохранённый мир обязан приводить к выбору первого доступного с записью в журнал.");
 
-// --- 8. Окно кампаний: мир — первый раздел с ПАПКА, заголовок с именем мира ---
+// --- 8. Окно кампаний: мир — сворачиваемый пункт дерева уровнем ВЫШЕ кампании ---
 
 const campaignsForm = read("src/AssistQuestEditor.App/Host/CampaignsForm.cs");
 check(/SetWorld\(WorldRecord\? world\)/.test(campaignsForm),
@@ -164,55 +164,141 @@ check(/SetWorld\(WorldRecord\? world\)/.test(campaignsForm),
 check(/\"Кампании и квесты — \" \+ world\.DisplayName/.test(campaignsForm),
   "Заголовок окна кампаний должен содержать имя мира: иначе непонятно, чей это каталог.");
 check(/private Control CreateWorldBlock/.test(campaignsForm),
-  "Мир обязан быть ОТДЕЛЬНЫМ разделом списка, а не одной из кампаний.");
+  "Мир обязан быть отдельным пунктом дерева, а не одной из кампаний.");
 check(/CreateMicroButton\("ПАПКА"\)/.test(campaignsForm),
   "В разделе мира должна быть кнопка «ПАПКА».");
-// Раздел мира рисуется ДО кампаний: он корень дерева.
-check(campaignsForm.indexOf("CreateWorldBlock(_world)") < campaignsForm.indexOf("CreateCampaignBlock(campaign)"),
-  "Раздел мира должен идти первым: он корень дерева, а кампании — его ветви.");
-// Имя мира крупнее строки кампании: иначе он выглядит ещё одной кампанией.
+check(/CreateWorldBlock\(_world\)/.test(campaignsForm),
+  "Дерево обязано начинаться с пункта мира.");
+
 const worldBlock = campaignsForm.slice(
   campaignsForm.indexOf("private Control CreateWorldBlock"),
   campaignsForm.indexOf("private Control? CreateSignatureRow"));
-check(/Font\("Segoe UI", 13f, FontStyle\.Bold\)/.test(worldBlock),
-  "Имя мира должно быть заметно крупнее названий кампаний.");
+
+// МИР ВЫГЛЯДИТ КАК КАМПАНИЯ, просто уровнем выше. Требование изменилось
+// намеренно: прежде мир был отдельным разделом с крупным (13pt) заголовком, и
+// выдать это за «тот же вид» нельзя. Единственный признак уровня — ОРАНЖЕВЫЙ
+// цвет (сохранён) и вложенность кампаний внутрь пункта мира.
+check(!/Font\("Segoe UI", 13f/.test(worldBlock),
+  "Имя мира не должно быть крупнее названий кампаний: мир — такой же пункт дерева.");
+check(/Font\("Segoe UI", 9f, FontStyle\.Bold\)/.test(worldBlock),
+  "Имя мира должно иметь тот же размер шрифта, что и название кампании.");
+check(/250, 176, 3/.test(worldBlock),
+  "Оранжевый цвет пункта мира обязан сохраниться: это единственный признак уровня.");
+// Мир сворачивается, как кампания.
+check(/ToggleCollapsed\(WorldCollapseKey\)/.test(worldBlock),
+  "Пункт мира обязан сворачиваться, как кампания: это тот же вид.");
+check(/collapsed \? "▸" : "▾"/.test(worldBlock),
+  "У пункта мира должна быть стрелка свёрнутости, как у кампании.");
+
+// Кампании ВЛОЖЕНЫ в пункт мира, а не лежат плоским списком рядом с ним:
+// только так принадлежность кампании миру видна без подписи.
+check(/foreach \(var campaign in _catalog\)\s*\r?\n?\s*rows\.Controls\.Add\(CreateCampaignBlock\(campaign\)\)/.test(worldBlock),
+  "Кампании должны вкладываться ВНУТРЬ пункта мира: иначе это два несвязанных списка.");
+// И плоского добавления кампаний в корень при ВЫБРАННОМ мире быть не должно.
+//
+// Проверка различает ветки, а не запрещает слово `CreateCampaignBlock`: при
+// отсутствии мира кампании остаются ПЛОСКИМ списком — это осознанная вырожденная
+// ветка (показывать их без родителя нельзя, но и прятать нечего). Запрещать её
+// значило бы требовать, чтобы окно перестало показывать хоть что-нибудь.
+const rebuildBody = campaignsForm.slice(
+  campaignsForm.indexOf("private void Rebuild()"),
+  campaignsForm.indexOf("private Control CreateWorldBlock"));
+const worldAddIndex = rebuildBody.indexOf("_list.Controls.Add(CreateWorldBlock(_world))");
+const elseIndex = rebuildBody.indexOf("else", worldAddIndex);
+const rootCampaignAddIndex = rebuildBody.indexOf("_list.Controls.Add(CreateCampaignBlock(campaign))");
+
+check(worldAddIndex >= 0, "Rebuild не добавляет пункт мира.");
+check(rootCampaignAddIndex < 0 || (elseIndex > worldAddIndex && rootCampaignAddIndex > elseIndex),
+  "Кампании добавляются в корень списка при выбранном мире, а не внутрь пункта мира.");
 
 // Строка кампании обязана остаться ПРЕЖНЕГО размера: сравнивать размеры нужно
 // по конкретному объявлению шрифта, а не по взаимному расположению строк в
-// файле — порядок аргументов инициализатора может меняться при правках, и
-// проверка «размер идёт после имени» ломалась бы без всякой причины.
-//
-// Границы среза берутся от НАЧАЛА метода до начала следующего: порядок
-// объявлений в файле не должен влиять на проверку.
+// файле — порядок аргументов инициализатора может меняться при правках.
 const campaignStart = campaignsForm.indexOf("private Control CreateCampaignBlock");
 const campaignEnd = campaignsForm.indexOf("\n    private ", campaignStart + 10);
 const campaignBlock = campaignsForm.slice(campaignStart, campaignEnd > 0 ? campaignEnd : undefined);
 const campaignFont = campaignBlock.match(/Font = new Font\("Segoe UI",\s*([\d.]+)f/);
 check(campaignFont && Number(campaignFont[1]) < 13,
-  "Строка кампании должна остаться меньше имени мира: " + (campaignFont?.[1] ?? "шрифт не найден"));
+  "Строка кампании должна остаться меньше 13pt: " + (campaignFont?.[1] ?? "шрифт не найден"));
+check(campaignFont && campaignFont[1] === "9", // 9f — как у пункта мира
+  "Размер шрифта кампании и мира должен совпадать: " + (campaignFont?.[1] ?? "?") + " против 9");
 
-// И имя мира обязано быть ЖИРНЫМ и крупнее любого шрифта в блоке кампаний.
-const worldFont = worldBlock.match(/Font = new Font\("Segoe UI",\s*([\d.]+)f[^)]*\)/);
-check(worldFont && Number(worldFont[1]) >= 12,
-  "Имя мира должно быть крупным (>=12pt): " + (worldFont?.[1] ?? "шрифт не найден"));
-
-// --- 9. Подписи автора курсивом в списках ---
+// --- 9. Под названием — ТОЛЬКО даты создания и изменения ---
 
 check(/FontStyle\.Italic/.test(campaignsForm),
-  "Подписи created_by/modified_by должны быть курсивом: они справка, а не название.");
-check(/WorldDisplayRules\.Describe\(world\.Definition\.Metadata\)/.test(campaignsForm),
-  "Подпись мира в списке должна собираться правилом домена, а не склейкой в форме.");
-check(/WorldDisplayRules\.Describe\(world\.Definition\.Metadata, modified: false\)/.test(campaignsForm),
-  "В списке должны быть ОБЕ подписи: и создание, и изменение.");
-// Подписи обязаны быть у КАМПАНИИ, а не только у мира: у каждой кампании есть
-// свои created_by/modified_by, и без них автор правки не виден в списке.
-check(/WorldDisplayRules\.Describe\(campaign\.Metadata\)/.test(campaignsForm),
-  "Кампания в списке не подписана автором/датой правки.");
-check(/WorldDisplayRules\.Describe\(campaign\.Metadata, modified: false\)/.test(campaignsForm),
-  "У кампании должна быть подпись СОЗДАНИЯ, а не только изменения.");
+  "Подписи дат должны быть курсивом: они справка, а не название.");
+// Автора в подписи НЕТ: в строке рядом с названием он читался бы как часть
+// названия. Для этого и появилось отдельное правило домена — DescribeStamp.
+check(/WorldDisplayRules\.DescribeStamp\(world\.Definition\.Metadata, modified: false\)/.test(campaignsForm),
+  "У мира должна быть подпись СОЗДАНИЯ без автора.");
+check(/WorldDisplayRules\.DescribeStamp\(world\.Definition\.Metadata\)/.test(campaignsForm),
+  "У мира должна быть подпись ИЗМЕНЕНИЯ без автора.");
+check(/WorldDisplayRules\.DescribeStamp\(campaign\.Metadata, modified: false\)/.test(campaignsForm),
+  "У кампании должна быть подпись СОЗДАНИЯ без автора.");
+check(/WorldDisplayRules\.DescribeStamp\(campaign\.Metadata\)/.test(campaignsForm),
+  "У кампании должна быть подпись ИЗМЕНЕНИЯ без автора.");
+// Прежняя подпись с автором в дереве быть НЕ должна: она противоречит требованию.
+check(!/WorldDisplayRules\.Describe\((world\.Definition|campaign)\.Metadata/.test(campaignsForm),
+  "В дереве осталась подпись с автором: под названием должны быть только даты.");
+// Правило живёт в домене: две реализации дали бы две подписи одного ресурса.
+const worldModelsForStamps = read("src/AssistQuestEditor.Domain/WorldModels.cs");
+check(/public static string\? DescribeStamp\(ResourceMetadata\? metadata, bool modified = true\)/.test(worldModelsForStamps),
+  "Правило подписи датами должно жить в домене, а не собираться в форме.");
+check(/label = modified \? "Modified" : "Created"/.test(worldModelsForStamps),
+  "Даты должны подписываться словами Modified/Created.");
 // Вид кампании обязан нести метаданные: без них подписывать нечем.
 check(/ResourceMetadata\? Metadata = null/.test(read("src/AssistQuestEditor.App/CampaignStore.cs")),
   "Вид кампании не несёт метаданные: подпись в списке собрать не из чего.");
+
+// --- 9б. Иконка ℹ️ у названия мира и кампании ---
+
+check(/CreateMicroButton\("ℹ️"\)/.test(worldBlock),
+  "У названия мира должна быть иконка ℹ️ для открытия свойств.");
+check(/CreateMicroButton\("ℹ️"\)/.test(campaignBlock),
+  "У названия кампании должна быть иконка ℹ️ для открытия свойств.");
+// Иконка у кампании обязана нести ЕЁ id: иконок столько же, сколько кампаний, и
+// «открыть свойства текущей» открывало бы не ту.
+check(/CampaignPropertiesRequested\?\.Invoke\(this,\s*new CampaignPropertiesRequestedEventArgs\(campaign\.Id\)\)/.test(campaignBlock),
+  "Иконка ℹ️ кампании не передаёт её id: откроются свойства не той кампании.");
+check(/WorldPropertiesRequested\?\.Invoke/.test(worldBlock),
+  "Иконка ℹ️ мира не запрашивает свойства мира.");
+// Сворачивание по иконке ℹ️ было бы неожиданным: у неё своё действие.
+check(!/header\.Click \+= \(_, _\) => ToggleCollapsed\(campaign\.Id\)/.test(campaignBlock),
+  "Сворачивание повешено на весь заголовок, включая кнопки: клик по ℹ️ свернёт кампанию.");
+check(/new Control\[\] \{ header, text, marker \}/.test(campaignBlock),
+  "Сворачивание должно быть только на заголовке, названии и стрелке.");
+
+// События обязаны доходить до окна свойств, а не теряться на середине пути.
+const simulatorFormForInfo = read("src/AssistQuestEditor.App/Host/SimulatorForm.cs");
+const mainFormForInfo = read("src/AssistQuestEditor.App/Host/MainForm.cs");
+check(/CampaignPropertiesRequested \+= \(_, e\) =>/.test(simulatorFormForInfo),
+  "Симулятор не пробрасывает просьбу о свойствах кампании наружу.");
+check(/campaignId: e\.CampaignId/.test(mainFormForInfo),
+  "Главное окно не открывает свойства той кампании, у которой нажата иконка.");
+check(/public event EventHandler\? WorldPropertiesRequested/.test(simulatorFormForInfo),
+  "Симулятор не объявляет событие свойств мира.");
+
+// --- 9в. Одна вертикальная прокрутка на всё дерево, без горизонтальной ---
+
+// Прокрутка только у корневого списка: вложенные спорили бы за колесо мыши, и
+// до кампаний было бы не добраться.
+check(/FlowLayoutPanel \{ Dock = DockStyle\.Fill, AutoScroll = true,[\s\S]{0,200}?WrapContents = false/.test(campaignsForm),
+  "Корневой список дерева обязан иметь вертикальную прокрутку.");
+const nestedScrollCount = (campaignsForm.match(/AutoScroll = false/g) || []).length;
+check(nestedScrollCount >= 2,
+  "У вложенных контейнеров прокрутка должна быть выключена (найдено " +
+  nestedScrollCount + "): две вложенные полосы спорят за колесо мыши.");
+// Горизонтальная прокрутка исключена: длинный текст ПЕРЕНОСИТСЯ по словам.
+check(!/AutoEllipsis = true/.test(worldBlock),
+  "Название мира обрезается многоточием вместо переноса.");
+check(!/AutoEllipsis = true/.test(campaignBlock),
+  "Название кампании обрезается многоточием вместо переноса.");
+check(/AutoSize = false/.test(campaignBlock),
+  "Название кампании должно быть с AutoSize = false: иначе Dock игнорируется и перенос не работает.");
+// WrapContents = false обязателен: при true FlowLayoutPanel переносил бы
+// вложенные плашки вбок и создавал горизонтальную прокрутку.
+check(!/WrapContents = true/.test(campaignsForm),
+  "Перенос содержимого включён: появится горизонтальная прокрутка.");
 // Подпись добавляется через null-безопасный помощник: CreateSignatureRow
 // возвращает null, когда подписывать нечем (файлы без авторства), а
 // Controls.Add(null) бросает исключение и уронил бы окно на старом ресурсе.

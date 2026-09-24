@@ -27,6 +27,8 @@ public sealed class FirstRunSetupForm : Form
     {
         Text = "Первичная настройка Assist Quest Editor";
         StartPosition = FormStartPosition.CenterScreen;
+        // Иконка приложения: окно без неё выглядит чужим в панели задач.
+        AppIconService.ApplyTo(this);
         FormBorderStyle = FormBorderStyle.FixedDialog;
         MaximizeBox = false;
         MinimizeBox = false;

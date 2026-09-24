@@ -188,12 +188,23 @@ public static class ResourcePropertiesService
     }
 
     /// <summary>
-    /// Копирует выбранный файл в папку ресурса под каноническим именем.
+    /// Копирует выбранное изображение в папку ресурса под каноническим именем,
+    /// приводя его к КВАДРАТУ.
     ///
     /// Имя НЕ сохраняется от источника: у ресурса одно изображение, и складывать
     /// его как «IMG_2024.png» значит терять связь между файлом и ролью. Путь
     /// записывается в определение как имя файла, а не абсолютный путь, чтобы
     /// архив и папка оставались переносимыми.
+    ///
+    /// Квадрат обязателен: изображение показывается эскизом в списках, и
+    /// прямоугольники давали «пляшущие» рамки. Обрезка идёт по центру — правило
+    /// живёт в <see cref="ImageCropRules"/>, чтобы окно свойств показывало в
+    /// предпросмотре РОВНО то, что будет записано.
+    ///
+    /// Прежняя версия копировала БАЙТЫ источника под именем `.png`. Для JPEG это
+    /// давало файл с расширением PNG и содержимым JPEG: расширение врало,
+    /// сторонние программы открывали его через раз, а любая проверка «это PNG?»
+    /// падала. Теперь содержимое всегда настоящее PNG.
     /// </summary>
     public static string CopyImageIn(string sourceImagePath, string targetFolder, string fileName)
     {
@@ -213,11 +224,43 @@ public static class ResourcePropertiesService
 
         // Копирование поверх самого себя — не ошибка: «Открыть» в проводнике
         // Windows отдаёт именно этот путь.
-        if (!Path.GetFullPath(sourceImagePath).Equals(Path.GetFullPath(target),
-                StringComparison.OrdinalIgnoreCase))
+        var samePath = Path.GetFullPath(sourceImagePath).Equals(Path.GetFullPath(target),
+            StringComparison.OrdinalIgnoreCase);
+
+        using var stream = File.OpenRead(sourceImagePath);
+        using var source = Image.FromStream(stream);
+
+        var crop = ImageCropRules.CenteredSquare(source.Width, source.Height);
+
+        if (crop.IsNoOp && samePath)
         {
-            File.Copy(sourceImagePath, target, overwrite: true);
+            // Файл уже квадратный и уже на месте: перекодирование только
+            // потеряло бы качество, ничего не изменив.
+            return leaf;
         }
+
+        // Небольшой палитровый PNG при пересохранении теряет альфу, поэтому
+        // пишем в 32-битном формате — обычный случай для тематической картинки.
+        using var square = new Bitmap(crop.Side, crop.Side,
+            System.Drawing.Imaging.PixelFormat.Format32bppArgb);
+
+        using (var graphics = Graphics.FromImage(square))
+        {
+            graphics.Clear(Color.Transparent);
+            graphics.DrawImage(source,
+                new Rectangle(0, 0, crop.Side, crop.Side),
+                new Rectangle(crop.X, crop.Y, crop.Side, crop.Side),
+                GraphicsUnit.Pixel);
+        }
+
+        // Промежуточный файл рядом с целью: писать сразу в target нельзя, если
+        // источник и цель совпадают — файл откроется на чтение и на запись
+        // одновременно, и часть данных потеряется.
+        var temporary = target + ".tmp";
+        square.Save(temporary, System.Drawing.Imaging.ImageFormat.Png);
+
+        stream.Dispose();
+        File.Move(temporary, target, overwrite: true);
 
         return leaf;
     }

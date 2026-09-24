@@ -2,12 +2,20 @@ namespace AssistQuestEditor.App;
 
 using AssistQuestEditor.Domain;
 
+/// <summary>
+/// Зарегистрированный в системе тип файла Assist Quest.
+///
+/// Собственного имени иконки здесь НЕТ: специконки для внутренних расширений
+/// не рисуются, и все типы получают иконку приложения (см.
+/// <see cref="AppIconService"/>). Прежнее поле <c>IconFileName</c> было бы
+/// полем, которое никто не читает, — а такой "бездействующий" параметр
+/// приглашает снова нарисовать отдельную иконку и снова разойтись с логотипом.
+/// </summary>
 public sealed record ResourceFileType(
     string Extension,
     string Kind,
     string FriendlyName,
     string ProgIdPart,
-    string IconFileName,
     string DefaultFileName,
     string Description);
 
@@ -17,12 +25,22 @@ public static class ResourceFileTypes
     // Dialogue/Choice сейчас являются частью .aqscene и отдельными файлами не являются.
     public static readonly IReadOnlyList<ResourceFileType> All =
     [
+        // Мир — ресурс ПЕРВОГО уровня: без него нет ни кампании, ни квеста.
+        // Прежде он был исключён из списка как "контейнер, а не файл", но
+        // `world.aqworld` — такой же канонический файл ресурса, как остальные, и
+        // без регистрации он открывался как "неизвестный тип".
+        new(
+            ".aqworld",
+            "World",
+            "Assist Quest World",
+            "World",
+            WorldPaths.WorldFileName,
+            "Канонический World Definition. Внутри мира живут кампании, в кампаниях — квесты."),
         new(
             ".aqcampaign",
             "Campaign",
             "Assist Quest Campaign",
             "Campaign",
-            "aqcampaign.ico",
             "campaign.aqcampaign",
             "Канонический Campaign Definition. Содержит состав кампании и статусы квестов."),
         new(
@@ -30,7 +48,6 @@ public static class ResourceFileTypes
             "Quest",
             "Assist Quest",
             "Quest",
-            "aqquest.ico",
             "quest.aqquest",
             "Канонический Quest Definition. Открывается в Нодовом редакторе."),
         new(
@@ -38,7 +55,6 @@ public static class ResourceFileTypes
             "Location",
             "Assist Quest Location",
             "Location",
-            "aqlocation.ico",
             "location.aqlocation",
             "Канонический Location Definition. Может быть фиксированным или динамически разрешаться по пространственным критериям."),
         new(
@@ -46,7 +62,6 @@ public static class ResourceFileTypes
             "Scene",
             "Assist Quest Scene",
             "Scene",
-            "aqscene.ico",
             "scene.aqscene",
             "Канонический Scene Definition. Открывается в Редакторе сцен и диалогов."),
         // Архив — не ресурс, а УПАКОВКА ресурсов: его не открывают в редакторе,
@@ -58,7 +73,6 @@ public static class ResourceFileTypes
             "Archive",
             "Assist Quest Archive",
             "Archive",
-            "aqezip.ico",
             WorldArchiveRules.DemoWorldFileName,
             "Архив Assist Quest: сжатый пакет мира, кампании или квеста. " +
             "Открывается диалогом импорта.")

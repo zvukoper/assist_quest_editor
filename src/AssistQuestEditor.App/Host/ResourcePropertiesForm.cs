@@ -26,6 +26,15 @@ public sealed class ResourcePropertiesForm : Form
     private readonly Label _validation;
     private readonly bool _editEnabled;
 
+    /// <summary>
+    /// Сторона квадратной панели изображения.
+    ///
+    /// Ширина прежняя (300): она задавала место слева в окне, и менять её
+    /// означает пересчитывать координаты правой колонки. Квадрат получается
+    /// равенством высоты ширине, а не изменением ширины.
+    /// </summary>
+    private const int ImagePanelSide = 300;
+
     private string? _pickedImagePath;
 
     /// <param name="properties">Что показывать и что менять.</param>
@@ -40,6 +49,8 @@ public sealed class ResourcePropertiesForm : Form
 
         Text = (editMode ? "Редактирование " : "Сведения о ") + kind + " — " + properties.DisplayName;
         StartPosition = FormStartPosition.CenterScreen;
+        // Иконка приложения: окно без неё выглядит чужим в панели задач.
+        AppIconService.ApplyTo(this);
         FormBorderStyle = FormBorderStyle.FixedDialog;
         MaximizeBox = false;
         MinimizeBox = false;
@@ -60,10 +71,15 @@ public sealed class ResourcePropertiesForm : Form
         // Слева — изображение, справа — поля. Порядок не косметический: картинку
         // узнают быстрее, чем читают имя, и она служит опознавательным знаком
         // среди похожих миров.
+        //
+        // Панель КВАДРАТНАЯ: изображение ресурса хранится квадратом (см.
+        // ImageCropRules), и прямоугольная рамка показывала бы его в других
+        // пропорциях, чем оно есть на диске. Ширина прежняя (300), высота равна
+        // ей — картинка 1:1.
         var left = new Panel
         {
             Location = new Point(18, 62),
-            Size = new Size(280, 380),
+            Size = new Size(ImagePanelSide, ImagePanelSide),
             BackColor = Color.FromArgb(16, 18, 22),
             BorderStyle = BorderStyle.FixedSingle
         };
@@ -71,6 +87,8 @@ public sealed class ResourcePropertiesForm : Form
         _preview = new PictureBox
         {
             Dock = DockStyle.Fill,
+            // Zoom, а не StretchImage: StretchImage растянул бы непропорционально,
+            // а изображение уже квадрат — его надо показать целиком.
             SizeMode = PictureBoxSizeMode.Zoom,
             BackColor = Color.FromArgb(16, 18, 22)
         };
@@ -290,7 +308,10 @@ public sealed class ResourcePropertiesForm : Form
         using var dialog = new OpenFileDialog
         {
             Title = "Изображение ресурса",
-            Filter = "Изображения|*.png;*.jpg;*.jpeg;*.bmp;*.gif;*.webp|Все файлы|*.*",
+            // GIF и WEBP не предлагаются: изображение ресурса перекодируется в
+            // квадрат, а эти форматы требуют отдельного кодека — выбор файла,
+            // который потом не удалось бы сохранить, выглядит поломкой.
+            Filter = "Изображения|*.png;*.jpg;*.jpeg;*.bmp|Все файлы|*.*",
             CheckFileExists = true
         };
 
@@ -314,7 +335,45 @@ public sealed class ResourcePropertiesForm : Form
 
         _pickedImagePath = dialog.FileName;
         RefreshImage(dialog.FileName);
-        _imageHint.Text = "Будет скопировано как " + ImageFileName;
+
+        // Предупреждаем, что изображение будет обрезано до квадрата: иначе
+        // потеря части снимка выглядела бы как ошибка сохранения.
+        var cropNote = CropNoteFor(dialog.FileName);
+        _imageHint.Text = cropNote is null
+            ? "Будет скопировано как " + ImageFileName
+            : cropNote + " · будет сохранено как " + ImageFileName;
+    }
+
+    /// <summary>
+    /// Сообщает, что изображение обрезается до квадрата, или <c>null</c>,
+    /// если обрезать нечего.
+    ///
+    /// Размеры читаются из заголовка файла, а не через полное декодирование:
+    /// многомегабайтное изображение разбирать целиком только ради подписи
+    /// было бы заметной задержкой на каждый выбор файла.
+    /// </summary>
+    private static string? CropNoteFor(string path)
+    {
+        try
+        {
+            using var stream = File.OpenRead(path);
+            using var image = Image.FromStream(stream, useEmbeddedColorManagement: false,
+                validateImageData: false);
+
+            var crop = ImageCropRules.CenteredSquare(image.Width, image.Height);
+            if (crop.IsNoOp)
+                return null;
+
+            return $"Квадрат {crop.Side}×{crop.Side} из {crop.SourceWidth}×{crop.SourceHeight}";
+        }
+        catch (Exception ex)
+        {
+            // Размеры прочитать не удалось — подпись не показываем. Копирование
+            // ниже всё равно либо сработает, либо сообщит о своей ошибке.
+            AppLogger.Warn("ResourcePropertiesForm: не удалось прочитать размеры изображения.",
+                $"{path}: {ex.Message}");
+            return null;
+        }
     }
 
     private void ClearImage()
@@ -355,6 +414,33 @@ public sealed class ResourcePropertiesForm : Form
     }
 
     /// <summary>
+    /// Копия изображения в память, обрезанная до квадрата по центру.
+    ///
+    /// Копия обязательна и по другой причине: без неё <c>Image.FromFile</c>
+    /// держит файл открытым, и следующее «Выбрать изображение» поверх того же
+    /// файла падает с «используется другим процессом» — то есть второй выбор
+    /// подряд не работал бы.
+    /// </summary>
+    private static Image SquareCopy(Image source)
+    {
+        var crop = ImageCropRules.CenteredSquare(source.Width, source.Height);
+        var square = new Bitmap(crop.Side, crop.Side);
+
+        using (var graphics = Graphics.FromImage(square))
+        {
+            // Прозрачность исходника нужно сохранить: PNG с альфой — обычный
+            // случай для тематической картинки.
+            graphics.Clear(Color.Transparent);
+            graphics.DrawImage(source,
+                new Rectangle(0, 0, crop.Side, crop.Side),
+                new Rectangle(crop.X, crop.Y, crop.Side, crop.Side),
+                GraphicsUnit.Pixel);
+        }
+
+        return square;
+    }
+
+    /// <summary>
     /// Показывает изображение, не блокируя файл.
     ///
     /// Без копии в память `Image.FromFile` держит файл открытым, и следующее
@@ -376,7 +462,10 @@ public sealed class ResourcePropertiesForm : Form
         {
             using var stream = File.OpenRead(path);
             using var source = Image.FromStream(stream);
-            _preview.Image = new Bitmap(source);
+            // Копия в память + квадратная обрезка: предпросмотр обязан
+            // показывать ТО ЖЕ, что будет записано в ресурс. Иначе автор
+            // видел бы исходный прямоугольник, а на диске оказывался квадрат.
+            _preview.Image = SquareCopy(source);
             _imageHint.Text = Path.GetFileName(path) + " — ЛКМ, чтобы открыть";
         }
         catch (Exception ex)

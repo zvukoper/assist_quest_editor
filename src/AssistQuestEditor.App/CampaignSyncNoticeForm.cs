@@ -10,6 +10,8 @@ public sealed class CampaignSyncNoticeForm : Form
     {
         Text = "Обновление квестов";
         StartPosition = FormStartPosition.CenterScreen;
+        // Иконка приложения: окно без неё выглядит чужим в панели задач.
+        AppIconService.ApplyTo(this);
         Size = new Size(760, 560);
         MinimumSize = new Size(600, 420);
         BackColor = Color.FromArgb(16, 18, 23);

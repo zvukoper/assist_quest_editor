@@ -14,7 +14,13 @@ public sealed class SimulatorForm : WebViewForm
     private readonly CampaignStore _campaignStore;
     private readonly ILocationResolver _locationResolver;
     private readonly RoadIndex _roads;
-    private readonly SimulationSaveStore _saveStore = new();
+    // Сохранения принадлежат МИРУ: снимок одного мира нельзя загрузить в
+    // другой, где другие квесты и точки. Раньше стор брал общий каталог
+    // `Документы\Assist Quest Editor\saves`, лежащий ВНЕ дерева миров — его
+    // никто не создавал, и автосохранение падало с DirectoryNotFoundException,
+    // выглядя как «автосохранение не работает». Без мира (режим CI) остаётся
+    // прежний корень: там мир не выбран, и терять нечего.
+    private readonly SimulationSaveStore _saveStore;
     private readonly Action<string> _openQuestEditor;
     private readonly System.Windows.Forms.Timer _runtimeTimer;
     private static readonly JsonSerializerOptions SnapshotJsonOptions = new()
@@ -27,6 +33,12 @@ public sealed class SimulatorForm : WebViewForm
     private readonly List<SimulatorJournalEntry> _journalEntries = new();
     private JournalForm? _journalForm;
     private CampaignsForm? _campaignsForm;
+
+    /// <summary>
+    /// Окно инвентаря. Отдельное окно, а не панель поверх карты: сетка 6×3
+    /// занимала половину оверлея и делила место с панелью персонажа.
+    /// </summary>
+    private InventoryForm? _inventoryForm;
 
     /// <summary>Мир, которому принадлежит окно. Null — режим без выбранного мира (CI).</summary>
     private readonly WorldRecord? _world;
@@ -86,6 +98,10 @@ public sealed class SimulatorForm : WebViewForm
         _world = world;
         _campaignStore = (campaignStore ?? throw new ArgumentNullException(nameof(campaignStore)))
             .ScopedTo(world?.FolderPath);
+        _saveStore = new SimulationSaveStore(
+            world is null
+                ? AppPaths.SimulationSaveRoot
+                : WorldPaths.SavesFolderPath(world.FolderPath));
         _openQuestEditor = openQuestEditor ?? throw new ArgumentNullException(nameof(openQuestEditor));
         _locationResolver = locationResolver ?? throw new ArgumentNullException(nameof(locationResolver));
         _roads = roads ?? new RoadIndex(Array.Empty<RoadSegment>());
@@ -112,6 +128,15 @@ public sealed class SimulatorForm : WebViewForm
         {
             _journalForm?.Close();
             _journalForm = null;
+
+            // Окно инвентаря закрывается вместе с Симулятором: оно показывает
+            // его состояние, и без хозяина осталось бы висеть с устаревшими
+            // данными, обновлять которые некому.
+            if (_inventoryForm is not null)
+            {
+                _inventoryForm.Close();
+                _inventoryForm = null;
+            }
 
             if (_campaignsForm is not null)
             {
@@ -267,6 +292,69 @@ public sealed class SimulatorForm : WebViewForm
 
         AppLogger.Info("SimulatorForm: отправляю snapshot в WebView2.", $"jsonChars={payload.Length}; points={pointCount}");
         PostJson(payload);
+
+        // Окно инвентаря получает ТОТ ЖЕ json, что и карта. Отдельная сборка
+        // снимка для него означала бы два описания состояния мира, и правка
+        // одного поля в Симуляторе молча ломала бы инвентарь.
+        if (_inventoryForm is not null && !_inventoryForm.IsDisposed)
+            _inventoryForm.SetSnapshotJson(payload);
+    }
+
+    /// <summary>
+    /// Открывает окно инвентаря (клавиша I) или сообщает о нём.
+    ///
+    /// Окно ОДНО: повторное нажатие I поднимает уже открытое, а не создаёт второе.
+    /// Два окна с одним содержимым — это два места, где его надо обновлять, и
+    /// рано или поздно они покажут разное.
+    /// </summary>
+    private void OpenInventoryWindow()
+    {
+        if (_inventoryForm is not null && !_inventoryForm.IsDisposed)
+        {
+            _inventoryForm.WindowState = FormWindowState.Normal;
+            _inventoryForm.BringToFront();
+            _inventoryForm.Activate();
+            return;
+        }
+
+        _inventoryForm = new InventoryForm();
+        _inventoryForm.InventoryItemSeenRequested += InventoryForm_ItemSeenRequested;
+        _inventoryForm.FormClosed += (_, _) =>
+        {
+            _inventoryForm = null;
+            // Окно закрыли: карта должна узнать об этом, иначе кнопка на карте
+            // останется в состоянии «открыто».
+            RequestSnapshot("inventory window closed");
+        };
+        _inventoryForm.Show(this);
+        AppLogger.Info("SimulatorForm: окно инвентаря открыто.",
+            $"size={_inventoryForm.Width}x{_inventoryForm.Height}");
+    }
+
+    /// <summary>Закрывает окно инвентаря, если оно открыто.</summary>
+    private void CloseInventoryWindow()
+    {
+        if (_inventoryForm is null || _inventoryForm.IsDisposed)
+            return;
+
+        _inventoryForm.Close();
+        _inventoryForm = null;
+    }
+
+    /// <summary>
+    /// Игрок увидел предмет в окне инвентаря: снимаем значок «новый».
+    ///
+    /// Запись идёт через ТОТ ЖЕ путь, что и для панели: состояние показа живёт в
+    /// Симуляторе, и второй учёт в окне дал бы возвращение значка после
+    /// следующего снимка.
+    /// </summary>
+    private void InventoryForm_ItemSeenRequested(object? sender, InventoryItemSeenEventArgs e)
+    {
+        if (string.IsNullOrWhiteSpace(e.ItemId))
+            return;
+
+        MarkInventoryItemSeen(e.ItemId);
+        RequestSnapshot("inventory item seen in window");
     }
 
     protected override void OnWebMessage(string json)
@@ -320,6 +408,16 @@ public sealed class SimulatorForm : WebViewForm
 
                 case "mark_inventory_seen":
                     MarkInventorySeen(root);
+                    break;
+
+                // Инвентарь открывается и закрывается клавишей I. Решение
+                // принимает Host, а не страница: окно — настоящая форма Windows,
+                // и создавать её из JS было бы невозможно.
+                case "toggle_inventory":
+                    if (_inventoryForm is not null && !_inventoryForm.IsDisposed)
+                        CloseInventoryWindow();
+                    else
+                        OpenInventoryWindow();
                     break;
 
                 case "set_vitals":
@@ -694,6 +792,13 @@ public sealed class SimulatorForm : WebViewForm
         _campaignsForm.CampaignFolderOpenRequested += CampaignsForm_CampaignFolderOpenRequested;
         _campaignsForm.QuestSelected += CampaignsForm_QuestSelected;
         _campaignsForm.WorldFolderOpenRequested += (_, _) => OpenWorldFolder();
+        // ℹ️ в дереве: свойства мира и свойства ИМЕННО ТОЙ кампании, у которой
+        // нажата иконка. Оба окна открывает главное окно — оно владеет сторами
+        // и правкой, и дублировать эту логику в симуляторе значило бы получить
+        // две реализации сохранения свойств.
+        _campaignsForm.WorldPropertiesRequested += (_, _) => WorldPropertiesRequested?.Invoke(this, EventArgs.Empty);
+        _campaignsForm.CampaignPropertiesRequested += (_, e) =>
+            CampaignPropertiesRequested?.Invoke(this, e);
         _campaignsForm.FormClosed += (_, _) =>
         {
             _campaignsForm = null;
@@ -704,6 +809,18 @@ public sealed class SimulatorForm : WebViewForm
             _campaignsForm.SelectQuest(_selectedCampaignId, _selectedQuestId);
         _campaignsForm.Show(this);
     }
+
+    /// <summary>
+    /// Просьба открыть свойства мира из дерева кампаний.
+    ///
+    /// Пробрасывается наружу, а не обрабатывается здесь: правка свойств живёт в
+    /// главном окне (оно владеет <see cref="WorldStore"/>), и вторая реализация
+    /// сохранения в симуляторе неизбежно разошлась бы с первой.
+    /// </summary>
+    public event EventHandler? WorldPropertiesRequested;
+
+    /// <summary>Просьба открыть свойства конкретной кампании из дерева.</summary>
+    public event EventHandler<CampaignPropertiesRequestedEventArgs>? CampaignPropertiesRequested;
 
     /// <summary>
     /// Открывает папку мира в проводнике.
@@ -968,10 +1085,25 @@ public sealed class SimulatorForm : WebViewForm
 
     private void MarkInventorySeen(JsonElement root)
     {
-        var key = Required(root, "itemId");
+        MarkInventoryItemSeen(Required(root, "itemId"));
+    }
+
+    /// <summary>
+    /// Снимает значок «новый предмет».
+    ///
+    /// Вынесено отдельным методом, потому что вызывается из ДВУХ мест: панель
+    /// инвентаря в Симуляторе и отдельное окно инвентаря. Две копии этой логики
+    /// разошлись бы — например, одна снимала бы значок, а другая нет, и значок
+    /// возвращался бы после каждого снимка.
+    /// </summary>
+    private void MarkInventoryItemSeen(string itemId)
+    {
+        if (string.IsNullOrWhiteSpace(itemId))
+            return;
+
         var state = _hub.Get<InventoryState>("inventory").Value;
         var newIds = new HashSet<string>(state.NewItemIds, StringComparer.OrdinalIgnoreCase);
-        if (!newIds.Remove(key))
+        if (!newIds.Remove(itemId))
         {
             return;
         }

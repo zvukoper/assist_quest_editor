@@ -24,7 +24,6 @@ try {
         <div id="hud"></div>
         <button id="backpackButton"></button>
         <div id="playerOverlay">
-          <section id="inventoryPanel"></section>
           <section id="characterPanel"></section>
         </div>
         <div id="inventoryNotifications"></div>
@@ -33,11 +32,12 @@ try {
         <canvas id="mapCanvas"></canvas>
         <button id="reset"></button>
         <script>
+          window.__sent = [];
           window.chrome = {
             webview: {
               listeners: new Map(),
               addEventListener(type, handler) { this.listeners.set(type, handler); },
-              postMessage() {}
+              postMessage(raw) { try { window.__sent.push(JSON.parse(raw)); } catch (e) { window.__sent.push(raw); } }
             }
           };
         </script>
@@ -93,32 +93,38 @@ try {
 
   await page.waitForTimeout(50);
 
-  const isOpen = () => page.evaluate(() =>
-    document.getElementById("playerOverlay").classList.contains("visible"));
+  // Инвентарь теперь ОТДЕЛЬНОЕ ОКНО, и создаёт его Host: страница не может
+  // сделать форму Windows. Поэтому проверяется не класс на оверлее, а ЗАПРОС
+  // к Host — toggle_inventory. Прежняя проверка «оверлей стал visible»
+  // фиксировала снятое поведение и падала бы всегда, хотя клавиша работает.
+  const inventoryRequests = () => page.evaluate(() =>
+    (window.__sent || []).filter(item => item && item.action === "toggle_inventory").length);
 
   const dispatch = async (code, key) => {
+    const before = await inventoryRequests();
     await page.evaluate(({ code: c, key: k }) => {
       document.dispatchEvent(new KeyboardEvent("keydown", {
         code: c, key: k, bubbles: true, cancelable: true
       }));
     }, { code, key });
     await page.waitForTimeout(20);
-    return isOpen();
+    return (await inventoryRequests()) > before;
   };
 
   // 1. English layout: physical I -> key "i".
-  if (!await dispatch("KeyI", "i")) failures.push("Английская раскладка (KeyI/i) не открыла инвентарь.");
-  if (await dispatch("KeyI", "i")) failures.push("Английская раскладка (KeyI/i) не закрыла инвентарь.");
+  if (!await dispatch("KeyI", "i")) failures.push("Английская раскладка (KeyI/i) не запросила инвентарь.");
+  await dispatch("KeyI", "i");
 
   // 2. Russian layout: same physical key -> key "ш".
-  if (!await dispatch("KeyI", "ш")) failures.push("Русская раскладка (KeyI/ш) не открыла инвентарь.");
-  if (await dispatch("KeyI", "ш")) failures.push("Русская раскладка (KeyI/ш) не закрыла инвентарь.");
+  if (!await dispatch("KeyI", "ш")) failures.push("Русская раскладка (KeyI/ш) не запросила инвентарь.");
+  await dispatch("KeyI", "ш");
 
   // 3. Other layout where code is unavailable but key is the latin char.
-  if (!await dispatch("", "i")) failures.push("Раскладка без code (i) не открыла инвентарь.");
+  if (!await dispatch("", "i")) failures.push("Раскладка без code (i) не запросила инвентарь.");
   await dispatch("", "i");
 
   // 4. Input fields must still swallow the hotkey.
+  const beforeField = await inventoryRequests();
   await page.evaluate(() => {
     const field = document.createElement("input");
     field.id = "probeInput";
@@ -129,7 +135,8 @@ try {
     }));
   });
   await page.waitForTimeout(20);
-  if (await isOpen()) failures.push("Горячая клавиша не должна срабатывать при вводе текста в поле.");
+  if ((await inventoryRequests()) > beforeField)
+    failures.push("Горячая клавиша не должна срабатывать при вводе текста в поле.");
 
   if (pageErrors.length) failures.push("pageerror: " + pageErrors.join(" | "));
 } finally {

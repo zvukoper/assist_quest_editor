@@ -184,6 +184,31 @@ public static class WorldDisplayRules
 
         return string.IsNullOrEmpty(stamp) ? null : $"{label} — · {stamp}";
     }
+
+    /// <summary>
+    /// Короткая подпись «дата и время» без автора — для строки под названием
+    /// в дереве кампаний.
+    ///
+    /// Отдельный метод, а не перегрузка <see cref="Describe"/>: у них разные
+    /// назначения. <c>Describe</c> отвечает на вопрос «кто это правил» и потому
+    /// подписывается автором, эта — на вопрос «когда это было», и автор в дереве
+    /// только шумит: в строке рядом с названием он читается как часть названия.
+    ///
+    /// Возвращает <c>null</c> для файлов без метаданных: рисовать пустую строку
+    /// значило бы занять место под то, чего нет.
+    /// </summary>
+    public static string? DescribeStamp(ResourceMetadata? metadata, bool modified = true)
+    {
+        if (metadata is null)
+            return null;
+
+        var moment = modified ? metadata.EffectiveModifiedOn : metadata.CreatedOn;
+        if (moment is null)
+            return null;
+
+        var label = modified ? "Modified" : "Created";
+        return $"{label}: {moment.Value.ToLocalTime():dd.MM.yyyy HH:mm}";
+    }
 }
 
 /// <summary>

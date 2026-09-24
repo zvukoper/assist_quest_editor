@@ -10,6 +10,11 @@
      достаточно поменять это значение (или вернуть цвет из связи) — точки
      следуют за кабелем автоматически. */
   --cable:#ffffff;
+  /* Сторона ячейки инвентаря. От неё считаются размеры ВСЕГО окна инвентаря
+     (6 столбцов, 3 строки), поэтому она задана переменной, а не разбросана
+     числами: иначе окно и сетка разъезжались бы при любой правке.
+     Прежняя ячейка 78×78 px; четверть ПЛОЩАДИ — это сторона вдвое меньше. */
+  --inventory-cell:39px;
 }
 *{box-sizing:border-box;scrollbar-width:thin;scrollbar-color:var(--scroll-thumb) transparent}
 *::-webkit-scrollbar{width:8px;height:0} *::-webkit-scrollbar-track{background:transparent}
@@ -277,7 +282,24 @@ input,select,textarea{padding:4px 5px;border-radius:4px;font-size:10px}textarea{
 /* Заголовочная строка не сжимается: это текст, а не орган управления. */
 .simTopHead{flex:0 0 auto}
 .simTitleBlock{display:flex;flex-direction:column;line-height:1.15;min-width:0}
-.simTopControls{flex-wrap:wrap}
+.simTopControls{
+  /* nowrap + ограниченное сжатие вместо wrap.
+     При переносе кнопки уезжали на вторую строку и наезжали на плашку статуса:
+     строка имела фиксированную высоту, а содержимое — две. Теперь переноса нет,
+     лишнее место отбирается у РАСТЯЖИМЫХ элементов (плашка и распорка), а кнопки
+     не сжимаются и не переносятся: перекрываться им негде. */
+  flex-wrap:nowrap;
+  min-width:0;
+}
+.simTopControls > *{min-width:0}
+/* Кнопки транспорта и действий имеют собственный размер: сжатие ломало бы
+   квадратные кнопки транспорта и обрезало подписи по буквам. */
+.simTopControls .simTransport,
+.simTopControls .toolButton{flex:0 0 auto;white-space:nowrap}
+/* Плашка статуса — первый кандидат на сжатие: её текст короткий, и многоточие
+   здесь читается лучше, чем перекрытые кнопки. */
+.simTopControls .simStatusPlate{flex:0 1 auto;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.simTopControls .topSpacer{flex:0 1 auto}
 .simTopInfo{flex-wrap:wrap}
 /* Подписи заголовка переносятся по словам, а не обрезаются: раньше строка не
    имела своей высоты, и многоточие/срез выглядели как «текст срезан». */
@@ -694,29 +716,40 @@ input,select,textarea{padding:4px 5px;border-radius:4px;font-size:10px}textarea{
 .vitalDual{display:grid;grid-template-columns:1fr 1fr;gap:5px}
 .vitalDualCell{min-width:0}
 .vitalDualCell .vitalLabel{display:block;margin-bottom:3px}
+/* Сетка инвентаря — 6 столбцов × 3 строки = 18 ячеек.
+   Прежние столбцы были minmax(54px,1fr) при auto-rows minmax(78px,1fr): ячейка
+   получалась 78 px, и сетка из 24 таких занимала почти весь экран.
+   Размер ячейки уменьшен вчетверо ПО ПЛОЩАДИ — то есть сторона вдвое:
+   четверть площади 78×78 — это 39×39. Сторона берётся явно, а не «примерно»,
+   потому что от неё зависит размер всего окна инвентаря. */
 .inventoryGrid{
   flex:1;min-height:0;overflow:auto;padding:10px;
-  display:grid;grid-template-columns:repeat(6,minmax(54px,1fr));grid-auto-rows:minmax(78px,1fr);
-  gap:7px;align-content:start;
+  display:grid;grid-template-columns:repeat(6,var(--inventory-cell));
+  grid-auto-rows:var(--inventory-cell);gap:7px;align-content:start;
+  justify-content:center;
 }
 .inventorySlot{
-  min-height:72px;border:1px solid rgba(255,255,255,.08);border-radius:7px;
+  width:var(--inventory-cell);height:var(--inventory-cell);
+  border:1px solid rgba(255,255,255,.08);border-radius:6px;
   background:rgba(9,12,16,.54);display:flex;justify-content:center;align-items:center;
   position:relative;
 }
 .inventorySlot.empty{opacity:.55}
 .inventoryItemButton{
   width:100%;height:100%;border:0;background:transparent;color:#fff;cursor:pointer;
-  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;padding:5px;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;padding:3px;
 }
 .inventoryItemSquare{
-  width:42px;height:42px;border-radius:9px;display:grid;place-items:center;
-  color:#fff;font-size:16px;font-weight:900;box-shadow:inset 0 0 0 1px rgba(255,255,255,.18),0 4px 10px rgba(0,0,0,.22);
+  width:20px;height:20px;border-radius:5px;display:grid;place-items:center;
+  color:#fff;font-size:10px;font-weight:900;box-shadow:inset 0 0 0 1px rgba(255,255,255,.18),0 2px 6px rgba(0,0,0,.22);
 }
-.inventoryItemName{font-size:9px;color:#e7edf4;white-space:nowrap;max-width:100%;overflow:hidden;text-overflow:ellipsis}
-.inventoryItemQty{position:absolute;right:5px;top:4px;color:#fff;font-size:9px;font-weight:800}
+/* Подпись предмета может не влезть в узкую ячейку: переноса здесь нет намеренно —
+   две строки текста сделали бы строку сетки выше, и весь инвентарь перестал бы
+   быть квадратным. Полное название даёт подсказка. */
+.inventoryItemName{font-size:7px;line-height:1.1;color:#e7edf4;white-space:nowrap;max-width:100%;overflow:hidden;text-overflow:ellipsis}
+.inventoryItemQty{position:absolute;right:3px;top:2px;color:#fff;font-size:8px;font-weight:800}
 .inventoryNewDot{
-  display:inline-block;width:7px;height:7px;margin-left:4px;vertical-align:middle;border-radius:50%;
+  display:inline-block;width:5px;height:5px;margin-left:2px;vertical-align:middle;border-radius:50%;
   background:#fab003;box-shadow:0 0 7px rgba(250,176,3,.75);
   animation:inventoryBeaconPulse 1s ease-in-out infinite;
 }
@@ -761,10 +794,15 @@ input,select,textarea{padding:4px 5px;border-radius:4px;font-size:10px}textarea{
 .mapStatusSpacer{flex:1}
 .mapStatusHint{color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 
-/* Индикатор светового дня в шапке симулятора.
-   Размер задаётся слотом, а SVG внутри масштабируется: индикатор не должен
-   менять высоту шапки при перерисовке. */
-.daylightSlot{display:inline-flex;align-items:center;justify-content:center;width:42px;height:42px;flex:0 0 auto}
+/* Индикатор светового дня. Живёт В ШАПКЕ между восходом и временем года
+   (слот рисует HUD), а не отдельной кнопкой в строке управления: там он был
+   размером с кнопку и выталкивал их на вторую строку.
+   Высота приравнена к плашке-бейджу, плашки (фона/рамки) НЕТ — это индикатор,
+   а не элемент управления, и рамка заставляла бы его читаться как кнопку. */
+.daylightSlot{
+  display:inline-flex;align-items:center;justify-content:center;
+  width:22px;height:22px;flex:0 0 auto;
+}
 .daylightSlot svg{display:block}
 
 /* Кнопка запущенной симуляции: LIME фон, белый текст с чёрной обводкой.

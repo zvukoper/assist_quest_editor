@@ -226,6 +226,76 @@ const backpackStyle = themeCss.slice(
 check(/bottom:calc\(26px/.test(backpackStyle),
   "Кнопка инвентаря должна отступать от полосы состояния карты (26px).");
 
+// Кнопки строки управления НЕ переносятся. Симптом был конкретный: кнопки
+// НАЕЗЖАЛИ друг на друга. Причина — `flex-wrap:wrap` при фиксированной высоте
+// строки: содержимое занимало две строки, а строка имела одну.
+//
+// Срез берётся от объявления до его ЗАКРЫВАЮЩЕЙ скобки, а не окном в N символов:
+// в правиле есть поясняющий комментарий, и окно в 320 символов не доходило до
+// `flex-wrap`. Проверка падала на СВОЁМ тексте, а не на дефекте.
+const controlsStyle = (() => {
+  const start = themeCss.indexOf(".simTopControls{");
+  if (start < 0) return "";
+  const end = themeCss.indexOf("}", start);
+  return end > start ? themeCss.slice(start, end + 1) : "";
+})();
+check(controlsStyle.length > 0, "theme.css должен стилизовать строку управления.");
+check(/flex-wrap:nowrap/.test(controlsStyle),
+  "Строка управления не должна переносить содержимое: при wrap кнопки наезжают " +
+  "друг на друга, потому что высота строки фиксированная.");
+check(!/flex-wrap:wrap/.test(controlsStyle),
+  "Строка управления всё ещё разрешает перенос — кнопки будут перекрываться.");
+// Кнопки не сжимаются: сжатие ломает квадратный транспорт и обрезает подписи.
+check(/\.simTopControls \.toolButton\{flex:0 0 auto/.test(themeCss),
+  "Кнопки строки управления не должны сжиматься: подписи обрезались бы по буквам.");
+check(/\.simTopControls \.simTransport\b[^{]*\{[^}]*flex:0 0 auto/.test(themeCss) ||
+      /\.simTopControls \.toolButton\{flex:0 0 auto/.test(themeCss),
+  "Транспорт не должен ужиматься.");
+// Сжимается ПЛАШКА, а не кнопки: у неё короткий текст, и многоточие читается
+// лучше, чем перекрытые кнопки.
+check(/\.simTopControls \.simStatusPlate\{flex:0 1 auto/.test(themeCss),
+  "Плашка статуса должна быть первым кандидатом на сжатие, а не кнопки.");
+
+// Индикатор фазы дня: внутри HUD между восходом и временем года, БЕЗ плашки,
+// высотой с плашку-бейдж.
+//
+// В РАЗМЕТКЕ его нет и быть не должно: слот рисует HUD, потому что место
+// индикатора определяется порядком подписей в снимке. Поэтому проверяется
+// наличие в JS, а не в HTML.
+check(/daylightIndicator/.test(simulatorJs),
+  "Индикатор светового дня должен рисоваться JS (внутри HUD).");
+// В строке управления его быть НЕ должно: там он был размером с кнопку и
+// выталкивал кнопки на вторую строку.
+const controlsRow = simulatorHtml.slice(
+  simulatorHtml.indexOf('class="simTopRow simTopControls"'),
+  simulatorHtml.indexOf('class="simTopRow simTopInfo"'));
+check(controlsRow.length > 0, "Строка управления должна быть в разметке.");
+check(!/daylightIndicator/.test(controlsRow),
+  "Индикатор фазы дня не должен стоять в строке управления: он её раздувает.");
+// Рисуется внутри HUD, а не отдельным элементом разметки.
+const hudMarkupStart = simulatorJs.indexOf("hud.innerHTML = [");
+check(hudMarkupStart >= 0, "HUD должен собираться из массива частей.");
+const hudMarkup = simulatorJs.slice(hudMarkupStart, simulatorJs.indexOf("renderDaylight()", hudMarkupStart));
+check(hudMarkup.length > 0 && /daylightIndicator/.test(hudMarkup),
+  "Индикатор должен рисоваться внутри HUD (в ряду подписей), а не отдельно.");
+// Порядок: восход/закат → индикатор → сезон.
+check(/hudClockBadge/.test(hudMarkup) || /sunriseLabel/.test(hudMarkup),
+  "Разметка HUD не содержит восход/закат: порядок индикатора непроверяем.");
+check(hudMarkup.indexOf("sunriseLabel") < hudMarkup.indexOf("daylightIndicator") &&
+      hudMarkup.indexOf("daylightIndicator") < hudMarkup.indexOf("seasonLabel"),
+  "Индикатор должен стоять МЕЖДУ восходом/закатом и временем года.");
+// Плашки нет: свой фон и рамка делали бы его кнопкой.
+const daylightStyle = themeCss.slice(
+  themeCss.indexOf(".daylightSlot{"), themeCss.indexOf(".daylightSlot{") + 320);
+check(!/background/.test(daylightStyle) && !/border:/.test(daylightStyle),
+  "У индикатора фазы дня не должно быть плашки (фона/рамки): это индикатор, а не кнопка.");
+// Высота — как у плашки-бейджа, а не как у кнопки.
+check(/\.daylightSlot\{[\s\S]{0,200}?height:22px/.test(themeCss),
+  "Индикатор должен быть высотой с плашку-бейдж (22px), а не с кнопку (42px).");
+check(/const size = 22;/.test(simulatorJs) &&
+      !/const size = 42;/.test(simulatorJs),
+  "SVG индикатора должен рисоваться в 22px: прежние 42px — это размер кнопки.");
+
 // 5. Поведенческая часть: реальный simulator.js.
 const browser = await chromium.launch({ headless: true });
 
@@ -240,22 +310,31 @@ try {
       <head><style>html,body{height:100%;margin:0;overflow:hidden}</style>
       <style>${themeCss.replaceAll("</style", "<\\/style")}</style></head>
       <body>
-        <header>
-          <div id="hud"></div>
-          <div id="daylightIndicator"></div>
-          <button id="openCampaigns"></button>
-          <button id="reloadCatalog"></button>
-          <button id="openSaves"></button>
-          <div class="simTransport">
-            <button id="simPlay" class="toolButton simTransportButton">▶</button>
-            <button id="simStop" class="toolButton simTransportButton">⏹</button>
-            <button id="simFastForward" class="toolButton simTransportButton">⏩</button>
+        <header class="simTop">
+          <div class="simTopRow simTopHead">
+            <div class="simTitleBlock"><div class="simTitle">Симулятор</div></div>
+            <div class="topSpacer"></div>
+            <div class="hud" id="hud"></div>
           </div>
-          <div class="simStatusPlate" id="simStatusPlate" data-sim-state="stopped">
-            <span class="simStatusText" id="simStatusText">Симуляция не запущена</span>
+          <div class="simTopRow simTopControls">
+            <div class="simTransport">
+              <button id="simPlay" class="toolButton simTransportButton">▶</button>
+              <button id="simStop" class="toolButton simTransportButton">⏹</button>
+              <button id="simFastForward" class="toolButton simTransportButton">⏩</button>
+            </div>
+            <div class="simStatusPlate" id="simStatusPlate" data-sim-state="stopped">
+              <span class="simStatusText" id="simStatusText">Симуляция не запущена</span>
+            </div>
+            <div class="topSpacer"></div>
+            <button class="toolButton" id="openCampaigns">Кампании и квесты</button>
+            <button class="toolButton" id="reloadCatalog">Обновить квесты</button>
+            <button class="toolButton" id="openSaves">Сохранения</button>
+            <button class="toolButton" id="reset">Сбросить</button>
           </div>
-          <span class="simAutoSave" id="simAutoSave"></span>
-          <button id="reset"></button>
+          <div class="simTopRow simTopInfo">
+            <span class="simAutoSave" id="simAutoSave"></span>
+            <span class="simAutoSaveHint" id="simAutoSaveHint"></span>
+          </div>
         </header>
         <main style="display:flex">
           <aside id="runtimeSide"></aside>

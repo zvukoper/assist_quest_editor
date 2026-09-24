@@ -262,8 +262,20 @@ public sealed class SimulationSaveStore
         return candidate;
     }
 
-    private void Write(string path, SimulationSave save) =>
+    private void Write(string path, SimulationSave save)
+    {
+        // Каталог создаётся ПЕРЕД записью, а не предполагается существующим.
+        //
+        // Это была не теория: автосохранение падало с DirectoryNotFoundException
+        // на `<Документы>\Assist Quest Editor\saves\session.aqsave`, потому что
+        // каталог никто не создавал. Проявлялось это как «автосохранение не
+        // работает» — молча, в логе, уже ПОСЛЕ того как автор поработал, и при
+        // следующем запуске мир снова выглядел новым. Ошибка записи глушится
+        // вызывающим кодом (симуляция не должна падать из-за диска), поэтому без
+        // этой строки дефект не виден вообще.
+        Directory.CreateDirectory(Path.GetDirectoryName(path) ?? _root);
         File.WriteAllBytes(path, SimulationSaveCodec.Encode(save));
+    }
 
     private static SimulationSaveListItem ToListItem(string path, SimulationSaveHeader header)
     {

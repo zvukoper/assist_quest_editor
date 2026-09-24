@@ -48,6 +48,8 @@ public sealed class ResourceExportForm : Form
 
         Text = "Экспорт " + kindLabel;
         StartPosition = FormStartPosition.CenterScreen;
+        // Иконка приложения: окно без неё выглядит чужим в панели задач.
+        AppIconService.ApplyTo(this);
         FormBorderStyle = FormBorderStyle.FixedDialog;
         MaximizeBox = false;
         MinimizeBox = false;

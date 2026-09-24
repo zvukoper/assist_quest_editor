@@ -108,6 +108,47 @@ internal static class Program
                 return;
             }
 
+            // Проба автосохранения. Отдельный режим, потому что дефект был
+            // ПОВЕДЕНЧЕСКИЙ: проверки читали исходники и видели корректный код,
+            // а запись падала на несуществующем каталоге. Ловится только реальной
+            // записью с обратным чтением.
+            if (args.Any(arg => string.Equals(arg, "--autosave-probe", StringComparison.OrdinalIgnoreCase)))
+            {
+                Environment.ExitCode = AutosaveProbeFromCommandLine(args);
+                return;
+            }
+
+            // Проба раскладки дерева кампаний. Тоже поведенческая: перекрытие
+            // строк, обрезка названия и две полосы прокрутки не видны в исходниках
+            // — форма строится кодом, и «правильная» на вид формула даёт кривую
+            // раскладку. Проба строит настоящее окно и меряет прямоугольники.
+            if (args.Any(arg => string.Equals(arg, "--tree-probe", StringComparison.OrdinalIgnoreCase)))
+            {
+                Environment.ExitCode = TreeProbeFromCommandLine(args);
+                return;
+            }
+
+            // Проба размеров окна инвентаря. Сетка 6×3 и размер окна считаются в
+            // ДВУХ местах (CSS для страницы, InventoryLayoutRules для формы), и
+            // расхождение даёт полосу прокрутки там, где её быть не должно, либо
+            // обрезанные ячейки. Проверяется сравнением чисел, а не глазами.
+            if (args.Any(arg => string.Equals(arg, "--inventory-probe", StringComparison.OrdinalIgnoreCase)))
+            {
+                Environment.ExitCode = InventoryProbeFromCommandLine(args);
+                return;
+            }
+
+            // Проба иконок. Проверяется ПОВЕДЕНЧЕСКИ: собирается ли ICO из
+            // логотипов, читается ли он как иконка и попадают ли кадры нужных
+            // размеров. Простое наличие файла ничего не доказывает — иконка
+            // может быть собрана с неверным числом кадров или вообще не
+            // читаться Windows.
+            if (args.Any(arg => string.Equals(arg, "--icon-probe", StringComparison.OrdinalIgnoreCase)))
+            {
+                Environment.ExitCode = IconProbeFromCommandLine(args);
+                return;
+            }
+
             var startupFile = args.FirstOrDefault(arg =>
                 !StartupOptions.IsApplicationSwitch(arg) &&
                 File.Exists(arg));
@@ -1042,6 +1083,447 @@ internal static class Program
     }
 
     /// <summary>
+    /// `--tree-probe &lt;корень миров&gt; &lt;id мира&gt; [--report &lt;файл&gt;]`
+    ///
+    /// Строит НАСТОЯЩЕЕ окно дерева кампаний и меряет раскладку.
+    ///
+    /// Проба поведенческая намеренно. Перекрытие строк, обрезка названия
+    /// многоточием вместо переноса и две полосы прокрутки не видны в исходниках:
+    /// форма строится кодом, и «правильная на вид» формула высоты даёт кривую
+    /// раскладку. Это уже случалось дважды — состав кампании уезжал под нижний
+    /// край, а подписи получали высоту строки квеста.
+    /// </summary>
+    private static int TreeProbeFromCommandLine(string[] args)
+    {
+        var reportDefault = Path.Combine(
+            ResourceRootResolver.ExecutableDirectory(Environment.ProcessPath) ?? AppContext.BaseDirectory,
+            "tree-probe-report.txt");
+
+        var reportIndex = Array.FindIndex(args, arg =>
+            string.Equals(arg, "--report", StringComparison.OrdinalIgnoreCase));
+        var report = reportIndex >= 0 && reportIndex + 1 < args.Length
+            ? args[reportIndex + 1]
+            : reportDefault;
+
+        try
+        {
+            var positional = args
+                .Where(arg => !arg.StartsWith("--", StringComparison.Ordinal))
+                .Where(arg => !IsValueOf(args, "--report", arg))
+                .ToArray();
+
+            if (positional.Length < 2)
+                throw new ArgumentException(
+                    "Ожидалось: --tree-probe <корень миров> <id мира> [--report <файл>]");
+
+            var userRoot = positional[0];
+            var worldId = positional[1];
+
+            var worlds = new WorldStore(userRoot, "tree-probe", readOnly: false);
+            var world = worlds.FindWorld(worldId)
+                ?? throw new InvalidOperationException("Мир не найден: " + worldId);
+
+            var campaigns = new CampaignStore(userRoot, readOnly: false, author: "tree-probe")
+                .ScopedTo(world.FolderPath);
+
+            var lines = new List<string> { "Дерево кампаний проверено.", "Мир: " + world.DisplayName };
+
+            using var form = new CampaignsForm();
+            form.SetWorld(world);
+            form.SetCatalog(campaigns.BuildSimulatorCatalog());
+
+            // Показ вне экрана: окно должно пройти полную раскладку, но пробе
+            // нельзя мешать и нельзя полагаться на наличие монитора.
+            form.StartPosition = FormStartPosition.Manual;
+            form.Location = new Point(-4000, -4000);
+            form.Size = new Size(620, 900);
+            form.Show();
+            Application.DoEvents();
+            form.PerformLayout();
+            Application.DoEvents();
+
+            var measurements = MeasureTree(form);
+            lines.AddRange(measurements);
+
+            foreach (var line in lines)
+                Console.WriteLine(line);
+
+            WriteResourceLines(report, lines);
+            return 0;
+        }
+        catch (Exception ex)
+        {
+            var message = "Раскладка дерева не проверена: " + ex;
+            Console.WriteLine(message);
+
+            try
+            {
+                WriteResourceLines(report, new[] { message });
+            }
+            catch
+            {
+                // Отчёт — диагностика; не суметь записать его не меняет результат.
+            }
+
+            return 1;
+        }
+    }
+
+    /// <summary>
+    /// Меряет раскладку дерева: перекрытия, обрезку и полосы прокрутки.
+    ///
+    /// Отчёт строится строками с префиксами, потому что читает его проверка:
+    /// строки вида «overlap:» считаются дефектом, «clipped:» — обрезкой.
+    /// </summary>
+    private static IEnumerable<string> MeasureTree(Form form)
+    {
+        var lines = new List<string>();
+
+        // Все контролы дерева в одном списке вместе с их абсолютными
+        // прямоугольниками: вложенные контейнеры дают координаты ОТНОСИТЕЛЬНО
+        // родителя, и прямое сравнение перекрытий было бы неверным.
+        var panels = new List<(Control Control, Rectangle Bounds)>();
+        Collect(form, panels);
+
+        var headers = new List<(Control Control, Rectangle Bounds)>();
+        // Тип конкретный, а не Control: HorizontalScroll есть только у
+        // контейнеров с прокруткой, и общий тип не дал бы его прочитать.
+        var scrolling = new List<ScrollableControl>();
+
+        // Заголовок мира ищется по кнопке «ПАПКА»: это его отличительный признак.
+        // Без этого проба проходила бы ВПУСТУЮ на пустом окне — «нет перекрытий»
+        // верно и тогда, когда не отрисовано ничего, и такая проверка бесполезна.
+        Rectangle? worldHeader = null;
+        var campaignHeaders = 0;
+
+        foreach (var (control, bounds) in panels)
+        {
+            // Заголовок — таблица, чей родитель ПРОСТАЯ панель. Проверка
+            // «родитель — Panel» недостаточна: FlowLayoutPanel тоже наследуется
+            // от Panel, поэтому строки квестов попадали в этот счёт, и «кампаний»
+            // насчитывалось больше, чем есть (проверено запуском: 4 вместо 3).
+            if (control is TableLayoutPanel &&
+                control.Parent is Panel && control.Parent is not FlowLayoutPanel)
+            {
+                var isWorld = control.Controls.OfType<Button>()
+                    .Any(button => button.Text == "ПАПКА");
+
+                if (isWorld)
+                {
+                    worldHeader = bounds;
+                    lines.Add("world header: " + bounds.Width + "x" + bounds.Height);
+                }
+                else
+                {
+                    campaignHeaders++;
+                }
+
+                headers.Add((control, bounds));
+
+                // Заголовок обязан вмещать свои контролы: если самый правый
+                // выходит за него, кнопка «Папка»/«ПАПКА» обрезана.
+                foreach (Control child in control.Controls)
+                {
+                    var childBounds = control.RectangleToScreen(child.Bounds);
+                    if (childBounds.Right > bounds.Right + 1 || childBounds.Bottom > bounds.Bottom + 1)
+                    {
+                        lines.Add("clipped: заголовок не вмещает " +
+                            child.GetType().Name + " (" + Describe(child) + ")");
+                    }
+                }
+            }
+
+            if (control is FlowLayoutPanel flow && flow.AutoScroll)
+                scrolling.Add(flow);
+        }
+
+        if (worldHeader is null)
+            lines.Add("noworldheader: пункт мира не отрисован");
+
+        lines.Add("campaign headers: " + campaignHeaders);
+        lines.Add("quest rows: " + panels.Count(entry =>
+            entry.Control is TableLayoutPanel && entry.Control.Parent is FlowLayoutPanel));
+
+        // Кампании обязаны быть ВЛОЖЕНЫ в пункт мира, то есть лежать по вертикали
+        // НИЖЕ его заголовка и внутри его рамки. Если бы они остались плоским
+        // списком, они начинались бы на уровне заголовка — и дерево выглядело бы
+        // двумя несвязанными частями.
+        if (worldHeader is Rectangle worldBounds)
+        {
+            foreach (var (control, bounds) in headers)
+            {
+                var isWorld = control.Controls.OfType<Button>()
+                    .Any(button => button.Text == "ПАПКА");
+                if (isWorld)
+                    continue;
+
+                if (bounds.Top < worldBounds.Bottom - 2 && bounds.Top < worldBounds.Top + 2)
+                {
+                    lines.Add("notnested: кампания стоит на уровне заголовка мира, а не внутри него");
+                    break;
+                }
+            }
+        }
+
+        // Перекрытие заголовков — это то, на что жаловался автор («наезжают»).
+        for (var i = 0; i < headers.Count; i++)
+        {
+            for (var j = i + 1; j < headers.Count; j++)
+            {
+                if (headers[i].Bounds.IntersectsWith(headers[j].Bounds))
+                {
+                    lines.Add("overlap: заголовки пересекаются (" +
+                        Describe(headers[i].Control) + " × " + Describe(headers[j].Control) + ")");
+                }
+            }
+        }
+
+        // Перекрытие ЛЮБОГО контрола заголовка с чужим: так ловится наезжание
+        // кнопок «Папка» двух кампаний, которое пересечением заголовков не видно.
+        var headerChildren = new List<(Control Control, Rectangle Bounds)>();
+        foreach (var (header, _) in headers)
+        {
+            foreach (Control child in header.Controls)
+            {
+                if (child is Label || child is Button || child is CheckBox)
+                    headerChildren.Add((child, header.RectangleToScreen(child.Bounds)));
+            }
+        }
+
+        for (var i = 0; i < headerChildren.Count; i++)
+        {
+            for (var j = i + 1; j < headerChildren.Count; j++)
+            {
+                var a = headerChildren[i];
+                var b = headerChildren[j];
+                if (a.Bounds.IntersectsWith(b.Bounds))
+                    lines.Add("overlap: " + Describe(a.Control) + " × " + Describe(b.Control));
+            }
+        }
+
+        // Полоса прокрутки должна быть РОВНО одна — у корневого списка дерева.
+        lines.Add("scrolling containers: " + scrolling.Count);
+        if (scrolling.Count != 1)
+        {
+            lines.Add("scrollcount: ожидалась одна прокрутка, найдено " + scrolling.Count);
+        }
+
+        // Горизонтальная прокрутка запрещена: длинный текст переносится по словам.
+        // Ширина содержимого корневого списка не должна превышать его самого.
+        foreach (var flow in scrolling)
+        {
+            if (flow.HorizontalScroll.Visible || flow.HorizontalScroll.Maximum > flow.ClientSize.Width)
+                lines.Add("hscroll: у дерева появилась горизонтальная прокрутка");
+        }
+
+        return lines;
+
+        // Абсолютные прямоугольники собираются в экранных координатах: так
+        // перекрытие считается верно независимо от вложенности.
+        static void Collect(Control parent, List<(Control, Rectangle)> sink)
+        {
+            foreach (Control child in parent.Controls)
+            {
+                sink.Add((child, child.Parent!.RectangleToScreen(child.Bounds)));
+                Collect(child, sink);
+            }
+        }
+
+        static string Describe(Control control) =>
+            string.IsNullOrEmpty(control.Text)
+                ? control.GetType().Name
+                : control.Text.Replace(Environment.NewLine, " ").Trim();
+    }
+
+    /// <summary>
+    /// `--inventory-probe [--report &lt;файл&gt;]`
+    ///
+    /// Сообщает расчётные размеры окна инвентаря и проверяет их связность.
+    ///
+    /// Проба НЕ открывает окно: расчёт живёт в домене
+    /// (<see cref="InventoryLayoutRules"/>), и открывать форму ради чисел
+    /// значило бы требовать видеокарту для арифметики. Проверка сравнивает
+    /// числа с CSS-переменной страницы — это единственное место, где они могут
+    /// разойтись, и разойдясь, дают полосу прокрутки или обрезанные ячейки.
+    /// </summary>
+    private static int InventoryProbeFromCommandLine(string[] args)
+    {
+        var reportDefault = Path.Combine(
+            ResourceRootResolver.ExecutableDirectory(Environment.ProcessPath) ?? AppContext.BaseDirectory,
+            "inventory-probe-report.txt");
+
+        var reportIndex = Array.FindIndex(args, arg =>
+            string.Equals(arg, "--report", StringComparison.OrdinalIgnoreCase));
+        var report = reportIndex >= 0 && reportIndex + 1 < args.Length
+            ? args[reportIndex + 1]
+            : reportDefault;
+
+        try
+        {
+            var lines = new List<string>
+            {
+                "Размеры инвентаря проверены.",
+                "columns: " + InventoryLayoutRules.Columns,
+                "rows: " + InventoryLayoutRules.Rows,
+                "capacity: " + InventoryLayoutRules.Capacity,
+                "cell: " + InventoryLayoutRules.CellSize,
+                "gap: " + InventoryLayoutRules.CellGap,
+                "grid: " + InventoryLayoutRules.GridWidth + "x" + InventoryLayoutRules.GridHeight,
+                "window: " + InventoryLayoutRules.WindowWidth + "x" + InventoryLayoutRules.WindowHeight
+            };
+
+            foreach (var line in lines)
+                Console.WriteLine(line);
+
+            WriteResourceLines(report, lines);
+            return 0;
+        }
+        catch (Exception ex)
+        {
+            var message = "Размеры инвентаря не проверены: " + ex;
+            Console.WriteLine(message);
+
+            try
+            {
+                WriteResourceLines(report, new[] { message });
+            }
+            catch
+            {
+                // Отчёт — диагностика; не суметь записать его не меняет результат.
+            }
+
+            return 1;
+        }
+    }
+
+    /// <summary>
+    /// `--icon-probe [--report &lt;файл&gt;]`
+    ///
+    /// Собирает иконку приложения из логотипов и читает её обратно.
+    ///
+    /// Проба ПОВЕДЕНЧЕСКАЯ: наличие файла логотипа не доказывает, что из него
+    /// получится рабочая иконка — контейнер может собраться с неверным числом
+    /// кадров, с неверными смещениями или нечитаемым кадром. Здесь ICO
+    /// собирается тем же кодом, что используют окна и ассоциации, и проверяется
+    /// ГЛУБИНОЙ: кадры извлекаются из полученных байтов.
+    /// </summary>
+    private static int IconProbeFromCommandLine(string[] args)
+    {
+        var reportDefault = Path.Combine(
+            ResourceRootResolver.ExecutableDirectory(Environment.ProcessPath) ?? AppContext.BaseDirectory,
+            "icon-probe-report.txt");
+
+        var reportIndex = Array.FindIndex(args, arg =>
+            string.Equals(arg, "--report", StringComparison.OrdinalIgnoreCase));
+        var report = reportIndex >= 0 && reportIndex + 1 < args.Length
+            ? args[reportIndex + 1]
+            : reportDefault;
+
+        try
+        {
+            var lines = new List<string> { "Иконка приложения проверена." };
+
+            var bytes = AppIconService.ToIcoBytes()
+                ?? throw new InvalidOperationException(
+                    "Иконка не собрана: логотипы не найдены рядом с приложением. " +
+                    "Ожидались файлы в " + AppIconService.AssetsDirectory);
+
+            lines.Add("bytes: " + bytes.Length);
+            lines.Add("assets: " + AppIconService.AssetsDirectory);
+            lines.Add("ico: " + AppIconService.IconFilePath());
+
+            // Заголовок контейнера: тип 1 = иконка, и число кадров должно
+            // совпадать с объявленным набором размеров.
+            var frames = ReadUInt16(bytes, 4);
+            lines.Add("frames: " + frames);
+
+            if (frames != AppIconService.FrameSizes.Count)
+                throw new InvalidOperationException(
+                    $"Кадров {frames}, ожидалось {AppIconService.FrameSizes.Count}.");
+
+            // Каждый кадр извлекается по его же смещению и проверяется как PNG:
+            // подпись плюс фактические размеры из IHDR. Так ловится и сдвинутое
+            // смещение, и подменённый кадр, и кадр чужого размера.
+            for (var i = 0; i < frames; i++)
+            {
+                var entry = 6 + i * 16;
+                var declaredWidth = bytes[entry] == 0 ? 256 : bytes[entry];
+                // Длина и смещение в ICONDIRENTRY записаны LITTLE-endian, а
+                // ширина и высота PNG внутри кадра — BIG-endian. Порядок байтов
+                // в одном формате разный, и перепутать их легко: проверка на
+                // этом и упала в первый прогон.
+                var length = (int)ReadUInt32LittleEndian(bytes, entry + 8);
+                var offset = (int)ReadUInt32LittleEndian(bytes, entry + 12);
+
+                if (offset + length > bytes.Length)
+                    throw new InvalidOperationException(
+                        $"Кадр {i} выходит за пределы файла: offset={offset}, length={length}.");
+
+                var isPng = bytes[offset] == 0x89 && bytes[offset + 1] == 0x50 &&
+                            bytes[offset + 2] == 0x4E && bytes[offset + 3] == 0x47;
+
+                if (!isPng)
+                    throw new InvalidOperationException($"Кадр {i} не является PNG.");
+
+                // Ширина и высота PNG лежат в IHDR как big-endian, смещение 16 и 20.
+                var pngWidth = (int)ReadUInt32BigEndian(bytes, offset + 16);
+                var pngHeight = (int)ReadUInt32BigEndian(bytes, offset + 20);
+
+                if (pngWidth != declaredWidth || pngHeight != declaredWidth)
+                    throw new InvalidOperationException(
+                        $"Кадр {i}: объявлен {declaredWidth}x{declaredWidth}, " +
+                        $"а внутри {pngWidth}x{pngHeight}.");
+
+                lines.Add($"frame {i}: {pngWidth}x{pngHeight}, {length} байт");
+            }
+
+            // Иконка должна РАБОТАТЬ: тот же путь использует форма окна.
+            using var icon = AppIconService.CreateWindowIcon()
+                ?? throw new InvalidOperationException("Иконка собрана, но не читается как Icon.");
+
+            lines.Add("window icon: " + icon.Width + "x" + icon.Height);
+
+            foreach (var line in lines)
+                Console.WriteLine(line);
+
+            WriteResourceLines(report, lines);
+            return 0;
+        }
+        catch (Exception ex)
+        {
+            var message = "Иконка не проверена: " + ex.Message;
+            Console.WriteLine(message);
+
+            try
+            {
+                WriteResourceLines(report, new[] { message });
+            }
+            catch
+            {
+                // Отчёт — диагностика; не суметь записать его не меняет результат.
+            }
+
+            return 1;
+        }
+    }
+
+    /// <summary>
+    /// Читает 16-битное число в порядке little-endian, как того требует формат ICO.
+    /// </summary>
+    private static ushort ReadUInt16(byte[] bytes, int offset) =>
+        (ushort)(bytes[offset] | (bytes[offset + 1] << 8));
+
+    /// <summary>Читает 32-битное число в порядке little-endian (ICONDIRENTRY).</summary>
+    private static uint ReadUInt32LittleEndian(byte[] bytes, int offset) =>
+        (uint)(bytes[offset] | (bytes[offset + 1] << 8) |
+               (bytes[offset + 2] << 16) | (bytes[offset + 3] << 24));
+
+    /// <summary>Читает 32-битное число в порядке big-endian (заголовок PNG).</summary>
+    private static uint ReadUInt32BigEndian(byte[] bytes, int offset) =>
+        (uint)((bytes[offset] << 24) | (bytes[offset + 1] << 16) |
+               (bytes[offset + 2] << 8) | bytes[offset + 3]);
+
+    /// <summary>
     /// Пишет строки отчёта, создавая каталог.
     ///
     /// Путь отчёта задаёт вызывающий процесс, и он может указать ещё не
@@ -1055,6 +1537,115 @@ internal static class Program
             Directory.CreateDirectory(directory);
 
         File.WriteAllLines(report, lines);
+    }
+
+    /// <summary>
+    /// `--autosave-probe &lt;корень миров&gt; &lt;id мира&gt; [--report &lt;файл&gt;]`
+    ///
+    /// Записывает автосохранение в мир и читает его обратно.
+    ///
+    /// Проба существует потому, что прежний дефект был невидим для чтения
+    /// исходников: `SimulationSaveStore` писал в общий каталог вне дерева миров,
+    /// который никто не создавал, и запись падала с
+    /// <c>DirectoryNotFoundException</c>. Ошибка глушилась вызывающим кодом
+    /// (симуляция не должна падать из-за диска), поэтому наружу это выглядело
+    /// как «автосохранение не работает», а мир при следующем запуске снова был
+    /// новым. Проверка обязана ПИСАТЬ файл и читать его обратно.
+    /// </summary>
+    private static int AutosaveProbeFromCommandLine(string[] args)
+    {
+        var reportDefault = Path.Combine(
+            ResourceRootResolver.ExecutableDirectory(Environment.ProcessPath) ?? AppContext.BaseDirectory,
+            "autosave-probe-report.txt");
+
+        var reportIndex = Array.FindIndex(args, arg =>
+            string.Equals(arg, "--report", StringComparison.OrdinalIgnoreCase));
+        var report = reportIndex >= 0 && reportIndex + 1 < args.Length
+            ? args[reportIndex + 1]
+            : reportDefault;
+
+        try
+        {
+            var positional = args
+                .Where(arg => !arg.StartsWith("--", StringComparison.Ordinal))
+                .Where(arg => !IsValueOf(args, "--report", arg))
+                .ToArray();
+
+            if (positional.Length < 2)
+                throw new ArgumentException(
+                    "Ожидалось: --autosave-probe <корень миров> <id мира> [--report <файл>]");
+
+            var userRoot = positional[0];
+            var worldId = positional[1];
+
+            var worlds = new WorldStore(userRoot, "autosave-probe", readOnly: false);
+            var world = worlds.FindWorld(worldId)
+                ?? throw new InvalidOperationException("Мир не найден: " + worldId);
+
+            // Путь берётся ИЗ КОНТРАКТА раскладки, а не собирается здесь: проба
+            // обязана проверять то же место, куда пишет приложение.
+            var savesFolder = WorldPaths.SavesFolderPath(world.FolderPath);
+
+            // Каталог СОЗНАТЕЛЬНО не создаётся: прежний дефект состоял именно в
+            // том, что стор писал в несуществующий каталог. Если стор снова
+            // перестанет его создавать, проба упадёт.
+            var store = new SimulationSaveStore(savesFolder);
+
+            var clockNow = new DateTimeOffset(2026, 5, 15, 18, 30, 42, TimeSpan.Zero);
+            var header = new SimulationSaveHeader(
+                SimulationSaveState.CurrentFormatVersion,
+                "session",
+                VersionInfo.InformationalVersion,
+                clockNow,
+                null,
+                clockNow,
+                "common",
+                TimeSpan.FromMinutes(37));
+
+            // Захват состояния — через тот же маппер, что использует симулятор:
+            // проба, собирающая снимок по-своему, проверяла бы не то, что пишет
+            // приложение.
+            var state = SimulationSaveMapper.Capture(new SimulatorDataChannelHub(), "common");
+
+            store.SaveSession(new SimulationSave(header, state));
+
+            var reloaded = store.LoadSession();
+            if (reloaded is null)
+                throw new InvalidOperationException("Автосохранение записано, но не читается.");
+
+            var lines = new[]
+            {
+                "Автосохранение проверено.",
+                "Папка: " + savesFolder,
+                "Файл: " + store.SessionPath,
+                "Файл существует: " + File.Exists(store.SessionPath),
+                "Размер: " + new FileInfo(store.SessionPath).Length,
+                "Прочитано: " + reloaded.Header.Name,
+                "Кампания: " + reloaded.Header.CampaignId
+            };
+
+            foreach (var line in lines)
+                Console.WriteLine(line);
+
+            WriteResourceLines(report, lines);
+            return 0;
+        }
+        catch (Exception ex)
+        {
+            var message = "Автосохранение не удалось: " + ex;
+            Console.WriteLine(message);
+
+            try
+            {
+                WriteResourceLines(report, new[] { message });
+            }
+            catch
+            {
+                // Отчёт — диагностика; не суметь записать его не меняет результат.
+            }
+
+            return 1;
+        }
     }
 
     /// <summary>

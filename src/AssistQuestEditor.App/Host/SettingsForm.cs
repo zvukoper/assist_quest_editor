@@ -9,6 +9,8 @@ public sealed class SettingsForm : Form
     {
         Text = "Настройки";
         StartPosition = FormStartPosition.CenterParent;
+        // Иконка приложения: окно без неё выглядит чужим в панели задач.
+        AppIconService.ApplyTo(this);
         Size = new Size(650, 470);
         MinimumSize = new Size(580, 420);
         BackColor = Color.FromArgb(10, 12, 16);

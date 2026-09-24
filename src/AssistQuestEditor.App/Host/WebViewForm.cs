@@ -34,6 +34,9 @@ public abstract class WebViewForm : Form
 
         Controls.Add(Browser);
         WindowGeometryStore.Attach(this, windowKey ?? page);
+        // Иконка ставится в БАЗОВОМ классе: все окна с WebView наследуют её, и
+        // новая форма не сможет «забыть» её выставить.
+        AppIconService.ApplyTo(this);
         Browser.NavigationCompleted += Browser_NavigationCompleted;
         Load += HandleLoad;
     }

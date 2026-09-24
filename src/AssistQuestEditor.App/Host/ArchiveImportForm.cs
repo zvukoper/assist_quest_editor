@@ -30,6 +30,8 @@ public sealed class ArchiveImportForm : Form
 
         Text = "Импорт архива Assist Quest";
         StartPosition = FormStartPosition.CenterScreen;
+        // Иконка приложения: окно без неё выглядит чужим в панели задач.
+        AppIconService.ApplyTo(this);
         FormBorderStyle = FormBorderStyle.FixedDialog;
         MaximizeBox = false;
         MinimizeBox = false;

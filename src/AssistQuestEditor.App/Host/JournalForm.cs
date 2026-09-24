@@ -23,6 +23,8 @@ public sealed class JournalForm : Form
     {
         Text = "Журнал событий";
         StartPosition = FormStartPosition.Manual;
+        // Иконка приложения: окно без неё выглядит чужим в панели задач.
+        AppIconService.ApplyTo(this);
         var workArea = Screen.PrimaryScreen?.WorkingArea ?? new Rectangle(0, 0, 1280, 800);
         var defaultWidth = Math.Min(620, Math.Max(420, workArea.Width / 3));
         Bounds = new Rectangle(workArea.Right - defaultWidth, workArea.Top, defaultWidth, workArea.Height);

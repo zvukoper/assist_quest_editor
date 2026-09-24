@@ -30,6 +30,8 @@ public sealed class WorldChooserForm : Form
 
         Text = hasWorlds ? "Выбор мира" : "Создание первого мира";
         StartPosition = FormStartPosition.CenterScreen;
+        // Иконка приложения: окно без неё выглядит чужим в панели задач.
+        AppIconService.ApplyTo(this);
         FormBorderStyle = FormBorderStyle.FixedDialog;
         MaximizeBox = false;
         MinimizeBox = false;

@@ -174,9 +174,15 @@ check(
 );
 
 // 6. Разметка и стили панели.
-for (const id of ["savesPanel", "savesList", "createSave", "closeSaves", "daylightIndicator", "openSaves"]) {
+// `daylightIndicator` в этом списке НЕТ: индикатор фазы дня переехал в шапку HUD
+// и рисуется JS (его место задаётся порядком подписей в снимке). Требовать его
+// в разметке значило бы закрепить прежнее расположение — в строке управления,
+// где он размером с кнопку выталкивал кнопки на вторую строку.
+for (const id of ["savesPanel", "savesList", "createSave", "closeSaves", "openSaves"]) {
   check(simulatorHtml.includes('id="' + id + '"'), "simulator.html должен содержать #" + id + ".");
 }
+check(/daylightIndicator/.test(simulatorJs),
+  "Индикатор фазы дня должен рисоваться JS внутри HUD.");
 check(/\.savesPanel\{/.test(themeCss), "theme.css должен стилизовать панель сохранений.");
 check(/\.savesPanel\[hidden\]\{display:none\}/.test(themeCss),
   "Панель сохранений должна скрываться атрибутом hidden.");
@@ -198,7 +204,6 @@ try {
       <body>
         <header>
           <div id="hud"></div>
-          <div id="daylightIndicator"></div>
           <button id="openCampaigns"></button>
           <button id="reloadCatalog"></button>
           <button id="openSaves"></button>

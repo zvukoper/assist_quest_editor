@@ -11,10 +11,10 @@
     <Prefer32Bit>false</Prefer32Bit>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
 
-    <Version>1.0.40.181</Version>
-    <AssemblyVersion>1.0.40.181</AssemblyVersion>
-    <FileVersion>1.0.40.181</FileVersion>
-    <AssemblyInformationalVersion>1.0.40.181-WORLD-CAMPAIGN-AUTHORING-R29</AssemblyInformationalVersion>
+    <Version>1.0.40.183</Version>
+    <AssemblyVersion>1.0.40.183</AssemblyVersion>
+    <FileVersion>1.0.40.183</FileVersion>
+    <AssemblyInformationalVersion>1.0.40.183-AQE-ICONS-R31</AssemblyInformationalVersion>
     <PublishSingleFile>true</PublishSingleFile>
     <SelfContained>true</SelfContained>
     <RuntimeIdentifier>win-x64</RuntimeIdentifier>
@@ -28,6 +28,10 @@
     <AssistQuestRepositoryCommit Condition="'$(AssistQuestRepositoryCommit)' == ''">unknown</AssistQuestRepositoryCommit>
     <DebugType>None</DebugType>
     <DebugSymbols>false</DebugSymbols>
+    <!-- Иконка приложения. Из неё же берётся иконка окон и — по требованию —
+         иконка всех внутренних типов файлов, для которых отдельные специконки
+         не рисуются. -->
+    <ApplicationIcon>Assets\AQE_logo.ico</ApplicationIcon>
   </PropertyGroup>
 
   <ItemGroup>
@@ -38,6 +42,30 @@
     <ProjectReference Include="../AssistQuestEditor.Domain/AssistQuestEditor.Domain.csproj" />
     <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.4191.47" />
     <None Update="Assets/SplashScreen.png">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+    </None>
+    <!-- Логотипы в четырёх размерах нужны ВО ВРЕМЯ РАБОТЫ: из них собирается
+         ICO для иконок окон и для ассоциаций файлов. ApplicationIcon
+         встраивается в exe, но из exe кадры не читаются по отдельности, поэтому
+         исходные PNG обязаны быть рядом с приложением. -->
+    <None Update="Assets/AQE_logo.ico">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+    </None>
+    <None Update="Assets/AQE_logo_16.png">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+    </None>
+    <None Update="Assets/AQE_logo_32.png">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+    </None>
+    <None Update="Assets/AQE_logo_48.png">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+    </None>
+    <None Update="Assets/AQE_logo_256.png">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
       <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
     </None>

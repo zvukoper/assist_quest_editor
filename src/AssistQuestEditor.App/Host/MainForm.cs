@@ -333,15 +333,18 @@ public sealed class MainForm : WebViewForm
 
         if (resource.Kind.Equals("Campaign", StringComparison.OrdinalIgnoreCase))
         {
-            var folder = Path.GetDirectoryName(path);
-            if (!string.IsNullOrWhiteSpace(folder) && Directory.Exists(folder))
-            {
-                Process.Start(new ProcessStartInfo
-                {
-                    FileName = folder,
-                    UseShellExecute = true
-                });
-            }
+            OpenResourceFolder(path);
+            return;
+        }
+
+        // Мир — ПРОЕКТ, а не документ: у него нет отдельного окна редактирования,
+        // и осмысленное действие по двойному клику — открыть его папку. Так же
+        // ведёт себя кампания. Без этой ветки мир попадал в общий ответ
+        // «редактор не реализован», хотя редактировать в нём нужно не файл, а
+        // содержимое папки.
+        if (resource.Kind.Equals("World", StringComparison.OrdinalIgnoreCase))
+        {
+            OpenResourceFolder(path);
             return;
         }
 
@@ -374,6 +377,41 @@ public sealed class MainForm : WebViewForm
         {
             AppLogger.Error("Не удалось открыть ресурс через ассоциацию файла.", ex, "path=" + path);
             MessageBox.Show(this, ex.Message, "Ошибка открытия ресурса", MessageBoxButtons.OK, MessageBoxIcon.Error);
+        }
+    }
+
+    /// <summary>
+    /// Открывает папку ресурса в проводнике.
+    ///
+    /// Общий метод для мира и кампании: оба — проекты-контейнеры, и «открыть»
+    /// для них означает показать файлы, а не документ. Молчаливое бездействие
+    /// при отсутствии папки выглядело бы как сломанное действие, поэтому
+    /// причина сообщается.
+    /// </summary>
+    private void OpenResourceFolder(string path)
+    {
+        var folder = Path.GetDirectoryName(path);
+        if (string.IsNullOrWhiteSpace(folder) || !Directory.Exists(folder))
+        {
+            MessageBox.Show(this,
+                "Папка ресурса не найдена: " + (folder ?? path),
+                "Открытие ресурса", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            return;
+        }
+
+        try
+        {
+            Process.Start(new ProcessStartInfo
+            {
+                FileName = folder,
+                UseShellExecute = true
+            });
+        }
+        catch (Exception ex)
+        {
+            AppLogger.Warn("Не удалось открыть папку ресурса.", $"{folder}: {ex.Message}");
+            MessageBox.Show(this, "Не удалось открыть папку: " + ex.Message,
+                "Открытие ресурса", MessageBoxButtons.OK, MessageBoxIcon.Error);
         }
     }
 
@@ -1900,6 +1938,13 @@ public sealed class MainForm : WebViewForm
             // ссылки на мир он видел бы кампании ВСЕХ миров сразу.
             SelectedWorld);
         _simulator.FormClosed += (_, _) => _simulator = null;
+        // ℹ️ в дереве кампаний открывает то же окно свойств, что и меню главной
+        // формы: список показывает несколько кампаний, и для каждой — своя
+        // иконка, поэтому кампания передаётся явно, а не берётся из селектора.
+        _simulator.WorldPropertiesRequested += (_, _) =>
+            ShowResourceProperties(kind: "world", edit: false);
+        _simulator.CampaignPropertiesRequested += (_, e) =>
+            ShowResourceProperties(kind: "campaign", edit: false, campaignId: e.CampaignId);
         PlaceOnSecondaryScreen(_simulator);
         _simulator.Show(this);
     }

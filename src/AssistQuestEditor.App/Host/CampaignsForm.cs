@@ -55,6 +55,20 @@ public sealed class CampaignFolderOpenRequestedEventArgs : EventArgs
     public string CampaignId { get; }
 }
 
+/// <summary>
+/// Просьба открыть окно свойств кампании из списка.
+///
+/// Отдельное событие, а не «открыть свойства текущей»: список показывает НЕСКОЛЬКО
+/// кампаний, и кнопка ℹ️ есть у каждой. Иначе нажатие у второй кампании открывало
+/// бы свойства первой — той, что выбрана в селекторе.
+/// </summary>
+public sealed class CampaignPropertiesRequestedEventArgs : EventArgs
+{
+    public CampaignPropertiesRequestedEventArgs(string campaignId) => CampaignId = campaignId;
+
+    public string CampaignId { get; }
+}
+
 /// <summary>Окно активации Campaign/Quest, отделённое от Simulator по тому же принципу, что Journal.</summary>
 public sealed class CampaignsForm : Form
 {
@@ -69,7 +83,10 @@ public sealed class CampaignsForm : Form
     private const int CampaignHeaderHeight = 48;
     // Раздел мира выше строки кампании: имя мира — заголовок дерева, а не
     // равноправный пункт списка.
-    private const int WorldHeaderHeight = 54;
+    //
+    // Высота заголовка мира РАВНА высоте заголовка кампании: мир — такой же
+    // сворачиваемый пункт дерева, просто уровнем выше. Собственная высота
+    // выдавала бы его за посторонний блок.
     private const string WorldCollapseKey = "::world::";
     private static readonly Color WorldHeaderColor = Color.FromArgb(38, 32, 16);
     private static readonly Color WorldRowBackColor = Color.FromArgb(28, 25, 18);
@@ -80,6 +97,15 @@ public sealed class CampaignsForm : Form
     // без переноса, и её высота должна быть видна формуле начальной высоты
     // плашки: иначе состав кампании уезжает под нижний край окна.
     private const int SignatureRowHeight = 18;
+
+    /// <summary>
+    /// Начальная высота блока вложенных кампаний до первой раскладки.
+    ///
+    /// Точную высоту считает ResizeBlocks по фактическим размерам вложенных
+    /// плашек. Константа нужна только чтобы блок не был нулевой высоты до
+    /// первого Resize — иначе вложенные кампании не отрисовались бы вообще.
+    /// </summary>
+    private const int CampaignStackHeight = 200;
 
     private readonly FlowLayoutPanel _list;
     private readonly Label _title;
@@ -93,6 +119,8 @@ public sealed class CampaignsForm : Form
     {
         Text = "Кампании и квесты";
         StartPosition = FormStartPosition.Manual;
+        // Иконка приложения: окно без неё выглядит чужим в панели задач.
+        AppIconService.ApplyTo(this);
         var workArea = Screen.PrimaryScreen?.WorkingArea ?? new Rectangle(0, 0, 1280, 800);
         var width = Math.Min(620, Math.Max(420, workArea.Width / 3));
         Bounds = new Rectangle(workArea.Right - width, workArea.Top, width, workArea.Height);
@@ -117,6 +145,8 @@ public sealed class CampaignsForm : Form
     public event EventHandler<CampaignFolderOpenRequestedEventArgs>? CampaignFolderOpenRequested;
     public event EventHandler<QuestSelectedEventArgs>? QuestSelected;
     public event EventHandler? WorldFolderOpenRequested;
+    public event EventHandler? WorldPropertiesRequested;
+    public event EventHandler<CampaignPropertiesRequestedEventArgs>? CampaignPropertiesRequested;
 
     /// <summary>
     /// Текущее выделение квеста. Нужно Simulator: он подсвечивает на карте тот
@@ -177,33 +207,36 @@ public sealed class CampaignsForm : Form
             foreach (Control child in _list.Controls) child.Dispose();
             _list.Controls.Clear();
 
-            // Раздел мира идёт ПЕРВЫМ и всегда: мир — корень дерева, и без него
-            // список кампаний висит в воздухе. Он же даёт доступ к папке мира,
-            // тогда как у кампаний своя кнопка «Папка».
+            // Кампании больше НЕ добавляются сюда: они вложены в пункт мира
+            // (см. CreateWorldBlock). Плоский список плюс отдельный раздел мира
+            // давали две несвязанные части, и принадлежность кампании миру
+            // приходилось додумывать.
             if (_world is not null)
-                _list.Controls.Add(CreateWorldBlock(_world));
-
-            if (_catalog.Count == 0)
             {
-                _list.Controls.Add(CreateNotice(_world is null
-                    ? "Установленных кампаний нет."
-                    : "В мире «" + _world.DisplayName + "» кампаний нет: создайте её в разделе мира."));
-                return;
+                _list.Controls.Add(CreateWorldBlock(_world));
+            }
+            else
+            {
+                // Мир не выбран: показывать кампании без родителя нельзя —
+                // непонятно, чьи они.
+                _list.Controls.Add(CreateNotice("Мир не выбран."));
+
+                foreach (var campaign in _catalog)
+                    _list.Controls.Add(CreateCampaignBlock(campaign));
             }
 
-            foreach (var campaign in _catalog) _list.Controls.Add(CreateCampaignBlock(campaign));
             ResizeBlocks();
         }
         finally { _list.ResumeLayout(true); }
     }
 
     /// <summary>
-    /// Раздел мира: имя КРУПНЫМ шрифтом и кнопка «ПАПКА».
+    /// Пункт мира: ТОТ ЖЕ вид, что у кампании, но уровнем выше в дереве.
     ///
-    /// Именно ПАПКА (капитальными), а не «Папка»: это переход к файлам проекта,
-    /// а не действие над кампанией, и смешивать их вид нельзя. Размер шрифта
-    /// отличает раздел от кампаний: без него мир выглядел бы ещё одной
-    /// кампанией в общем списке.
+    /// Раньше это был отдельный раздел с крупным (13pt) заголовком, и мир
+    /// выглядел не пунктом дерева, а посторонним блоком над списком. Теперь
+    /// различие только двумя признаками: оранжевый текст (мир — корень) и
+    /// отступ кампаний, которые идут ВНУТРИ его рамки.
     /// </summary>
     private Control CreateWorldBlock(WorldRecord world)
     {
@@ -215,37 +248,74 @@ public sealed class CampaignsForm : Form
             Margin = new Padding(0, 0, 0, 10)
         };
 
+        // Колонки как у кампании, но состав другой: у мира нет галочки активности
+        // (мир не «включён» или «выключен» — он открыт) и нет статуса.
         var header = new TableLayoutPanel
         {
             Dock = DockStyle.Top,
-            Height = WorldHeaderHeight,
-            ColumnCount = 3,
-            Padding = new Padding(10, 6, 8, 6),
+            Height = CampaignHeaderHeight,
+            ColumnCount = 4,
+            Padding = new Padding(8, 4, 7, 4),
             BackColor = WorldHeaderColor,
             Cursor = Cursors.Hand
         };
+        header.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
         header.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
         header.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
         header.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
 
+        var marker = new Label
+        {
+            AutoSize = true,
+            Text = collapsed ? "▸" : "▾",
+            ForeColor = AccentColor,
+            Font = new Font("Segoe UI", 9f, FontStyle.Bold),
+            Margin = new Padding(0, 9, 6, 0),
+            Cursor = Cursors.Hand
+        };
+
+        // Размер шрифта как у кампании (9f) и БЕЗ AutoEllipsis: длинное имя
+        // должно переноситься, а не обрезаться многоточием. Оранжевый цвет
+        // сохранён — по нему мир отличают от кампаний, и это единственный
+        // оставшийся признак уровня.
+        //
+        // Вторая строка с составом УБРАНА: под названием должны быть только
+        // Created и Modified (отдельные подписи ниже). Состав показывает окно
+        // свойств — там для него есть место.
         var text = new Label
         {
             Dock = DockStyle.Fill,
-            AutoEllipsis = true,
+            AutoSize = false,
+            AutoEllipsis = false,
             Cursor = Cursors.Hand,
-            Text = (collapsed ? "▸ " : "▾ ") + world.DisplayName,
+            TextAlign = ContentAlignment.MiddleLeft,
+            Text = world.DisplayName,
             ForeColor = Color.FromArgb(250, 176, 3),
-            Font = new Font("Segoe UI", 13f, FontStyle.Bold),
+            Font = new Font("Segoe UI", 9f, FontStyle.Bold),
             Margin = new Padding(0, 2, 6, 2)
         };
+
+        // ℹ️ открывает окно свойств мира: то же действие, что у кампаний, и
+        // стоит на том же месте строки.
+        var info = CreateMicroButton("ℹ️");
+        info.TextAlign = ContentAlignment.MiddleCenter;
+        info.Margin = new Padding(0, 4, 6, 4);
+        info.Click += (_, _) => WorldPropertiesRequested?.Invoke(this, EventArgs.Empty);
 
         var folder = CreateMicroButton("ПАПКА");
         folder.Click += (_, _) => WorldFolderOpenRequested?.Invoke(this, EventArgs.Empty);
 
-        header.Controls.Add(text, 0, 0);
-        header.Controls.Add(folder, 2, 0);
-        header.Click += (_, _) => ToggleCollapsed(WorldCollapseKey);
-        text.Click += (_, _) => ToggleCollapsed(WorldCollapseKey);
+        header.Controls.Add(marker, 0, 0);
+        header.Controls.Add(text, 1, 0);
+        header.Controls.Add(info, 2, 0);
+        header.Controls.Add(folder, 3, 0);
+
+        // Сворачивание — по заголовку, названию и стрелке. Кнопки исключены:
+        // у них своё действие, и сворачивание по нажатию ℹ️ было бы неожиданным.
+        foreach (Control element in new Control[] { header, text, marker })
+        {
+            element.Click += (_, _) => ToggleCollapsed(WorldCollapseKey);
+        }
 
         block.Controls.Add(header);
 
@@ -254,30 +324,63 @@ public sealed class CampaignsForm : Form
             Dock = DockStyle.Fill,
             FlowDirection = FlowDirection.TopDown,
             WrapContents = false,
-            AutoScroll = true,
+            // Прокрутка ЗДЕСЬ отключена: она общая у всего дерева (см. _list).
+            // Иначе две вложенные полосы спорили бы за колесо мыши, и до
+            // кампаний было бы не добраться.
+            AutoScroll = false,
             BackColor = WorldRowBackColor,
             Padding = new Padding(0)
         };
 
         if (!collapsed)
         {
-            // Подписи мелким курсивом: автора и дату читают лишь когда возникает
-            // вопрос «чья это правка», и в основном списке они не должны
-            // соревноваться с названиями кампаний.
-            var signature = WorldDisplayRules.Describe(world.Definition.Metadata);
-            var created = WorldDisplayRules.Describe(world.Definition.Metadata, modified: false);
-            AddSignature(rows, created);
-            AddSignature(rows, signature);
+            // Под названием — ТОЛЬКО даты создания и изменения (без автора):
+            // в строке рядом с названием автор читался бы как часть названия.
+            // Дата создания идёт первой — так читается хронология.
+            AddSignature(rows, WorldDisplayRules.DescribeStamp(world.Definition.Metadata, modified: false));
+            AddSignature(rows, WorldDisplayRules.DescribeStamp(world.Definition.Metadata));
 
             if (!string.IsNullOrWhiteSpace(world.Definition.Description))
                 rows.Controls.Add(CreateNotice(world.Definition.Description!));
+
+            // Кампании живут ВНУТРИ пункта мира: так дерево читается как дерево,
+            // и принадлежность кампании миру очевидна без подписи.
+            foreach (var campaign in _catalog)
+                rows.Controls.Add(CreateCampaignBlock(campaign));
+
+            if (_catalog.Count == 0)
+                rows.Controls.Add(CreateNotice("В этом мире кампаний нет — создайте её в разделе мира."));
         }
 
         block.Controls.Add(rows);
         rows.BringToFront();
-        block.Height = collapsed ? WorldHeaderHeight : WorldHeaderHeight + (collapsed ? 0 : 74);
+
+        // Начальная высота: заголовок, подписи и вложенные кампании. Точную
+        // высоту выставит ResizeBlocks, когда будет известна ширина колонки.
+        block.Height = collapsed
+            ? CampaignHeaderHeight
+            : CampaignHeaderHeight + SignatureRowHeight * 2 + CampaignStackHeight;
+
         block.Width = Math.Max(200, _list.ClientSize.Width - 24);
         return block;
+    }
+
+    /// <summary>
+    /// Сколько кампаний в мире — для строки деталей пункта мира.
+    ///
+    /// Тот же формат, что у кампании («квесты: N/M»): строка деталей дерева
+    /// обязана читаться однотипно, иначе мир и кампания выглядят разными
+    /// сущностями, хотя различаются только уровнем.
+    /// </summary>
+    private string DescribeCampaignsCount()
+    {
+        if (_catalog.Count == 0)
+            return "кампаний нет";
+
+        var quests = _catalog.Sum(item => item.Quests.Count);
+        var active = _catalog.Count(item => item.Active);
+
+        return $"кампаний: {active}/{_catalog.Count} · квестов: {quests}";
     }
 
     /// <summary>
@@ -318,20 +421,38 @@ public sealed class CampaignsForm : Form
         var collapsed = _collapsed.Contains(campaign.Id);
         var activeCount = campaign.Quests.Count(quest => quest.Status == CampaignQuestStatus.Enabled);
         var block = new Panel { BorderStyle = BorderStyle.FixedSingle, BackColor = Color.FromArgb(23, 24, 25), Margin = new Padding(0, 0, 0, 8) };
-        var header = new TableLayoutPanel { Dock = DockStyle.Top, Height = CampaignHeaderHeight, ColumnCount = 4, Padding = new Padding(8, 4, 7, 4), BackColor = Color.FromArgb(20, 32, 38), Cursor = Cursors.Hand };
-        header.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize)); header.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100)); header.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize)); header.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+        // Шесть колонок: стрелка, галочка активности, название, ℹ️, статус, папка.
+        // Стрелка отдельной колонкой нужна потому, что название без AutoEllipsis
+        // переносится по словам, и значок свернуть/развернуть внутри него
+        // уезжал бы в середину строки при переносе.
+        var header = new TableLayoutPanel { Dock = DockStyle.Top, Height = CampaignHeaderHeight, ColumnCount = 6, Padding = new Padding(8, 4, 7, 4), BackColor = Color.FromArgb(20, 32, 38), Cursor = Cursors.Hand };
+        header.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize)); header.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize)); header.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100)); header.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize)); header.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize)); header.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
         var active = new CheckBox { AutoSize = true, Checked = campaign.Active, Margin = new Padding(0, 6, 6, 0) };
         active.CheckedChanged += (_, _) => CampaignActiveChanged?.Invoke(this, new CampaignActiveChangedEventArgs(campaign.Id, active.Checked));
-        var text = new Label { Dock = DockStyle.Fill, AutoEllipsis = true, Cursor = Cursors.Hand, Text = (collapsed ? "▸ " : "▾ ") + campaign.Name + Environment.NewLine +
-            $"квесты: {activeCount}/{campaign.Quests.Count} · v{campaign.Version}", ForeColor = Color.FromArgb(238, 243, 248), Font = new Font("Segoe UI", 9f, FontStyle.Bold), Margin = new Padding(0, 2, 6, 2) };
+        var marker = new Label { AutoSize = true, Text = collapsed ? "▸" : "▾", ForeColor = Color.FromArgb(200, 208, 216), Font = new Font("Segoe UI", 9f, FontStyle.Bold), Margin = new Padding(0, 9, 6, 0), Cursor = Cursors.Hand };
+        // AutoEllipsis ВЫКЛЮЧен вместе с AutoSize: название должно ПЕРЕНОСИТЬСЯ.
+        // При AutoSize = true Label сам подстраивает ширину под текст, Dock
+        // игнорируется, и перенос не работает — текст вылезал за строку.
+        var text = new Label { Dock = DockStyle.Fill, AutoSize = false, AutoEllipsis = false, Cursor = Cursors.Hand, TextAlign = ContentAlignment.MiddleLeft, Text = campaign.Name, ForeColor = Color.FromArgb(238, 243, 248), Font = new Font("Segoe UI", 9f, FontStyle.Bold), Margin = new Padding(0, 2, 6, 2) };
+        var info = CreateMicroButton("ℹ️");
+        info.TextAlign = ContentAlignment.MiddleCenter;
+        info.Margin = new Padding(0, 4, 6, 4);
+        // Id передаётся явно: кнопок ℹ️ столько же, сколько кампаний, и
+        // «открыть свойства текущей» открывало бы не ту.
+        info.Click += (_, _) => CampaignPropertiesRequested?.Invoke(this, new CampaignPropertiesRequestedEventArgs(campaign.Id));
         var state = new Label { AutoSize = true, Text = campaign.Active ? "Активна" : "Отключена", ForeColor = campaign.Active ? Color.FromArgb(139, 216, 255) : Color.FromArgb(135, 145, 157), Font = new Font("Segoe UI", 8f), Margin = new Padding(0, 7, 8, 0) };
         var folder = CreateMicroButton("Папка");
         folder.Click += (_, _) => CampaignFolderOpenRequested?.Invoke(this, new CampaignFolderOpenRequestedEventArgs(campaign.Id));
-        header.Controls.Add(active, 0, 0); header.Controls.Add(text, 1, 0); header.Controls.Add(state, 2, 0); header.Controls.Add(folder, 3, 0);
-        // ЛКМ по заголовку (кроме галочки, статуса и кнопки) сворачивает список
+        header.Controls.Add(marker, 0, 0); header.Controls.Add(active, 1, 0);
+        header.Controls.Add(text, 2, 0); header.Controls.Add(info, 3, 0); header.Controls.Add(state, 4, 0); header.Controls.Add(folder, 5, 0);
+        // ЛКМ по заголовку (кроме галочки, статуса и кнопок) сворачивает список
         // квестов кампании: это позволяет держать длинный каталог компактным.
-        header.Click += (_, _) => ToggleCollapsed(campaign.Id);
-        text.Click += (_, _) => ToggleCollapsed(campaign.Id);
+        // Кнопка ℹ️ исключена: у неё своё действие, и сворачивание по нажатию
+        // на неё было бы неожиданным.
+        foreach (Control element in new Control[] { header, text, marker })
+        {
+            element.Click += (_, _) => ToggleCollapsed(campaign.Id);
+        }
         // Порядок докинга в WinForms — обратный z-order: контролы укладываются
         // от последнего в коллекции к первому. Добавляем сначала заголовок, а
         // rows поднимаем наверх, поэтому список не уезжает под плашку кампании.
@@ -375,7 +496,10 @@ public sealed class CampaignsForm : Form
             Dock = DockStyle.Fill,
             FlowDirection = FlowDirection.TopDown,
             WrapContents = false,
-            AutoScroll = true,
+            // Прокрутка общая у всего дерева — здесь она ВЫКЛЮЧЕНА. Вложенные
+            // полосы спорили бы за колесо мыши, и колесо над кампанией
+            // прокручивало бы её список вместо дерева.
+            AutoScroll = false,
             BackColor = Color.FromArgb(23, 24, 25),
             // Padding пустой: высота блока считается точно под строки, и лишние
             // пиксели заставляли бы список показывать полосу прокрутки всегда.
@@ -387,8 +511,10 @@ public sealed class CampaignsForm : Form
             // созданных до появления авторства, их нет), и добавление null в
             // коллекцию контролов бросило бы ArgumentNullException — то есть
             // окно кампаний падало бы на первом же «старом» ресурсе.
-            AddSignature(rows, WorldDisplayRules.Describe(campaign.Metadata));
-            AddSignature(rows, WorldDisplayRules.Describe(campaign.Metadata, modified: false));
+            //
+            // Дата создания первой: так читается хронология.
+            AddSignature(rows, WorldDisplayRules.DescribeStamp(campaign.Metadata, modified: false));
+            AddSignature(rows, WorldDisplayRules.DescribeStamp(campaign.Metadata));
 
             foreach (var quest in campaign.Quests)
                 rows.Controls.Add(CreateQuestRow(campaign, quest));
@@ -494,57 +620,95 @@ public sealed class CampaignsForm : Form
     private static Label CreateNotice(string message) => new() { AutoSize = true, Text = message, ForeColor = Color.FromArgb(165, 175, 185), Font = new Font("Segoe UI", 8.5f), Padding = new Padding(4, 6, 4, 6), Margin = new Padding(0, 0, 0, 8) };
     private void ResizeBlocks()
     {
-        var width = Math.Max(360, _list.ClientSize.Width - _list.Padding.Horizontal - SystemInformation.VerticalScrollBarWidth - 2);
+        // Ширина уменьшается на ширину полосы прокрутки: она теперь ОДНА на всё
+        // дерево, и без этого вычета строки уезжали бы под полосу, а текст
+        // обрезался бы по правому краю.
+        var width = Math.Max(360, _list.ClientSize.Width - _list.Padding.Horizontal
+            - SystemInformation.VerticalScrollBarWidth - 2);
+
+        // Обход только ВЕРХНЕГО уровня: вложенные кампании получают ширину от
+        // пункта мира, а не от списка — иначе они вылезали бы за его рамку.
         foreach (Control block in _list.Controls)
         {
             block.Width = width;
-            // Поиск строго по типу, а не по индексу Controls[^1]: индекс — это
-            // z-order, и любой BringToFront или смена порядка добавления ломала
-            // бы выравнивание строк молча.
             if (block is not Panel panel)
                 continue;
 
             var rows = panel.Controls.OfType<FlowLayoutPanel>().FirstOrDefault();
             var header = panel.Controls.OfType<TableLayoutPanel>().FirstOrDefault();
-            if (rows is null)
+            if (rows is null || header is null)
                 continue;
 
-            // Строка квеста начинается с отступа QuestRowIndent и доходит до
-            // правого края плашки кампании: отступ показывает вложенность,
-            // правый край образует общую линию с заголовком.
-            var rowWidth = Math.Max(280, width - QuestRowIndent - 4);
-            var totalRows = 0;
-            foreach (Control row in rows.Controls)
+            var innerWidth = Math.Max(280, width - panel.Padding.Horizontal - 4);
+            var total = LayoutPanelChildren(rows, innerWidth, QuestRowIndent);
+
+            // Высота пункта считается по фактическим высотам содержимого, а не по
+            // формуле «строк × константа»: названия переносятся по словам, и
+            // фиксированная высота срезала бы длинные.
+            panel.Height = Math.Max(CampaignHeaderHeight + 4, header.Height + total + 4);
+        }
+    }
+
+    /// <summary>
+    /// Раскладывает строки контейнера и возвращает суммарную высоту.
+    ///
+    /// Общая функция для двух уровней дерева: пункт мира и плашка кампании
+    /// отличаются только величиной отступа и набором строк. Две копии этого
+    /// цикла разошлись бы — как уже было с формулами высоты, из-за чего состав
+    /// кампании уезжал под нижний край.
+    /// </summary>
+    /// <param name="indent">Отступ слева: показывает вложенность уровня.</param>
+    private static int LayoutPanelChildren(FlowLayoutPanel rows, int availableWidth, int indent)
+    {
+        var rowWidth = Math.Max(200, availableWidth - indent);
+        var total = 0;
+
+        foreach (Control row in rows.Controls)
+        {
+            // Вложенная плашка кампании: ширина та же (она — элемент дерева), но
+            // отступ задаётся её собственным Margin, а высота считается внутри
+            // её же вызова LayoutPanelChildren.
+            if (row is Panel nested)
             {
-                row.Width = rowWidth;
-                // Отступ вложенности и замер высоты относятся ТОЛЬКО к строкам
-                // квестов. Подписи автора/дат и уведомления — не строки квеста:
-                // им задавали бы отступ QuestRowIndent и высоту QuestRowMinHeight,
-                // то есть подпись в 18 пикселей занимала бы 26 и сдвигала состав.
-                if (row is not TableLayoutPanel)
+                nested.Width = rowWidth;
+
+                var nestedRows = nested.Controls.OfType<FlowLayoutPanel>().FirstOrDefault();
+                var nestedHeader = nested.Controls.OfType<TableLayoutPanel>().FirstOrDefault();
+                if (nestedRows is not null && nestedHeader is not null)
                 {
-                    totalRows += row.Height + row.Margin.Vertical;
-                    continue;
+                    var nestedTotal = LayoutPanelChildren(
+                        nestedRows,
+                        rowWidth - nested.Padding.Horizontal,
+                        QuestRowIndent);
+                    nested.Height = Math.Max(CampaignHeaderHeight + 4,
+                        nestedHeader.Height + nestedTotal + 4);
                 }
 
-                row.Margin = new Padding(QuestRowIndent, 0, 0, 3);
-                // Высота задаётся измеренной, а не константой: заголовок
-                // переносится по словам, и фиксированная высота срезала
-                // длинные названия квестов.
-                row.Height = MeasureRowHeight(row);
-                totalRows += row.Height + row.Margin.Vertical;
+                total += nested.Height + nested.Margin.Vertical;
+                continue;
             }
 
-            // Высота плашки считается по фактическим высотам строк, а не по
-            // формуле «строк × константа»: заголовок переносится по словам, и
-            // фиксированная высота срезала длинные названия квестов.
-            if (header is not null)
+            row.Width = rowWidth;
+
+            // Отступ вложенности и замер высоты относятся ТОЛЬКО к строкам
+            // квестов. Подписи дат и уведомления — не строки квеста: им задавали
+            // бы отступ QuestRowIndent и высоту QuestRowMinHeight, то есть
+            // подпись в 18 пикселей занимала бы 26 и сдвигала состав.
+            if (row is not TableLayoutPanel)
             {
-                panel.Height = Math.Max(
-                    CampaignHeaderHeight + 4,
-                    header.Height + totalRows + 4);
+                total += row.Height + row.Margin.Vertical;
+                continue;
             }
+
+            row.Margin = new Padding(indent, 0, 0, 3);
+            // Высота задаётся измеренной, а не константой: заголовок
+            // переносится по словам, и фиксированная высота срезала
+            // длинные названия квестов.
+            row.Height = MeasureRowHeight(row);
+            total += row.Height + row.Margin.Vertical;
         }
+
+        return total;
     }
 
     /// <summary>

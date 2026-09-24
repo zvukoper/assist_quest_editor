@@ -1,0 +1,150 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Инвентарь</title>
+<link rel="stylesheet" href="theme.css?v=1.0.40.183">
+<style>
+  /* Окно инвентаря — самостоятельное окно Windows, а не панель поверх карты.
+     Поэтому страница занимает ровно размер окна и не имеет прокрутки: сетка
+     6×3 рассчитана на этот размер, и прокрутка здесь означала бы, что размеры
+     разъехались. */
+  html, body { height:100%; margin:0; overflow:hidden; }
+  .inventoryWindow { height:100%; display:flex; flex-direction:column; }
+  /* Панель растягивается на всё окно: она — единственное содержимое. */
+  .inventoryWindow .gamePanel { flex:1 1 auto; border-radius:0; border:none; }
+  /* Прокрутка ЗАПРЕЩЕНА: размер окна подобран под сетку. Если содержимое не
+     влезает, это дефект размеров, и его надо видеть, а не прятать за полосой. */
+  .inventoryWindow .inventoryGrid { overflow:hidden; }
+</style>
+</head>
+<body>
+<div class="inventoryWindow">
+  <section class="gamePanel inventoryPanel" id="inventoryPanel"></section>
+</div>
+<div class="inventoryNotifications" id="inventoryNotifications" aria-live="polite"></div>
+
+<script src="inventory.js?v=1.0.40.183"></script>
+<script>
+(function () {
+  "use strict";
+
+  var panel = document.getElementById("inventoryPanel");
+  var notifications = document.getElementById("inventoryNotifications");
+  var snapshot = null;
+  var catalog = [];
+  // Предметы, которые уже показаны игроку: значок «новый предмет» не должен
+  // возвращаться после наведения курсора. Состояние живёт здесь, а не в
+  // Симуляторе: окно владеет своим показом.
+  var seenItemIds = new Set();
+
+  function render() {
+    if (!panel) return;
+
+    if (!snapshot) {
+      // Пустой снимок — не ошибка на старте: окно открывается до первого
+      // сообщения Host, и вместо белого экрана показывается объяснение.
+      panel.innerHTML =
+        "<div class='gamePanelHeader'><div><div class='gamePanelTitle'>Инвентарь</div>" +
+        "<div class='gamePanelSub'>Ожидание данных от Симулятора</div></div></div>" +
+        "<div class='notice' style='margin:12px'>Окно обновляется, пока открыт Симулятор.</div>";
+      return;
+    }
+
+    // Заголовка нет: он уже есть в системной рамке окна, и второй такой же
+    // читался бы как дубликат.
+    panel.innerHTML = AssistInventory.panelMarkup(snapshot, catalog, {
+      seenItemIds: seenItemIds
+    });
+
+    panel.querySelectorAll("[data-inventory-item]").forEach(function (button) {
+      button.addEventListener("mouseenter", function () {
+        var id = String(button.dataset.inventoryItem || "").toLowerCase();
+        if (!id) return;
+        seenItemIds.add(id);
+        // Host запоминает показ и в своём состоянии: иначе значок вернулся бы
+        // на следующем же снимке.
+        send({ action: "mark_inventory_seen", itemId: id });
+        render();
+      });
+    });
+  }
+
+  function send(payload) {
+    try {
+      if (window.chrome && window.chrome.webview) {
+        window.chrome.webview.postMessage(JSON.stringify(payload));
+      }
+    } catch (error) {
+      // Молча: окно не должно падать из-за недоступного канала.
+    }
+  }
+
+  function showNotification(itemId, delta) {
+    if (!notifications) return;
+
+    var amount = Math.abs(Number(delta) || 0);
+    var item = AssistInventory.itemDefinition(catalog, itemId);
+    var type = Number(delta) > 0 ? "add" : "remove";
+    var toast = document.createElement("div");
+    toast.className = "inventoryNotification " + type + " in";
+    toast.innerHTML =
+      "<div class='inventoryNotificationTitle'>" +
+        (type === "add" ? "Получено" : "Изъято") + "</div>" +
+      "<div class='inventoryNotificationName'>" +
+        AssistInventory.escapeHtml(item.name || itemId) + " ×" + amount + "</div>";
+    notifications.appendChild(toast);
+
+    window.setTimeout(function () {
+      toast.classList.add("closing");
+      window.setTimeout(function () { toast.remove(); }, 260);
+    }, 1800);
+  }
+
+  function handleMessage(raw) {
+    var message;
+    try {
+      message = typeof raw === "string" ? JSON.parse(raw) : raw;
+    } catch (error) {
+      return;
+    }
+    if (!message) return;
+
+    if (message.type === "snapshot") {
+      snapshot = message.snapshot || null;
+      catalog = Array.isArray(message.itemCatalog) ? message.itemCatalog : [];
+      render();
+      return;
+    }
+
+    if (message.type === "inventory_notification") {
+      showNotification(message.itemId, message.delta);
+    }
+  }
+
+  /**
+   * Подписка на ОБА источника сообщений.
+   *
+   * `chrome.webview` есть только в WebView2; `window` используется стендом
+   * проверок. Подписка на оба канала — единственный способ, чтобы один и тот же
+   * код работал и в приложении, и в прогоне.
+   */
+  if (window.chrome && window.chrome.webview) {
+    window.chrome.webview.addEventListener("message", function (event) {
+      handleMessage(event.data);
+    });
+  }
+
+  window.addEventListener("message", function (event) {
+    handleMessage(event.data);
+  });
+
+  // Готовность окна: Host присылает снимок после этого сообщения, иначе первое
+  // состояние потерялось бы — окно ещё не подписано.
+  send({ action: "inventory_ready" });
+  render();
+})();
+</script>
+</body>
+</html>

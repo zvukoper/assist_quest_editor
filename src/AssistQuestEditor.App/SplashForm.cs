@@ -10,6 +10,8 @@ public sealed class SplashForm : Form
         ClientSize = new Size(800, 450);
         FormBorderStyle = FormBorderStyle.None;
         StartPosition = FormStartPosition.CenterScreen;
+        // Иконка приложения: окно без неё выглядит чужим в панели задач.
+        AppIconService.ApplyTo(this);
         ShowInTaskbar = false;
         TopMost = true;
         BackColor = Color.FromArgb(10, 12, 16);
