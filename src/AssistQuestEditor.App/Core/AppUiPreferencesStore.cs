@@ -15,7 +15,25 @@ public sealed record AppUiPreferences(
     string? LastSceneDefinitionPath = null,
     Dictionary<string, WindowGeometry>? Windows = null,
     List<string>? RecentQuestFiles = null,
-    List<string>? RecentSceneFiles = null);
+    List<string>? RecentSceneFiles = null,
+    // Псевдоним автора: им подписываются созданные миры, кампании и квесты
+    // (created_by / modified_by). Пусто означает «первичная настройка не
+    // пройдена»: приложение обязано показать диалог и не пускать к работе,
+    // иначе ресурсы создавались бы без подписи.
+    string? Author = null,
+    // Первичная настройка пройдена. Отдельный флаг, а не проверка на пустой
+    // Author: пользователь мог пройти настройку и оставить имя, которое позже
+    // признали недопустимым, — тогда диалог должен показаться снова.
+    bool SetupCompleted = false,
+    // Выбранный язык интерфейса. Пока единственный — русский, но поле заведено
+    // сразу: иначе перевод интерфейса потребовал бы менять формат файла.
+    string? Language = "ru",
+    // Последний выбранный мир. Хранится в настройках, потому что определяет
+    // содержимое и главной формы, и симулятора.
+    string? LastWorldId = null,
+    // Последняя выбранная кампания. Помнится отдельно от мира: при выборе мира
+    // подставляется его запомненная кампания.
+    string? LastCampaignId = null);
 
 public static class AppUiPreferencesStore
 {
@@ -25,9 +43,10 @@ public static class AppUiPreferencesStore
     {
         get
         {
-            var root = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
-            if (string.IsNullOrWhiteSpace(root)) root = AppContext.BaseDirectory;
-            return Path.Combine(root, "AssistQuestEditor", "ui-settings.json");
+            // Настройки лежат рядом с мирами, в пользовательской папке Документов:
+            // псевдоним автора — часть пользовательских данных, и держать его в
+            // AppData значило бы терять подпись ресурсов при переустановке.
+            return Path.Combine(AppPaths.SettingsDirectory, "ui-settings.json");
         }
     }
 

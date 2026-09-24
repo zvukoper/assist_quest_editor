@@ -25,7 +25,9 @@ function read(relative) {
 }
 
 const simulatorJs = read("src/AssistQuestEditor.App/Web/simulator.js");
-const themeCss = read("src/AssistQuestEditor.App/Web/theme.css");const simulatorForm = read("src/AssistQuestEditor.App/Host/SimulatorForm.cs");
+const themeCss = read("src/AssistQuestEditor.App/Web/theme.css");
+const simulatorHtml = read("src/AssistQuestEditor.App/Web/simulator.html");
+const simulatorForm = read("src/AssistQuestEditor.App/Host/SimulatorForm.cs");
 const coordinator = read("src/AssistQuestEditor.Domain/QuestRuntimeCoordinator.cs");
 const mapper = read("src/AssistQuestEditor.Domain/SimulationSaveMapper.cs");
 const campaignModels = read("src/AssistQuestEditor.Domain/CampaignModels.cs");
@@ -122,18 +124,107 @@ check(/const gap = isPlayer \? 20 :/.test(labelBody),
 check(/#ffffff/.test(labelBody) && /isPlayer/.test(labelBody),
   "Игрок должен подписываться белым цветом.");
 
-// 4. Кнопка запущенной симуляции.
-check(/simRunning/.test(simulatorJs), "Кнопка симуляции должна получать класс simRunning.");
-check(/\.toolButton\.simRunning\{/.test(themeCss),
-  "theme.css должен стилизовать кнопку запущенной симуляции.");
-const runningStyle = themeCss.slice(
-  themeCss.indexOf(".toolButton.simRunning{"),
-  themeCss.indexOf(".toolButton.simRunning:hover")
+// 4. Транспорт симуляции: play / stop / ff и плашка статуса.
+//
+// Плашка раньше была КНОПКОЙ; теперь она только показывает состояние, а
+// управляют три кнопки слева. Отсюда три состояния вместо двух: одной кнопкой
+// их выразить невозможно, а мир знает именно три (не запущено / идёт / пауза).
+check(/simStatusPlate/.test(simulatorHtml), "Разметка должна содержать плашку статуса симуляции.");
+check(/id="simPlay"/.test(simulatorHtml), "Разметка должна содержать кнопку play.");
+check(/id="simStop"/.test(simulatorHtml), "Разметка должна содержать кнопку stop.");
+check(/id="simFastForward"/.test(simulatorHtml), "Разметка должна содержать кнопку ff.");
+// Лейаут: три строки вместо одного ряда — иначе верхние тексты срезались, а
+// межстрочные расстояния задавались полями элементов и были слишком большими.
+check(/class="simTopRow/.test(simulatorHtml),
+  "Верхняя панель Симулятора должна быть разделена на строки (.simTopRow).");
+check(/\.simTopRow\{/.test(themeCss), "theme.css должен стилизовать строки верхней панели.");
+check(/\.simTop\{[\s\S]{0,260}flex-direction:column/.test(themeCss),
+  "Верхняя панель должна быть flex-колонкой: только так три строки раскладываются без среза текста.");
+check(/\.simTitle\{[^}]*white-space:normal/.test(themeCss),
+  "Заголовок Симулятора должен переноситься, а не обрезаться.");
+check(/\.simBody\{flex:1 1 auto/.test(themeCss),
+  "Высота тела не должна быть константой: панель выросла до трёх строк.");
+
+// Состояния плашки заданы атрибутом: цвета не дублируются в JS.
+check(/data-sim-state/.test(simulatorJs),
+  "Плашка должна получать состояние атрибутом data-sim-state.");
+check(/\.simStatusPlate\[data-sim-state="running"\]/.test(themeCss),
+  "theme.css должен оформлять состояние «идёт».");
+check(/\.simStatusPlate\[data-sim-state="stopped"\]/.test(themeCss),
+  "theme.css должен оформлять состояние «не запущено».");
+const pausedStyle = themeCss.slice(
+  themeCss.indexOf('.simStatusPlate[data-sim-state="paused"]'),
+  themeCss.indexOf("@keyframes simPausePulse")
 );
-check(/var\(--lime\)/.test(runningStyle), "Кнопка запущенной симуляции должна иметь LIME фон.");
-check(/color:#fff/.test(runningStyle), "Текст кнопки запущенной симуляции должен быть белым.");
-check(/text-shadow/.test(runningStyle) && /#000/.test(runningStyle),
-  "Текст кнопки запущенной симуляции должен иметь чёрную обводку.");
+check(/animation:simPausePulse 1500ms/.test(pausedStyle),
+  "Состояние «на паузе» должно пульсировать 1500 мс (требование пользователя).");
+check(/var\(--accent\)/.test(pausedStyle),
+  "Пульсация паузы должна быть оранжевой (акцентной).");
+
+// В плашке НЕ должно быть собственной иконки, а также кратности: состояние
+// выражено цветом и текстом, третий носитель того же смысла — шум. Кратность
+// переехала к игровым часам в HUD (и только при ускорении).
+check(!/simStatusIcon/.test(simulatorJs) && !/simStatusIcon/.test(simulatorHtml),
+  "Плашка статуса не должна дублировать состояние иконкой.");
+check(!/simStatusSpeed/.test(simulatorJs) && !/simStatusSpeed/.test(simulatorHtml),
+  "Кратность не должна дублироваться в плашке: она показывается у игровых часов.");
+// Кнопки транспорта не выделяются: состояние показывает плашка.
+check(!/\.simTransportButton\.active\{/.test(themeCss),
+  "Кнопки транспорта не должны иметь активного состояния — статуса достаточно.");
+check(!/classList\.toggle\("active"/.test(simulatorJs.slice(
+    simulatorJs.indexOf("function renderSimulationTransport()"),
+    simulatorJs.indexOf("function formatSpeed("))),
+  "JS не должен подсвечивать кнопку транспорта: это дублировало бы плашку.");
+
+// Подпись автосохранения — отдельная строка сведений под плашкой.
+check(/id="simAutoSave"/.test(simulatorHtml),
+  "Под кнопкой запуска должна быть подпись «Автосохранение: дата и время».");
+check(/autoSaveLabel/.test(simulatorForm) && /autoSaveLabel/.test(simulatorJs),
+  "Подпись автосохранения должна приходить в снимке (Host → Web).");
+check(/На паузе/.test(simulatorJs),
+  "Web должен уметь показать состояние «На паузе».");
+
+// Вспышка автосохранения: LIME, ОДИН раз, 2 секунды.
+const autoSaveStyle = themeCss.slice(
+  themeCss.indexOf(".simAutoSave.autoSavePulse"),
+  themeCss.indexOf("@keyframes simAutoSavePulse")
+);
+check(/animation:simAutoSavePulse 2000ms/.test(autoSaveStyle),
+  "Вспышка автосохранения должна длиться 2000 мс.");
+check(/\b1\b/.test(autoSaveStyle) && /both/.test(autoSaveStyle),
+  "Вспышка автосохранения должна быть ОДНОразовой (iteration-count 1).");
+const autoSaveKeyframes = themeCss.slice(themeCss.indexOf("@keyframes simAutoSavePulse"));
+check(/var\(--lime\)/.test(autoSaveKeyframes),
+  "Вспышка автосохранения должна быть цвета lime.");
+
+// Ускоренное игровое время: часы оранжевые + кратность.
+check(/hudAccelerated/.test(simulatorJs),
+  "Web должен помечать ускоренное время классом на HUD.");
+check(/#hud\.hudAccelerated #hudGameTime/.test(themeCss),
+  "При ускорении игровые часы должны становиться оранжевыми.");
+check(/hudClockSpeed/.test(simulatorJs) && /\.hudClockSpeed\{/.test(themeCss),
+  "При ускорении рядом с часами должна показываться кратность.");
+const speedStyle = themeCss.slice(
+  themeCss.indexOf(".hudClockSpeed{"),
+  themeCss.indexOf(".hudClockSpeed{") + 120
+);
+check(/var\(--accent\)/.test(speedStyle),
+  "Кратность ускорения должна быть акцентного (оранжевого) цвета.");
+// Реакция на смену кратности обязательна: без снимка в ответ UI не узнает о ней.
+const speedCase = simulatorForm.slice(
+  simulatorForm.indexOf('case "simulation_set_speed":'),
+  simulatorForm.indexOf('case "simulation_set_speed":') + 620
+);
+check(/RequestSnapshot/.test(speedCase),
+  "Смена кратности должна отвечать снимком: иначе UI о ней не узнает.");
+
+// Кнопка инвентаря не должна перекрывать полосу состояния карты.
+const backpackStyle = themeCss.slice(
+  themeCss.indexOf(".backpackButton{"),
+  themeCss.indexOf(".backpackButton:hover")
+);
+check(/bottom:calc\(26px/.test(backpackStyle),
+  "Кнопка инвентаря должна отступать от полосы состояния карты (26px).");
 
 // 5. Поведенческая часть: реальный simulator.js.
 const browser = await chromium.launch({ headless: true });
@@ -155,7 +246,15 @@ try {
           <button id="openCampaigns"></button>
           <button id="reloadCatalog"></button>
           <button id="openSaves"></button>
-          <button id="simulationToggle" class="toolButton">Запустить</button>
+          <div class="simTransport">
+            <button id="simPlay" class="toolButton simTransportButton">▶</button>
+            <button id="simStop" class="toolButton simTransportButton">⏹</button>
+            <button id="simFastForward" class="toolButton simTransportButton">⏩</button>
+          </div>
+          <div class="simStatusPlate" id="simStatusPlate" data-sim-state="stopped">
+            <span class="simStatusText" id="simStatusText">Симуляция не запущена</span>
+          </div>
+          <span class="simAutoSave" id="simAutoSave"></span>
           <button id="reset"></button>
         </header>
         <main style="display:flex">
@@ -183,6 +282,14 @@ try {
               postMessage(raw) { try { window.__sent.push(JSON.parse(raw)); } catch (e) { window.__sent.push(raw); } }
             }
           };
+          // Счётчик ЗАПУСКОВ вспышки автосохранения. Считать надо именно
+          // animationstart, а не читать animationName: после завершения конечной
+          // анимации getComputedStyle всё ещё отдаёт её имя, поэтому «вспыхнуло
+          // ли снова» по стилю не отличить.
+          window.__autoSavePulseStarts = 0;
+          document.getElementById("simAutoSave").addEventListener("animationstart", event => {
+            if (event.animationName === "simAutoSavePulse") window.__autoSavePulseStarts += 1;
+          });
         </script>
         <script>
           ${simulatorJs.replaceAll("</script", "<\\/script")}
@@ -196,7 +303,8 @@ try {
     position: { x: 0, y: 0, z: 0 }, color: "#78c8f0", triggerRadius: 35, editable: false
   };
 
-  const pushSnapshot = running => page.evaluate(({ running, point }) => {
+  const pushSnapshot = state => page.evaluate(({ state, point }) => {
+    const running = !!state.running;
     window.chrome.webview.listeners.get("message")({
       data: JSON.stringify({
         type: "snapshot",
@@ -212,7 +320,11 @@ try {
           clock: { startDate: "2026-01-01T00:00:00+00:00", elapsed: "12:00:00", running: running }
         },
         questCatalog: [], runtime: { questId: "", currentNodeId: null, status: "Stopped", waitingFor: "", message: "" },
-        simulationRunning: running, enabledQuestIds: [], selectedQuest: { campaignId: "", questId: "" },
+        simulationRunning: running,
+        simulationPaused: !!state.paused,
+        simulationSpeed: state.speed || 1,
+        autoSaveLabel: state.autoSaveLabel || null,
+        enabledQuestIds: [], selectedQuest: { campaignId: "", questId: "" },
         itemCatalog: { items: [] }, npcCatalog: { npcs: [] }, reputationViews: {},
         journalDetached: false,
         daylight: {
@@ -229,56 +341,176 @@ try {
         }
       })
     });
-  }, { running, point });
+  }, { state, point });
 
-  // Симуляция ВКЛ: метки «(пауза)» быть НЕ должно, кнопка — LIME.
-  await pushSnapshot(true);
+  const readTransport = () => page.evaluate(() => ({
+    hud: document.getElementById("hud").textContent,
+    state: document.getElementById("simStatusPlate").dataset.simState,
+    text: document.getElementById("simStatusText").textContent,
+    play: document.getElementById("simPlay").textContent,
+    autoSave: document.getElementById("simAutoSave").textContent,
+    clockSpeed: document.getElementById("hudClockSpeed")?.textContent || "",
+    hudAccelerated: document.getElementById("hud").classList.contains("hudAccelerated")
+  }));
+
+  // Симуляция ВКЛ: метки «(пауза)» быть НЕ должно, плашка зелёная, play — ⏸️.
+  await pushSnapshot({ running: true });
   await page.waitForTimeout(300);
 
-  const runningState = await page.evaluate(() => {
-    const hud = document.getElementById("hud").textContent;
-    const button = document.getElementById("simulationToggle");
-    const style = getComputedStyle(button);
-    return {
-      hud,
-      simRunning: button.classList.contains("simRunning"),
-      background: style.backgroundColor,
-      color: style.color,
-      textShadow: style.textShadow
-    };
-  });
-
+  const runningState = await readTransport();
   check(!/\(пауза\)/.test(runningState.hud),
     "При включённой симуляции метка «(пауза)» появляться не должна: " + runningState.hud);
   // Часы обязаны показывать секунды — иначе по ним не видно, что время идёт.
   check(/\d{2}:\d{2}:\d{2}/.test(runningState.hud),
     "Часы в шапке должны показывать время с секундами (чч:мм:сс): " + runningState.hud);
-  check(runningState.simRunning,
-    "Кнопка запущенной симуляции должна получать класс simRunning.");
-  check(/rgb\(\s*17,\s*251,\s*6\s*\)/.test(runningState.background),
-    "Фон кнопки запущенной симуляции должен быть LIME (#11fb06): " + runningState.background);
-  check(/rgb\(\s*255,\s*255,\s*255\s*\)/.test(runningState.color),
-    "Текст кнопки запущенной симуляции должен быть белым: " + runningState.color);
-  check(runningState.textShadow && runningState.textShadow !== "none" && /rgb\(\s*0,\s*0,\s*0\s*\)/.test(runningState.textShadow),
-    "У текста кнопки должна быть чёрная обводка: " + runningState.textShadow);
+  check(runningState.state === "running",
+    "При идущей симуляции плашка должна быть в состоянии running: " + runningState.state);
+  check(/Идет симуляция/.test(runningState.text),
+    "Статус идущей симуляции должен быть «Идет симуляция»: " + runningState.text);
+  check(runningState.play === "⏸️",
+    "Иконка play при идущей симуляции должна стать ⏸️ (следующее действие — пауза): " + runningState.play);
+  // Требование по цвету: зелёный. Проверяем вычисленный стиль, а не имя класса.
+  const runningColor = await page.evaluate(() =>
+    getComputedStyle(document.getElementById("simStatusPlate")).color);
+  check(/rgb\(\s*17,\s*251,\s*6\s*\)/.test(runningColor),
+    "Статус идущей симуляции должен быть зелёным (LIME #11fb06): " + runningColor);
 
-  // Симуляция ВЫКЛ: метка появляется, класс снимается.
-  await pushSnapshot(false);
+  // Пауза: оранжевая пульсация 1500 мс, статус «На паузе», play снова ▶️.
+  await pushSnapshot({ running: false, paused: true, speed: 1 });
   await page.waitForTimeout(300);
 
-  const stoppedState = await page.evaluate(() => ({
-    hud: document.getElementById("hud").textContent,
-    simRunning: document.getElementById("simulationToggle").classList.contains("simRunning")
+  const pausedState = await readTransport();
+  const pausedComputed = await page.evaluate(() => {
+    const plate = document.getElementById("simStatusPlate");
+    const style = getComputedStyle(plate);
+    const animation = { name: style.animationName, duration: style.animationDuration };
+    // Цвет читаем на ОСТАНОВЛЕННОЙ анимации: пульсация меняет цвет по кадрам, и
+    // произвольный замер попал бы в середину цикла (#fbbd2e вместо акцента).
+    plate.style.animation = "none";
+    const color = getComputedStyle(plate).color;
+    plate.style.animation = "";
+    return { color, animationName: animation.name, duration: animation.duration };
+  });
+  check(pausedState.state === "paused",
+    "Плашка должна быть в состоянии paused: " + pausedState.state);
+  check(/На паузе/.test(pausedState.text),
+    "Статус паузы должен быть «На паузе»: " + pausedState.text);
+  check(pausedState.play === "▶️",
+    "Иконка play на паузе должна быть ▶️ (следующее действие — продолжить): " + pausedState.play);
+  check(/rgb\(\s*250,\s*176,\s*3\s*\)/.test(pausedComputed.color),
+    "Статус паузы должен быть оранжевым (акцент #fab003): " + pausedComputed.color);
+  check(pausedComputed.animationName === "simPausePulse" && pausedComputed.duration === "1.5s",
+    "Пульсация паузы должна быть 1500 мс: " + pausedComputed.animationName + "/" + pausedComputed.duration);
+
+  // Симуляция ВЫКЛ: серая плашка, статус начальный, пульсации нет.
+  await pushSnapshot({ running: false, paused: false, autoSaveLabel: "24.09.2026 11:37:05" });
+  await page.waitForTimeout(300);
+
+  const stoppedState = await readTransport();
+  const stoppedComputed = await page.evaluate(() => ({
+    color: getComputedStyle(document.getElementById("simStatusPlate")).color,
+    animationName: getComputedStyle(document.getElementById("simStatusPlate")).animationName
   }));
-  check(/\(пауза\)/.test(stoppedState.hud),
+  check(/пауза/.test(stoppedState.hud),
     "При выключенной симуляции метка «(пауза)» должна быть: " + stoppedState.hud);
-  check(!stoppedState.simRunning,
-    "У выключенной симуляции класс simRunning должен сниматься.");
+  check(stoppedState.state === "stopped",
+    "Плашка должна быть в состоянии stopped: " + stoppedState.state);
+  check(/Симуляция не запущена/.test(stoppedState.text),
+    "Статус должен быть «Симуляция не запущена»: " + stoppedState.text);
+  check(/rgb\(\s*139,\s*151,\s*163\s*\)/.test(stoppedComputed.color),
+    "Статус незапущенной симуляции должен быть серым: " + stoppedComputed.color);
+  check(!/simPausePulse/.test(stoppedComputed.animationName),
+    "У незапущенной симуляции пульсации быть не должно.");
+
+  // Подпись автосохранения: формат «дата и время», из данных Host.
+  check(/Автосохранение: 24\.09\.2026 11:37:05/.test(stoppedState.autoSave),
+    "Под плашкой должна быть дата автосохранения из снимка: " + stoppedState.autoSave);
+  // Вспышка: LIME и ровно 2 секунды. Проверяется вычисленный стиль, а не класс:
+  // класс может быть на месте, а анимация уже закончиться.
+  const autoSavePulse = await page.evaluate(() => {
+    const style = getComputedStyle(document.getElementById("simAutoSave"));
+    return { name: style.animationName, duration: style.animationDuration, iterations: style.animationIterationCount };
+  });
+  check(autoSavePulse.name === "simAutoSavePulse",
+    "Автосохранение должно пропульсировать цветом lime: " + autoSavePulse.name);
+  check(autoSavePulse.duration === "2s" && autoSavePulse.iterations === "1",
+    "Вспышка автосохранения должна быть однократной и длиться 2 секунды: " +
+      autoSavePulse.duration + "/" + autoSavePulse.iterations);
+  // Вспышка именно LIME, а не «какой-то цвет»: замер по кадру 15%, потому что
+  // крайние кадры возвращают нейтральный цвет.
+  const autoSavePeak = await page.evaluate(() => {
+    const frames = [...document.styleSheets]
+      .flatMap(sheet => { try { return [...sheet.cssRules]; } catch { return []; } })
+      .find(rule => rule.type === CSSRule.KEYFRAMES_RULE && rule.name === "simAutoSavePulse");
+    const peak = frames ? [...frames.cssRules].find(frame => frame.keyText.startsWith("15")) : null;
+    return peak?.style?.color || null;
+  });
+  check(autoSavePeak && /var\(--lime\)/.test(autoSavePeak),
+    "Пик вспышки автосохранения должен быть цвета lime: " + autoSavePeak);
+  // Однократность по счётчику ЗАПУСКОВ: у одного автосохранения — ровно одна.
+  const pulseStartsAfterFirst = await page.evaluate(() => window.__autoSavePulseStarts);
+  check(pulseStartsAfterFirst === 1,
+    "Автосохранение должно вспыхивать ровно один раз: " + pulseStartsAfterFirst);
+
+  // При ×1 ускорения нет: часы нейтральные, кратность не показана.
+  check(!stoppedState.hudAccelerated && !stoppedState.clockSpeed,
+    "Без ускорения часы не должны становиться оранжевыми и показывать кратность: " +
+      JSON.stringify(stoppedState));
+
+  // Кратность: ff перебирает набор и отправляет новое значение в Host.
+  await page.click("#simFastForward");
+  await page.waitForTimeout(100);
+  const speedMessage = await page.evaluate(() =>
+    window.__sent.filter(item => item.action === "simulation_set_speed").pop());
+  check(speedMessage && Number(speedMessage.speed) === 5,
+    "ff с ×1 должен запросить ×5: " + JSON.stringify(speedMessage));
+
+  await pushSnapshot({ running: true, speed: 20 });
+  await page.waitForTimeout(200);
+  const speedState = await readTransport();
+  check(/×20/.test(speedState.clockSpeed),
+    "При ускорении у игровых часов должна быть кратность: " + speedState.clockSpeed);
+  check(speedState.hudAccelerated,
+    "При ускорении HUD должен получать класс hudAccelerated.");
+  const clockColor = await page.evaluate(() =>
+    getComputedStyle(document.getElementById("hudGameTime")).color);
+  check(/rgb\(\s*250,\s*176,\s*3\s*\)/.test(clockColor),
+    "При ускорении игровые часы должны быть оранжевыми: " + clockColor);
+
+  // Повторный снимок с ТЕМ ЖЕ автосохранением не должен вспыхивать снова:
+  // снимки приходят постоянно, и вспышка на каждом мигала бы бесконечно.
+  await pushSnapshot({ running: true, speed: 20, autoSaveLabel: "24.09.2026 11:37:05" });
+  await page.waitForTimeout(200);
+  const repeatedStarts = await page.evaluate(() => window.__autoSavePulseStarts);
+  check(repeatedStarts === 1,
+    "Повторный снимок с той же датой автосохранения не должен запускать вспышку: " +
+      repeatedStarts);
+
+  // А НОВОЕ автосохранение — должно.
+  await pushSnapshot({ running: true, speed: 20, autoSaveLabel: "24.09.2026 12:05:44" });
+  await page.waitForTimeout(200);
+  const newStarts = await page.evaluate(() => window.__autoSavePulseStarts);
+  check(newStarts === 2,
+    "Новое автосохранение обязано пропульсировать: " + newStarts);
+
+  // Клик по play при идущей симуляции — это ПАУЗА, а не остановка.
+  await page.click("#simPlay");
+  await page.waitForTimeout(100);
+  const pauseAction = await page.evaluate(() => window.__sent[window.__sent.length - 1]);
+  check(pauseAction?.action === "simulation_pause",
+    "Клик по play при идущей симуляции должен ставить ПАУЗУ: " + JSON.stringify(pauseAction));
+
+  // Клик по stop — выключение с автосохранением.
+  await page.click("#simStop");
+  await page.waitForTimeout(100);
+  const stopAction = await page.evaluate(() => window.__sent[window.__sent.length - 1]);
+  check(stopAction?.action === "simulation_stop",
+    "Клик по stop должен выключать симуляцию: " + JSON.stringify(stopAction));
 
   // Секунды обязаны ДВИГАТЬСЯ: именно ради этого они добавлены. Проверяем
   // реальное изменение текста, а не только его формат — часы, которые стоят,
   // формально «показывают секунды», но пользу не приносят.
-  await pushSnapshot(true);
+  await pushSnapshot({ running: true });
   await page.waitForTimeout(200);
 
   const readClock = () => page.evaluate(() =>
@@ -373,7 +605,8 @@ try {
   check(pageErrors.length === 0, "Ошибки страницы: " + pageErrors.join("; "));
 
   if (!failures.length) {
-    console.log("Окружение и подписи: OK кнопка LIME, подпись выше маркера на " +
+    console.log("Окружение и подписи: OK транспорт/плашка трёх состояний, автосохранение, " +
+      "часы с секундами, подпись выше маркера на " +
       (labels.orange.minY - labels.white.maxY) + "px");
   }
 } finally {

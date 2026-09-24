@@ -198,6 +198,196 @@ input,select,textarea{padding:4px 5px;border-radius:4px;font-size:10px}textarea{
 @keyframes versionPushRotate{to{transform:rotate(360deg)}}
 @keyframes questRuntimeDash{to{stroke-dashoffset:-28}}
 .versionChip{cursor:pointer;white-space:nowrap}
+
+/* --- Селектор [МИР][КАМПАНИЯ][меню] ------------------------------------------
+
+   Селектор отвечает на вопрос «что я сейчас редактирую», поэтому стоит в шапке
+   и на первом месте среди чипов: без него «какой мир открыт» приходилось
+   угадывать по содержимому. Названия полей капитальными (МИР / КАМПАНИЯ) —
+   это подписи, а не украшение: рядом два выпадающих списка, и без подписей их
+   не различить.
+
+   Ширина ограничена: длинные имена миров не должны выдавливать чипы состояния
+   за край окна. ------------------------------------------------------------- */
+
+.worldSelector{
+  display:flex;align-items:center;gap:5px;
+  padding:3px 5px;border:1px solid var(--border);border-radius:8px;
+  background:rgba(255,255,255,.03);
+  position:relative;
+}
+.worldSelectorField{display:flex;align-items:center;gap:5px;min-width:0}
+.worldSelectorLabel{
+  color:var(--muted);font-size:9px;font-weight:800;letter-spacing:.5px;
+  white-space:nowrap;
+}
+.worldSelectorSelect{
+  max-width:170px;min-width:96px;
+  background:var(--panel-deep);color:var(--text);
+  border:1px solid var(--border);border-radius:6px;
+  font-size:11px;font-weight:600;padding:3px 4px;
+}
+/* Мир шире кампании: имя мира — заголовок дерева, кампания — его ветвь. */
+#worldSelect{max-width:190px}
+.worldSelectorButton{
+  background:var(--panel-deep);color:var(--text);
+  border:1px solid var(--border);border-radius:6px;
+  font-size:12px;line-height:1;padding:4px 7px;cursor:pointer;
+}
+.worldSelectorButton:hover{border-color:rgba(250,176,3,.55);color:#fff}
+/* Меню открывается поверх содержимого: это действия, а не часть разметки
+   страницы, поэтому оно не должно сдвигать карточки при раскрытии. */
+.worldMenu{
+  position:absolute;top:calc(100% + 4px);right:0;z-index:60;
+  min-width:220px;padding:4px;
+  display:flex;flex-direction:column;
+  background:var(--panel-deep);border:1px solid var(--border);border-radius:8px;
+  box-shadow:0 14px 34px rgba(0,0,0,.5);
+}
+.worldMenu[hidden]{display:none}
+.worldMenu button{
+  text-align:left;background:transparent;border:0;border-radius:6px;
+  color:var(--text);font-size:11px;padding:7px 9px;cursor:pointer;
+}
+.worldMenu button:hover{background:rgba(250,176,3,.12);color:#fff}
+.worldMenu .worldMenuSep{height:1px;margin:4px 2px;background:var(--border)}
+/* Пункты, создающие ресурс, выделены акцентом: это то, ради чего меню чаще
+   всего и открывают. */
+.worldMenu button.worldMenuCreate{color:var(--accent);font-weight:700}
+
+/* --- Симулятор: верхняя панель в три строки и транспорт -----------------------
+
+   Панель была одним рядом: строка заголовка не имела собственной высоты, и при
+   узком окне текст срезался, а вертикальные отступы задавались полями самих
+   элементов — отсюда «слишком большое расстояние между строками». Теперь строки
+   разделены структурно (три .simTopRow), высота панели считается от содержимого,
+   а не задана константой. --------------------------------------------------- */
+
+.simTop{
+  display:flex;
+  flex-direction:column;
+  align-items:stretch;
+  justify-content:center;
+  gap:6px;
+  height:auto;
+  flex:0 0 auto;
+  padding:8px 12px;
+}
+.simTopRow{display:flex;align-items:center;gap:8px;min-width:0}
+/* Заголовочная строка не сжимается: это текст, а не орган управления. */
+.simTopHead{flex:0 0 auto}
+.simTitleBlock{display:flex;flex-direction:column;line-height:1.15;min-width:0}
+.simTopControls{flex-wrap:wrap}
+.simTopInfo{flex-wrap:wrap}
+/* Подписи заголовка переносятся по словам, а не обрезаются: раньше строка не
+   имела своей высоты, и многоточие/срез выглядели как «текст срезан». */
+.simTitle{font-weight:800;font-size:13px;white-space:normal;word-break:break-word}
+.simSub{color:var(--muted);font-size:10px;white-space:normal;word-break:break-word}
+
+/* Высота строки Симулятора теперь часть самой панели, а не константа: три
+   строки плюс отступы. Если оставить здесь фиксированные 46/58 px, карта
+   уезжала бы под панель или оставляла пустую полосу.
+   Раскладка берётся от flex-контейнера (.app — колонка), поэтому высота тела
+   считается сама: панель flex:0 0 auto, тело flex:1. */
+.simBody{flex:1 1 auto;height:auto}
+
+/* Транспорт: три квадратные кнопки. Ширина фиксирована, потому что глифы
+   разных размеров (▶ ⏹ ⏩) иначе давали бы «пляшущие» кнопки.
+   Кнопки намеренно БЕЗ активного состояния: состояние симуляции показывает
+   плашка, и подсвеченная кнопка дублировала бы его — после паузы подсветка
+   оставалась бы на play, хотя действие у кнопки уже другое. */
+.simTransport{display:flex;gap:4px;align-items:center;flex:0 0 auto}
+.simTransportButton{
+  width:34px;height:30px;padding:0;
+  display:inline-flex;align-items:center;justify-content:center;
+  font-size:15px;line-height:1;
+}
+
+/* Плашка статуса симуляции. Цвет задаётся атрибутом data-sim-state, поэтому
+   ни одно из трёх состояний не «забывается» при правке JS. */
+.simStatusPlate{
+  display:inline-flex;align-items:center;gap:7px;
+  padding:5px 11px;border-radius:8px;
+  border:1px solid var(--border);background:rgba(255,255,255,.03);
+  font-size:11px;font-weight:700;min-height:30px;
+}
+.simStatusPlate[data-sim-state="stopped"]{color:#8b97a3;border-color:rgba(255,255,255,.12)}
+.simStatusPlate[data-sim-state="running"]{color:var(--lime);border-color:rgba(17,251,6,.35);background:rgba(17,251,6,.06)}
+/* Пауза пульсирует оранжевым 1500 мс. Шаг в 1.5 с задан намеренно медленным:
+   быстрое мигание читается как «ошибка», а пауза — нормальное состояние. */
+.simStatusPlate[data-sim-state="paused"]{
+  color:var(--accent);border-color:rgba(250,176,3,.45);background:rgba(250,176,3,.08);
+  animation:simPausePulse 1500ms ease-in-out infinite;
+}
+@keyframes simPausePulse{
+  0%,100%{background:rgba(250,176,3,.06);border-color:rgba(250,176,3,.35);color:var(--accent)}
+  50%{background:rgba(250,176,3,.26);border-color:rgba(250,176,3,.85);color:#ffd479}
+}
+
+/* Строка сведений об автосохранении. */
+.simAutoSave{color:#c9d2dc;font-size:10px;font-weight:700}
+.simAutoSaveHint{color:var(--muted);font-size:9px}
+/* Вспышка «автосохранение произошло»: LIME, ОДИН раз, 2 секунды.
+   Конечная анимация `forwards` с прозрачными крайними кадрами: цвет приходит
+   к исходному сам и не требует снятия класса из JS. Одноразовость обеспечена
+   флагом слота в JS, а не таймером: таймер сработал бы до прихода снимка. */
+.simAutoSave.autoSavePulse{animation:simAutoSavePulse 2000ms ease-out 1 both}
+@keyframes simAutoSavePulse{
+  0%{color:#c9d2dc}
+  15%{color:var(--lime)}
+  40%{color:#c9d2dc}
+  60%{color:var(--lime)}
+  100%{color:#c9d2dc}
+}
+
+/* Ускоренное игровое время: часы в шапке становятся оранжевыми и рядом
+   появляется кратность. При ×1 оранжевого нет — иначе он был бы постоянным
+   шумом и перестал бы означать «время ускорено». */
+#hud.hudAccelerated #hudGameTime,
+.hudClockSpeed{color:var(--accent);font-weight:800}
+
+/* Подпись про паузу в панели сохранений: постоянная, не всплывающая. */
+.savesPanelHint{
+  padding:6px 10px;border-left:2px solid var(--accent);
+  background:rgba(250,176,3,.05);border-radius:5px;
+  color:#dfe6ee;font-size:10px;line-height:1.4;
+}
+
+/* --- Редактор: постоянная строка действий документа ---------------------------
+
+   Кнопки «Сохранить»/«Открыть» раньше лежали внутри прокручиваемого тела и
+   уезжали вверх вместе с полями и свойствами, так что «Сохранить» приходилось
+   искать прокруткой. Теперь панель действий ПРИЛИПАЕТ к верху прокручиваемой
+   области: она видна всегда, но остаётся внутри #workspace.
+
+   Прилипание, а не вынос узла в отдельную строку: панель действий — это первый
+   .toolbar, который рисует каждая панель, а их обработчики ищут кнопки как
+   ws.querySelector(...). После выноса узла повторный рендер не заменял старую
+   панель (она уже не была потомком #workspace), и в документе оказывались ДВА
+   набора кнопок с одинаковыми id — Playwright падал на strict mode, а панель
+   ломалась на любом втором рендере.
+   flex вместо calc(100% - 37px): высота заголовка не константа (он переносится),
+   и формула «минус 37px» разошлась бы с реальностью при первой же правке. ----- */
+.docPanel{display:flex;flex-direction:column}
+.docPanel>.panelTitle{flex:0 0 auto}
+/* Верхний отступ снимается у тела: его роль берёт на себя строка действий,
+   иначе при прилипании над ней оставалась бы просвечивающая полоса. */
+.docPanel>.panelBody{flex:1 1 auto;height:auto;min-height:0;overflow:auto;padding-top:0}
+
+/* Панель действий — ПЕРВЫЙ .toolbar в теле документа; у каждой панели
+   (Quest Graph, Scene, Dialogue, Locations) он свой, но всегда идёт первым
+   элементом тела. Селектор по структуре, а не по классу, добавленному после
+   рендера: панели перерисовывают своё содержимое сами (например, редактор
+   локаций зовёт свой render() при каждом изменении), и класс, выставленный
+   извне, стирался бы на первой же такой перерисовке. */
+.docPanel>.panelBody>.toolbar:first-child{
+  position:sticky;top:0;z-index:3;
+  padding-bottom:8px;
+  background:var(--panel-deep);
+  backdrop-filter:blur(4px);
+  border-bottom:1px solid var(--border);
+}
+
 .versionChip:disabled{opacity:1;cursor:wait}
 .versionPushIcon{display:inline-block;width:13px;margin-left:3px;text-align:center;font-weight:900}
 .versionChip[data-state="running"] .versionPushIcon{color:var(--accent);animation:versionPushRotate .75s linear infinite}
@@ -423,7 +613,10 @@ input,select,textarea{padding:4px 5px;border-radius:4px;font-size:10px}textarea{
 
 /* Simulator gameplay inventory / character HUD */
 .backpackButton{
-  position:absolute;left:16px;bottom:16px;z-index:45;width:48px;height:48px;
+  /* Отступ снизу считается от высоты полосы состояния карты (26px) плюс
+     зазор: кнопка больше её не перекрывает. Константа 16px оставляла нижний
+     край кнопки в полосе, и последняя строка статусбара читалась хуже. */
+  position:absolute;left:16px;bottom:calc(26px + 14px);z-index:45;width:48px;height:48px;
   display:grid;place-items:center;border:1px solid rgba(250,176,3,.38);
   border-radius:10px;background:rgba(23,24,25,.96);color:#dfe5ec;cursor:pointer;
   box-shadow:0 12px 28px rgba(0,0,0,.45),0 0 18px rgba(250,176,3,.06);
@@ -437,8 +630,8 @@ input,select,textarea{padding:4px 5px;border-radius:4px;font-size:10px}textarea{
 .backpackButton.hasNew .backpackNewDot{display:block;animation:inventoryBeaconPulse 1s ease-in-out infinite}
 .backpackButton.hasNew{animation:inventoryBackpackPulse 1.2s ease-in-out infinite}
 .playerOverlay{
-  position:absolute;left:16px;bottom:76px;z-index:40;display:none;gap:8px;
-  width:min(860px,calc(100% - 32px));height:min(540px,calc(100% - 98px));
+  position:absolute;left:16px;bottom:calc(26px + 14px + 48px + 12px);z-index:40;display:none;gap:8px;
+  width:min(860px,calc(100% - 32px));height:min(540px,calc(100% - 150px));
   min-height:360px;align-items:stretch;
 }
 .playerOverlay.visible{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr)}
@@ -655,7 +848,7 @@ input,select,textarea{padding:4px 5px;border-radius:4px;font-size:10px}textarea{
 @keyframes inventoryNotificationIn{from{opacity:0;transform:translateY(-22px)}to{opacity:1;transform:translateY(0)}}
 @media(max-width:920px){
   .playerOverlay.visible{grid-template-columns:1fr}.characterPanel{display:none}
-  .playerOverlay{height:min(560px,calc(100% - 98px));width:min(480px,calc(100% - 32px))}
+  .playerOverlay{height:min(560px,calc(100% - 150px));width:min(480px,calc(100% - 32px))}
 }
 
 

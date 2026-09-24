@@ -23,7 +23,16 @@ public sealed record InstalledCampaignView(
     int Version,
     bool Active,
     string FolderPath,
-    IReadOnlyList<InstalledQuestView> Quests);
+    IReadOnlyList<InstalledQuestView> Quests,
+    // Мир, которому кампания СЕБЯ приписывает. Нужен списку, чтобы показать
+    // оранжевое предупреждение, если папку перенесли в чужой мир: без него
+    // квесты кампании выглядят пропавшими, а причина не видна вовсе.
+    string? ParentWorldId = null,
+    // Полное имя и описание: показываются в списке и в окне свойств.
+    string? FullName = null,
+    string? Description = null,
+    // Подпись автора и дат: показывается курсивом в списке кампаний.
+    ResourceMetadata? Metadata = null);
 
 /// <summary>
 /// Canonical installed campaign catalog.
@@ -39,23 +48,77 @@ public sealed class CampaignStore
         new(StringComparer.OrdinalIgnoreCase);
     private readonly string _root;
     private readonly bool _readOnly;
+    // Автор хранится в сторе, а не передаётся в каждый метод: подпись проставляется
+    // ВСЕМИ правками кампании, и параметр у каждого вызова рано или поздно забыли бы.
+    private readonly string? _author;
 
     public CampaignStore()
         : this(AppPaths.UserQuestRoot, readOnly: false)
     {
     }
 
-    public CampaignStore(string root, bool readOnly)
+    public CampaignStore(string root, bool readOnly, string? author = null)
     {
         if (string.IsNullOrWhiteSpace(root))
             throw new ArgumentException("Campaign root не задан.", nameof(root));
 
         _root = Path.GetFullPath(root);
         _readOnly = readOnly;
+        _author = author;
         Reload();
     }
 
+    /// <summary>
+    /// Кампании ТОЛЬКО выбранного мира.
+    ///
+    /// Мир — это проект, и его содержимое не должно смешиваться с чужим: два
+    /// мира могут иметь кампанию с одним и тем же id (например Common), и без
+    /// ограничения дерева они бы накладывались друг на друга. Отбор идёт по
+    /// пути: кампания принадлежит миру, если лежит внутри его папки.
+    ///
+    /// <paramref name="worldFolder"/> — пустая строка или null означает «весь
+    /// корень»: так работает режим без выбранного мира (CI-прогон, диагностика).
+    /// </summary>
+    public CampaignStore ScopedTo(string? worldFolder)
+    {
+        if (string.IsNullOrWhiteSpace(worldFolder))
+            return this;
+
+        var scoped = new CampaignStore(worldFolder, _readOnly, _author);
+        AppLogger.Info("CampaignStore: каталог ограничен миром.",
+            $"world={worldFolder}; campaigns={scoped.Records.Count}");
+        return scoped;
+    }
+
+    /// <summary>
+    /// Имя мира, которому принадлежит каталог.
+    ///
+    /// Берётся из имени папки, а не из файла мира: стор работает со своей
+    /// папкой и не должен читать файлы соседнего уровня. Пусто для всего корня.
+    /// </summary>
+    public string WorldFolderName =>
+        _root.Equals(Path.GetFullPath(AppPaths.UserQuestRoot), StringComparison.OrdinalIgnoreCase)
+            ? string.Empty
+            : Path.GetFileName(_root);
+
     public bool IsReadOnly => _readOnly;
+
+    /// <summary>
+    /// Папка, в которой лежат кампании этого стора.
+    ///
+    /// Стор строится либо на корне кампаний, либо на папке МИРА (`ScopedTo`).
+    /// Во втором случае кампании обязаны лежать в подпапке `campaigns`: иначе
+    /// созданная кампания оказалась бы рядом с `world.aqworld`, разошлась бы с
+    /// раскладкой обмена (архив мира собирает папку `campaigns`) и не попала бы
+    /// в архив при выгрузке мира.
+    ///
+    /// Признак папки мира — файл `world.aqworld`, а не имя папки: имя произвольное
+    /// (его задаёт автор), а файл мира есть ровно у папки мира и больше нигде.
+    /// </summary>
+    private string CampaignsContainer =>
+        File.Exists(WorldPaths.WorldFilePath(_root))
+            ? WorldPaths.CampaignsRoot(_root)
+            : _root;
 
     public IReadOnlyList<CampaignRecord> Records =>
         _records.Values
@@ -104,7 +167,11 @@ public sealed class CampaignStore
                 record.Definition.Version,
                 record.Definition.Active,
                 record.FolderPath,
-                quests));
+                quests,
+                record.Definition.WorldId,
+                record.Definition.FullName,
+                record.Definition.Description,
+                record.Definition.Metadata));
         }
 
         return result;
@@ -226,9 +293,54 @@ public sealed class CampaignStore
             $"weather={world.StartConditions?.Weather}");
     }
 
-    public void SetQuestEnabled(string campaignId, string questId, bool enabled)
+    /// <summary>
+    /// Обновляет свойства кампании из окна свойств.
+    ///
+    /// Затрагивается ТОЛЬКО описательная часть (имя, описание, изображение).
+    /// Квесты, активность, геокоордината и стартовые условия живут в этом же
+    /// файле и обязаны остаться нетронутыми: иначе правка описания молча
+    /// изменила бы игровые настройки мира.
+    ///
+    /// <paramref name="parentWorldId"/> не меняется никогда: переносить кампанию
+    /// в другой мир через окно свойств нельзя — это файловая операция, и
+    /// «редактирование» здесь лишь переписало бы поле, оставив папку на месте.
+    /// </summary>
+    public void UpdateCampaign(
+        string campaignId,
+        string name,
+        string? fullName,
+        string? description,
+        string? imageFileName)
     {
         var record = GetRecord(campaignId);
+
+        if (!ResourceNaming.IsValidName(name))
+            throw new InvalidOperationException(
+                "Недопустимое имя кампании: используйте буквы, цифры, пробел и подчёркивание.");
+
+        var moment = DateTimeOffset.UtcNow;
+        record.Replace(record.Definition with
+        {
+            Name = name.Trim(),
+            FullName = string.IsNullOrWhiteSpace(fullName) ? null : fullName.Trim(),
+            Description = string.IsNullOrWhiteSpace(description) ? null : description.Trim(),
+            ImageFile = string.IsNullOrWhiteSpace(imageFileName) ? null : imageFileName,
+            Metadata = (record.Definition.Metadata ?? new ResourceMetadata())
+                .WithModified(
+                    string.IsNullOrWhiteSpace(_author)
+                        ? ResourceMetadata.DefaultAuthor(moment)
+                        : _author,
+                    moment)
+        });
+
+        Save(record);
+        AppLogger.Info("CampaignStore: свойства кампании обновлены.",
+            $"campaignId={campaignId}; name={record.Definition.Name}; " +
+            $"image={record.Definition.ImageFile}");
+    }
+
+    public void SetQuestEnabled(string campaignId, string questId, bool enabled)
+    {        var record = GetRecord(campaignId);
         var entry = record.Definition.Quests.FirstOrDefault(item =>
             item.QuestId.Equals(questId, StringComparison.OrdinalIgnoreCase));
 
@@ -254,21 +366,116 @@ public sealed class CampaignStore
             $"campaignId={campaignId}; questId={questId}; enabled={enabled}");
     }
 
+    /// <summary>
+    /// Создаёт кампанию в папке своего мира.
+    ///
+    /// Кампания создаётся СРАЗУ ФАЙЛОМ, а не «пустой заготовкой»: каталог
+    /// читается с диска, и кампания без файла просто не существовала бы — автор
+    /// увидел бы, что кнопка ничего не сделала.
+    ///
+    /// Демонстрационный квест НЕ создаётся: в отличие от общей кампании мира
+    /// (её отсутствие означает мир, в котором нечего создавать), новая кампания
+    /// заводится автором осознанно, и пустой список квестов — нормальное начало.
+    /// </summary>
+    public CampaignRecord CreateCampaign(
+        string worldId,
+        string name,
+        string? fullName = null,
+        string? description = null)
+    {
+        if (_readOnly)
+            throw new InvalidOperationException("Каталог кампаний открыт только для чтения.");
+
+        if (!ResourceNaming.IsValidName(name))
+            throw new InvalidOperationException(
+                "Недопустимое имя кампании: используйте буквы, цифры, пробел и подчёркивание.");
+
+        var folderName = ResourceNaming.ToFolderName(name);
+        var container = CampaignsContainer;
+        var folder = Path.Combine(container, folderName);
+
+        // Проверка занятости имени идёт ПО КАТАЛОГУ, а не только по файловой
+        // системе: на регистронезависимой ФС «Проверка» и «проверка» — одна
+        // папка, а на регистрозависимой — разные, и поведение расходилось бы
+        // между машинами. Стор уже знает свои записи, поэтому проверяет их.
+        var clash = _records.Values.FirstOrDefault(record =>
+            record.Definition.Id.Equals(folderName.Replace(' ', '_').ToLowerInvariant(),
+                StringComparison.OrdinalIgnoreCase) ||
+            Path.GetFileName(record.FolderPath).Equals(folderName,
+                StringComparison.OrdinalIgnoreCase));
+
+        if (clash is not null || Directory.Exists(folder))
+        {
+            throw new InvalidOperationException(
+                "Кампания с таким именем уже существует: " + name);
+        }
+
+        var moment = DateTimeOffset.UtcNow;
+        var author = string.IsNullOrWhiteSpace(_author)
+            ? ResourceMetadata.DefaultAuthor(moment)
+            : _author;
+
+        var definition = new CampaignDefinition(
+            Id: folderName.Replace(' ', '_').ToLowerInvariant(),
+            Name: name.Trim(),
+            Version: 1,
+            // Новая кампания НЕ активна: активная кампания задаёт мир симуляции,
+            // и «создал кампанию — сменил мир» было бы неожиданным побочным
+            // эффектом создания.
+            Active: false,
+            Quests: Array.Empty<CampaignQuestEntry>(),
+            Files: Array.Empty<string>(),
+            Geo: GeoCoordinate.CreateDefault(),
+            StartDate: GameCalendar.DefaultStartDate,
+            WorldId: worldId,
+            FullName: string.IsNullOrWhiteSpace(fullName) ? null : fullName.Trim(),
+            Description: string.IsNullOrWhiteSpace(description) ? null : description.Trim(),
+            Metadata: new ResourceMetadata().WithCreated(author, moment));
+
+        // Структура папок создаётся сразу: автор должен видеть, куда класть
+        // квесты и сцены, а не создавать каталоги руками.
+        foreach (var sub in new[]
+                 {
+                     WorldPaths.QuestsFolderPath(folder),
+                     WorldPaths.ScenesFolderPath(folder)
+                 })
+        {
+            Directory.CreateDirectory(sub);
+        }
+
+        WorldContentSeeder.WriteCampaign(folder, definition, worldId);
+        Reload();
+
+        var record = GetRecord(definition.Id)
+            ?? throw new InvalidOperationException(
+                "Кампания создана, но не читается: " + WorldPaths.CampaignFilePath(folder));
+
+        AppLogger.Info("CampaignStore: кампания создана.",
+            $"worldId={worldId}; campaignId={definition.Id}; folder={folder}");
+
+        return record;
+    }
+
     public void Reload()
     {
         _records.Clear();
-        if (!_readOnly)
-            Directory.CreateDirectory(_root);
 
-        if (!Directory.Exists(_root))
+        // Сканируется тот же контейнер, куда пишет создание кампании. Иначе
+        // созданная кампания попала бы на диск, но не в каталог: «создал, а её
+        // нигде нет» — тот самый симптом, который эта проверка и ловит.
+        var container = CampaignsContainer;
+        if (!_readOnly)
+            Directory.CreateDirectory(container);
+
+        if (!Directory.Exists(container))
         {
             AppLogger.Info("CampaignStore: каталог отсутствует.",
-                $"root={_root}; readOnly={_readOnly}");
+                $"root={_root}; container={container}; readOnly={_readOnly}");
             return;
         }
 
         foreach (var campaignFile in Directory.EnumerateFiles(
-                     _root,
+                     container,
                      CampaignFileName,
                      SearchOption.AllDirectories)
                  .OrderBy(path => path, StringComparer.OrdinalIgnoreCase))

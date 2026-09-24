@@ -1,5 +1,7 @@
 namespace AssistQuestEditor.App;
 
+using AssistQuestEditor.Domain;
+
 public sealed record ResourceFileType(
     string Extension,
     string Kind,
@@ -46,7 +48,20 @@ public static class ResourceFileTypes
             "Scene",
             "aqscene.ico",
             "scene.aqscene",
-            "Канонический Scene Definition. Открывается в Редакторе сцен и диалогов.")
+            "Канонический Scene Definition. Открывается в Редакторе сцен и диалогов."),
+        // Архив — не ресурс, а УПАКОВКА ресурсов: его не открывают в редакторе,
+        // а импортируют. Вид "Archive" и обрабатывается отдельно (диалог импорта
+        // вместо открытия документа), иначе двойной клик пытался бы прочитать
+        // zip как определение квеста.
+        new(
+            WorldArchiveRules.Extension,
+            "Archive",
+            "Assist Quest Archive",
+            "Archive",
+            "aqezip.ico",
+            WorldArchiveRules.DemoWorldFileName,
+            "Архив Assist Quest: сжатый пакет мира, кампании или квеста. " +
+            "Открывается диалогом импорта.")
     ];
 
     public static ResourceFileType Get(string extension)

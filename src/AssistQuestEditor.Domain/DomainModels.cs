@@ -240,7 +240,15 @@ public sealed record QuestDefinition(
     QuestGraph Graph,
     IReadOnlyList<string> SceneIds,
     QuestActivation? Activation = null,
-    int Version = 1);
+    int Version = 1,
+    // Мир и кампания-родители. Записываются в файл, потому что игрок может
+    // физически положить квест не в ту кампанию: список покажет оранжевое
+    // предупреждение о чужом родителе, но работать не помешает — объект может
+    // быть перенесён осознанно (например при подготовке экспорта).
+    string? WorldId = null,
+    string? CampaignId = null,
+    // Авторство и даты создания/изменения.
+    ResourceMetadata? Metadata = null);
 
 public sealed record QuestDefinitionDocument(
     [property: JsonPropertyOrder(0)] int SchemaVersion,

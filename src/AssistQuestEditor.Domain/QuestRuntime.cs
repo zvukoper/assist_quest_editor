@@ -71,10 +71,54 @@ public sealed class QuestRuntime : IQuestRuntimeController
     public QuestGraph ActiveGraph => _graphStore.Value;
     public bool SimulationRunning { get; private set; } = true;
 
+    /// <summary>
+    /// Пауза одиночного Runtime.
+    ///
+    /// Управляет ею координатор (он владеет состоянием симуляции), а сам Runtime
+    /// лишь помнит факт паузы: его <see cref="Tick"/> и проверки ожидания
+    /// ориентируются на <see cref="SimulationRunning"/>, который при паузе тоже
+    /// false. Отдельное поле нужно интерфейсу, чтобы «продолжить» отличалось от
+    /// «начать заново».
+    /// </summary>
+    public bool IsPaused { get; private set; }
+
+    /// <summary>
+    /// Кратность игрового времени одиночного Runtime.
+    ///
+    /// Часы двигает координатор, поэтому здесь значение только хранится: интерфейс
+    /// требует его у владельца состояния, а не у каждого исполнителя.
+    /// </summary>
+    public double SimulationSpeed { get; private set; } = 1d;
+
     public IReadOnlyCollection<string> EnabledQuestIds =>
         [ActiveGraph.Id];
 
-    public void SetSimulationRunning(bool running) => SimulationRunning = running;
+    public void SetSimulationRunning(bool running)
+    {
+        SimulationRunning = running;
+        if (running)
+            IsPaused = false;
+    }
+
+    public void PauseSimulation()
+    {
+        SimulationRunning = false;
+        IsPaused = true;
+    }
+
+    public void ResumeSimulation()
+    {
+        SimulationRunning = true;
+        IsPaused = false;
+    }
+
+    public void SetSimulationSpeed(double speed)
+    {
+        if (double.IsNaN(speed) || double.IsInfinity(speed))
+            return;
+
+        SimulationSpeed = Math.Clamp(speed, QuestRuntimeCoordinator.MinSimulationSpeed, QuestRuntimeCoordinator.MaxSimulationSpeed);
+    }
 
     public void SetQuestEnabled(string questId, bool enabled)
     {

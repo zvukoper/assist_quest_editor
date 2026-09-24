@@ -21,7 +21,19 @@ public sealed class QuestRuntimeCoordinator : IQuestRuntimeController
     private readonly Dictionary<string, bool> _activationReady = new(StringComparer.OrdinalIgnoreCase);
     private readonly HashSet<string> _enabledQuestIds = new(StringComparer.OrdinalIgnoreCase);
     private bool _simulationRunning;
+    private bool _isPaused;
+    private double _simulationSpeed = 1d;
     private DateTimeOffset? _lastClockTick;
+
+    /// <summary>
+    /// Допустимый диапазон кратности игрового времени.
+    ///
+    /// Верхняя граница не декоративная: при 60× мир проходит игровые сутки за
+    /// 24 реальных минуты, и это ещё осмысленный сценарий («переждать ночь»).
+    /// Ниже 0.1× часы выглядели бы остановившимися, хотя симуляция «идёт».
+    /// </summary>
+    public const double MinSimulationSpeed = 0.1d;
+    public const double MaxSimulationSpeed = 60d;
 
     public QuestRuntimeCoordinator(
         IDataChannelHub hub,
@@ -60,6 +72,10 @@ public sealed class QuestRuntimeCoordinator : IQuestRuntimeController
 
     public bool SimulationRunning => _simulationRunning;
 
+    public bool IsPaused => _isPaused;
+
+    public double SimulationSpeed => _simulationSpeed;
+
     public IReadOnlyCollection<string> EnabledQuestIds =>
         _enabledQuestIds.ToArray();
 
@@ -80,6 +96,10 @@ public sealed class QuestRuntimeCoordinator : IQuestRuntimeController
             return;
 
         _simulationRunning = running;
+        // Любой явный старт снимает паузу, любая остановка её больше не несёт:
+        // «пауза» — это признак остановленного, но не сброшенного мира, и жить
+        // она может только рядом с остановкой.
+        _isPaused = false;
         _activeRuntime?.SetSimulationRunning(running);
         SetClockRunning(running);
 
@@ -90,6 +110,63 @@ public sealed class QuestRuntimeCoordinator : IQuestRuntimeController
 
         if (running)
             EvaluateAutomaticStart();
+    }
+
+    /// <summary>
+    /// Ставит симуляцию на паузу, не сбрасывая состояние мира.
+    ///
+    /// Отличие от <see cref="SetSimulationRunning"/>(false) только в признаке
+    /// <see cref="IsPaused"/>: само исполнение в обоих случаях останавливается.
+    /// Разделять их нужно потому, что кнопка play ведёт себя по-разному —
+    /// после паузы она продолжает мир, после полной остановки начинает заново,
+    /// — а автосохранение должно срабатывать в обоих случаях.
+    /// </summary>
+    public void PauseSimulation()
+    {
+        if (!_simulationRunning)
+        {
+            _isPaused = true;
+            return;
+        }
+
+        _simulationRunning = false;
+        _isPaused = true;
+        _activeRuntime?.SetSimulationRunning(false);
+        SetClockRunning(false);
+
+        PublishSynthetic("SimulationPaused", null, "Симуляция на паузе.");
+    }
+
+    /// <summary>Продолжает приостановленную симуляцию.</summary>
+    public void ResumeSimulation()
+    {
+        if (_simulationRunning)
+            return;
+
+        if (!_isPaused)
+        {
+            SetSimulationRunning(true);
+            return;
+        }
+
+        _simulationRunning = true;
+        _isPaused = false;
+        // Точка отсчёта часов сбрасывается: иначе прирост времени за время паузы
+        // был бы засчитан как игровое время, и мир «прыгнул» бы вперёд ровно на
+        // длительность паузы.
+        _lastClockTick = null;
+        _activeRuntime?.SetSimulationRunning(true);
+        SetClockRunning(true);
+
+        PublishSynthetic("SimulationResumed", null, "Симуляция продолжена.");
+    }
+
+    public void SetSimulationSpeed(double speed)
+    {
+        if (double.IsNaN(speed) || double.IsInfinity(speed))
+            return;
+
+        _simulationSpeed = Math.Clamp(speed, MinSimulationSpeed, MaxSimulationSpeed);
     }
 
     /// <summary>
@@ -203,7 +280,13 @@ public sealed class QuestRuntimeCoordinator : IQuestRuntimeController
             // Отрицательная дельта (перевод часов) игнорируется: время мира не
             // должно идти назад.
             if (delta > TimeSpan.Zero)
-                clock = clock with { Elapsed = clock.Elapsed + delta };
+            {
+                // Кратность применяется ТОЛЬКО к игровым часам: она ускоряет мир,
+                // а не частоту тиков Runtime. Ускорять сами тики нельзя — они
+                // дёргают срабатывание квестов, и «перемотка» превратилась бы в
+                // мгновенный проскок всех триггеров подряд.
+                clock = clock with { Elapsed = clock.Elapsed + delta * _simulationSpeed };
+            }
         }
 
         _lastClockTick = now;

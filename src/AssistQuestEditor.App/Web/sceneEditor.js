@@ -98,7 +98,9 @@
             " · NodeId " + escapeHtml(sceneNavigationBack.nodeId) +
           "</div>"
         : "") +
-      "<div style='height:calc(100% - 46px);min-height:560px;border:1px solid var(--border);border-radius:8px;overflow:hidden;background:#111419'>" +
+      // −8px, а не −46px: панель действий вынесена в постоянную строку
+      // (прилипающая строка в theme.css) и больше не занимает высоту канваса.
+      "<div style='height:calc(100% - 8px);min-height:560px;border:1px solid var(--border);border-radius:8px;overflow:hidden;background:#111419'>" +
         "<svg id='sceneGraphSvg' viewBox='" + sceneViewport.x + " " + sceneViewport.y + " " + sceneViewport.width + " " + sceneViewport.height + "' xmlns='http://www.w3.org/2000/svg' style='width:100%;height:100%'>" +
           "<g id='sceneGraphEdges'>" + sceneEdges() + "</g>" +
           "<g id='sceneGraphNodes'>" + sceneGraph.nodes.map(sceneNodeMarkup).join("") + "</g>" +

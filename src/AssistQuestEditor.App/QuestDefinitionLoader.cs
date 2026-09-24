@@ -10,16 +10,20 @@ public static class QuestDefinitionLoader
     private const string RelativeDirectory = "quests";
 
     /// <summary>
-    /// Загружает все canonical Quest Definitions из resource-каталога.
+    /// Загружает все canonical Quest Definitions из ресурсного каталога.
     /// Каждый .aqquest является самостоятельным документом.
+    ///
+    /// Пользовательская папка проверяется на существование, но НЕ подменяет
+    /// поставку при пустом каталоге: пустая папка миров — это стартовая фаза
+    /// («мир не создан»), а не повод показать учебный квест как будто он есть в
+    /// мире. Иначе список выглядел бы наполненным при отсутствии миров.
     /// </summary>
     public static IReadOnlyList<QuestDefinition> LoadAllOrFallback()
     {
-        var userDirectory = AppPaths.UserQuestRoot;
         var sourceDirectory = Path.Combine(AppPaths.ResourceRoot, RelativeDirectory);
-        var directory = Directory.Exists(userDirectory) &&
-                        Directory.EnumerateFiles(userDirectory, "*.aqquest", SearchOption.AllDirectories).Any()
-            ? userDirectory
+        var directory = Directory.Exists(AppPaths.WorldsRoot) &&
+                        Directory.EnumerateFiles(AppPaths.WorldsRoot, "*.aqquest", SearchOption.AllDirectories).Any()
+            ? AppPaths.WorldsRoot
             : sourceDirectory;
 
         if (!Directory.Exists(directory))
@@ -54,16 +58,17 @@ public static class QuestDefinitionLoader
     /// Возврат только QuestGraph терял Description/SceneIds уже на старте, поэтому
     /// первое же сохранение записывало документ без них.
     ///
-    /// Путь строится от каталога ресурсов, а не от <see cref="AppContext.BaseDirectory"/>:
-    /// в single-file публикации базовый каталог — это кэш распаковки, где могут
-    /// лежать ресурсы прошлых сборок.
+    /// Порядок поиска: сначала миры пользователя (там живёт актуальный контент),
+    /// затем поставка. Путь строится от каталога ресурсов, а не от
+    /// <see cref="AppContext.BaseDirectory"/>: в single-file публикации базовый
+    /// каталог — это кэш распаковки, где могут лежать ресурсы прошлых сборок.
     /// </summary>
     public static QuestDefinitionDocument LoadDocumentOrFallback()
     {
         var sourcePath = Path.Combine(AppPaths.ResourceRoot, RelativePath);
-        var userPath = Directory.Exists(AppPaths.UserQuestRoot)
+        var userPath = Directory.Exists(AppPaths.WorldsRoot)
             ? Directory.EnumerateFiles(
-                    AppPaths.UserQuestRoot,
+                    AppPaths.WorldsRoot,
                     Path.GetFileName(RelativePath),
                     SearchOption.AllDirectories)
                 .FirstOrDefault()
@@ -99,6 +104,42 @@ public static class QuestDefinitionLoader
             AppLogger.Error("Ошибка загрузки учебного Quest Definition.", ex, $"path={path}");
             return FallbackDocument();
         }
+    }
+
+    /// <summary>
+    /// Собирает документ квеста из графа с проставленным авторством и родителями.
+    ///
+    /// Один конструктор документа на всё приложение: «кто и когда создал» и
+    /// «в каком мире и кампании живёт» обязаны проставляться одинаково, иначе
+    /// одни файлы получат подпись, а другие нет.
+    /// </summary>
+    public static QuestDefinitionDocument CreateDocument(
+        QuestGraph graph,
+        string author,
+        DateTimeOffset moment,
+        string worldId,
+        string campaignId,
+        QuestDefinition? source = null)
+    {
+        var baseDefinition = source is null
+            ? new QuestDefinition(graph.Id, graph.Name, string.Empty, graph, Array.Empty<string>())
+            : source with { Graph = graph };
+
+        // Авторство сохраняется, если документ уже существовал: «создал» при
+        // перезаписи не меняется, а «изменил» обновляется.
+        var metadata = baseDefinition.Metadata is { CreatedBy: not null } existing
+            ? existing.WithModified(author, moment)
+            : new ResourceMetadata().WithCreated(author, moment);
+
+        return new QuestDefinitionDocument(
+            1,
+            "aqquest",
+            baseDefinition with
+            {
+                WorldId = worldId,
+                CampaignId = campaignId,
+                Metadata = metadata
+            });
     }
 
     private static QuestDefinitionDocument FallbackDocument()

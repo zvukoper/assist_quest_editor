@@ -27,6 +27,10 @@ public sealed class SimulatorForm : WebViewForm
     private readonly List<SimulatorJournalEntry> _journalEntries = new();
     private JournalForm? _journalForm;
     private CampaignsForm? _campaignsForm;
+
+    /// <summary>Мир, которому принадлежит окно. Null — режим без выбранного мира (CI).</summary>
+    private readonly WorldRecord? _world;
+
     private bool _journalDetached;
     private bool _snapshotRequestScheduled;
     private bool _journalRefreshScheduled;
@@ -40,6 +44,24 @@ public sealed class SimulatorForm : WebViewForm
     // приходят часто, и режим исчезал бы через доли секунды после нажатия.
     private LocationVisualisationRequest? _locationVisualisation;
 
+    /// <summary>
+    /// Момент последнего автосохранения.
+    ///
+    /// Показывается под кнопкой запуска («Автосохранение: дата и время»), чтобы
+    /// игрок понимал, к какому состоянию вернётся мир. Null означает «ещё не
+    /// сохранялось»: подпись тогда это и говорит, вместо пустоты или выдуманной
+    /// даты.
+    /// </summary>
+    private DateTimeOffset? _autoSaveAt;
+
+    /// <summary>
+    /// Мир уже автосохранён при закрытии.
+    ///
+    /// Форма закрывается двумя событиями подряд (FormClosing, затем FormClosed),
+    /// и без флага автосохранение выполнялось бы дважды на каждый выход.
+    /// </summary>
+    private bool _closedAutosaved;
+
     public SimulatorForm(
         IDataChannelHub hub,
         IQuestRuntimeController runtime,
@@ -47,7 +69,8 @@ public sealed class SimulatorForm : WebViewForm
         CampaignStore campaignStore,
         Action<string> openQuestEditor,
         ILocationResolver locationResolver,
-        RoadIndex? roads = null)
+        RoadIndex? roads = null,
+        WorldRecord? world = null)
         : base(
             "Симулятор",
             "simulator.html",
@@ -57,7 +80,12 @@ public sealed class SimulatorForm : WebViewForm
         _hub = hub;
         _runtime = runtime ?? throw new ArgumentNullException(nameof(runtime));
         _questGraph = questGraph ?? throw new ArgumentNullException(nameof(questGraph));
-        _campaignStore = campaignStore ?? throw new ArgumentNullException(nameof(campaignStore));
+        // Каталог кампаний ограничивается МИРОМ: два мира могут иметь кампанию
+        // с одним и тем же id (например Common), и без ограничения они бы
+        // наложились друг на друга в списке и на карте.
+        _world = world;
+        _campaignStore = (campaignStore ?? throw new ArgumentNullException(nameof(campaignStore)))
+            .ScopedTo(world?.FolderPath);
         _openQuestEditor = openQuestEditor ?? throw new ArgumentNullException(nameof(openQuestEditor));
         _locationResolver = locationResolver ?? throw new ArgumentNullException(nameof(locationResolver));
         _roads = roads ?? new RoadIndex(Array.Empty<RoadSegment>());
@@ -73,6 +101,12 @@ public sealed class SimulatorForm : WebViewForm
         {
             events.Published += Events_Published;
         }
+
+        // Штатное закрытие окна симулятора: мир автосохраняется, если симуляция
+        // была запущена. Форма закрывается при выходе из приложения через
+        // MainForm.FormClosed, поэтому отдельной ветки «выход из приложения» не
+        // нужно — это тот же путь.
+        FormClosing += (_, _) => AutosaveOnClose();
 
         FormClosed += (_, _) =>
         {
@@ -104,12 +138,37 @@ public sealed class SimulatorForm : WebViewForm
     {
         Opacity = 1;
         AppLogger.Info("SimulatorForm: browser ready, отправляю snapshot.");
+
+        // Мир восстанавливается ДО первого снимка: карта должна сразу показать
+        // актуальное состояние, а не мигнуть «началом мира» и перерисоваться.
+        AutoLoadWorld();
         PushRoads();
         PushSnapshot();
         if (_journalDetached)
         {
             BeginInvoke((Action)OpenJournalWindow);
         }
+    }
+
+    /// <summary>
+    /// Автосохранение при штатном закрытии окна.
+    ///
+    /// Делается до уничтожения каналов и таймера: после закрытия читать состояние
+    /// уже неоткуда. Флаг защищает от повторного вызова на FormClosed.
+    /// </summary>
+    private void AutosaveOnClose()
+    {
+        if (_closedAutosaved)
+            return;
+
+        _closedAutosaved = true;
+        if (!_runtime.SimulationRunning)
+        {
+            AppLogger.Info("SimulatorForm: закрытие без автосохранения (симуляция выключена).");
+            return;
+        }
+
+        StopSimulation("закрытие симулятора");
     }
 
     /// <summary>
@@ -178,6 +237,14 @@ public sealed class SimulatorForm : WebViewForm
                 StringComparer.OrdinalIgnoreCase),
             runtime = _runtime.State,
             simulationRunning = _runtime.SimulationRunning,
+            simulationPaused = _runtime.IsPaused,
+            simulationSpeed = _runtime.SimulationSpeed,
+            // Подпись под кнопкой запуска: к какому состоянию мира игрок вернётся.
+            // Берётся СИСТЕМНАЯ дата текущего автосохранения (локальное время
+            // машины, до секунды), а не игровое время мира: подпись отвечает на
+            // вопрос «когда это записано на диск», и по ней игрок сверяется с
+            // часами Windows.
+            autoSaveLabel = _autoSaveAt?.ToLocalTime().ToString("dd.MM.yyyy HH:mm:ss"),
             enabledQuestIds = _runtime.EnabledQuestIds,
             questCatalog = BuildQuestCatalog(snapshot),
             selectedQuest = new
@@ -338,16 +405,30 @@ public sealed class SimulatorForm : WebViewForm
                     break;
 
                 case "simulation_start":
-                    _runtime.SetSimulationRunning(true);
-                    StartPersistence();
+                    StartSimulation();
                     break;
 
                 case "simulation_stop":
-                    _runtime.SetSimulationRunning(false);
-                    // При выключении симуляции сохранённое состояние фиксируется,
-                    // а последующие пробы пользователя остаются локальными: при
-                    // следующем запуске мир вернётся к этому снимку.
-                    PersistSession("симуляция остановлена", force: true);
+                    StopSimulation("симуляция остановлена вручную");
+                    break;
+
+                case "simulation_pause":
+                    PauseSimulation();
+                    break;
+
+                case "simulation_resume":
+                    ResumeSimulation();
+                    break;
+
+                case "simulation_set_speed":
+                    _runtime.SetSimulationSpeed(Number(root, "speed", _runtime.SimulationSpeed));
+                    AppLogger.Info("SimulatorForm: кратность игрового времени изменена.",
+                        $"speed={_runtime.SimulationSpeed}");
+                    // Снимок обязателен: кратность живёт в Runtime, а UI узнаёт о
+                    // ней ТОЛЬКО из снимка. Без этого ответа кнопка ff выглядела
+                    // неработающей — нажатие уходило, но ни кнопка, ни часы, ни
+                    // подсказка не менялись.
+                    RequestSnapshot("simulation speed changed");
                     break;
 
                 case "set_quest_enabled":
@@ -378,8 +459,13 @@ public sealed class SimulatorForm : WebViewForm
                     // «Сбросить» обнуляет сохранённое прохождение, но НЕ выключает
                     // симуляцию: пользователь продолжает работу в чистом мире с
                     // той же сессией.
+                    //
+                    // Автосохранение после сброса НЕ пишется: автосохранение — это
+                    // только реакция на выключение симуляции. Пустой слот означает
+                    // «прохождения нет», и следующий запуск честно возьмёт мир из
+                    // кампании.
                     _saveStore.ClearSession();
-                    PersistSession("сброс после очистки", force: true);
+                    _autoSaveAt = null;
 
                     // Свойства мира берутся из КАМПАНИИ, а не остаются какими были:
                     // сброс возвращает мир к состоянию «на входе», и погода с
@@ -598,12 +684,16 @@ public sealed class SimulatorForm : WebViewForm
         }
 
         _campaignsForm = new CampaignsForm();
+        // Мир ставится ДО каталога: окно строит раздел мира первым, и без него
+        // заголовок и кнопка «ПАПКА» ссылались бы в никуда.
+        _campaignsForm.SetWorld(_world);
         _campaignsForm.SetCatalog(_campaignStore.BuildSimulatorCatalog());
         _campaignsForm.CampaignActiveChanged += CampaignsForm_CampaignActiveChanged;
         _campaignsForm.QuestEnabledChanged += CampaignsForm_QuestEnabledChanged;
         _campaignsForm.QuestOpenRequested += CampaignsForm_QuestOpenRequested;
         _campaignsForm.CampaignFolderOpenRequested += CampaignsForm_CampaignFolderOpenRequested;
         _campaignsForm.QuestSelected += CampaignsForm_QuestSelected;
+        _campaignsForm.WorldFolderOpenRequested += (_, _) => OpenWorldFolder();
         _campaignsForm.FormClosed += (_, _) =>
         {
             _campaignsForm = null;
@@ -613,6 +703,26 @@ public sealed class SimulatorForm : WebViewForm
         if (_selectedQuestId.Length > 0)
             _campaignsForm.SelectQuest(_selectedCampaignId, _selectedQuestId);
         _campaignsForm.Show(this);
+    }
+
+    /// <summary>
+    /// Открывает папку мира в проводнике.
+    ///
+    /// Молчаливое бездействие при отсутствии папки выглядело бы как сломанная
+    /// кнопка, поэтому об этом говорится прямо.
+    /// </summary>
+    private void OpenWorldFolder()
+    {
+        var folder = _world?.FolderPath;
+        if (string.IsNullOrWhiteSpace(folder) || !Directory.Exists(folder))
+        {
+            MessageBox.Show(this,
+                "Папка мира не найдена: " + (folder ?? "мир не выбран"),
+                "Папка мира", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            return;
+        }
+
+        Process.Start(new ProcessStartInfo { FileName = folder, UseShellExecute = true });
     }
 
     /// <summary>
@@ -1609,18 +1719,13 @@ public sealed class SimulatorForm : WebViewForm
     /// <summary>
     /// Создаёт сохранение текущего состояния.
     ///
-    /// Снимок разрешён только при запущенной симуляции: выключенный симулятор —
-    /// визуальный инструмент, и его изменения намеренно не считаются состоянием
-    /// мира. Иначе «точный снимок прохождения» включал бы пробы пользователя.
+    /// Ручное сохранение разрешено в ЛЮБОМ режиме — и при идущей симуляции, и при
+    /// выключенной. Это осознанно: игрок формирует разные типы снимков, а
+    /// запрещать их «потому что симуляция не идёт» значит отнимать у него
+    /// возможность зафиксировать подготовленную вручную сцену.
     /// </summary>
     private void CreateSave(JsonElement root)
     {
-        if (!_runtime.SimulationRunning)
-        {
-            PostSaveError("Сохранение возможно только при запущенной симуляции.");
-            return;
-        }
-
         var requested = root.TryGetProperty("name", out var nameNode) ? nameNode.GetString() : null;
         var createdAt = DateTimeOffset.UtcNow;
 
@@ -1644,13 +1749,17 @@ public sealed class SimulatorForm : WebViewForm
     }
 
     /// <summary>
-    /// Загружает сохранение и ВЫКЛЮЧАЕТ симуляцию.
+    /// Загружает сохранение и ставит симуляцию на ПАУЗУ.
     ///
     /// Симуляция гасится намеренно: загрузка одним движением меняет игрока,
     /// факты, инвентарь и статусы квестов, и если бы симуляция продолжала идти,
     /// эти изменения немедленно вызвали бы срабатывания нод (активация квестов,
     /// события, эффекты). Пользователь должен сначала убедиться, что мир в
-    /// ожидаемом состоянии, и запустить симуляцию сам.
+    /// ожидаемом состоянии, и продолжить сам.
+    ///
+    /// Это именно ПАУЗА, а не полная остановка: кнопка play после загрузки
+    /// ПРОДОЛЖАЕТ загруженное состояние, а не начинает его заново. О паузе
+    /// интерфейс сообщает отдельной подписью под кнопкой «Загрузить».
     /// </summary>
     private void LoadSave(JsonElement root)
     {
@@ -1658,28 +1767,31 @@ public sealed class SimulatorForm : WebViewForm
         var save = _saveStore.Load(path);
 
         SimulationSaveMapper.Apply(_hub, save.State);
-        _runtime.SetSimulationRunning(false);
+        // Пауза вместо полной остановки: мир сохранён, продолжить можно одним
+        // нажатием. Автосохранение при этом НЕ делается — загрузка не является
+        // выключением симуляции.
+        _runtime.PauseSimulation();
 
         // Статусы квестов пришли из снимка: пересчёт из каталога кампании
         // обязателен, иначе включённость квестов в Runtime осталась бы прежней.
         SyncRuntimeQuestEnabled();
 
         AppLogger.Info("SimulatorForm: сохранение загружено.",
-            $"path={path}; name={save.Header.Name}; simulationRunning=false");
+            $"path={path}; name={save.Header.Name}; paused=true");
 
-        PostSaveResult("loaded", path, "Загружено: " + save.Header.Name + ". Симуляция выключена.");
+        PostSaveResult("loaded", path,
+            "Загружено: " + save.Header.Name + ". Симуляция на паузе — нажмите play, чтобы продолжить.");
         RequestSnapshot("save loaded");
     }
 
-    /// <summary>Перезаписывает существующее сохранение текущим состоянием.</summary>
+    /// <summary>
+    /// Перезаписывает существующее сохранение текущим состоянием.
+    ///
+    /// Как и создание, доступно в любом режиме: перезапись — это то же ручное
+    /// сохранение, только в существующий слот.
+    /// </summary>
     private void OverwriteSave(JsonElement root)
     {
-        if (!_runtime.SimulationRunning)
-        {
-            PostSaveError("Перезапись возможна только при запущенной симуляции.");
-            return;
-        }
-
         var path = Required(root, "path");
         var clock = _hub.Get<WorldClockState>("sim-time").Value;
 
@@ -1725,37 +1837,100 @@ public sealed class SimulatorForm : WebViewForm
     /// <summary>
     /// Запускает режим прохождения.
     ///
-    /// Сначала восстанавливается сохранённое состояние: запуск симуляции обязан
-    /// продолжать прохождение, а не начинать его заново. Локальные изменения,
-    /// сделанные выключенным симулятором (визуальным инструментом), при этом
-    /// теряются — это и есть требуемое поведение.
+    /// Автозагрузка выполняется ОДИН раз при открытии Симулятора
+    /// (<see cref="AutoLoadWorld"/>), а не здесь: мир должен быть уже
+    /// восстановлен к моменту, когда пользователь жмёт play. Поэтому запуск —
+    /// это только включение часов и Runtime.
     /// </summary>
-    private void StartPersistence()
+    private void StartSimulation()
+    {
+        if (_runtime.SimulationRunning)
+            return;
+
+        // Пауза и «не запущено» различаются действием play: после паузы мир
+        // продолжается, без паузы — начинается с текущего состояния (в которое
+        // его уже привела автозагрузка).
+        if (_runtime.IsPaused)
+        {
+            _runtime.ResumeSimulation();
+            AppLogger.Info("SimulatorForm: симуляция продолжена после паузы.");
+        }
+        else
+        {
+            _runtime.SetSimulationRunning(true);
+            AppLogger.Info("SimulatorForm: симуляция запущена.");
+        }
+
+        RequestSnapshot("simulation started");
+    }
+
+    /// <summary>
+    /// Полностью выключает симуляцию с автосохранением мира.
+    ///
+    /// Это единственный путь «выключения» — и кнопка stop, и закрытие окна, и
+    /// выход из приложения идут через него, поэтому автосохранение невозможно
+    /// забыть в одной из веток.
+    /// </summary>
+    private void StopSimulation(string reason)
+    {
+        _runtime.SetSimulationRunning(false);
+        AutosaveWorld(reason);
+        RequestSnapshot("simulation stopped");
+    }
+
+    /// <summary>
+    /// Пауза: мир замирает, автосохранение НЕ делается.
+    ///
+    /// Пауза — это не выключение: игрок вернётся в то же состояние через play, и
+    /// лишняя запись на диск здесь только плодила бы одинаковые снимки.
+    /// </summary>
+    private void PauseSimulation()
+    {
+        _runtime.PauseSimulation();
+        AppLogger.Info("SimulatorForm: симуляция поставлена на паузу.");
+        RequestSnapshot("simulation paused");
+    }
+
+    private void ResumeSimulation()
+    {
+        _runtime.ResumeSimulation();
+        AppLogger.Info("SimulatorForm: симуляция продолжена.");
+        RequestSnapshot("simulation resumed");
+    }
+
+    /// <summary>
+    /// Автозагрузка последнего автосохранения при открытии Симулятора.
+    ///
+    /// Симуляция при этом НЕ запускается: игрок сначала видит мир в том
+    /// состоянии, в котором его оставил, и только потом решает продолжать.
+    /// Пустой слот — нормальная ситуация первого запуска.
+    /// </summary>
+    private void AutoLoadWorld()
     {
         var session = _saveStore.LoadSession();
         if (session is null)
         {
-            AppLogger.Info("SimulatorForm: сохранённого прохождения нет, начинаем новое.");
-            PersistSession("старт без сохранения");
+            AppLogger.Info("SimulatorForm: автосохранения нет, мир берётся из кампании.");
+            ApplyWorldFromCampaign("первый запуск без автосохранения");
             return;
         }
 
         SimulationSaveMapper.Apply(_hub, session.State);
         SyncRuntimeQuestEnabled();
-        AppLogger.Info("SimulatorForm: прохождение восстановлено.",
-            $"gameDate={session.Header.GameDate:yyyy-MM-dd HH:mm}; played={session.Header.PlayedTime}");
-        PersistSession("старт с восстановлением");
-        RequestSnapshot("simulation started: session restored");
+        _autoSaveAt = session.Header.CreatedAt;
+        // Мир восстановлен, но часы должны стоять: иначе время пойдёт само,
+        // хотя игрок ещё не нажал play.
+        if (_hub.Get<WorldClockState>("sim-time").Value.Running)
+        {
+            var clock = _hub.Get<WorldClockState>("sim-time").Value;
+            _hub.Get<WorldClockState>("sim-time").Set(clock with { Running = false }, "Автозагрузка");
+        }
+
+        AppLogger.Info("SimulatorForm: мир восстановлен из автосохранения.",
+            $"createdAt={session.Header.CreatedAt:yyyy-MM-dd HH:mm:ss}; " +
+            $"gameDate={session.Header.GameDate:yyyy-MM-dd HH:mm}; simulationRunning=false");
     }
 
-    /// <summary>
-    /// Записывает текущее состояние прохождения.
-    ///
-    /// Правило режима: состояние попадает на диск только когда симуляция включена.
-    /// Выключенный симулятор — визуальный инструмент, и его изменения на диск не
-    /// попадают. Исключение одно: <paramref name="force"/> при выключении
-    /// симуляции, когда нужно зафиксировать последнее игровое состояние.
-    /// </summary>
     private void PersistSession(string reason, bool force = false)
     {
         if (!_runtime.SimulationRunning && !force)
@@ -1764,17 +1939,19 @@ public sealed class SimulatorForm : WebViewForm
         try
         {
             var clock = _hub.Get<WorldClockState>("sim-time").Value;
+            var createdAt = DateTimeOffset.UtcNow;
             var header = new SimulationSaveHeader(
                 SimulationSaveState.CurrentFormatVersion,
                 "session",
                 VersionInfo.InformationalVersion,
-                DateTimeOffset.UtcNow,
+                createdAt,
                 null,
                 clock.Now,
                 CurrentCampaignId(),
                 clock.Elapsed);
 
             _saveStore.SaveSession(new SimulationSave(header, CaptureState()));
+            _autoSaveAt = createdAt;
             AppLogger.Info("SimulatorForm: прохождение записано.",
                 $"reason={reason}; gameTime={clock.Now:yyyy-MM-dd HH:mm}; elapsed={clock.Elapsed}");
         }
@@ -1784,6 +1961,15 @@ public sealed class SimulatorForm : WebViewForm
             AppLogger.Error("SimulatorForm: не удалось записать прохождение.", ex, "reason=" + reason);
         }
     }
+
+    /// <summary>
+    /// Записывает автосохранение мира.
+    ///
+    /// Вызывается ТОЛЬКО при выключении симуляции (кнопка stop, закрытие окна,
+    /// выход из приложения). Пока симуляция выключена, автосохранений нет — иначе
+    /// пробы пользователя в «визуальном» режиме попадали бы в мир.
+    /// </summary>
+    private void AutosaveWorld(string reason) => PersistSession("автосохранение: " + reason, force: true);
     /// <summary>
     /// Id активной кампании для подписи сохранения.
     ///
@@ -1802,7 +1988,8 @@ public sealed class SimulatorForm : WebViewForm
             action,
             path,
             message,
-            simulationRunning = _runtime.SimulationRunning
+            simulationRunning = _runtime.SimulationRunning,
+            simulationPaused = _runtime.IsPaused
         }, SnapshotJsonOptions));
 
     private void PostSaveError(string message) =>

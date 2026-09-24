@@ -37,44 +37,101 @@ for (const action of ["list_saves", "create_save", "load_save", "overwrite_save"
   );
 }
 
-// 2. Загрузка сохранения обязана выключить симуляцию.
+// 2. Загрузка сохранения обязана поставить симуляцию на ПАУЗУ.
+//
+// Пауза, а не полное выключение: игрок вернётся в загруженное состояние одним
+// нажатием play. Проверяется именно паузный путь — «выключить» тоже дало бы
+// остановленный мир, но кнопка play начала бы его заново, и загруженный снимок
+// потерялся бы на первом же тике.
 const loadSaveBody = simulatorForm.slice(
   simulatorForm.indexOf("private void LoadSave("),
   simulatorForm.indexOf("private void OverwriteSave(")
 );
 check(
-  /SetSimulationRunning\(false\)/.test(loadSaveBody),
-  "Загрузка сохранения обязана выключать симуляцию: иначе изменения немедленно " +
-  "вызовут срабатывание нод (активация квестов, события, эффекты)."
+  /PauseSimulation\(\)/.test(loadSaveBody),
+  "Загрузка сохранения обязана ставить симуляцию на паузу: иначе изменения " +
+  "немедленно вызовут срабатывание нод (активация квестов, события, эффекты)."
 );
 check(
   /SimulationSaveMapper\.Apply/.test(loadSaveBody),
   "Загрузка сохранения обязана применять снимок к каналам симулятора."
 );
+check(
+  /simulation на паузе|на паузе/i.test(loadSaveBody),
+  "Подпись после загрузки должна сообщать о паузе: игрок обязан понимать, " +
+  "почему мир не идёт сам."
+);
 
-// 3. Состояние прохождения пишется на диск только при включенной симуляции.
-// Границы среза берутся по следующим объявлениям, а не в обратном порядке:
-// PostSaveList объявлен ВЫШЕ PersistSession, и перепутанные границы давали
-// пустую строку, из-за чего проверка падала на исправном коде.
+// 3. Автосохранение — только при ВЫКЛЮЧЕНИИ симуляции.
+//
+// Это центральное правило хранения: мир между запусками не должен теряться, но
+// и пробы в выключенном (визуальном) режиме не должны попадать на диск.
 const persistBody = simulatorForm.slice(
   simulatorForm.indexOf("private void PersistSession("),
-  simulatorForm.indexOf("private string CurrentCampaignId(")
+  simulatorForm.indexOf("private void AutosaveWorld(")
 );
 check(
   /if \(!_runtime\.SimulationRunning && !force\)/.test(persistBody),
   "PersistSession должен возвращаться без записи при выключенной симуляции."
 );
 check(
-  /runtime\.SimulationRunning/.test(simulatorForm.slice(
-    simulatorForm.indexOf("private void CreateSave("),
-    simulatorForm.indexOf("private void LoadSave("))),
-  "Создание сохранения должно требовать включённой симуляции."
+  /private void AutosaveWorld\(string reason\)/.test(simulatorForm),
+  "Автосохранение обязано быть отдельным методом: его вызывают и кнопка stop, " +
+  "и закрытие окна, и выход из приложения."
+);
+check(
+  /StopSimulation\("закрытие симулятора"\)/.test(simulatorForm),
+  "Закрытие окна симулятора обязано автосохранять мир: иначе выход из " +
+  "приложения теряет прохождение."
+);
+check(
+  /AutosaveWorld\(reason\)/.test(simulatorForm.slice(
+    simulatorForm.indexOf("private void StopSimulation("),
+    simulatorForm.indexOf("private void PauseSimulation("))),
+  "Кнопка stop обязана создавать автосохранение: это единственный путь " +
+  "«выключения» симуляции."
 );
 
-// 4. Запуск симуляции продолжает прохождение, а сброс его очищает, НЕ выключая.
+// 3.1. Пауза автосохранения НЕ делает: она не является выключением.
+const pauseBody = simulatorForm.slice(
+  simulatorForm.indexOf("private void PauseSimulation()"),
+  simulatorForm.indexOf("private void ResumeSimulation()")
+);
+check(
+  !/AutosaveWorld|PersistSession/.test(pauseBody),
+  "Пауза не должна создавать автосохранение: игрок продолжит из того же " +
+  "состояния, и запись только плодила бы одинаковые снимки."
+);
+
+// 3.2. Ручное сохранение доступно в любом режиме.
+check(
+  !/Сохранение возможно только при запущенной/.test(simulatorForm) &&
+  !/Перезапись возможна только при запущенной/.test(simulatorForm),
+  "Ручное сохранение и перезапись должны быть доступны и при выключенной " +
+  "симуляции: это разные типы снимков, и запрет отнимал бы возможность " +
+  "зафиксировать подготовленную вручную сцену."
+);
+const createSaveBody = simulatorForm.slice(
+  simulatorForm.indexOf("private void CreateSave("),
+  simulatorForm.indexOf("private void LoadSave(")
+);
+check(
+  /CaptureState\(\)/.test(createSaveBody),
+  "Создание сохранения обязано снимать текущее состояние каналов."
+);
+
+// 4. Запуск восстанавливает мир из автосохранения, а сброс его очищает, НЕ выключая.
+check(
+  /AutoLoadWorld\(\)/.test(simulatorForm),
+  "При открытии Симулятора обязана выполняться автозагрузка мира."
+);
 check(
   /LoadSession\(\)/.test(simulatorForm),
-  "Запуск симуляции должен читать автосохранение прохождения."
+  "Автозагрузка обязана читать автосохранение прохождения."
+);
+check(
+  /AutoLoadWorld\(\)[\s\S]{0,400}PushSnapshot\(\)/.test(simulatorForm),
+  "Автозагрузка обязана идти ДО первого снимка: иначе карта мигнёт «началом мира»."
 );
 check(
   /ClearSession\(\)/.test(simulatorForm),
@@ -91,6 +148,11 @@ check(
 check(
   !/SetSimulationRunning\(false\)/.test(resetBody),
   "«Сбросить» НЕ должен выключать симуляцию: сброс и остановка — разные действия."
+);
+check(
+  !/PersistSession\("сброс/.test(resetBody),
+  "«Сбросить» НЕ должен писать автосохранение: автосохранение — реакция на " +
+  "выключение симуляции, и пустой слот должен означать «прохождения нет»."
 );
 
 // 5. Снимок содержит данные светового дня, а календарь/астрономия считает домен.

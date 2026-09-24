@@ -20,8 +20,9 @@ The extension is deliberately not abbreviated (`.aqsn`, `.aqqs`) so a file remai
 | `.aqscene` | Scene | Canonical Scene Definition / Scene Graph | **Implemented** |
 | `.aqdialogue` | Dialogue | Reusable dialogue content referenced by scenes | Reserved |
 | `.aqchoice` | Choice | Reusable choice/options resource | Reserved |
-| `.aqcampaign` | Campaign | High-level collection/description of a story campaign | Reserved |
-| `.aqworld` | World | Authoring world container | Reserved |
+| `.aqcampaign` | Campaign | Campaign resource: own id, full name, description, image and metadata inside a world | **Implemented** |
+| `.aqworld` | World | Authoring world container: world = project, campaigns live inside it | **Implemented** |
+| `.aqezip` | Archive | Packed resource (world/campaign/quest) with a manifest, for transfer and import | **Implemented** |
 | `.aqpoint` | World Point | Authoring point with world coordinates and metadata | Reserved |
 | `.aqcity` | City | World-city reference resource | Reserved |
 | `.aqitem` | Item | Item definition used by inventory/actions | Reserved |
@@ -74,6 +75,33 @@ This avoids shipping a collection of binary icon files with the single-file EXE.
 
 Double-clicking an implemented `.aqquest` or `.aqscene` opens the corresponding editor. Registered future types currently report that their editor is reserved/not implemented.
 
+A `.aqezip` archive is handled differently by design: double-clicking launches the
+application and opens the **import dialog**, which shows the contents of the archive
+BEFORE anything is unpacked (kind, name, author, dates, description, file list). An
+archive is a transport container, not an authoring resource, so there is nothing to
+edit before importing it.
+
+## Archive contract (`.aqezip`)
+
+A `.aqezip` is a ZIP container written with `CompressionLevel.SmallestSize` and a
+FIXED entry timestamp. Both details are load-bearing:
+
+- the fixed timestamp makes the output **byte-reproducible**, so `ci/archive_smoke.mjs`
+  can compare the bundled demo archive byte for byte; without it every regeneration
+  would differ and the check would be meaningless;
+- directories are stored as **explicit entries**, because ZIP stores only files —
+  empty directories such as `Saves/` carry meaning here and would otherwise be lost.
+
+The archive carries a manifest describing the resource (kind, id, name, full name,
+description, image, parent world, metadata) plus an explicit dependency list. Only
+"with dependencies" packing exists today; a plain pack is deliberately absent so the
+result is never silently incomplete.
+
+The archive **file name is not a path**: a resource name containing a separator, `..`
+or `:` is rejected outright. `Path.GetFileName("../escape")` returns `"escape"`, so a
+"sanitizing" implementation would silently CHANGE the write location instead of
+refusing — a rejected name is the honest outcome.
+
 To remove the registrations without uninstalling the application:
 
 `AssistQuestEditor.exe --unregister-file-associations`
@@ -88,6 +116,32 @@ Existing sandbox resources were moved from JSON-only extensions to their canonic
 - `data/scenes/ruslan_finish.json` → `ruslan_finish.aqscene`
 
 The graph/scene payload itself was preserved; only the resource discriminator was added.
+
+## Раскладка пользовательских ресурсов (1.0.40.181)
+
+Пользовательская папка переехала из `%LOCALAPPDATA%` в **Документы**, и в ней
+лежит ОДНО дерево: мир — проект, кампания внутри мира, квест внутри кампании.
+
+```
+Документы\Assist Quest Editor\
+  worlds\
+    <Мир>\
+      world.aqworld
+      campaigns\<Кампания>\campaign.aqcampaign
+      campaigns\<Кампания>\quests\<Id>.aqquest
+      campaigns\<Кампания>\scenes\
+      Saves\
+      Exported\
+```
+
+Контракт путей живёт в `Domain/WorldPaths.cs`: Domain не может ссылаться на App,
+поэтому имя файла кампании задаёт сама раскладка, а не код редактора.
+
+Раньше пользовательская папка была в `%LOCALAPPDATA%`, а рядом с EXE жила вторая
+копия контента в `data/`. Правка одной из копий не была видна в другой, и «квест не
+появился на карте» объяснялось именно этим. Дублирование устранено: контент живёт
+в пользовательских мирах. Раздел ниже описывает публикацию ОБРАЗЦОВ, а не рабочее
+хранилище.
 
 ## Публикация ресурсов и синхронизация с каталогом data
 

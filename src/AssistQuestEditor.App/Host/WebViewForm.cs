@@ -201,13 +201,9 @@ public abstract class WebViewForm : Form
 
     private static string GetWebViewUserDataFolder()
     {
-        var localAppData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
-        if (string.IsNullOrWhiteSpace(localAppData))
-        {
-            localAppData = AppContext.BaseDirectory;
-        }
-
-        return Path.Combine(localAppData, "AssistQuestEditor", "WebView2");
+        // Профиль WebView2 остаётся в AppData (см. AppPaths): это технические
+        // данные, привязанные к машине, и переносить их в Документы нельзя.
+        return AppPaths.WebViewUserDataRoot;
     }
 
     private void ShowWebViewError(Exception ex)

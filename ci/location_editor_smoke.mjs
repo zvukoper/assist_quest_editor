@@ -930,6 +930,64 @@ try {
   if (errors.length)
     throw new Error("pageerror: " + errors.join(" | "));
 
+  // --- 12. Панель действий документа всегда на виду ---
+  // Раньше «Сохранить» лежала внутри прокручиваемого тела и уезжала вверх
+  // вместе с полями: чтобы её найти, приходилось прокручивать панель обратно.
+  // Проверяем именно ВИДИМОСТЬ на экране после прокрутки тела, а не наличие
+  // класса: класс может быть на месте, а кнопка — за пределами панели.
+  await loadState(definition, null);
+  await page.waitForTimeout(150);
+
+  const sticky = await page.evaluate(() => {
+    const body = document.getElementById("workspace");
+    const toolbar = body.querySelector(":scope > .toolbar");
+    const button = document.getElementById("saveLocation");
+    if (!body || !toolbar || !button) return null;
+
+    const before = button.getBoundingClientRect();
+    const bodyBefore = body.getBoundingClientRect();
+    body.scrollTop = body.scrollHeight;
+    const after = button.getBoundingClientRect();
+
+    return {
+      position: getComputedStyle(toolbar).position,
+      beforeTop: Math.round(before.top - bodyBefore.top),
+      afterTop: Math.round(after.top - bodyBefore.top),
+      afterBottom: Math.round(after.bottom - bodyBefore.top),
+      bodyHeight: Math.round(bodyBefore.height),
+      scrollTop: body.scrollTop
+    };
+  });
+
+  if (!sticky)
+    throw new Error("Панель документа не найдена: строка действий отсутствует.");
+  if (sticky.position !== "sticky")
+    throw new Error("Строка действий документа не прилипает (position=" +
+      sticky.position + "): кнопки уедут при прокрутке.");
+  if (sticky.scrollTop <= 0)
+    throw new Error("Тело панели документа не прокручивается: проверка ничего не значит.");
+  // Главное: после прокрутки кнопка осталась в пределах видимой части тела.
+  if (sticky.afterTop < -1 || sticky.afterBottom > sticky.bodyHeight + 1)
+    throw new Error("«Сохранить» уехала за пределы панели при прокрутке (" +
+      JSON.stringify(sticky) + ").");
+  // И не осталась на своём прежнем месте: иначе прилипание не сработало.
+  if (sticky.afterTop !== sticky.beforeTop)
+    throw new Error("Строка действий прилипла не к верху панели (" +
+      sticky.beforeTop + " → " + sticky.afterTop + ").");
+
+  // Кнопки обязаны остаться в единственном экземпляре: их ищут как
+  // ws.querySelector(...), и дубликат от предыдущего рендера сломал бы и
+  // обработчики, и Playwright (strict mode).
+  const duplicateIds = await page.evaluate(() => {
+    const seen = new Map();
+    document.querySelectorAll("#workspace [id]").forEach(node => {
+      seen.set(node.id, (seen.get(node.id) || 0) + 1);
+    });
+    return [...seen].filter(([, count]) => count > 1).map(([id]) => id);
+  });
+  if (duplicateIds.length)
+    throw new Error("В панели документа остались дубликаты id: " + duplicateIds.join(", "));
+
   console.log("Location editor smoke: OK");
 } finally {
   await browser.close();

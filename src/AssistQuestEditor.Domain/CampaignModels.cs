@@ -60,7 +60,20 @@ public sealed record CampaignDefinition(
     IReadOnlyList<string> Files,
     GeoCoordinate? Geo = null,
     DateTimeOffset? StartDate = null,
-    WorldStartConditions? StartConditions = null);
+    WorldStartConditions? StartConditions = null,
+    // Id мира-родителя. Пусто у старых файлов: принадлежность проверяется
+    // толерантно (см. CampaignWorldDefinition.BelongsTo), иначе уже
+    // существующие кампании перестали бы открываться.
+    string? WorldId = null,
+    // Название для человека и описание: показываются в списке, в окне
+    // редактирования и в диалоге импорта.
+    string? FullName = null,
+    string? Description = null,
+    // Файл изображения внутри папки кампании.
+    string? ImageFile = null,
+    // Авторство и даты: список показывает его курсивом, импорт по ним решает,
+    // перезаписывать ли существующее.
+    ResourceMetadata? Metadata = null);
 
 public sealed record CampaignDefinitionDocument(
     int SchemaVersion,

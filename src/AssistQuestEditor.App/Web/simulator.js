@@ -57,6 +57,18 @@
   // лежит верхним слоем и имеет собственный приоритет подсветки.
   let hoveredQuest = null;
   let simulationRunning = false;
+  // Пауза — отдельное от «не запущено» состояние: play после паузы продолжает
+  // мир, play после остановки начинает с текущего (автозагруженного) состояния.
+  let simulationPaused = false;
+  // Кратность игрового времени приходит из Host: скорость — свойство Runtime,
+  // а не оформление, и UI только отражает её.
+  let simulationSpeed = 1;
+  // Подпись «Автосохранение: дата и время» приходит в снимке.
+  let autoSaveLabel = null;
+  // Слот автосохранения, который уже отмечен вспышкой. Сравнивается со снимком:
+  // без него вспышка повторялась бы на КАЖДОМ снимке (а они идут постоянно),
+  // и плашка мигала бы бесконечно вместо одного раза на новое автосохранение.
+  let autoSavePulseSlot = null;
   let camera = { cx: 0, cz: 0, mpp: 50 };
   let eventHistory = [];
   let runtimeTargetKey = "";
@@ -2473,6 +2485,115 @@
     renderDaylight();
   }
 
+  /**
+   * Транспорт симуляции: play / stop / ff и плашка статуса.
+   *
+   * Плашка раньше была кнопкой; теперь она только ПОКАЗЫВАЕТ состояние, а
+   * управляют три отдельные кнопки. Это разделение принципиально: одна кнопка
+   * не может выражать три состояния (не запущено / идёт / пауза), а именно
+   * столько их знает мир.
+   *
+   * Состояния заданы атрибутом data-sim-state — на него вешается оформление
+   * (серый / зелёный / пульсирующий оранжевый), поэтому цвета не дублируются
+   * в JS.
+   */
+  function renderSimulationTransport() {
+    const play = document.getElementById("simPlay");
+    const stop = document.getElementById("simStop");
+    const fastForward = document.getElementById("simFastForward");
+    const plate = document.getElementById("simStatusPlate");
+    const text = document.getElementById("simStatusText");
+    const autoSave = document.getElementById("simAutoSave");
+
+    let state;
+    let textValue;
+    if (simulationRunning) {
+      state = "running";
+      textValue = "Идет симуляция";
+    } else if (simulationPaused) {
+      state = "paused";
+      textValue = "На паузе";
+    } else {
+      state = "stopped";
+      textValue = "Симуляция не запущена";
+    }
+
+    // Иконка play отражает ДЕЙСТВИЕ кнопки: идёт симуляция — нажатие поставит
+    // паузу (⏸️), иначе нажатие запустит или продолжит (▶️). Подсветка кнопки
+    // НЕ выставляется: состояние показывает плашка, а подсвеченная кнопка
+    // дублировала бы его и после нажатия оставалась бы на неверной кнопке.
+    if (play) {
+      play.textContent = simulationRunning ? "⏸️" : "▶️";
+      play.title = simulationRunning ? "Пауза" : simulationPaused ? "Продолжить" : "Запустить симуляцию";
+      play.setAttribute("aria-label", play.title);
+    }
+
+    // Стоп доступен всегда: он же создаёт автосохранение, и игрок вправе
+    // зафиксировать мир, даже если симуляция ещё не запускалась.
+    if (stop) {
+      stop.disabled = false;
+      stop.title = "Остановить симуляцию и автосохранить мир";
+    }
+
+    // ff сообщает текущую кратность: иначе непонятно, куда придёт следующее
+    // нажатие, и ускорение выглядит как «кнопка без состояния».
+    if (fastForward) {
+      const speedText = simulationSpeed === 1 ? "" : " (сейчас ×" + formatSpeed(simulationSpeed) + ")";
+      fastForward.title = "Ускорить игровое время" + speedText;
+      fastForward.setAttribute("aria-label", fastForward.title);
+    }
+
+    if (plate) {
+      plate.dataset.simState = state;
+      if (text) text.textContent = textValue;
+    }
+
+    // Оранжевые часы при ускоренном времени задаются классом на самом HUD, а не
+    // на бейдже часов: бейдж пересоздаётся вместе с разметкой HUD каждый снимок,
+    // и класс на нём пришлось бы выставлять ПОСЛЕ вставки разметки — то есть в
+    // другом месте и легко забыть. HUD же живёт постоянно.
+    if (hud) hud.classList.toggle("hudAccelerated", simulationSpeed !== 1);
+
+    if (autoSave) {
+      autoSave.textContent = autoSaveLabel
+        ? "Автосохранение: " + autoSaveLabel
+        : "Автосохранение: нет";
+
+      // Вспышка ровно ОДИН раз на новое автосохранение. Сравнивается подпись
+      // целиком: она содержит дату и время до секунды, поэтому двух одинаковых
+      // подписей у разных слотов практически не бывает, а лишнее состояние
+      // (идентификатор слота) не нужно.
+      if (autoSaveLabel && autoSaveLabel !== autoSavePulseSlot) {
+        autoSavePulseSlot = autoSaveLabel;
+        autoSave.classList.remove("autoSavePulse");
+        // Чтение offsetWidth перезапускает CSS-анимацию: без него повторное
+        // добавление класса не даёт эффекта, если класс не успел сняться.
+        void autoSave.offsetWidth;
+        autoSave.classList.add("autoSavePulse");
+      }
+    }
+  }
+
+  function formatSpeed(value) {
+    const numeric = Number(value);
+    if (!Number.isFinite(numeric)) return "1";
+    return Number.isInteger(numeric) ? String(numeric) : numeric.toFixed(1);
+  }
+
+  /**
+   * Следующая кратность при нажатии ff.
+   *
+   * Набор фиксированный, а не «умножить на два»: предсказуемый перебор
+   * (1 → 5 → 20 → 60 → 1) позволяет вернуться к нормальной скорости тем же
+   * нажатием, не подбирая её обратно.
+   */
+  const SIMULATION_SPEEDS = [1, 5, 20, 60];
+
+  function nextSimulationSpeed() {
+    const current = SIMULATION_SPEEDS.findIndex(value => Math.abs(value - Number(simulationSpeed)) < 0.001);
+    return SIMULATION_SPEEDS[(current + 1) % SIMULATION_SPEEDS.length];
+  }
+
   function drawHud() {
     const p = snapshot.player.position;
     const selected = snapshot.selection?.point;
@@ -2480,23 +2601,27 @@
     const sdoCount = points.filter(point => !point.isCity).length;
     const cityCount = points.filter(point => point.isCity).length;
     const questCount = questCatalog.reduce((sum, campaign) => sum + (campaign.quests?.length || 0), 0);
-    const simulationButton = document.getElementById("simulationToggle");
-    if (simulationButton) {
-      simulationButton.textContent = simulationRunning ? "Остановить симуляцию" : "Запустить симуляцию";
-      // Запущенная симуляция — LIME с белым текстом и чёрной обводкой: состояние
-      // «идёт» должно читаться сразу, а акцентный оранжевый занят квестами.
-      simulationButton.classList.toggle("simRunning", simulationRunning);
-      simulationButton.classList.toggle("primary", !simulationRunning);
-    }
+    renderSimulationTransport();
+
+    // Ускоренное игровое время: часы уходят в оранжевый и рядом появляется
+    // кратность. При ×1 ничего не показывается — иначе оранжевый был бы
+    // постоянным шумом и перестал бы означать «время ускорено».
+    const accelerated = simulationSpeed !== 1;
+    const clockText = escapeHtml(currentGameMoment()?.clock || daylight?.gameClockLabel || daylight?.gameTimeLabel || "");
 
     hud.innerHTML = [
       "<span class='badge " + (simulationRunning ? "accent" : "blue") + "'>" +
         (simulationRunning ? "Симуляция: ВКЛ" : "Симуляция: ВЫКЛ") + "</span>",
       daylight
-        ? "<span class='badge " + (daylight.isDay ? "accent" : "blue") + "'>" +
+        ? "<span class='badge " + (daylight.isDay ? "accent" : "blue") + "' id='hudClockBadge'>" +
             escapeHtml(daylight.gameDateLabel) + " · <span id='hudGameTime'>" +
-            escapeHtml(currentGameMoment()?.clock || daylight.gameClockLabel || daylight.gameTimeLabel) +
-            "</span>" + (simulationRunning ? "" : " (пауза)") + "</span>"
+            clockText +
+            "</span>" +
+            (accelerated
+              ? " <span class='hudClockSpeed' id='hudClockSpeed' title='Игровое время ускорено'>×" +
+                escapeHtml(formatSpeed(simulationSpeed)) + "</span>"
+              : "") +
+            (simulationRunning ? "" : " (пауза)") + "</span>"
         : "",
       daylight
         ? "<span class='badge blue' title='Восход и закат по геокоординате кампании'>" +
@@ -3129,6 +3254,11 @@
       window.__assistItemCatalog = Array.isArray(message.itemCatalog) ? message.itemCatalog : [];
       runtime = message.runtime || null;
       simulationRunning = !!message.simulationRunning;
+      simulationPaused = !!message.simulationPaused;
+      if (typeof message.simulationSpeed === "number") simulationSpeed = message.simulationSpeed;
+      // Подпись автосохранения: null означает «слота ещё нет», и интерфейс
+      // обязан это сказать именно так, а не показывать пустую дату.
+      autoSaveLabel = message.autoSaveLabel || null;
       questCatalog = normalizeQuestCatalog(message.questCatalog);
       selectedQuest = {
         campaignId: message.selectedQuest?.campaignId || "",
@@ -3219,10 +3349,13 @@
     if (message.type === "save_result") {
       saveBusy = false;
       setSavesNotice(message.message || "");
-      // Симуляция могла быть выключена загрузкой: состояние кнопки берётся из
-      // ответа Host, а не из локального предположения.
+      // Симуляция могла быть поставлена на паузу загрузкой: состояние берётся
+      // из ответа Host, а не из локального предположения.
       if (typeof message.simulationRunning === "boolean") {
         simulationRunning = message.simulationRunning;
+      }
+      if (typeof message.simulationPaused === "boolean") {
+        simulationPaused = message.simulationPaused;
       }
       if (savesOpen) send({ action: "list_saves" });
       return;
@@ -3558,8 +3691,22 @@
     drawMap();
   });
 
-  document.getElementById("simulationToggle")?.addEventListener("click", () => {
-    send({ action: simulationRunning ? "simulation_stop" : "simulation_start" });
+  // Транспорт симуляции: play / stop / ff.
+  //
+  // Кнопка play не несёт состояния — она спрашивает Host и шлёт ровно то
+  // действие, которое соответствует текущему режиму. Вычислять его на стороне
+  // UI нельзя: источник истины один (Runtime), и локальное «угадывание» уже
+  // приводило к расхождению подписи и реальности.
+  document.getElementById("simPlay")?.addEventListener("click", () => {
+    send({ action: simulationRunning ? "simulation_pause" : "simulation_start" });
+  });
+
+  document.getElementById("simStop")?.addEventListener("click", () => {
+    send({ action: "simulation_stop" });
+  });
+
+  document.getElementById("simFastForward")?.addEventListener("click", () => {
+    send({ action: "simulation_set_speed", speed: nextSimulationSpeed() });
   });
 
   document.getElementById("reset")?.addEventListener("click", () => send({ action: "reset" }));

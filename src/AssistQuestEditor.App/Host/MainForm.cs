@@ -65,6 +65,27 @@ public sealed class MainForm : WebViewForm
     private JunctionReviewForm? _junctionReview;
     private CityBoundaryForm? _cityBoundaryForm;
 
+    /// <summary>
+    /// Каталог миров и псевдоним автора.
+    ///
+    /// Стор создаётся в конструкторе, а не берётся из Program: главная форма —
+    /// единственное место, которое делает с мирами действия (импорт архива), и
+    /// передавать сюда готовый стор значило бы держать два источника истины о
+    /// состоянии каталога.
+    ///
+    /// В CI-режиме стор открыт ТОЛЬКО ДЛЯ ЧТЕНИЯ: прогон не должен менять
+    /// пользовательские миры, но обязан уметь их показать.
+    /// </summary>
+    private readonly WorldStore _worldStore;
+
+    /// <summary>
+    /// Режим CI test. Запоминается потому, что от него зависит ЗАПИСЬ настроек:
+    /// прогон обязан быть неинтерактивным и не должен менять файлы пользователя.
+    /// </summary>
+    private readonly bool _ciTest;
+
+    private AppUiPreferences _preferences;
+
     public MainForm(
         IDataChannelHub hub,
         bool ciTest = false,
@@ -88,11 +109,32 @@ public sealed class MainForm : WebViewForm
         _junctions = junctions ?? new JunctionIndex(Array.Empty<JunctionPoint>());
         _cityBoundaries = cityBoundaries ?? new StaticCityBoundarySource();
         _worldPoints = worldPoints ?? Array.Empty<WorldPoint>();
+        _ciTest = ciTest;
+        // Настройки и каталог миров читаются ДО создания стора кампаний: стор
+        // ограничивается папкой выбранного мира, а «какой мир выбран» известно
+        // только из настроек.
+        _preferences = AppUiPreferencesStore.Load();
+        // Псевдоним обязателен: им подписываются импортированные ресурсы. В CI
+        // настройка не спрашивается, поэтому подставляется системная подпись —
+        // иначе импорт в прогоне падал бы на пустом авторе.
+        // Подпись пользователя вычисляется один раз: её читают и мир, и кампании,
+        // и разойтись эти два значения не должны — иначе правка кампании
+        // подписывалась бы другим автором, чем правка мира.
+        var author = string.IsNullOrWhiteSpace(_preferences.Author)
+            ? ResourceMetadata.DefaultAuthor(DateTimeOffset.Now)
+            : _preferences.Author!;
+
+        _worldStore = new WorldStore(AppPaths.UserRoot, author, readOnly: ciTest);
+
         _campaignStore = ciTest
+            // В CI мир может отсутствовать вовсе (прогон не создаёт миров), и
+            // тогда читается поставляемый каталог: прогон обязан быть
+            // неинтерактивным, но контент ему нужен.
             ? new CampaignStore(Path.Combine(AppPaths.ResourceRoot, "campaigns"), readOnly: true)
-            : new CampaignStore();
-        _questGraph = new QuestGraphStore(QuestDefinitionLoader.LoadDocumentOrFallback().Definition);
-        _sceneCatalog = SceneCatalogLoader.Load();
+            : new CampaignStore(AppPaths.UserQuestRoot, readOnly: false, author)
+                .ScopedTo(SelectedWorld?.FolderPath);
+
+        _questGraph = new QuestGraphStore(QuestDefinitionLoader.LoadDocumentOrFallback().Definition);        _sceneCatalog = SceneCatalogLoader.Load();
         var initialScene = _sceneCatalog.TryGetScene("ruslan_start", out var ruslanStart)
             ? ruslanStart
             : _sceneCatalog.Scenes.FirstOrDefault() ?? SceneCatalogFactory.CreateStarter().Scenes.First();
@@ -101,11 +143,10 @@ public sealed class MainForm : WebViewForm
             ? new LocationStore(Path.Combine(Path.GetTempPath(), "AssistQuestEditor-CI-Locations"), readOnly: true)
             : new LocationStore(AppPaths.UserLocationRoot);
         _locationResolver = new LocationRuntimeResolver(_locationStore, _hub, _roads, _junctions, _cityBoundaries);
-        var preferences = AppUiPreferencesStore.Load();
         _sceneDocument = new SceneDocumentSession(
             initialScene.Id,
             ResolveScenePath(initialScene.Id),
-            preferences.LastSceneDefinitionPath);
+            _preferences.LastSceneDefinitionPath);
         _sceneCatalog.Changed += SceneCatalog_Changed;
         _sceneRuntime = new SceneRuntime(_sceneCatalog, _hub);
         _runtime = new QuestRuntimeCoordinator(
@@ -213,6 +254,9 @@ public sealed class MainForm : WebViewForm
         // Начальное состояние чипа: симуляция не запускается автоматически, но
         // после перезагрузки страницы web-сторона снова ждёт актуальное значение.
         PostSimulatorState();
+        // Селектор [МИР][КАМПАНИЯ] тоже рисуется из состояния Host: web-сторона
+        // списков миров не знает, и без этого сообщения селектор был бы пустым.
+        PostWorldSelection();
         OpenSimulator();
 
         var startupPath = FileActivationRequest.Consume();
@@ -277,6 +321,16 @@ public sealed class MainForm : WebViewForm
             return;
         }
 
+        // Архив открывается ДИАЛОГОМ ИМПОРТА, а не редактором: двойной клик по
+        // .aqezip означает «посмотри, что внутри, и, если надо, установи».
+        // Распаковка без показа содержимого была бы опасной — архив приходит
+        // извне и может перезаписать работу автора.
+        if (resource.Kind.Equals("Archive", StringComparison.OrdinalIgnoreCase))
+        {
+            ImportArchive(path);
+            return;
+        }
+
         if (resource.Kind.Equals("Campaign", StringComparison.OrdinalIgnoreCase))
         {
             var folder = Path.GetDirectoryName(path);
@@ -323,6 +377,808 @@ public sealed class MainForm : WebViewForm
         }
     }
 
+    /// <summary>
+    /// Импорт архива <c>.aqezip</c>: показать содержимое, затем распаковать.
+    ///
+    /// Показ содержимого ДО распаковки — не удобство, а требование: архив может
+    /// перезаписать существующий ресурс, и согласие вслепую недопустимо.
+    ///
+    /// Все три вида (мир, кампания, квест) идут через один диалог, потому что
+    /// манифест у них общий. Но ВЫПОЛНЯЕТ импорт разный код: мир распаковывается
+    /// в каталог миров, а кампания и квест — внутрь родителя, и родителя надо
+    /// знать. Пока реализован импорт мира; для остальных видов выводится явное
+    /// сообщение вместо молчаливой распаковки «куда-нибудь».
+    /// </summary>
+    private void ImportArchive(string archivePath)
+    {
+        ArchiveInspection inspection;
+        try
+        {
+            inspection = WorldArchiveService.Inspect(archivePath);
+        }
+        catch (Exception ex)
+        {
+            // Повреждённый архив — ожидаемый случай (файл могли скопировать
+            // неполностью). Пользователю нужно объяснение, а не исключение.
+            AppLogger.Error("Импорт архива: не удалось прочитать архив.", ex, "path=" + archivePath);
+            MessageBox.Show(this,
+                "Не удалось прочитать архив." + Environment.NewLine + Environment.NewLine + ex.Message,
+                "Импорт архива", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            return;
+        }
+
+        using var dialog = new ArchiveImportForm(inspection);
+        if (dialog.ShowDialog(this) != DialogResult.OK)
+            return;
+
+        try
+        {
+            if (inspection.Manifest.Kind.Equals(WorldArchiveKinds.World, StringComparison.OrdinalIgnoreCase))
+            {
+                var world = _worldStore.ImportWorldFromArchive(archivePath, dialog.OverwriteRequested);
+
+                // Запоминается через `with`, а не присваиванием: AppUiPreferences —
+                // запись, её поля менять нельзя (CS8852).
+                _preferences = _preferences with { LastWorldId = world.Definition.Id };
+                AppUiPreferencesStore.Save(_preferences);
+
+                AppLogger.Info("Импорт архива: мир установлен.",
+                    $"world={world.Definition.Id}; folder={world.FolderPath}; " +
+                    $"overwrite={dialog.OverwriteRequested}");
+
+                MessageBox.Show(this,
+                    "Мир «" + world.DisplayName + "» импортирован в:" +
+                    Environment.NewLine + world.FolderPath,
+                    "Импорт завершён", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                return;
+            }
+
+            // Кампания и квест кладутся ВНУТРЬ родителя: файл кампании лежит в
+            // папке мира, файл квеста — в папке кампании. Родитель спрашивается
+            // явно, потому что положить ресурс в посторонний мир «по умолчанию»
+            // значит показать автору пустоту там, где он его искал.
+            var isQuest = inspection.Manifest.Kind.Equals(WorldArchiveKinds.Quest,
+                StringComparison.OrdinalIgnoreCase);
+
+            using var parentDialog = new ImportParentForm(
+                isQuest ? "квеста" : "кампании",
+                inspection.Manifest,
+                _worldStore.Worlds,
+                SelectedWorld?.Definition.Id,
+                folder =>
+                {
+                    // Кампании читаются из ТОГО мира, который выбран в списке:
+                    // кампании с одним id (например common) есть в каждом мире,
+                    // и общий каталог отдал бы чужую.
+                    var scoped = new CampaignStore(folder, readOnly: true);
+                    return scoped.Records;
+                });
+
+            if (parentDialog.ShowDialog(this) != DialogResult.OK)
+            {
+                AppLogger.Info("Импорт архива: выбор родителя отменён.",
+                    $"kind={inspection.Manifest.Kind}");
+                return;
+            }
+
+            var parentWorld = parentDialog.SelectedWorld
+                ?? throw new InvalidOperationException("Родительский мир не выбран.");
+
+            ResourceImportResult imported;
+
+            if (isQuest)
+            {
+                var parentCampaign = parentDialog.SelectedCampaign
+                    ?? throw new InvalidOperationException("Родительская кампания не выбрана.");
+
+                imported = ResourceImportService.ImportQuest(
+                    parentCampaign, inspection, dialog.OverwriteRequested);
+            }
+            else
+            {
+                imported = ResourceImportService.ImportCampaign(
+                    parentWorld, inspection, dialog.OverwriteRequested);
+            }
+
+            // Импорт кампании меняет состав КАТАЛОГА текущего мира. Если он и
+            // есть тот мир, куда положили ресурс, — симулятор обязан перечитать
+            // каталог, иначе нового квеста на карте не будет.
+            if (parentWorld.Definition.Id.Equals(SelectedWorld?.Definition.Id,
+                    StringComparison.OrdinalIgnoreCase))
+            {
+                _simulator?.ReloadCatalog("resource imported");
+                _simulator?.RequestSnapshot("resource imported");
+            }
+
+            AppLogger.Info("Импорт архива: ресурс установлен.",
+                $"kind={imported.Kind}; id={imported.Id}; target={imported.TargetPath}; " +
+                $"world={parentWorld.Definition.Id}; overwrite={dialog.OverwriteRequested}");
+
+            MessageBox.Show(this,
+                (imported.Kind.Equals(WorldArchiveKinds.Quest, StringComparison.OrdinalIgnoreCase)
+                    ? "Квест «"
+                    : "Кампания «") + imported.DisplayName + "» импортирован в мир «" +
+                parentWorld.DisplayName + "»:" + Environment.NewLine +
+                imported.TargetPath,
+                "Импорт завершён", MessageBoxButtons.OK, MessageBoxIcon.Information);
+
+            PostWorldSelection();
+        }
+        catch (Exception ex)
+        {
+            AppLogger.Error("Импорт архива: ошибка распаковки.", ex, "path=" + archivePath);
+            MessageBox.Show(this,
+                "Импорт не выполнен." + Environment.NewLine + Environment.NewLine + ex.Message,
+                "Импорт архива", MessageBoxButtons.OK, MessageBoxIcon.Error);
+        }
+    }
+
+    /// <summary>
+    /// Смена мира из селектора.
+    ///
+    /// Пока НЕ выполняется — говорится прямо, а не молча. Причины: стор кампаний
+    /// и Runtime Quest созданы один раз на выбранном мире, а окна редакторов
+    /// держат ссылки на те же объекты; корректная смена требует пересоздать их
+    /// все и сбросить кэши (локации, сцены, каталог квестов). Молчаливая смена
+    /// заголовка без смены содержимого — худший вид поломки: «выбрал мир, а
+    /// квесты прежние».
+    ///
+    /// Уже СЕЙЧАС выбор запоминается в файле мира, поэтому он не теряется, и
+    /// после перезапуска загрузится именно он.
+    /// </summary>
+    private void RequestWorldSwitch(string? worldId)
+    {
+        if (string.IsNullOrWhiteSpace(worldId))
+            return;
+
+        var target = _worldStore.FindWorld(worldId);
+        if (target is null)
+        {
+            PostJson(JsonSerializer.Serialize(new
+            {
+                type = "world_switch_result",
+                ok = false,
+                message = "Мир не найден: " + worldId
+            }));
+            return;
+        }
+
+        if (string.Equals(target.Definition.Id, SelectedWorld?.Definition.Id, StringComparison.OrdinalIgnoreCase))
+            return;
+
+        AppLogger.Info("MainForm: запрошена смена мира без перезапуска.", $"worldId={worldId}");
+
+        // Запись в настройки — чтобы выбор не потерялся и применился при
+        // следующем запуске. Это единственное, что сейчас можно сделать честно.
+        if (!_ciTest)
+        {
+            _preferences = _preferences with { LastWorldId = target.Definition.Id };
+            AppUiPreferencesStore.Save(_preferences);
+        }
+
+        MessageBox.Show(this,
+            "Мир «" + target.DisplayName + "» запомнен, но переключение на живом окне " +
+            "пока не реализовано: редакторы и Симулятор держат объекты текущего мира." +
+            Environment.NewLine + Environment.NewLine +
+            "Перезапустите приложение — оно откроется с выбранным миром." +
+            Environment.NewLine + Environment.NewLine +
+            "Текущий мир: " + (SelectedWorld?.DisplayName ?? "не выбран"),
+            "Смена мира", MessageBoxButtons.OK, MessageBoxIcon.Information);
+
+        // Селектор возвращается к фактическому состоянию: выбранный в списке
+        // мир не совпадает с открытым, и оставлять это расхождение нельзя —
+        // интерфейс начал бы показывать несуществующее.
+        PostWorldSelection();
+    }
+
+    /// <summary>
+    /// Выбор кампании внутри текущего мира.
+    ///
+    /// Кампания — часть уже открытого мира, поэтому её смена не требует
+    /// пересоздания редакторов: запоминается в файле мира и уходит в Симулятор,
+    /// который показывает состав кампании.
+    /// </summary>
+    private void SelectCampaign(string? campaignId)
+    {
+        var world = SelectedWorld;
+        if (world is null || string.IsNullOrWhiteSpace(campaignId))
+            return;
+
+        var exists = _campaignStore.Records.Any(record =>
+            record.Definition.Id.Equals(campaignId, StringComparison.OrdinalIgnoreCase));
+        if (!exists)
+        {
+            AppLogger.Warn("MainForm: выбрана кампания, которой нет в мире.",
+                $"worldId={world.Definition.Id}; campaignId={campaignId}");
+            PostWorldSelection();
+            return;
+        }
+
+        if (_worldStore.IsReadOnly)
+        {
+            // В CI-режиме каталог миров только для чтения: выбор не записывается,
+            // но интерфейс всё равно должен показать актуальное состояние.
+            PostWorldSelection();
+            return;
+        }
+
+        _worldStore.RememberCampaign(world.Definition.Id, campaignId);
+        _preferences = _preferences with
+        {
+            LastWorldId = world.Definition.Id,
+            LastCampaignId = campaignId
+        };
+        AppUiPreferencesStore.Save(_preferences);
+
+        AppLogger.Info("MainForm: кампания выбрана.",
+            $"worldId={world.Definition.Id}; campaignId={campaignId}");
+
+        _simulator?.RequestSnapshot("campaign selected");
+        PostWorldSelection();
+    }
+
+    /// <summary>
+    /// Открывает папку текущего мира в проводнике.
+    ///
+    /// Отсутствие папки сообщается явно: молчаливое бездействие выглядело бы
+    /// как сломанная кнопка.
+    /// </summary>
+    private void OpenWorldFolder()
+    {
+        var folder = SelectedWorld?.FolderPath;
+        if (string.IsNullOrWhiteSpace(folder) || !Directory.Exists(folder))
+        {
+            MessageBox.Show(this,
+                "Папка мира не найдена: " + (folder ?? "мир не выбран"),
+                "Папка мира", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            return;
+        }
+
+        Process.Start(new ProcessStartInfo { FileName = folder, UseShellExecute = true });
+    }
+
+    /// <summary>
+    /// Выгружает текущий мир папкой либо архивом.
+    ///
+    /// Диалог показывается ВСЕГДА, даже когда выгружать нечего: молчаливое
+    /// «ничего не произошло» не отличить от поломки пункта меню.
+    ///
+    /// Зависимости (кампании) считаются до показа диалога — по фактическому
+    /// содержимому папки мира, а не по каталогу в памяти: выгружается диск, и
+    /// обещать в диалоге то, чего на диске нет, нельзя.
+    /// </summary>
+    private void ExportWorld()
+    {
+        var world = SelectedWorld;
+        if (world is null)
+        {
+            MessageBox.Show(this, "Мир не выбран — выгружать нечего.",
+                "Экспорт мира", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            return;
+        }
+
+        var source = world.FolderPath;
+        if (!Directory.Exists(source))
+        {
+            MessageBox.Show(this, "Папка мира не найдена: " + source,
+                "Экспорт мира", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            return;
+        }
+
+        var moment = DateTimeOffset.UtcNow;
+        var exportRoot = WorldPaths.ExportFolder(AppPaths.UserRoot, moment);
+        var folderName = ResourceNaming.ToFolderName(world.DisplayName);
+
+        var fileCount = Directory.EnumerateFiles(source, "*", SearchOption.AllDirectories).Count();
+        var totalBytes = Directory.EnumerateFiles(source, "*", SearchOption.AllDirectories)
+            .Sum(file => new FileInfo(file).Length);
+
+        var campaigns = Directory.Exists(WorldPaths.CampaignsRoot(source))
+            ? Directory.EnumerateDirectories(WorldPaths.CampaignsRoot(source))
+                .Select(Path.GetFileName)
+                .Where(name => !string.IsNullOrWhiteSpace(name))
+                .OrderBy(name => name, StringComparer.OrdinalIgnoreCase)
+                .Select(name => "кампания «" + name + "»")
+                .ToArray()
+            : Array.Empty<string>();
+
+        using var dialog = new ResourceExportForm(
+            kindLabel: "мира",
+            displayName: world.DisplayName,
+            sourceFolder: source,
+            fileCount: fileCount,
+            totalBytes: totalBytes,
+            dependencies: campaigns,
+            folderDestination: Path.Combine(exportRoot, folderName) + Path.DirectorySeparatorChar,
+            archiveDestination: Path.Combine(exportRoot, folderName + WorldArchiveRules.Extension));
+
+        if (dialog.ShowDialog(this) != DialogResult.OK)
+        {
+            AppLogger.Info("MainForm: экспорт мира отменён пользователем.",
+                $"worldId={world.Definition.Id}");
+            return;
+        }
+
+        try
+        {
+            var result = dialog.ArchiveRequested
+                ? ResourceExportService.ExportArchive(
+                    AppPaths.UserRoot,
+                    source,
+                    world.DisplayName,
+                    ResourceExportService.ManifestForWorld(world),
+                    moment)
+                : ResourceExportService.ExportFolder(
+                    AppPaths.UserRoot,
+                    source,
+                    world.DisplayName,
+                    moment);
+
+            AppLogger.Info("MainForm: мир выгружен.",
+                $"worldId={world.Definition.Id}; archive={result.IsArchive}; " +
+                $"path={result.Path}; files={result.FileCount}; bytes={result.Bytes}");
+
+            MessageBox.Show(this,
+                "Мир «" + world.DisplayName + "» выгружен " +
+                (result.IsArchive ? "архивом" : "папкой") + "." +
+                Environment.NewLine + Environment.NewLine +
+                result.Path +
+                Environment.NewLine + Environment.NewLine +
+                "Файлов: " + result.FileCount + " · объём: " + FormatBytes(result.Bytes),
+                "Экспорт завершён", MessageBoxButtons.OK, MessageBoxIcon.Information);
+        }
+        catch (Exception ex)
+        {
+            AppLogger.Warn("MainForm: экспорт мира не удался.",
+                $"worldId={world.Definition.Id}; error={ex.Message}");
+            MessageBox.Show(this, "Не удалось выгрузить мир: " + ex.Message,
+                "Экспорт мира", MessageBoxButtons.OK, MessageBoxIcon.Error);
+        }
+    }
+
+    /// <summary>
+    /// Выгружает кампанию текущего мира.
+    ///
+    /// Кампания выгружается только вместе с указанием родительского мира: при
+    /// импорте её некуда положить иначе. Идентификатор родителя попадает в
+    /// манифест, поэтому у получателя диалог импорта покажет, чья она.
+    /// </summary>
+    private void ExportCampaign(string? campaignId)
+    {
+        var world = SelectedWorld;
+        if (world is null)
+        {
+            MessageBox.Show(this, "Мир не выбран — кампанию выгружать не из чего.",
+                "Экспорт кампании", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            return;
+        }
+
+        var record = _campaignStore.Records.FirstOrDefault(item =>
+            item.Definition.Id.Equals(campaignId ?? string.Empty, StringComparison.OrdinalIgnoreCase));
+        var resolved = record is not null;
+
+        if (!resolved)
+        {
+            // Идентификатор не пришёл или не найден. Берётся активная кампания
+            // мира — по ней селектор и выставлен, — но результат проверяется по
+            // каталогу, а не принимается на веру.
+            record = _campaignStore.Records.FirstOrDefault(item =>
+                item.Definition.Id.Equals(world.Definition.LastCampaignId ?? string.Empty,
+                    StringComparison.OrdinalIgnoreCase));
+            resolved = record is not null;
+        }
+
+        if (!resolved && _campaignStore.Records.Count == 1)
+        {
+            // Единственная кампания — двусмысленности нет.
+            record = _campaignStore.Records[0];
+            resolved = true;
+        }
+
+        if (!resolved)
+        {
+            // Угадывать нечего: в мире несколько кампаний, а активная не
+            // определилась — выгрузилась бы не та, и автор узнал бы об этом
+            // только по содержимому архива.
+            AppLogger.Warn("MainForm: экспорт кампании без определённой кампании.",
+                $"worldId={world.Definition.Id}; requested={campaignId ?? "<none>"}; " +
+                $"available={_campaignStore.Records.Count}");
+            MessageBox.Show(this,
+                "В мире «" + world.DisplayName + "» не определена активная кампания." +
+                Environment.NewLine + Environment.NewLine +
+                "Выберите кампанию в списке «КАМПАНИЯ» и повторите экспорт.",
+                "Экспорт кампании", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            return;
+        }
+
+        // Явная проверка вместо флага «resolved»: компилятор не выводит
+        // непустоту из отдельной переменной, а Nullable включён на весь проект.
+        var campaign = record ?? throw new InvalidOperationException(
+            "Кампания не определена, хотя проверка это подтвердила.");
+
+        var source = campaign.FolderPath;
+        if (!Directory.Exists(source))
+        {
+            MessageBox.Show(this, "Папка кампании не найдена: " + source,
+                "Экспорт кампании", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            return;
+        }
+
+        var moment = DateTimeOffset.UtcNow;
+        var exportRoot = WorldPaths.ExportFolder(AppPaths.UserRoot, moment);
+        var displayName = string.IsNullOrWhiteSpace(record.Definition.FullName)
+            ? record.Definition.Name
+            : record.Definition.FullName!;
+        var folderName = ResourceNaming.ToFolderName(displayName);
+
+        var files = Directory.EnumerateFiles(source, "*", SearchOption.AllDirectories).ToArray();
+        var questCount = files.Count(file =>
+            file.EndsWith(".aqquest", StringComparison.OrdinalIgnoreCase));
+        var sceneCount = files.Count(file =>
+            file.EndsWith(".aqscene", StringComparison.OrdinalIgnoreCase));
+
+        var dependencies = new List<string>();
+        if (questCount > 0) dependencies.Add(questCount + " квест(ов)");
+        if (sceneCount > 0) dependencies.Add(sceneCount + " сцен(ы)");
+
+        using var dialog = new ResourceExportForm(
+            kindLabel: "кампании",
+            displayName: displayName,
+            sourceFolder: source,
+            fileCount: files.Length,
+            totalBytes: files.Sum(file => new FileInfo(file).Length),
+            dependencies: dependencies,
+            folderDestination: Path.Combine(exportRoot, folderName) + Path.DirectorySeparatorChar,
+            archiveDestination: Path.Combine(exportRoot, folderName + WorldArchiveRules.Extension));
+
+        if (dialog.ShowDialog(this) != DialogResult.OK)
+        {
+            AppLogger.Info("MainForm: экспорт кампании отменён пользователем.",
+                $"campaignId={campaign.Definition.Id}");
+            return;
+        }
+
+        try
+        {
+            var result = dialog.ArchiveRequested
+                ? ResourceExportService.ExportArchive(
+                    AppPaths.UserRoot,
+                    source,
+                    displayName,
+                    ResourceExportService.ManifestForCampaign(
+                        campaign,
+                        world.Definition.Id,
+                        campaign.Definition.Metadata),
+                    moment)
+                : ResourceExportService.ExportFolder(
+                    AppPaths.UserRoot,
+                    source,
+                    displayName,
+                    moment);
+
+            AppLogger.Info("MainForm: кампания выгружена.",
+                $"worldId={world.Definition.Id}; campaignId={record.Definition.Id}; " +
+                $"archive={result.IsArchive}; path={result.Path}; files={result.FileCount}");
+
+            MessageBox.Show(this,
+                "Кампания «" + displayName + "» выгружена " +
+                (result.IsArchive ? "архивом" : "папкой") + "." +
+                Environment.NewLine + Environment.NewLine +
+                result.Path +
+                Environment.NewLine + Environment.NewLine +
+                "В манифесте указан родительский мир: " + world.Definition.Id,
+                "Экспорт завершён", MessageBoxButtons.OK, MessageBoxIcon.Information);
+        }
+        catch (Exception ex)
+        {
+            AppLogger.Warn("MainForm: экспорт кампании не удался.",
+                $"campaignId={record.Definition.Id}; error={ex.Message}");
+            MessageBox.Show(this, "Не удалось выгрузить кампанию: " + ex.Message,
+                "Экспорт кампании", MessageBoxButtons.OK, MessageBoxIcon.Error);
+        }
+    }
+
+    private static string FormatBytes(long bytes)
+    {
+        if (bytes < 1024) return bytes + " Б";
+        if (bytes < 1024 * 1024) return (bytes / 1024.0).ToString("0.0") + " КБ";
+        return (bytes / (1024.0 * 1024.0)).ToString("0.0") + " МБ";
+    }
+
+    /// <summary>
+    /// Показывает свойства мира или кампании — «Ред.» либо «ℹ️».
+    ///
+    /// Одно окно на оба вида ресурсов и на оба режима. Причина: «Ред.» и «ℹ️»
+    /// спрашивают про одно и то же содержимое, и разные формы неизбежно
+    /// расходились бы — правя описание, автор не видел бы автора и дату, по
+    /// которым у получателя решается вопрос о перезаписи при импорте.
+    ///
+    /// Запись идёт ПОСЛЕ закрытия окна и только если было что менять: сохранение
+    /// «того же самого» обновило бы modified_on, то есть изменило бы ресурс,
+    /// не изменив ничего.
+    /// </summary>
+    private void ShowResourceProperties(string kind, bool edit, string? campaignId = null)
+    {
+        var world = SelectedWorld;
+        if (world is null)
+        {
+            MessageBox.Show(this, "Мир не выбран.",
+                "Свойства ресурса", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            return;
+        }
+
+        var isCampaign = kind.Equals("campaign", StringComparison.OrdinalIgnoreCase);
+        var record = isCampaign ? ResolveCampaign(campaignId, world) : null;
+
+        if (isCampaign && record is null)
+        {
+            MessageBox.Show(this,
+                "В мире «" + world.DisplayName + "» не определена кампания." +
+                Environment.NewLine + Environment.NewLine +
+                "Выберите кампанию в списке «КАМПАНИЯ» и повторите.",
+                "Свойства кампании", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            return;
+        }
+
+        var properties = isCampaign
+            ? ResourcePropertiesService.DescribeCampaign(record!, world)
+            : ResourcePropertiesService.DescribeWorld(world, _campaignStore);
+
+        using var dialog = new ResourcePropertiesForm(properties, edit);
+        var result = dialog.ShowDialog(this);
+
+        if (!edit || result != DialogResult.OK)
+        {
+            AppLogger.Info("MainForm: окно свойств закрыто без изменений.",
+                $"kind={kind}; edit={edit}; id={properties.Id}");
+            return;
+        }
+
+        var imageFileName = properties.ImageFileName;
+
+        if (dialog.ImageChanged)
+        {
+            try
+            {
+                imageFileName = dialog.PickedImagePath is { Length: > 0 } picked
+                    ? ResourcePropertiesService.CopyImageIn(picked, properties.FolderPath,
+                        properties.ImageFileName ?? WorldPaths.WorldImageFileName)
+                    // Пустая строка означает «снять изображение»: файл остаётся
+                    // на диске (его могли использовать другие ресурсы), но
+                    // определение больше на него не ссылается.
+                    : null;
+            }
+            catch (Exception ex)
+            {
+                AppLogger.Warn("MainForm: изображение не скопировано.",
+                    $"kind={kind}; id={properties.Id}; error={ex.Message}");
+                MessageBox.Show(this,
+                    "Не удалось применить изображение: " + ex.Message +
+                    Environment.NewLine + Environment.NewLine +
+                    "Остальные свойства не сохранены — исправьте и повторите.",
+                    "Свойства ресурса", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                return;
+            }
+        }
+
+        try
+        {
+            if (isCampaign)
+            {
+                _campaignStore.UpdateCampaign(
+                    properties.Id,
+                    dialog.ShortNameValue,
+                    dialog.FullNameValue,
+                    dialog.DescriptionValue,
+                    imageFileName);
+
+                _simulator?.ReloadCatalog("campaign properties changed");
+                _simulator?.RequestSnapshot("campaign properties changed");
+            }
+            else
+            {
+                _worldStore.UpdateWorld(
+                    properties.Id,
+                    dialog.ShortNameValue,
+                    dialog.FullNameValue,
+                    dialog.DescriptionValue,
+                    imageFileName);
+
+                // Каталог кампаний привязан к ПАПКЕ мира, а она при правке имени
+                // не меняется, поэтому перечитывать его не нужно. Обновляется
+                // только то, что показывает имя мира.
+                _simulator?.RequestSnapshot("world properties changed");
+            }
+
+            PostWorldSelection();
+        }
+        catch (Exception ex)
+        {
+            AppLogger.Warn("MainForm: свойства ресурса не сохранены.",
+                $"kind={kind}; id={properties.Id}; error={ex.Message}");
+            MessageBox.Show(this, "Не удалось сохранить свойства: " + ex.Message,
+                "Свойства ресурса", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            return;
+        }
+
+        MessageBox.Show(this,
+            (isCampaign ? "Кампания «" : "Мир «") + dialog.FullNameValue +
+            (dialog.FullNameValue.Length == 0 ? dialog.ShortNameValue : string.Empty) +
+            "» сохранён." + Environment.NewLine + Environment.NewLine +
+            "Файл: " + (isCampaign ? record!.CampaignFilePath : world.WorldFilePath),
+            "Свойства сохранены", MessageBoxButtons.OK, MessageBoxIcon.Information);
+    }
+
+    /// <summary>
+    /// Кампания по id из селектора, иначе активная кампания мира.
+    ///
+    /// Возвращает <c>null</c>, когда определить нечего: угадывать между
+    /// несколькими кампаниями нельзя — откроется не та, и автор узнает об этом
+    /// только по содержимому.
+    /// </summary>
+    private CampaignStore.CampaignRecord? ResolveCampaign(string? campaignId, WorldRecord world)
+    {
+        var byId = _campaignStore.Records.FirstOrDefault(item =>
+            item.Definition.Id.Equals(campaignId ?? string.Empty, StringComparison.OrdinalIgnoreCase));
+        if (byId is not null)
+            return byId;
+
+        var byRemembered = _campaignStore.Records.FirstOrDefault(item =>
+            item.Definition.Id.Equals(world.Definition.LastCampaignId ?? string.Empty,
+                StringComparison.OrdinalIgnoreCase));
+        if (byRemembered is not null)
+            return byRemembered;
+
+        return _campaignStore.Records.Count == 1 ? _campaignStore.Records[0] : null;
+    }
+
+    /// <summary>
+    /// Создаёт новый мир.
+    ///
+    /// Результат НЕ открывается здесь же: мир только что создан, и смена
+    /// открытого мира на живом окне пока не реализована (редакторы и Runtime
+    /// держат объекты прежнего мира). Поэтому смена мира запоминается и автору
+    /// говорится прямо, что произойдёт при следующем запуске, — вместо
+    /// молчаливой подмены заголовка без смены содержимого.
+    /// </summary>
+    private void CreateWorld()
+    {
+        var parent = WorldPaths.WorldsRoot(AppPaths.UserRoot);
+
+        using var dialog = new ResourceCreateForm("мир", parent);
+        if (dialog.ShowDialog(this) != DialogResult.OK)
+        {
+            AppLogger.Info("MainForm: создание мира отменено пользователем.");
+            return;
+        }
+
+        try
+        {
+            var world = _worldStore.CreateWorld(
+                dialog.NameValue,
+                dialog.FullNameValue.Length == 0 ? null : dialog.FullNameValue,
+                dialog.DescriptionValue.Length == 0 ? null : dialog.DescriptionValue);
+
+            // Запоминается через `with`, а не присваиванием: AppUiPreferences —
+            // запись, её поля менять нельзя (CS8852).
+            _preferences = _preferences with { LastWorldId = world.Definition.Id };
+            AppUiPreferencesStore.Save(_preferences);
+
+            AppLogger.Info("MainForm: мир создан.",
+                $"worldId={world.Definition.Id}; folder={world.FolderPath}");
+
+            // Селектор обновляется сразу: созданный мир обязан появиться в списке,
+            // иначе «создал мир, а его нигде нет».
+            PostWorldSelection();
+
+            MessageBox.Show(this,
+                "Мир «" + world.DisplayName + "» создан." + Environment.NewLine + Environment.NewLine +
+                world.FolderPath + Environment.NewLine + Environment.NewLine +
+                "Общая кампания с демонстрационным квестом создана автоматически." +
+                Environment.NewLine + Environment.NewLine +
+                "Мир запомнен: он откроется при следующем запуске приложения — " +
+                "смена мира в открытом окне пока не реализована.",
+                "Мир создан", MessageBoxButtons.OK, MessageBoxIcon.Information);
+        }
+        catch (Exception ex)
+        {
+            AppLogger.Warn("MainForm: мир не создан.", ex.Message);
+            MessageBox.Show(this, "Не удалось создать мир: " + ex.Message,
+                "Новый мир", MessageBoxButtons.OK, MessageBoxIcon.Error);
+        }
+    }
+
+    /// <summary>
+    /// Создаёт новую кампанию в текущем мире.
+    ///
+    /// В отличие от мира, кампания появляется в УЖЕ открытом мире, поэтому она
+    /// сразу попадает в селектор и её можно начать наполнять. Активной она не
+    /// становится: активная кампания задаёт мир симуляции, и «создал кампанию —
+    /// сменил мир» было бы неожиданным побочным эффектом.
+    /// </summary>
+    private void CreateCampaign()
+    {
+        var world = SelectedWorld;
+        if (world is null)
+        {
+            MessageBox.Show(this,
+                "Мир не выбран: кампания создаётся внутри мира.",
+                "Новая кампания", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            return;
+        }
+
+        var parent = WorldPaths.CampaignsRoot(world.FolderPath);
+
+        using var dialog = new ResourceCreateForm("кампания", parent);
+        if (dialog.ShowDialog(this) != DialogResult.OK)
+        {
+            AppLogger.Info("MainForm: создание кампании отменено пользователем.");
+            return;
+        }
+
+        try
+        {
+            var campaign = _campaignStore.CreateCampaign(
+                world.Definition.Id,
+                dialog.NameValue,
+                dialog.FullNameValue.Length == 0 ? null : dialog.FullNameValue,
+                dialog.DescriptionValue.Length == 0 ? null : dialog.DescriptionValue);
+
+            AppLogger.Info("MainForm: кампания создана.",
+                $"worldId={world.Definition.Id}; campaignId={campaign.Definition.Id}");
+
+            _simulator?.ReloadCatalog("campaign created");
+            _simulator?.RequestSnapshot("campaign created");
+            PostWorldSelection();
+
+            MessageBox.Show(this,
+                "Кампания «" + WorldDisplayRules.DisplayName(campaign.Definition.Name,
+                    campaign.Definition.FullName) + "» создана в мире «" +
+                world.DisplayName + "»." + Environment.NewLine + Environment.NewLine +
+                campaign.FolderPath + Environment.NewLine + Environment.NewLine +
+                "Кампания отключена: включите её, когда будете готовы играть. " +
+                "Квесты добавляются в папке quests.",
+                "Кампания создана", MessageBoxButtons.OK, MessageBoxIcon.Information);
+        }
+        catch (Exception ex)
+        {
+            AppLogger.Warn("MainForm: кампания не создана.", ex.Message);
+            MessageBox.Show(this, "Не удалось создать кампанию: " + ex.Message,
+                "Новая кампания", MessageBoxButtons.OK, MessageBoxIcon.Error);
+        }
+    }
+
+    /// <summary>
+    /// Сообщает, что действие из меню ещё не реализовано.
+    ///
+    /// Заглушка «ничего не делать» недопустима: пункт меню выглядел бы сломанным,
+    /// и пользователь искал бы причину в своём мире. Текст называет пункт, чтобы
+    /// было понятно, о чём речь.
+    /// </summary>
+    private void NotifyNotImplemented(string action)
+    {
+        var label = action switch
+        {
+            "world_info" => "Сведения о мире",
+            "world_edit" => "Редактирование мира",
+            "campaign_info" => "Сведения о кампании",
+            "campaign_edit" => "Редактирование кампании",
+            "export_world" => "Экспорт мира",
+            "export_campaign" => "Экспорт кампании",
+            "import_archive" => "Импорт архива",
+            "create_world" => "Создание мира",
+            "create_campaign" => "Создание кампании",
+            _ => action
+        };
+
+        AppLogger.Info("MainForm: пункт меню ещё не реализован.", "action=" + action);
+        MessageBox.Show(this,
+            label + " пока не реализовано — этот пункт появится в следующих обновлениях." +
+            Environment.NewLine + Environment.NewLine +
+            "Сейчас доступны: выбор и запоминание мира, выбор кампании и папка мира.",
+            "Ещё не реализовано", MessageBoxButtons.OK, MessageBoxIcon.Information);
+    }
+
     protected override void OnWebMessage(string json)
     {
         try
@@ -366,6 +1222,73 @@ public sealed class MainForm : WebViewForm
 
                 case "open_settings":
                     OpenSettings();
+                    break;
+
+                // --- Селектор мира и кампании ---
+                //
+                // Смена мира в работающем приложении пока не поддержана: стор
+                // кампаний и Runtime созданы на выбранном мире, а их замена на
+                // живой форме — отдельная задача (снимок, кэши локаций, окна
+                // редакторов). Честный отказ лучше молчаливой смены подписи
+                // без смены содержимого: «выбрал мир, а квесты прежние» —
+                // худший вид поломки.
+                case "select_world":
+                    RequestWorldSwitch(root.TryGetProperty("worldId", out var worldNode)
+                        ? worldNode.GetString()
+                        : null);
+                    break;
+
+                case "select_campaign":
+                    SelectCampaign(root.TryGetProperty("campaignId", out var campaignNode)
+                        ? campaignNode.GetString()
+                        : null);
+                    break;
+
+                case "open_world_folder":
+                    OpenWorldFolder();
+                    break;
+
+                // Экспорт не просто «сохранить куда-то»: от галочки «Архивация в
+                // aqezip» зависит и содержимое, и вид результата, поэтому решение
+                // собирается диалогом ДО записи на диск.
+                case "export_world":
+                    ExportWorld();
+                    break;
+
+                case "export_campaign":
+                    ExportCampaign(root.TryGetProperty("campaignId", out var exportCampaignNode)
+                        ? exportCampaignNode.GetString()
+                        : null);
+                    break;
+
+                case "world_info":
+                    ShowResourceProperties(kind: "world", edit: false);
+                    break;
+
+                case "world_edit":
+                    ShowResourceProperties(kind: "world", edit: true);
+                    break;
+
+                case "campaign_info":
+                    ShowResourceProperties(kind: "campaign", edit: false,
+                        root.TryGetProperty("campaignId", out var infoCampaignNode)
+                            ? infoCampaignNode.GetString()
+                            : null);
+                    break;
+
+                case "campaign_edit":
+                    ShowResourceProperties(kind: "campaign", edit: true,
+                        root.TryGetProperty("campaignId", out var editCampaignNode)
+                            ? editCampaignNode.GetString()
+                            : null);
+                    break;
+
+                case "create_world":
+                    CreateWorld();
+                    break;
+
+                case "create_campaign":
+                    CreateCampaign();
                     break;
             }
         }
@@ -474,6 +1397,54 @@ public sealed class MainForm : WebViewForm
                 // поэтому чип совпадает с кнопкой в окне симулятора даже после
                 // перезагрузки страницы.
                 running = _runtime.SimulationRunning
+            }));
+        }
+        catch (InvalidOperationException)
+        {
+        }
+    }
+
+    /// <summary>
+    /// Отправляет в главное окно состояние селектора [МИР][КАМПАНИЯ][меню].
+    ///
+    /// Источник истины — Host: он владеет каталогом миров и знает, какой мир
+    /// открыт. Web только рисует присланное, поэтому селектор в главном окне и
+    /// в Симуляторе не может разойтись.
+    ///
+    /// Кампании берутся из стора, УЖЕ ограниченного текущим миром: это и есть
+    /// причина, по которой список не может показать чужой мир.
+    /// </summary>
+    private void PostWorldSelection()
+    {
+        if (IsDisposed || !IsHandleCreated)
+        {
+            return;
+        }
+
+        var world = SelectedWorld;
+        var campaigns = _campaignStore.Records
+            .Select(record => new
+            {
+                id = record.Definition.Id,
+                name = WorldDisplayRules.DisplayName(record.Definition.Name, record.Definition.FullName)
+            })
+            .ToArray();
+
+        var activeCampaignId = ResourceSelectorRules.ResolveCampaignId(
+            world?.Definition.LastCampaignId,
+            campaigns.Select(item => item.id));
+
+        try
+        {
+            PostJson(JsonSerializer.Serialize(new
+            {
+                type = "world_selection",
+                worlds = _worldStore.Worlds
+                    .Select(record => new { id = record.Definition.Id, name = record.DisplayName })
+                    .ToArray(),
+                campaigns,
+                worldId = world?.Definition.Id ?? string.Empty,
+                campaignId = activeCampaignId ?? string.Empty
             }));
         }
         catch (InvalidOperationException)
@@ -924,10 +1895,54 @@ public sealed class MainForm : WebViewForm
             _campaignStore,
             path => OpenStartupResource(path),
             _locationResolver,
-            _roads);
+            _roads,
+            // Мир передаётся явно: Симулятор показывает его кампании, и без
+            // ссылки на мир он видел бы кампании ВСЕХ миров сразу.
+            SelectedWorld);
         _simulator.FormClosed += (_, _) => _simulator = null;
         PlaceOnSecondaryScreen(_simulator);
         _simulator.Show(this);
+    }
+
+    /// <summary>
+    /// Текущий мир приложения.
+    ///
+    /// Берётся по id из настроек: мир выбирается один раз при первом запуске, а
+    /// дальше восстанавливается. Если сохранённого мира нет (удалили папку,
+    /// переустановка), берётся первый доступный — работать без мира нельзя, но
+    /// и молча открывать ничего нельзя, поэтому выбор фиксируется в настройках.
+    /// </summary>
+    private WorldRecord? SelectedWorld
+    {
+        get
+        {
+            var stored = _worldStore.Worlds.FirstOrDefault(world =>
+                world.Definition.Id.Equals(_preferences.LastWorldId, StringComparison.OrdinalIgnoreCase));
+
+            if (stored is not null)
+                return stored;
+
+            var fallback = _worldStore.Worlds.FirstOrDefault();
+            if (fallback is null)
+                return null;
+
+            if (!string.Equals(_preferences.LastWorldId, fallback.Definition.Id, StringComparison.OrdinalIgnoreCase))
+            {
+                AppLogger.Info("MainForm: сохранённый мир недоступен, выбран первый доступный.",
+                    $"stored={_preferences.LastWorldId ?? "нет"}; selected={fallback.Definition.Id}");
+
+                // В CI-прогоне настройки НЕ записываются: прогон обязан быть
+                // неинтерактивным и не менять файлы пользователя. Сам выбор при
+                // этом работает — он нужен, чтобы приложение запустилось.
+                if (!_ciTest)
+                {
+                    _preferences = _preferences with { LastWorldId = fallback.Definition.Id };
+                    AppUiPreferencesStore.Save(_preferences);
+                }
+            }
+
+            return fallback;
+        }
     }
 
     private void PlaceOnSecondaryScreen(Form form)

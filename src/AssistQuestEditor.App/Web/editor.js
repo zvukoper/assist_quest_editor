@@ -100,7 +100,13 @@
   root.innerHTML =
     "<div class='layoutThree'>" +
       "<section class='panel'><div class='panelTitle'>Редакторы</div><div class='navStack' id='nav'></div></section>" +
-      "<section class='panel'><div class='panelTitle' id='workspaceTitle'></div><div class='panelBody' id='workspace'></div></section>" +
+      // Тело панели документа прокручивается, а панель действий прилипает к его
+      // верху (см. .docPanel>.panelBody>.toolbar:first-child в theme.css): кнопки
+      // «Сохранить» и т.п. должны быть видны всегда, а не уезжать вместе с полями.
+      "<section class='panel docPanel'>" +
+        "<div class='panelTitle' id='workspaceTitle'></div>" +
+        "<div class='panelBody' id='workspace'></div>" +
+      "</section>" +
       "<section class='panel'><div class='panelTitle'>Свойства</div><div class='panelBody' id='inspector'></div></section>" +
     "</div>";
 
@@ -237,7 +243,10 @@
         "<button class='toolButton primary' id='applyActivation'>Применить</button>" +
         "<span class='miniLabel' id='activationHint'></span>" +
       "</div>" +
-      "<div style='height:calc(100% - 46px);min-height:560px;border:1px solid var(--border);border-radius:8px;overflow:hidden;background:#111419'>" +
+      // Панель действий прилипает к верху тела документа (см. theme.css),
+      // поэтому её высота больше не вычитается из высоты канваса: с прежними
+      // −46px под канвасом оставалась бы пустая полоса.
+      "<div style='height:calc(100% - 8px);min-height:560px;border:1px solid var(--border);border-radius:8px;overflow:hidden;background:#111419'>" +
         "<svg id='questGraphSvg' viewBox='" + graphViewport.x + " " + graphViewport.y + " " + graphViewport.width + " " + graphViewport.height + "' xmlns='http://www.w3.org/2000/svg' style='width:100%;height:100%'>" +
           "<g id='questGraphEdges'>" + graphEdges() + "</g>" +
           "<g id='questGraphNodes'>" + questGraph.nodes.map(graphNodeMarkup).join("") + "</g>" +
