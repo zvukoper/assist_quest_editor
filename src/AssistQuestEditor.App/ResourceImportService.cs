@@ -25,15 +25,8 @@ public sealed record ResourceImportResult(
 /// </summary>
 public static class ResourceImportService
 {
-    /// <summary>Каноническое расширение файла квеста.</summary>
     public const string QuestExtension = ".aqquest";
 
-    /// <summary>
-    /// Устанавливает кампанию в папку мира.
-    ///
-    /// Имя папки — из манифеста (id ресурса), потому что кампанию адресуют по id:
-    /// ссылки в квестах и сохранениях указывают на него, а не на отображаемое имя.
-    /// </summary>
     public static ResourceImportResult ImportCampaign(
         WorldRecord world,
         ArchiveInspection inspection,
@@ -54,51 +47,77 @@ public static class ResourceImportService
                 name => Directory.Exists(Path.Combine(campaignsRoot, name)));
 
         var targetFolder = Path.Combine(campaignsRoot, targetName);
+        if (overwrite && Directory.Exists(targetFolder))
+        {
+            var existing = ReadCampaign(targetFolder);
+            EnsureOverwriteDiffers(
+                inspection.Manifest.Version,
+                inspection.Manifest.Metadata?.ModifiedOn,
+                existing?.Version,
+                existing?.Metadata?.ModifiedOn,
+                "Кампания");
+        }
+
         var staging = UnpackToStaging(inspection.ArchivePath, WorldPaths.CampaignFileName);
 
         try
         {
+            var definition = ReadCampaign(staging)
+                ?? throw new InvalidDataException("В архиве нет корректного campaign.aqcampaign.");
+
+            if (!overwrite)
+            {
+                definition = definition with
+                {
+                    Id = ToResourceId(targetName),
+                    Name = targetName,
+                    FullName = null,
+                    WorldId = world.Definition.Id
+                };
+                RewriteCampaign(staging, definition);
+                RewriteQuestParents(staging, world.Definition.Id, definition.Id);
+            }
+            else
+            {
+                definition = definition with { WorldId = world.Definition.Id };
+                RewriteCampaign(staging, definition);
+            }
+
+            RemoveDependencyPayload(staging);
+
             if (Directory.Exists(targetFolder))
                 Directory.Delete(targetFolder, recursive: true);
 
-            Directory.CreateDirectory(campaignsRoot);
             Directory.Move(staging, targetFolder);
+
+            var installed = ReadCampaign(targetFolder)
+                ?? throw new InvalidDataException("Кампания распакована, но не читается.");
+
+            var displayName = string.IsNullOrWhiteSpace(installed.FullName)
+                ? installed.Name
+                : installed.FullName!;
+
+            return new ResourceImportResult(
+                WorldArchiveKinds.Campaign,
+                installed.Id,
+                displayName,
+                targetFolder,
+                overwrite);
         }
         catch
         {
             Cleanup(staging);
             throw;
         }
-
-        var definition = ReadCampaign(targetFolder)
-            ?? throw new InvalidDataException(
-                "Кампания распакована, но не читается: проверьте " +
-                WorldPaths.CampaignFilePath(targetFolder));
-
-        var displayName = string.IsNullOrWhiteSpace(definition.FullName)
-            ? definition.Name
-            : definition.FullName!;
-
-        AppLogger.Info("ResourceImportService: кампания импортирована.",
-            $"world={world.Definition.Id}; folder={targetFolder}; id={definition.Id}; " +
-            $"overwrite={overwrite}");
-
-        return new ResourceImportResult(
-            WorldArchiveKinds.Campaign, definition.Id, displayName, targetFolder, overwrite);
     }
 
-    /// <summary>
-    /// Устанавливает квест в папку кампании.
-    ///
-    /// Имя файла — id ресурса плюс каноническое расширение: квесты перечисляются
-    /// в файле кампании по относительному пути, и произвольное имя файла сделало
-    /// бы ресурс невидимым для каталога, хотя сам файл лежал бы на месте.
-    /// </summary>
     public static ResourceImportResult ImportQuest(
+        CampaignStore store,
         CampaignStore.CampaignRecord campaign,
         ArchiveInspection inspection,
         bool overwrite)
     {
+        ArgumentNullException.ThrowIfNull(store);
         ArgumentNullException.ThrowIfNull(campaign);
         ArgumentNullException.ThrowIfNull(inspection);
         EnsureKind(inspection, WorldArchiveKinds.Quest);
@@ -107,63 +126,198 @@ public static class ResourceImportService
         Directory.CreateDirectory(questsFolder);
 
         var desired = WorldArchiveImportRules.TargetFolderName(inspection.Manifest);
-        var fileName = desired + QuestExtension;
-
-        if (!overwrite)
-        {
-            fileName = WorldArchiveImportRules.UniqueFolderName(
+        var targetName = overwrite
+            ? desired
+            : WorldArchiveImportRules.UniqueFolderName(
                 desired,
-                name => File.Exists(Path.Combine(questsFolder, name + QuestExtension))) + QuestExtension;
+                name => File.Exists(Path.Combine(questsFolder, name + QuestExtension)));
+
+        var targetFile = Path.Combine(questsFolder, targetName + QuestExtension);
+        var existingEntry = campaign.Definition.Quests.FirstOrDefault(item =>
+            item.QuestId.Equals(desired, StringComparison.OrdinalIgnoreCase));
+
+        if (overwrite && existingEntry is not null)
+        {
+            var existingPath = Path.Combine(campaign.FolderPath, existingEntry.RelativePath);
+            if (File.Exists(existingPath))
+            {
+                var existingDefinition = ReadQuest(existingPath);
+                EnsureOverwriteDiffers(
+                    inspection.Manifest.Version,
+                    inspection.Manifest.Metadata?.ModifiedOn,
+                    existingDefinition?.Version ?? existingEntry.Version,
+                    existingDefinition?.Metadata?.ModifiedOn,
+                    "Квест");
+            }
         }
 
-        var targetFile = Path.Combine(questsFolder, fileName);
         var staging = UnpackToStaging(inspection.ArchivePath, "*" + QuestExtension);
-
         try
         {
-            // Переносится ОДИН файл, а не папка: квесты кампании лежат в общей
-            // папке `quests`, и удаление её целиком стёрло бы соседние квесты.
             var staged = Directory
                 .EnumerateFiles(staging, "*" + QuestExtension, SearchOption.AllDirectories)
                 .FirstOrDefault()
                 ?? throw new InvalidDataException("В архиве нет файла квеста (.aqquest).");
 
-            // Каталог назначения уже создан выше, поэтому Move не подменит
-            // целевой файл папкой с тем же именем.
-            File.Move(staged, targetFile, overwrite: true);
+            var quest = ReadQuest(staged)
+                ?? throw new InvalidDataException("Файл квеста повреждён.");
+
+            if (!overwrite)
+            {
+                var newId = ToResourceId(targetName);
+                quest = quest with
+                {
+                    Id = newId,
+                    Title = targetName,
+                    WorldId = campaign.Definition.WorldId,
+                    CampaignId = campaign.Definition.Id,
+                    Graph = quest.Graph with { Id = newId, Name = targetName }
+                };
+            }
+            else
+            {
+                quest = quest with
+                {
+                    WorldId = campaign.Definition.WorldId,
+                    CampaignId = campaign.Definition.Id
+                };
+            }
+
+            var tempQuest = Path.Combine(staging, "imported" + QuestExtension);
+            File.WriteAllText(
+                tempQuest,
+                ResourceJsonFormat.Serialize(new QuestDefinitionDocument(
+                    1, "aqquest", quest)));
+
+            File.Copy(tempQuest, targetFile, overwrite: true);
+
+            var relativePath = Path.GetRelativePath(campaign.FolderPath, targetFile)
+                .Replace(Path.DirectorySeparatorChar, '/');
+
+            store.RegisterQuest(
+                campaign,
+                quest,
+                relativePath,
+                CampaignQuestStatus.Enabled);
+
+            RemoveDependencyPayload(staging);
+
+            return new ResourceImportResult(
+                WorldArchiveKinds.Quest,
+                quest.Id,
+                string.IsNullOrWhiteSpace(quest.Title) ? quest.Id : quest.Title,
+                targetFile,
+                overwrite);
         }
         finally
         {
             Cleanup(staging);
         }
-
-        var displayName = string.IsNullOrWhiteSpace(inspection.Manifest.FullName)
-            ? inspection.Manifest.Name
-            : inspection.Manifest.FullName!;
-
-        AppLogger.Info("ResourceImportService: квест импортирован.",
-            $"campaign={campaign.Definition.Id}; file={targetFile}; " +
-            $"id={inspection.Manifest.Id}; overwrite={overwrite}");
-
-        return new ResourceImportResult(
-            WorldArchiveKinds.Quest, inspection.Manifest.Id, displayName, targetFile, overwrite);
     }
 
-    /// <summary>
-    /// Распаковывает архив во временную папку и требует наличия файла ресурса.
-    ///
-    /// Требование проверяется ДО переноса: без него на месте появился бы ресурс,
-    /// который стор не увидит, — «импорт прошёл, а кампании нет».
-    /// </summary>
+    private static void EnsureOverwriteDiffers(
+        int incomingVersion,
+        DateTimeOffset? incomingModified,
+        int? existingVersion,
+        DateTimeOffset? existingModified,
+        string kind)
+    {
+        // Перезапись разрешена только при отличии версии ИЛИ даты изменения.
+        // При совпадении обоих признаков архив не содержит более нового ресурса.
+        var sameVersion = existingVersion.HasValue && existingVersion.Value == incomingVersion;
+        var sameDate = incomingModified.HasValue &&
+                       existingModified.HasValue &&
+                       incomingModified.Value == existingModified.Value;
+
+        if (sameVersion && sameDate)
+        {
+            throw new InvalidOperationException(
+                $"{kind} с такой же версией ({incomingVersion}) и датой изменения уже существует. " +
+                "Перезапись не выполнена: импортируйте ресурс как новый.");
+        }
+    }
+
+    private static string ToResourceId(string value) =>
+        ResourceNaming.ToFolderName(value).Replace(' ', '_').ToLowerInvariant();
+
+    private static void RewriteCampaign(string folder, CampaignDefinition definition)
+    {
+        File.WriteAllText(
+            WorldPaths.CampaignFilePath(folder),
+            ResourceJsonFormat.Serialize(new CampaignDefinitionDocument(
+                1, "aqcampaign", definition)));
+    }
+
+    private static void RewriteQuestParents(string folder, string worldId, string campaignId)
+    {
+        var quests = Path.Combine(folder, WorldPaths.QuestsFolder);
+        if (!Directory.Exists(quests))
+            return;
+
+        foreach (var path in Directory.EnumerateFiles(
+                     quests, "*" + QuestExtension, SearchOption.AllDirectories))
+        {
+            var quest = ReadQuest(path);
+            if (quest is null)
+                continue;
+
+            var next = quest with
+            {
+                WorldId = worldId,
+                CampaignId = campaignId
+            };
+
+            File.WriteAllText(
+                path,
+                ResourceJsonFormat.Serialize(new QuestDefinitionDocument(
+                    1, "aqquest", next)));
+        }
+    }
+
+    private static QuestDefinition? ReadQuest(string path)
+    {
+        try
+        {
+            var document = ResourceJsonFormat.Deserialize<QuestDefinitionDocument>(
+                File.ReadAllText(path));
+            return document?.Definition;
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    private static CampaignDefinition? ReadCampaign(string folder)
+    {
+        var path = WorldPaths.CampaignFilePath(folder);
+        if (!File.Exists(path))
+            return null;
+
+        try
+        {
+            var document = ResourceJsonFormat.Deserialize<CampaignDefinitionDocument>(
+                File.ReadAllText(path));
+            return document?.Definition;
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
     private static string UnpackToStaging(string archivePath, string expectedPattern)
     {
-        var staging = Path.Combine(Path.GetTempPath(), "aq-import-" + Guid.NewGuid().ToString("N"));
+        var staging = Path.Combine(
+            Path.GetTempPath(),
+            "aq-import-" + Guid.NewGuid().ToString("N"));
 
         try
         {
             WorldArchiveService.Unpack(archivePath, staging);
 
-            if (Directory.EnumerateFiles(staging, expectedPattern, SearchOption.AllDirectories).Any())
+            if (Directory.EnumerateFiles(
+                    staging, expectedPattern, SearchOption.AllDirectories).Any())
                 return staging;
 
             throw new InvalidDataException(
@@ -176,53 +330,34 @@ public static class ResourceImportService
         }
     }
 
+    private static void RemoveDependencyPayload(string staging)
+    {
+        var dependencies = Path.Combine(staging, "dependencies");
+        if (Directory.Exists(dependencies))
+            Directory.Delete(dependencies, recursive: true);
+
+        var info = Path.Combine(staging, "DEPENDENCIES.txt");
+        if (File.Exists(info))
+            File.Delete(info);
+    }
+
     private static void Cleanup(string staging)
     {
         if (!Directory.Exists(staging))
             return;
 
         try { Directory.Delete(staging, recursive: true); }
-        catch { /* уборка не должна скрывать исходную ошибку */ }
+        catch { }
     }
 
-    /// <summary>
-    /// Отвергает архив другого вида.
-    ///
-    /// Импорт «наугад» (что бы ни лежало в архиве) положил бы папку мира внутрь
-    /// кампании, и разбираться пришлось бы по содержимому диска.
-    /// </summary>
     private static void EnsureKind(ArchiveInspection inspection, string expected)
     {
-        if (!inspection.Manifest.Kind.Equals(expected, StringComparison.OrdinalIgnoreCase))
+        if (!inspection.Manifest.Kind.Equals(
+                expected, StringComparison.OrdinalIgnoreCase))
         {
             throw new InvalidOperationException(
-                "Архив содержит «" + inspection.Manifest.Kind + "», а не «" + expected + "».");
-        }
-    }
-
-    /// <summary>
-    /// Читает файл кампании из распакованной папки.
-    ///
-    /// Возвращает <c>null</c> вместо исключения: файл уже перенесён на место, и
-    /// «не читается» нужно объяснить с путём, а не выбросить наружу на середине.
-    /// </summary>
-    private static CampaignDefinition? ReadCampaign(string folder)
-    {
-        var path = WorldPaths.CampaignFilePath(folder);
-        if (!File.Exists(path))
-            return null;
-
-        try
-        {
-            // Десериализатор возвращает nullable: пустой или чужой документ
-            // разбирается без исключения, поэтому null проверяется явно.
-            var document = ResourceJsonFormat.Deserialize<CampaignDefinitionDocument>(
-                File.ReadAllText(path));
-            return document?.Definition;
-        }
-        catch
-        {
-            return null;
+                "Архив содержит «" + inspection.Manifest.Kind +
+                "», а не «" + expected + "».");
         }
     }
 }
