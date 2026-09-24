@@ -149,6 +149,17 @@ internal static class Program
                 return;
             }
 
+            // Проба читаемости диалогов. Поведенческая и ЗАМЕРЯЮЩАЯ: кнопка с
+            // заданным тёмным фоном и СВЕТЛЫМ текстом на живой теме Windows может
+            // отрисоваться иначе, чем обещает код — вплоть до тёмного текста на
+            // тёмном фоне. В исходниках это не видно: цвета заданы верно, а
+            // перебивает их системная тема.
+            if (args.Any(arg => string.Equals(arg, "--contrast-probe", StringComparison.OrdinalIgnoreCase)))
+            {
+                Environment.ExitCode = ContrastProbeFromCommandLine(args);
+                return;
+            }
+
             var startupFile = args.FirstOrDefault(arg =>
                 !StartupOptions.IsApplicationSwitch(arg) &&
                 File.Exists(arg));
@@ -1473,6 +1484,513 @@ internal static class Program
             return 1;
         }
     }
+
+    /// <summary>
+    /// `--contrast-probe [--report &lt;файл&gt;]`
+    ///
+    /// Проверяет ЧИТАЕМОСТЬ текста кнопок в тёмных диалогах.
+    ///
+    /// Проба поведенческая и замеряющая: цвета в исходниках заданы верно
+    /// (светлый текст на тёмном фоне), но у кнопки с `FlatStyle.Flat`
+    /// системная тема Windows может перебить заданный фон — тогда текст рисуется
+    /// тёмным на тёмном и не читается. В коде этого не видно, а глазами видно
+    /// только на конкретной системе.
+    ///
+    /// Поэтому каждая кнопка отрисовывается в битмап ПРЯМО из формы, текст
+    /// ищется по нему же, и контраст считается как отношение яркостей
+    /// текста и фона (WCAG-подобно). Формы показываются ВНЕ ЭКРАНА: пробе нельзя
+    /// мешать работать и нельзя требовать монитора.
+    /// </summary>
+    private static int ContrastProbeFromCommandLine(string[] args)
+    {
+        var reportDefault = Path.Combine(
+            ResourceRootResolver.ExecutableDirectory(Environment.ProcessPath) ?? AppContext.BaseDirectory,
+            "contrast-probe-report.txt");
+
+        var reportIndex = Array.FindIndex(args, arg =>
+            string.Equals(arg, "--report", StringComparison.OrdinalIgnoreCase));
+        var reportPath = reportIndex >= 0 && reportIndex + 1 < args.Length
+            ? args[reportIndex + 1]
+            : reportDefault;
+
+        // Каталог для снимков экрана. Замер через DrawToBitmap показывает то, что
+        // просит код, а НЕ то, что рисует система: кнопка с заданным фоном может
+        // отрисоваться темой, и тогда расхождение видно только на настоящем
+        // экране. Снимок с экрана — эталон, с которым сравнивается замер.
+        var captureIndex = Array.FindIndex(args, arg =>
+            string.Equals(arg, "--capture", StringComparison.OrdinalIgnoreCase));
+        var captureFolder = captureIndex >= 0 && captureIndex + 1 < args.Length
+            ? args[captureIndex + 1]
+            : null;
+
+        try
+        {
+            var lines = new List<string> { "Читаемость диалогов проверена." };
+            var forms = BuildDialogSamples().ToList();
+
+            if (forms.Count == 0)
+                throw new InvalidOperationException("Ни один диалог не удалось построить.");
+
+            var measured = 0;
+            var unreadable = 0;
+
+            foreach (var (name, form) in forms)
+            {
+                using (form)
+                {
+                    var onScreen = captureFolder is not null;
+
+                    // На экране форма показывается только для СНИМКА; обычный
+                    // замер идёт вне экрана, чтобы не мешать работающему редактору.
+                    form.StartPosition = FormStartPosition.Manual;
+                    form.Location = onScreen ? new Point(40, 40) : new Point(-6000, -6000);
+                    form.TopMost = onScreen;
+                    form.Show();
+                    Application.DoEvents();
+                    form.PerformLayout();
+                    Application.DoEvents();
+
+                    if (onScreen)
+                    {
+                        // Снимок экрана становится ИСТОЧНИКОМ ЗАМЕРА: он показывает
+                        // то, что нарисовала система, а DrawToBitmap — то, что
+                        // просил код. Если тема перебивает заданный цвет, разница
+                        // видна только здесь.
+                        using var screen = CaptureForm(form, name, captureFolder!);
+                        Application.DoEvents();
+
+                        if (screen is not null)
+                        {
+                            var screenUnreadable = MeasureControlsOnScreen(
+                                form, screen, name, lines, captureFolder!, out var screenMeasured);
+                            measured += screenMeasured;
+                            unreadable += screenUnreadable;
+                        }
+
+                        continue;
+                    }
+
+                    foreach (var button in Descendants(form).OfType<Button>())
+                    {
+                        if (string.IsNullOrWhiteSpace(button.Text) || !button.Visible)
+                            continue;
+
+                        var measurement = MeasureControlContrast(button);
+                        if (measurement is null)
+                            continue;
+
+                        var (ratio, backgroundLuma, textLuma) = measurement.Value;
+                        measured++;
+
+                        // Яркости печатаются ОТДЕЛЬНО от контраста: без них
+                        // непонятно, что именно не так — «тёмный текст на тёмном
+                        // фоне» и «светлый текст на светлом» дают одно и то же
+                        // отношение, а чинятся по-разному.
+                        lines.Add($"button: {name} / «{button.Text}»" +
+                            (button.Enabled ? "" : " (выключена)") +
+                            $": контраст {ratio:0.0}:1, фон {backgroundLuma}, текст {textLuma}");
+
+                        // Выключенная кнопка НЕ считается нечитаемой: её приглушённый
+                        // вид — намеренный сигнал «сейчас нельзя», и придираться к
+                        // контрасту там значило бы требовать от неё выглядеть
+                        // доступной. Но в отчёт она попадает: если она приглушена
+                        // так, что не читается ВООБЩЕ, это тоже дефект.
+                        if (!button.Enabled)
+                            continue;
+
+                        // Порог 4.5:1 — обычный минимум для мелкого текста. Здесь
+                        // он даже мягче нужного: кнопка со светлым текстом на
+                        // тёмном фоне даёт около 12:1, а тёмный текст на тёмном —
+                        // около 1.2:1, так что запас огромный и ложных срабатываний
+                        // на промежуточных оттенках не будет.
+                        if (ratio < 4.5)
+                        {
+                            unreadable++;
+                            lines.Add("unreadable: " + name + " — «" + button.Text +
+                                "» (фон " + backgroundLuma + ", текст " + textLuma +
+                                "): контраст " + ratio.ToString("0.0") + ":1");
+                        }
+                    }
+
+                    // Поля ввода проверяются тем же замером: у них та же
+                    // опасность — системная тема задаёт БЕЛЫЙ фон при заданном
+                    // тёмном, и тогда светлый текст исчезает на белом.
+                    foreach (var box in Descendants(form).OfType<TextBox>())
+                    {
+                        if (!box.Visible || !box.Enabled || box.Multiline)
+                            continue;
+
+                        // Пустое поле проверять нечем: замер тогда цепляет РАМКУ и
+                        // выдаёт «текст 100» при полном отсутствии текста. Ложное
+                        // срабатывание на пустом поле уже было получено.
+                        if (string.IsNullOrWhiteSpace(box.Text))
+                            continue;
+
+                        var measurement = MeasureControlContrast(box);
+                        if (measurement is null)
+                            continue;
+
+                        var (ratio, backgroundLuma, textLuma) = measurement.Value;
+                        measured++;
+                        lines.Add($"textbox: {name} / «{box.Text}»: контраст {ratio:0.0}:1, " +
+                            $"фон {backgroundLuma}, текст {textLuma}");
+
+                        if (ratio < 4.5)
+                        {
+                            unreadable++;
+                            lines.Add("unreadable: " + name + " — поле «" + box.Text +
+                                "» (фон " + backgroundLuma + ", текст " + textLuma +
+                                "): контраст " + ratio.ToString("0.0") + ":1");
+                        }
+                    }
+                }
+            }
+
+            lines.Add("buttons measured: " + measured);
+
+            // Обязательное покрытие. Без него удаление диалога из пробы просто
+            // СНИЖАЛО бы охват, и проверка оставалась бы зелёной: «нет нечитаемых»
+            // верно и тогда, когда ничего не отрисовано. Названия берутся из
+            // отчёта (`вид: диалог / «кнопка»`), а не выдумываются.
+            //
+            // «Выбрать изображение…» в окне СВЕДЕНИЙ — именно та кнопка, которая
+            // была нечитаемой: она выключена в режиме просмотра. Её наличие в
+            // списке обязательно, иначе возврат к пропуску выключенных контролов
+            // снова сделает замер слепым и проверка останется зелёной.
+            var required = new[]
+            {
+                "Кампании и квесты / «Ред.»",
+                "Кампании и квесты / «ПАПКА»",
+                "Свойства ресурса (просмотр) / «Выбрать изображение…»",
+                "Свойства ресурса (правка) / «Сохранить»",
+                "Экспорт ресурса / «Экспортировать»",
+                "Создание ресурса / «Создать»",
+                "Настройки / «Зарегистрировать расширения»"
+            };
+
+            var reportText = string.Join("\n", lines);
+            var missing = required.Where(item => !reportText.Contains(item)).ToList();
+
+            lines.Add(missing.Count == 0
+                ? "coverage: ok (" + required.Length + ")"
+                : "coverage: не проверено — " + string.Join("; ", missing));
+
+            var failed = unreadable > 0 || missing.Count > 0;
+            lines.Add(!failed
+                ? "contrast: ok"
+                : "contrast: fail — нечитаемых " + unreadable + ", не охвачено " + missing.Count);
+
+            foreach (var line in lines)
+                Console.WriteLine(line);
+
+            WriteResourceLines(reportPath, lines);
+            return failed ? 1 : 0;
+        }
+        catch (Exception ex)
+        {
+            var message = "Читаемость диалогов не проверена: " + ex.Message;
+            Console.WriteLine(message);
+
+            try
+            {
+                WriteResourceLines(reportPath, new[] { message });
+            }
+            catch
+            {
+                // Отчёт — диагностика; не суметь записать его не меняет результат.
+            }
+
+            return 1;
+        }
+    }
+
+    /// <summary>
+    /// Снимает РЕАЛЬНО отрисованное окно с экрана.
+    ///
+    /// Именно этот снимок разрешает спор «код задаёт светлый текст, а на экране
+    /// тёмный»: `DrawToBitmap` отдаёт то, что просит код, а тема Windows может
+    /// нарисовать иначе. Снимок сохраняется в файл, чтобы его можно было не только
+    /// замерить, но и ПОСМОТРЕТЬ.
+    /// </summary>
+    private static Bitmap? CaptureForm(Form form, string name, string folder)
+    {
+        Directory.CreateDirectory(folder);
+
+        // Дать форме перерисоваться по-настоящему: WM_PRINT отдаёт содержимое
+        // сразу, а экранная композиция отстаёт на кадр. Также нужен запас на
+        // появление системной тени и заголовка окна.
+        for (var attempt = 0; attempt < 12; attempt++)
+        {
+            Application.DoEvents();
+            Thread.Sleep(40);
+        }
+
+        var bounds = form.Bounds;
+        if (bounds.Width <= 0 || bounds.Height <= 0)
+            return null;
+
+        var bitmap = new Bitmap(bounds.Width, bounds.Height);
+        using (var graphics = Graphics.FromImage(bitmap))
+            graphics.CopyFromScreen(bounds.Location, Point.Empty, bounds.Size);
+
+        // Имя файла — из названия диалога: по нему снимок и ищется.
+        var safe = new string(name.Select(ch => char.IsLetterOrDigit(ch) ? ch : '-').ToArray());
+        bitmap.Save(Path.Combine(folder, safe + ".png"), System.Drawing.Imaging.ImageFormat.Png);
+
+        return bitmap;
+    }
+
+    /// <summary>
+    /// Меряет читаемость контролов ПО СНИМКУ ЭКРАНА и сохраняет вырезку каждой
+    /// кнопки.
+    ///
+    /// Вырезки нужны, чтобы увидеть глазами то же, что измерил замер: спор «светлый
+    /// текст или тёмный» разрешается одним взглядом на увеличенный фрагмент, и
+    /// ошибку в самом замере так видно сразу.
+    ///
+    /// Координаты берутся у САМОГО контрола (`RectangleToScreen`), а не подбираются
+    /// по картинке: подбор однажды уже дал вырезку соседнего окна.
+    /// </summary>
+    /// <summary>
+    /// Какие контролы имеет смысл мерить.
+    ///
+    /// Правило ОДНО на оба пути замера (внеэкранный и по снимку экрана). Две
+    /// копии этого условия уже разошлись: пропуск пустых полей был добавлен
+    /// только в один путь, и замер снимал пустое поле, принимая РАМКУ за текст
+    /// («текст 100» при полном отсутствии текста).
+    ///
+    /// ВЫКЛЮЧЕННЫЕ контролы меряются НАМЕРЕННО: именно у них текст рисуется
+    /// системным цветом вместо заданного, и именно это был дефект («Выбрать
+    /// изображение…» и «Убрать изображение» в окне сведений). Пропуск выключенных
+    /// делал бы замер слепым ровно к тому, ради чего он написан.
+    ///
+    /// Пустое поле проверять нечем: рисовать в нём нечего, а рамка даёт ложный
+    /// «контраст».
+    /// </summary>
+    private static bool ShouldMeasure(Control control, out bool isButton)
+    {
+        isButton = control is Button;
+
+        if (!isButton && control is not (TextBox { Multiline: false }))
+            return false;
+
+        if (!control.Visible)
+            return false;
+
+        return !string.IsNullOrWhiteSpace(control.Text);
+    }
+
+    private static int MeasureControlsOnScreen(
+        Form form, Bitmap screen, string name, List<string> lines, string folder, out int measured)
+    {
+        measured = 0;
+        var unreadable = 0;
+        var origin = form.Bounds.Location;
+
+        foreach (var control in Descendants(form))
+        {
+            if (!ShouldMeasure(control, out var isButton))
+                continue;
+
+            var bounds = control.RectangleToScreen(control.ClientRectangle);
+            var local = new Rectangle(bounds.X - origin.X, bounds.Y - origin.Y, bounds.Width, bounds.Height);
+
+            if (local.Width <= 4 || local.Height <= 4 ||
+                !new Rectangle(0, 0, screen.Width, screen.Height).Contains(local))
+            {
+                lines.Add("skipped: " + name + " — «" + control.Text + "» вне снимка");
+                continue;
+            }
+
+            var crop = screen.Clone(local, screen.PixelFormat);
+            var kind = isButton ? "button" : "textbox";
+            var safe = SafeName(name + "-" + control.Text);
+            crop.Save(Path.Combine(folder, kind + "-" + safe + ".png"),
+                System.Drawing.Imaging.ImageFormat.Png);
+
+            var measurement = MeasureBitmapContrast(crop);
+            crop.Dispose();
+
+            if (measurement is null)
+                continue;
+
+            var (ratio, backgroundLuma, textLuma) = measurement.Value;
+            measured++;
+            // Пометка «выключена» печатается ОБОИМИ путями замера: по ней
+            // проверка убеждается, что выключенные контролы вообще попали в замер.
+            // Пропусти их замер — и дефект системной отрисовки снова стал бы
+            // невидимым, а проверка осталась бы зелёной.
+            lines.Add($"{kind}: {name} / «{control.Text}»" +
+                (control.Enabled ? "" : " (выключена)") +
+                $": контраст {ratio:0.0}:1, фон {backgroundLuma}, текст {textLuma}");
+
+            if (ratio < 4.5)
+            {
+                unreadable++;
+                lines.Add("unreadable: " + name + " — «" + control.Text +
+                    "» (фон " + backgroundLuma + ", текст " + textLuma +
+                    "): контраст " + ratio.ToString("0.0") + ":1");
+            }
+        }
+
+        return unreadable;
+    }
+
+    /// <summary>Имя файла из произвольного текста: только буквы и цифры.</summary>
+    private static string SafeName(string text) =>
+        new(text.Select(ch => char.IsLetterOrDigit(ch) ? ch : '-').ToArray());
+
+    /// <summary>
+    /// Контраст текста к фону, замеренный ПО ГОТОВОМУ ИЗОБРАЖЕНИЮ.
+    ///
+    /// Фон — МОДА распределения яркости (заливка занимает большую часть площади),
+    /// текст — самый далёкий от фона оттенок. Медиана не годится: она попадает
+    /// между фоном и текстом.
+    /// </summary>
+    private static (double Ratio, int Background, int Text)? MeasureBitmapContrast(Bitmap bitmap)
+    {
+        if (bitmap.Width <= 2 || bitmap.Height <= 2)
+            return null;
+
+        // Гистограмма яркостей: 256 корзин достаточно, а усреднять по каналам
+        // можно потому, что цвета здесь серые и тёмно-синие — без насыщенных
+        // оттенков, где яркость каналов расходится.
+        var histogram = new int[256];
+        for (var y = 0; y < bitmap.Height; y++)
+        {
+            for (var x = 0; x < bitmap.Width; x++)
+                histogram[Luma(bitmap.GetPixel(x, y))]++;
+        }
+
+        var background = 0;
+        for (var index = 1; index < histogram.Length; index++)
+        {
+            if (histogram[index] > histogram[background])
+                background = index;
+        }
+
+        var text = background;
+        var farthest = 0;
+        for (var index = 0; index < histogram.Length; index++)
+        {
+            if (histogram[index] == 0)
+                continue;
+
+            var distance = Math.Abs(index - background);
+            if (distance > farthest)
+            {
+                farthest = distance;
+                text = index;
+            }
+        }
+
+        // Совсем без текста (однотонная кнопка со значком вместо надписи) замер
+        // не имеет смысла, но и дефектом не является.
+        if (farthest < 24)
+            return null;
+
+        var lighter = Math.Max(background, text) / 255.0;
+        var darker = Math.Min(background, text) / 255.0;
+
+        return ((lighter + 0.05) / (darker + 0.05), background, text);
+    }
+
+    /// <summary>
+    /// Строит по одному представителю каждого тёмного диалога.
+    ///
+    /// Данные — временные и не касаются диска: проба проверяет ЦВЕТА, а не
+    /// содержимое, и запись в пользовательскую папку была бы побочным эффектом
+    /// ради замера.
+    /// </summary>
+    private static IEnumerable<(string Name, Form Form)> BuildDialogSamples()
+    {
+        var folder = Path.Combine(Path.GetTempPath(), "aq-contrast-probe");
+
+        yield return ("Свойства ресурса (просмотр)", new ResourcePropertiesForm(
+            new ResourceProperties(
+                "мира", "Пробный мир", "Пробный мир", "probe-world", 1, "Описание", null,
+                null, null, null, Array.Empty<string>(), folder),
+            editMode: false));
+
+        yield return ("Свойства ресурса (правка)", new ResourcePropertiesForm(
+            new ResourceProperties(
+                "кампании", "Пробная кампания", "Пробная кампания", "probe-campaign", 1,
+                "Описание", null, null, null, null, Array.Empty<string>(), folder),
+            editMode: true));
+
+        yield return ("Экспорт ресурса", new ResourceExportForm(
+            "мира", "Пробный мир", folder, 3, 1024,
+            Array.Empty<string>(),
+            Path.Combine(folder, "Exported", "Пробный мир"),
+            Path.Combine(folder, "Exported", "Пробный мир.aqezip")));
+
+        yield return ("Создание ресурса", new ResourceCreateForm("мира", folder, "Пробный мир"));
+
+        yield return ("Настройки", new SettingsForm());
+
+        // Окно дерева кампаний: оно рисует СВОИ кнопки («ПАПКА», «Ред.») и
+        // заголовки строк, и именно в нём автор увидел тёмный текст.
+        var world = new WorldRecord(
+            new WorldDefinition("probe-world", "Пробный мир", "Пробный мир", "Описание"),
+            folder);
+
+        var tree = new CampaignsForm();
+        tree.SetWorld(world);
+        tree.SetCatalog(new[]
+        {
+            new InstalledCampaignView(
+                "probe-campaign", "Пробная кампания", 1, true, folder,
+                new[]
+                {
+                    new InstalledQuestView(
+                        "probe-campaign", "Пробная кампания", folder, true,
+                        "probe-quest", "Пробный квест", 1, CampaignQuestStatus.Enabled,
+                        "quests/probe.aqquest",
+                        Path.Combine(folder, "quests", "probe.aqquest"),
+                        null, 1)
+                },
+                "probe-world", "Пробная кампания", "Описание кампании")
+        });
+
+        yield return ("Кампании и квесты", tree);
+    }
+
+    /// <summary>Все вложенные контролы до самого низа дерева.</summary>
+    private static IEnumerable<Control> Descendants(Control root)
+    {
+        foreach (Control child in root.Controls)
+        {
+            yield return child;
+
+            foreach (var nested in Descendants(child))
+                yield return nested;
+        }
+    }
+
+    /// <summary>
+    /// Контраст текста кнопки к её фону, замеренный ПО ПИКСЕЛЯМ.
+    ///
+    /// Читать `button.ForeColor`/`BackColor` бессмысленно: именно расхождение
+    /// между обещанным цветом и нарисованным и нужно поймать. Поэтому кнопка
+    /// рисуется в битмап, фон берётся как МОДА распределения яркости (заливка
+    /// занимает большую часть площади), а текст — как самый далёкий от фона
+    /// пиксель. Медиана не годится: она попадает между фоном и текстом.
+    /// </summary>
+    /// <returns>Контраст, яркость фона и яркость текста; null — мерить нечего.</returns>
+    private static (double Ratio, int Background, int Text)? MeasureControlContrast(Control control)
+    {
+        if (control.Width <= 2 || control.Height <= 2)
+            return null;
+
+        using var bitmap = new Bitmap(control.Width, control.Height);
+        control.DrawToBitmap(bitmap, new Rectangle(0, 0, control.Width, control.Height));
+
+        return MeasureBitmapContrast(bitmap);
+    }
+
+    /// <summary>Яркость пикселя (BT.601), 0..255.</summary>
+    private static int Luma(Color color) =>
+        (int)Math.Round(0.299 * color.R + 0.587 * color.G + 0.114 * color.B);
 
     /// <summary>
     /// `--icon-probe [--report &lt;файл&gt;]`

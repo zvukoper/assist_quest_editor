@@ -97,8 +97,49 @@ const mutations = [
     from: "Anchor = AnchorStyles.Right, Margin = new Padding(0, 0, 7, 0)",
     to: "Margin = new Padding(0, 14, 7, 0)",
     why: "вертикаль обязана задаваться якорем, а не отступом"
+  },
+  {
+    name: "выключенные кнопки без своей отрисовки",
+    file: "src/AssistQuestEditor.App/Host/DarkFlatButton.cs",
+    probe: "contrast",
+    // Мутация обязана КОМПИЛИРОВАТЬСЯ: `if (true)` даёт CS0162 (недостижимый
+    // код), а проект собирается с TreatWarningsAsErrors — контроль тогда сообщал
+    // бы «копия не собралась», что не является поимкой проверки.
+    from: "if (Enabled)",
+    to: "if (Enabled || !Enabled)",
+    why: "выключенный текст обязан оставаться читаемым, а не системно-серым"
+  },
+  {
+    name: "выключенный текст тёмным цветом",
+    file: "src/AssistQuestEditor.App/Host/DarkFlatButton.cs",
+    probe: "contrast",
+    // Проверяется ИМЕННО читаемость: тёмный текст на тёмном фоне — тот самый
+    // дефект. Замена класса кнопки на обычный `Button` такой мутацией НЕ была бы:
+    // обычная кнопка рисуется темой Windows (серый фон, серый текст), и контраст
+    // внутри неё остаётся достаточным — это несогласованность оформления, а не
+    // нечитаемость, и требовать её поймать значило бы требовать не того.
+    from: "Color.FromArgb(170, 178, 190)",
+    to: "Color.FromArgb(20, 22, 25)",
+    why: "выключенный текст обязан быть светлым: иначе он не читается на тёмном фоне"
+  },
+  {
+    name: "кнопка меню без подписи",
+    file: "src/AssistQuestEditor.App/Web/main.html",
+    probe: "selector",
+    from: "aria-expanded=\"false\">Действия<span aria-hidden=\"true\">▾</span></button>",
+    to: "aria-expanded=\"false\">▾</button>",
+    why: "по треугольнику меню не находят: экспорт и импорт искали глазами"
   }
 ];
+
+/**
+ * Какие мутации правят C#. Их копия обязана БЫТЬ СОБРАНА: проба читает
+ * ИСПОЛНЯЕМЫЙ файл, а каталог сборки подключён junction-ссылкой на настоящее
+ * дерево, поэтому без своей сборки проба запускала бы неизменённый exe и
+ * «мутант не пойман». Ровно это и выяснилось на прогоне: JS-мутации ловились,
+ * а обе C# — нет.
+ */
+const csharpMutation = file => file.endsWith(".cs");
 
 /**
  * Готовит временную копию дерева для мутации.
@@ -121,15 +162,11 @@ function stageCopy() {
     filter: source => !skip.has(path.basename(source))
   });
 
-  // Библиотеки запуска и каталоги сборки — ссылками.
+  // Библиотеки запуска подключаются ссылкой: их копирование заняло бы минуты,
+  // а нужны они только для запуска. Каталоги сборки НЕ отдаются ссылкой: проба
+  // запускает exe, и ссылка вернула бы НЕизменённую сборку — C#-мутация тогда
+  // «не ловится». Для C#-правок своя сборка делается после подмены (см. ниже).
   fs.symlinkSync(path.join(root, "node_modules"), path.join(copy, "node_modules"), "junction");
-
-  for (const project of ["AssistQuestEditor.App", "AssistQuestEditor.Domain"]) {
-    const build = path.join(root, "src", project, "bin");
-    if (fs.existsSync(build)) {
-      fs.symlinkSync(build, path.join(copy, "src", project, "bin"), "junction");
-    }
-  }
 
   return copy;
 }
@@ -139,9 +176,10 @@ function stageCopy() {
 const probeFile = {
   inventory: "ci/inventory_smoke.mjs",
   environment: "ci/environment_clock_smoke.mjs",
-  storage: "ci/world_storage_smoke.mjs"
+  storage: "ci/world_storage_smoke.mjs",
+  selector: "ci/world_selector_smoke.mjs",
+  contrast: "ci/contrast_smoke.mjs"
 };
-
 /**
  * Прогон пробы в заданном каталоге.
  *
@@ -182,7 +220,11 @@ for (const mutation of mutations) {
   const copy = stageCopy();
   try {
     const target = path.join(copy, ...mutation.file.split("/"));
-    const source = fs.readFileSync(target, "utf8");
+
+    // Исходники в репозитории CRLF, а якоря в этом файле записаны через LF:
+    // без нормализации `includes` не находит образец, подмена не применяется, и
+    // контроль молча «проходит» ничего не измерив (этот промах уже случался).
+    const source = fs.readFileSync(target, "utf8").replace(/\r\n/g, "\n");
 
     if (!source.includes(mutation.from)) {
       failures.push(`мутация «${mutation.name}»: образец не найден в ${mutation.file}`);
@@ -191,12 +233,33 @@ for (const mutation of mutations) {
 
     fs.writeFileSync(target, source.split(mutation.from).join(mutation.to), "utf8");
 
+    if (csharpMutation(mutation.file)) {
+      // Своя сборка в копии: проба запускает exe, а не читает исходник.
+      try {
+        execFileSync("dotnet", [
+          "build", "src/AssistQuestEditor.App/AssistQuestEditor.App.csproj",
+          "-c", "Release", "--nologo", "-v", "q"
+        ], { cwd: copy, stdio: "pipe", timeout: 300000 });
+      } catch (error) {
+        // Не собралось — это НЕ поимка: сообщаем отдельно, иначе «мутант
+        // пойман» означало бы «проверка не запустилась».
+        failures.push(`мутация «${mutation.name}»: копия не собралась — ` +
+          String(error.stdout ?? "").slice(-400));
+        continue;
+      }
+    }
+
     const result = runProbe(copy, mutation.probe);
     results.push({ name: mutation.name, caught: result.failed });
 
     if (!result.failed) {
+      // Вывод пробы печатается целиком: без него непонятно, ПОЧЕМУ мутант не
+      // пойман — «проверка не заметила» и «проверка не нашла нужный контрол»
+      // выглядят одинаково, а чинятся по-разному.
       failures.push(`мутация «${mutation.name}» НЕ поймана (${mutation.why}): ` +
-        `проверка проходит с дефектом (код ${result.code}).`);
+        `проверка проходит с дефектом (код ${result.code}).\n` +
+        result.stdout.split(/\r?\n/).filter(line => line.trim()).slice(-12)
+          .map(line => "     " + line.trim()).join("\n"));
     }
   } finally {
     fs.rmSync(copy, { recursive: true, force: true });

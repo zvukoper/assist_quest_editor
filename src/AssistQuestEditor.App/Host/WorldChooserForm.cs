@@ -107,12 +107,11 @@ public sealed class WorldChooserForm : Form
             Font = new Font("Segoe UI", 8.6f)
         };
 
-        _create = new Button
+        _create = new DarkFlatButton
         {
             Location = new Point(18, hasWorlds ? 210 : 198),
             Size = new Size(200, 38),
             Text = hasWorlds ? "Создать и открыть" : "Создать мир",
-            FlatStyle = FlatStyle.Flat,
             BackColor = Color.FromArgb(250, 176, 3),
             ForeColor = Color.FromArgb(20, 20, 20),
             Font = new Font("Segoe UI", 9.5f, FontStyle.Bold)
@@ -151,32 +150,24 @@ public sealed class WorldChooserForm : Form
 
             _existing.SelectedIndex = 0;
 
-            var open = new Button
+            var open = new DarkFlatButton
             {
                 Location = new Point(18, 448),
                 Size = new Size(160, 38),
-                Text = "Открыть",
-                FlatStyle = FlatStyle.Flat,
-                BackColor = Color.FromArgb(23, 24, 25),
-                ForeColor = Color.FromArgb(231, 237, 244)
+                Text = "Открыть"
             };
-            open.FlatAppearance.BorderColor = Color.FromArgb(60, 66, 74);
             open.Click += (_, _) => TryOpenExisting();
 
             // «Выйти» — в ПРАВОМ нижнем углу, отдельно от действий с миром:
             // это не выбор мира, а отказ от работы, и стоять в одном ряду с
             // «Создать»/«Открыть» он не должен.
-            var quit = new Button
+            var quit = new DarkFlatButton
             {
                 Location = new Point(450, 448),
                 Size = new Size(118, 38),
                 Text = "Выйти",
-                FlatStyle = FlatStyle.Flat,
-                BackColor = Color.FromArgb(23, 24, 25),
-                ForeColor = Color.FromArgb(220, 228, 236),
                 DialogResult = DialogResult.Cancel
             };
-            quit.FlatAppearance.BorderColor = Color.FromArgb(60, 66, 74);
 
             Controls.Add(open);
             Controls.Add(quit);
@@ -195,31 +186,23 @@ public sealed class WorldChooserForm : Form
             // «Пропустить» — отдельная кнопка, а не пункт списка: она делает
             // ДРУГОЕ действие (импортирует архив), и смешивать его с «создать
             // пустой мир» нельзя — результат разный.
-            var skip = new Button
+            var skip = new DarkFlatButton
             {
                 Location = new Point(18, 198),
                 Size = new Size(330, 38),
                 Text = "Пропустить (создастся демо-мир для обучения)",
-                FlatStyle = FlatStyle.Flat,
-                BackColor = Color.FromArgb(23, 24, 25),
-                ForeColor = Color.FromArgb(231, 237, 244),
                 Font = new Font("Segoe UI", 9f, FontStyle.Bold)
             };
-            skip.FlatAppearance.BorderColor = Color.FromArgb(60, 66, 74);
             skip.Click += (_, _) => TryImportDemoWorld();
 
             // «Выйти» — в правом нижнем углу, в стороне от действий с миром.
-            var quit = new Button
+            var quit = new DarkFlatButton
             {
                 Location = new Point(450, 198),
                 Size = new Size(118, 38),
                 Text = "Выйти",
-                FlatStyle = FlatStyle.Flat,
-                BackColor = Color.FromArgb(23, 24, 25),
-                ForeColor = Color.FromArgb(220, 228, 236),
                 DialogResult = DialogResult.Cancel
             };
-            quit.FlatAppearance.BorderColor = Color.FromArgb(60, 66, 74);
 
             Controls.Add(skip);
             Controls.Add(quit);

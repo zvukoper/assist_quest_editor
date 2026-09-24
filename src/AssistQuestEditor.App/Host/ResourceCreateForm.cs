@@ -131,12 +131,11 @@ public sealed class ResourceCreateForm : Form
             Font = new Font("Segoe UI", 8.6f)
         };
 
-        var create = new Button
+        var create = new DarkFlatButton
         {
             Location = new Point(18, 326),
             Size = new Size(150, 38),
             Text = "Создать",
-            FlatStyle = FlatStyle.Flat,
             BackColor = Color.FromArgb(250, 176, 3),
             ForeColor = Color.FromArgb(20, 20, 20),
             Font = new Font("Segoe UI", 9.5f, FontStyle.Bold),
@@ -144,17 +143,13 @@ public sealed class ResourceCreateForm : Form
         };
         create.FlatAppearance.BorderColor = Color.FromArgb(250, 176, 3);
 
-        var cancel = new Button
+        var cancel = new DarkFlatButton
         {
             Location = new Point(434, 326),
             Size = new Size(94, 38),
             Text = "Отмена",
-            FlatStyle = FlatStyle.Flat,
-            BackColor = Color.FromArgb(23, 24, 25),
-            ForeColor = Color.FromArgb(220, 228, 236),
             DialogResult = DialogResult.Cancel
         };
-        cancel.FlatAppearance.BorderColor = Color.FromArgb(60, 66, 74);
 
         // Проверка в FormClosing, а не в Click: кнопка с DialogResult закрывает
         // окно сама, и сообщить о недопустимом имени было бы уже негде.

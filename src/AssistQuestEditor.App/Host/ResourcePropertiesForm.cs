@@ -144,7 +144,12 @@ public sealed class ResourcePropertiesForm : Form
             BackColor = Color.FromArgb(23, 24, 25),
             ForeColor = Color.FromArgb(231, 237, 244),
             BorderStyle = BorderStyle.FixedSingle,
-            Enabled = editMode
+            // ReadOnly, а НЕ Enabled = false. У выключенного поля WinForms рисует
+            // текст системным серым, игнорируя заданный цвет: на тёмном фоне это
+            // даёт контраст 3,3:1 при минимуме 4,5:1 — замерено на настоящем
+            // экране пробой читаемости. У поля только для чтения цвет остаётся
+            // заданным, а править всё равно нельзя.
+            ReadOnly = !editMode
         };
 
         var fullLabel = new Label
@@ -166,7 +171,8 @@ public sealed class ResourcePropertiesForm : Form
             BackColor = Color.FromArgb(23, 24, 25),
             ForeColor = Color.FromArgb(231, 237, 244),
             BorderStyle = BorderStyle.FixedSingle,
-            Enabled = editMode
+            // См. пояснение у короткого имени: ReadOnly вместо Enabled = false.
+            ReadOnly = !editMode
         };
 
         var descriptionLabel = new Label
@@ -188,7 +194,8 @@ public sealed class ResourcePropertiesForm : Form
             BackColor = Color.FromArgb(23, 24, 25),
             ForeColor = Color.FromArgb(231, 237, 244),
             BorderStyle = BorderStyle.FixedSingle,
-            Enabled = editMode
+            // См. пояснение у короткого имени: ReadOnly вместо Enabled = false.
+            ReadOnly = !editMode
         };
 
         right.Controls.Add(_shortName);
@@ -199,30 +206,22 @@ public sealed class ResourcePropertiesForm : Form
         right.Controls.Add(descriptionLabel);
         right.Controls.Add(info);
 
-        var pickImage = new Button
+        var pickImage = new DarkFlatButton
         {
             Location = new Point(18, 452),
             Size = new Size(190, 34),
             Text = "Выбрать изображение…",
-            FlatStyle = FlatStyle.Flat,
-            BackColor = Color.FromArgb(23, 24, 25),
-            ForeColor = Color.FromArgb(220, 228, 236),
             Enabled = editMode
         };
-        pickImage.FlatAppearance.BorderColor = Color.FromArgb(60, 66, 74);
         pickImage.Click += (_, _) => PickImage();
 
-        var clearImage = new Button
+        var clearImage = new DarkFlatButton
         {
             Location = new Point(216, 452),
             Size = new Size(120, 34),
             Text = "Убрать изображение",
-            FlatStyle = FlatStyle.Flat,
-            BackColor = Color.FromArgb(23, 24, 25),
-            ForeColor = Color.FromArgb(220, 228, 236),
             Enabled = editMode
         };
-        clearImage.FlatAppearance.BorderColor = Color.FromArgb(60, 66, 74);
         clearImage.Click += (_, _) => ClearImage();
 
         _validation = new Label
@@ -233,12 +232,11 @@ public sealed class ResourcePropertiesForm : Form
             Font = new Font("Segoe UI", 8.6f)
         };
 
-        var save = new Button
+        var save = new DarkFlatButton
         {
             Location = new Point(18, 542),
             Size = new Size(170, 38),
             Text = "Сохранить",
-            FlatStyle = FlatStyle.Flat,
             BackColor = Color.FromArgb(250, 176, 3),
             ForeColor = Color.FromArgb(20, 20, 20),
             Font = new Font("Segoe UI", 9.5f, FontStyle.Bold),
@@ -250,17 +248,13 @@ public sealed class ResourcePropertiesForm : Form
 
         // Кнопка закрытия всегда называется по делу: в режиме «Сведения»
         // «Сохранить» нечего, и слово «Сохранить» обещало бы запись.
-        var close = new Button
+        var close = new DarkFlatButton
         {
             Location = new Point(740, 542),
             Size = new Size(108, 38),
             Text = editMode ? "Отмена" : "Закрыть",
-            FlatStyle = FlatStyle.Flat,
-            BackColor = Color.FromArgb(23, 24, 25),
-            ForeColor = Color.FromArgb(220, 228, 236),
             DialogResult = DialogResult.Cancel
         };
-        close.FlatAppearance.BorderColor = Color.FromArgb(60, 66, 74);
 
         Controls.Add(save);
         Controls.Add(close);

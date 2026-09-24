@@ -26,6 +26,13 @@ check(/>МИР</.test(mainHtml), "У списка миров нет подпис
 check(/>КАМПАНИЯ</.test(mainHtml), "У списка кампаний нет подписи КАМПАНИЯ.");
 check(/id="worldFolder"/.test(mainHtml), "Нет кнопки папки мира.");
 check(/id="worldMenu"/.test(mainHtml), "Нет кнопки меню.");
+// Кнопка обязана БЫТЬ ПОДПИСАНА словом, а не одним глифом ▾: по треугольнику
+// меню не находят — экспорт и импорт искали глазами по всей панели. Проверяется
+// видимый ТЕКСТ кнопки (глиф исключён из accessible name через aria-hidden).
+check(/id="worldMenu"[^>]*>Действия<span aria-hidden="true">▾<\/span>/.test(mainHtml),
+  "Кнопка меню должна называть себя словом (например «Действия»), а не только знаком ▾.");
+check(/class="worldSelectorButton" id="worldMenu"/.test(mainHtml),
+  "Кнопка меню должна нести стиль остальных кнопок шапки: подпись без стиля выбьет высоту строки.");
 // Селектор стоит ПЕРВЫМ среди элементов шапки: он отвечает на вопрос «что я
 // редактирую», и без этого его искали бы глазами по всей панели.
 check(mainHtml.indexOf('id="worldSelector"') < mainHtml.indexOf('id="simulatorState"'),
@@ -62,6 +69,9 @@ check(/private void NotifyNotImplemented/.test(mainForm),
   "Необработанные пункты меню обязаны сообщать о себе, а не молчать.");
 // Экспорт, «Ред.» и сведения уже реализованы — в списке «ещё не реализовано»
 // они остаться не должны, иначе проверка закрепила бы заглушку как норму.
+// Создающие пункты выделены акцентом — по ним меню и открывают чаще всего.
+check(/\.worldMenuCreate\{color:var\(--accent\);font-weight:700\}/.test(theme),
+  "Создающие пункты меню должны быть выделены акцентом.");
 for (const action of ["create_world", "create_campaign"]) {
   check(mainForm.includes(`case "${action}":`),
     `Host не знает пункт меню «${action}».`);
@@ -203,8 +213,8 @@ try {
 
   check(opened.hidden === false, "Меню не открылось по кнопке.");
   check(opened.expanded === "true", "aria-expanded не обновлён при открытии меню.");
-  for (const required of ["world_edit", "campaign_info", "export_world", "import_archive",
-                          "create_world", "create_campaign"]) {
+  for (const required of ["world_edit", "campaign_info", "export_world", "export_campaign",
+                         "import_archive", "create_world", "create_campaign"]) {
     check(opened.items.includes(required),
       `В меню нет пункта «${required}»: ` + opened.items.join(", "));
   }

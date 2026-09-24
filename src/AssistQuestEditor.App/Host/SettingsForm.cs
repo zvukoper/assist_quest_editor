@@ -63,13 +63,12 @@ public sealed class SettingsForm : Form
             Font = new Font("Segoe UI", 8.8f)
         };
 
-        _registerExtensionsButton = new Button
+        _registerExtensionsButton = new DarkFlatButton
         {
             AutoSize = false,
             Location = new Point(18, 212),
             Size = new Size(285, 42),
             Text = "Зарегистрировать расширения",
-            FlatStyle = FlatStyle.Flat,
             BackColor = Color.FromArgb(250, 176, 3),
             ForeColor = Color.FromArgb(28, 28, 28),
             Font = new Font("Segoe UI", 9f, FontStyle.Bold),
@@ -78,13 +77,12 @@ public sealed class SettingsForm : Form
         _registerExtensionsButton.FlatAppearance.BorderColor = Color.FromArgb(250, 176, 3);
         _registerExtensionsButton.Click += RegisterExtensionsButton_Click;
 
-        _resetWindowsButton = new Button
+        _resetWindowsButton = new DarkFlatButton
         {
             AutoSize = false,
             Location = new Point(18, 282),
             Size = new Size(260, 42),
             Text = "Сброс настроек окон",
-            FlatStyle = FlatStyle.Flat,
             BackColor = Color.FromArgb(250, 176, 3),
             ForeColor = Color.FromArgb(28, 28, 28),
             Font = new Font("Segoe UI", 9f, FontStyle.Bold),
@@ -105,13 +103,12 @@ public sealed class SettingsForm : Form
             Font = new Font("Segoe UI", 8.5f)
         };
 
-        var closeButton = new Button
+        var closeButton = new DarkFlatButton
         {
             Anchor = AnchorStyles.Right | AnchorStyles.Bottom,
             Size = new Size(96, 30),
             Location = new Point(532, 394),
             Text = "Закрыть",
-            FlatStyle = FlatStyle.Flat,
             BackColor = Color.FromArgb(32, 36, 42),
             ForeColor = Color.FromArgb(220, 228, 236)
         };

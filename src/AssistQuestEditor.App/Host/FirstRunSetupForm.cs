@@ -83,28 +83,20 @@ public sealed class FirstRunSetupForm : Form
                 : suggestedAuthor
         };
 
-        var useComputerName = new Button
+        var useComputerName = new DarkFlatButton
         {
             Location = new Point(18, 190),
             Size = new Size(120, 30),
-            Text = "Имя ПК",
-            FlatStyle = FlatStyle.Flat,
-            BackColor = Color.FromArgb(23, 24, 25),
-            ForeColor = Color.FromArgb(220, 228, 236)
+            Text = "Имя ПК"
         };
-        useComputerName.FlatAppearance.BorderColor = Color.FromArgb(60, 66, 74);
         useComputerName.Click += (_, _) => _author.Text = NormalizeCandidate(Environment.MachineName);
 
-        var useAccountName = new Button
+        var useAccountName = new DarkFlatButton
         {
             Location = new Point(146, 190),
             Size = new Size(140, 30),
-            Text = "Имя учётной записи",
-            FlatStyle = FlatStyle.Flat,
-            BackColor = Color.FromArgb(23, 24, 25),
-            ForeColor = Color.FromArgb(220, 228, 236)
+            Text = "Имя учётной записи"
         };
-        useAccountName.FlatAppearance.BorderColor = Color.FromArgb(60, 66, 74);
         useAccountName.Click += (_, _) => _author.Text = NormalizeCandidate(Environment.UserName);
 
         _validation = new Label
@@ -148,12 +140,11 @@ public sealed class FirstRunSetupForm : Form
             Font = new Font("Segoe UI", 8.4f)
         };
 
-        _save = new Button
+        _save = new DarkFlatButton
         {
             Location = new Point(18, 348),
             Size = new Size(180, 38),
             Text = "Сохранить и продолжить",
-            FlatStyle = FlatStyle.Flat,
             BackColor = Color.FromArgb(250, 176, 3),
             ForeColor = Color.FromArgb(20, 20, 20),
             Font = new Font("Segoe UI", 9.5f, FontStyle.Bold)
@@ -163,17 +154,13 @@ public sealed class FirstRunSetupForm : Form
 
         // Отмена закрывает диалог с Cancel: приложение не должно продолжать
         // работу без подписи, поэтому «отмена» = «выйти», а не «пропустить».
-        var cancel = new Button
+        var cancel = new DarkFlatButton
         {
             Location = new Point(410, 348),
             Size = new Size(118, 38),
             Text = "Выйти",
-            FlatStyle = FlatStyle.Flat,
-            BackColor = Color.FromArgb(23, 24, 25),
-            ForeColor = Color.FromArgb(220, 228, 236),
             DialogResult = DialogResult.Cancel
         };
-        cancel.FlatAppearance.BorderColor = Color.FromArgb(60, 66, 74);
 
         Controls.Add(_save);
         Controls.Add(cancel);

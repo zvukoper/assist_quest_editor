@@ -130,12 +130,11 @@ public sealed class ResourceExportForm : Form
             Font = new Font("Segoe UI", 8.4f, FontStyle.Italic)
         };
 
-        var export = new Button
+        var export = new DarkFlatButton
         {
             Location = new Point(18, 396),
             Size = new Size(170, 38),
             Text = "Экспортировать",
-            FlatStyle = FlatStyle.Flat,
             BackColor = Color.FromArgb(250, 176, 3),
             ForeColor = Color.FromArgb(20, 20, 20),
             Font = new Font("Segoe UI", 9.5f, FontStyle.Bold),
@@ -143,17 +142,13 @@ public sealed class ResourceExportForm : Form
         };
         export.FlatAppearance.BorderColor = Color.FromArgb(250, 176, 3);
 
-        var cancel = new Button
+        var cancel = new DarkFlatButton
         {
             Location = new Point(520, 396),
             Size = new Size(108, 38),
             Text = "Отмена",
-            FlatStyle = FlatStyle.Flat,
-            BackColor = Color.FromArgb(23, 24, 25),
-            ForeColor = Color.FromArgb(220, 228, 236),
             DialogResult = DialogResult.Cancel
         };
-        cancel.FlatAppearance.BorderColor = Color.FromArgb(60, 66, 74);
 
         Controls.Add(export);
         Controls.Add(cancel);

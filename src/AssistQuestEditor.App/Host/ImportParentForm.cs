@@ -140,12 +140,11 @@ public sealed class ImportParentForm : Form
 
         _worlds.SelectedIndexChanged += (_, _) => ReloadCampaigns(campaignsForWorld);
 
-        var accept = new Button
+        var accept = new DarkFlatButton
         {
             Location = new Point(18, needsCampaign ? 424 : 272),
             Size = new Size(170, 38),
             Text = "Импортировать",
-            FlatStyle = FlatStyle.Flat,
             BackColor = Color.FromArgb(250, 176, 3),
             ForeColor = Color.FromArgb(20, 20, 20),
             Font = new Font("Segoe UI", 9.5f, FontStyle.Bold),
@@ -176,17 +175,13 @@ public sealed class ImportParentForm : Form
             _hint.Text = string.Empty;
         };
 
-        var cancel = new Button
+        var cancel = new DarkFlatButton
         {
             Location = new Point(494, needsCampaign ? 424 : 272),
             Size = new Size(84, 38),
             Text = "Отмена",
-            FlatStyle = FlatStyle.Flat,
-            BackColor = Color.FromArgb(23, 24, 25),
-            ForeColor = Color.FromArgb(220, 228, 236),
             DialogResult = DialogResult.Cancel
         };
-        cancel.FlatAppearance.BorderColor = Color.FromArgb(60, 66, 74);
 
         Controls.Add(accept);
         Controls.Add(cancel);

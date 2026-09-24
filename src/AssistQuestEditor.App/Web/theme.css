@@ -234,10 +234,14 @@ input,select,textarea{padding:4px 5px;border-radius:4px;font-size:10px}textarea{
 }
 /* Мир шире кампании: имя мира — заголовок дерева, кампания — его ветвь. */
 #worldSelect{max-width:190px}
+/* Кнопка меню ПОДПИСАНА словом, а не одним глифом ▾: по треугольнику меню не
+   находят — экспорт и импорт искали глазами по всей панели. Действия в нём —
+   не «ещё что-то», а рабочие инструменты, и кнопка обязана их называть. */
 .worldSelectorButton{
   background:var(--panel-deep);color:var(--text);
   border:1px solid var(--border);border-radius:6px;
-  font-size:12px;line-height:1;padding:4px 7px;cursor:pointer;
+  font-size:11px;font-weight:600;line-height:1.25;padding:4px 9px;cursor:pointer;
+  display:inline-flex;align-items:center;gap:5px;white-space:nowrap;
 }
 .worldSelectorButton:hover{border-color:rgba(250,176,3,.55);color:#fff}
 /* Меню открывается поверх содержимого: это действия, а не часть разметки
