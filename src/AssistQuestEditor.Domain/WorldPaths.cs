@@ -29,6 +29,8 @@ public static class WorldPaths
     public const string SavesFolder = "Saves";
     public const string QuestsFolder = "quests";
     public const string ScenesFolder = "scenes";
+    public const string LocationsFolder = "locations";
+    public const string DynamicEventsFolder = "events";
     public const string ExportedFolder = "Exported";
 
     public const string WorldFileName = "world.aqworld";
