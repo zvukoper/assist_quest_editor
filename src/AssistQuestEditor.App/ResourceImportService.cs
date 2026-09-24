@@ -117,6 +117,31 @@ public static class ResourceImportService
         }
     }
 
+    /// <summary>
+    /// Compatibility overload for existing probes and integrations. The canonical
+    /// overload receives the owner CampaignStore so imported Quest metadata is
+    /// registered in campaign.aqcampaign immediately.
+    /// </summary>
+    public static ResourceImportResult ImportQuest(
+        CampaignStore.CampaignRecord campaign,
+        ArchiveInspection inspection,
+        bool overwrite)
+    {
+        ArgumentNullException.ThrowIfNull(campaign);
+
+        var store = new CampaignStore(
+            campaign.FolderPath,
+            readOnly: false,
+            author: "import");
+        var record = store.Records.FirstOrDefault(item =>
+            item.Definition.Id.Equals(campaign.Definition.Id, StringComparison.OrdinalIgnoreCase))
+            ?? throw new InvalidOperationException(
+                "Не удалось восстановить CampaignStore для импорта Quest: " +
+                campaign.Definition.Id);
+
+        return ImportQuest(store, record, inspection, overwrite);
+    }
+
     public static ResourceImportResult ImportQuest(
         CampaignStore store,
         CampaignStore.CampaignRecord campaign,
