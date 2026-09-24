@@ -69,7 +69,7 @@ public sealed class QuestRuntime : IQuestRuntimeController
 
     public QuestRuntimeState State { get; private set; }
     public QuestGraph ActiveGraph => _graphStore.Value;
-    public bool SimulationRunning { get; private set; } = false;
+    public bool SimulationRunning { get; private set; } = true;
 
     /// <summary>
     /// Пауза одиночного Runtime.
