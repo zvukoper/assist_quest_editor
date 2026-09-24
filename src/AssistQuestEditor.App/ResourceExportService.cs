@@ -313,7 +313,7 @@ public static class ResourceExportService
             Name: definition.Name,
             FullName: definition.FullName,
             Description: definition.Description,
-            Version: WorldArchiveRules.SupportedVersion,
+            Version: definition.Version,
             IncludesDependencies: true,
             Entries: Array.Empty<WorldArchiveEntry>(),
             ParentWorldId: null,
