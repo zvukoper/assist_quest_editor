@@ -131,6 +131,16 @@ public sealed class QuestRuntime : IQuestRuntimeController
     }
     public event EventHandler<QuestRuntimeEvent>? Published;
 
+    public bool StartQuest(string questId)
+    {
+        if (string.IsNullOrWhiteSpace(questId) ||
+            !ActiveGraph.Id.Equals(questId, StringComparison.OrdinalIgnoreCase))
+            return false;
+
+        Start();
+        return true;
+    }
+
     public void Start()
     {
         ResetWaiting();
