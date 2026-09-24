@@ -92,6 +92,15 @@ public interface ILocationResolver
     WorldPoint? Resolve(string locationId);
 
     /// <summary>
+    /// Разрешение конкретного runtime-экземпляра.
+    ///
+    /// Один Dynamic Location может одновременно обслуживать много независимых
+    /// событий. resolutionKey разделяет их кэши. Старые реализации, которым
+    /// раздельный ключ не нужен, сохраняют прежнее поведение.
+    /// </summary>
+    WorldPoint? Resolve(string locationId, string? resolutionKey) => Resolve(locationId);
+
+    /// <summary>
     /// Радиус срабатывания из самой Location или null, если он неизвестен.
     ///
     /// Задан методом по умолчанию, чтобы реализации, которым радиуса не нужно
@@ -109,7 +118,13 @@ public interface ILocationResolver
 public interface ILocationResolutionSession
 {
     void Reset();
+
     void Invalidate(string locationId);
+
+    /// <summary>
+    /// Инвалидирует только один runtime-resolution scope.
+    /// </summary>
+    void Invalidate(string locationId, string? resolutionKey) => Invalidate(locationId);
 }
 
 /// <summary>

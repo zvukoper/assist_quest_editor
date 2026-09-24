@@ -58,6 +58,13 @@ public static class ResourceFileTypes
             "location.aqlocation",
             "Канонический Location Definition. Может быть фиксированным или динамически разрешаться по пространственным критериям."),
         new(
+            ".aqevent",
+            "DynamicEvent",
+            "Assist Quest Dynamic Event",
+            "DynamicEvent",
+            "event.aqevent",
+            "Каноническое правило появления динамического события: триггер, политика генерации и ссылка на Location."),
+        new(
             ".aqscene",
             "Scene",
             "Assist Quest Scene",

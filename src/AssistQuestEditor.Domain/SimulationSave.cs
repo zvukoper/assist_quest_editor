@@ -35,8 +35,15 @@ public sealed record SimulationSaveState(
     IReadOnlyList<string> UnlockedSkills,
     string Weather)
 {
-    /// <summary>Текущая версия формата. Растёт при несовместимом изменении.</summary>
-    public const int CurrentFormatVersion = 1;
+    /// <summary>
+    /// Состояние World Runtime Director. Поле добавлено как расширение формата:
+    /// старые сохранения v1 после чтения получают Empty, без искусственного
+    /// восстановления случайных событий.
+    /// </summary>
+    public DynamicEventRuntimeState DynamicEvents { get; init; } = DynamicEventRuntimeState.Empty;
+
+    /// <summary>Текущая версия формата.</summary>
+    public const int CurrentFormatVersion = 2;
 }
 
 /// <summary>

@@ -25,6 +25,8 @@ public sealed class EditorForm : WebViewForm
     private readonly SceneDocumentSession _sceneDocument;
     private readonly IQuestRuntimeController _runtime;
     private readonly LocationStore _locationStore;
+    private readonly DynamicEventStore _dynamicEventStore;
+    private readonly IDynamicEventDirector _dynamicEventDirector;
 
     /// <summary>
     /// Дорожная геометрия мира для критерия «рядом с дорогой».
@@ -76,6 +78,11 @@ public sealed class EditorForm : WebViewForm
         _activePane.Equals("locations", StringComparison.OrdinalIgnoreCase) ||
         _activePane.Equals("location", StringComparison.OrdinalIgnoreCase);
 
+    private bool IsDynamicEvent =>
+        _activePane.Equals("events", StringComparison.OrdinalIgnoreCase) ||
+        _activePane.Equals("dynamic-events", StringComparison.OrdinalIgnoreCase) ||
+        _activePane.Equals("dynamicevents", StringComparison.OrdinalIgnoreCase);
+
     /// <summary>Страница, которую это окно показывает прямо сейчас.</summary>
     public string ActivePanePage => "editor.html#" + _activePane;
 
@@ -83,6 +90,9 @@ public sealed class EditorForm : WebViewForm
     private string? _currentLocationPath;
     private LocationDefinition? _currentLocationDefinition;
     private bool _locationDirty;
+    private string? _currentDynamicEventPath;
+    private DynamicEventDefinition? _currentDynamicEventDefinition;
+    private bool _dynamicEventDirty;
     private string? _lastDefinitionPath;
     private bool _documentDirty;
     private bool _loadingScene;
@@ -149,6 +159,8 @@ public sealed class EditorForm : WebViewForm
         SceneDocumentSession sceneDocument,
         IQuestRuntimeController runtime,
         LocationStore locationStore,
+        DynamicEventStore dynamicEventStore,
+        IDynamicEventDirector dynamicEventDirector,
         RoadIndex? roads = null,
         JunctionIndex? junctions = null,
         ICityBoundarySource? cityBoundaries = null)
@@ -164,6 +176,8 @@ public sealed class EditorForm : WebViewForm
         _sceneDocument = sceneDocument;
         _runtime = runtime;
         _locationStore = locationStore ?? throw new ArgumentNullException(nameof(locationStore));
+        _dynamicEventStore = dynamicEventStore ?? throw new ArgumentNullException(nameof(dynamicEventStore));
+        _dynamicEventDirector = dynamicEventDirector ?? throw new ArgumentNullException(nameof(dynamicEventDirector));
         _roads = roads ?? new RoadIndex(Array.Empty<RoadSegment>());
         _junctions = junctions ?? new JunctionIndex(Array.Empty<JunctionPoint>());
         _cityBoundaries = cityBoundaries ?? new StaticCityBoundarySource();
@@ -252,6 +266,7 @@ public sealed class EditorForm : WebViewForm
             "scene" => "scene",
             "dialogue" => "dialogue",
             "locations" or "location" => "locations",
+            "events" or "dynamic-events" or "dynamicevents" => "events",
             var other => other
         };
 
@@ -261,7 +276,7 @@ public sealed class EditorForm : WebViewForm
     /// контекста Quest Graph и отдельного окна не требуют.
     /// </summary>
     private static bool IsHostedPane(string pane) =>
-        pane is "graph" or "scene" or "dialogue" or "locations";
+        pane is "graph" or "scene" or "dialogue" or "locations" or "events";
 
     private bool ConfirmPaneSwitch()
     {
@@ -273,6 +288,9 @@ public sealed class EditorForm : WebViewForm
 
         if (IsLocation && _locationDirty)
             return ConfirmDiscard("Location", () => SaveLocation());
+
+        if (IsDynamicEvent && _dynamicEventDirty)
+            return ConfirmDiscard("Dynamic Event", () => SaveDynamicEvent());
 
         return true;
     }
@@ -336,6 +354,13 @@ public sealed class EditorForm : WebViewForm
         {
             _locationStore.Reload();
             PostLocationEditorState(includeWorldPoints: true);
+            return;
+        }
+
+        if (IsDynamicEvent)
+        {
+            _dynamicEventStore.Reload();
+            PostDynamicEventEditorState();
         }
     }
 
@@ -357,6 +382,15 @@ public sealed class EditorForm : WebViewForm
         {
             _locationStore.Reload();
             PostLocationEditorState(includeWorldPoints: true);
+        }
+    }
+
+    public void RefreshDynamicEventCatalog()
+    {
+        if (IsDynamicEvent)
+        {
+            _dynamicEventStore.Reload();
+            PostDynamicEventEditorState();
         }
     }
 
@@ -460,6 +494,7 @@ public sealed class EditorForm : WebViewForm
             "Quest" when IsGraph => OpenGraphResource(path),
             "Scene" when IsScene => OpenSceneResource(path),
             "Location" when IsLocation => OpenLocationResource(path),
+            "DynamicEvent" when IsDynamicEvent => OpenDynamicEventResource(path),
             _ => throw new InvalidOperationException(
                 "Ресурс " + resource.Extension + " пока не поддерживается этим редактором.")
         };
@@ -563,6 +598,32 @@ public sealed class EditorForm : WebViewForm
             }
         }
 
+        if (IsDynamicEvent && _dynamicEventDirty)
+        {
+            var result = MessageBox.Show(
+                this,
+                "В текущем Dynamic Event есть несохранённые изменения.\r\n\r\n" +
+                "Да — сохранить Dynamic Event.\r\n" +
+                "Нет — закрыть без сохранения.\r\n" +
+                "Отмена — вернуться в редактор.",
+                "Несохранённые изменения Dynamic Event",
+                MessageBoxButtons.YesNoCancel,
+                MessageBoxIcon.Warning,
+                MessageBoxDefaultButton.Button1);
+
+            if (result == DialogResult.Cancel)
+            {
+                e.Cancel = true;
+                return;
+            }
+
+            if (result == DialogResult.Yes && !SaveDynamicEvent())
+            {
+                e.Cancel = true;
+                return;
+            }
+        }
+
         base.OnFormClosing(e);
     }
 
@@ -644,6 +705,10 @@ public sealed class EditorForm : WebViewForm
             else if (IsLocation)
             {
                 HandleLocationAction(root, action);
+            }
+            else if (IsDynamicEvent)
+            {
+                HandleDynamicEventAction(root, action);
             }
         }
         catch (Exception ex)
@@ -1759,6 +1824,239 @@ public sealed class EditorForm : WebViewForm
             worldPoints = includeWorldPoints
                 ? _hub.GetSnapshot().World.Points
                 : Array.Empty<WorldPoint>()
+        }, WebJsonOptions));
+    }
+
+    private void HandleDynamicEventAction(JsonElement root, string? action)
+    {
+        switch (action)
+        {
+            case "dynamic_event_new":
+                _currentDynamicEventDefinition = CreateDefaultDynamicEvent();
+                _currentDynamicEventPath = null;
+                _dynamicEventDirty = false;
+                UpdateWindowTitle();
+                PostDynamicEventEditorState();
+                break;
+
+            case "dynamic_event_open":
+                OpenDynamicEvent();
+                break;
+
+            case "dynamic_event_save":
+                SaveDynamicEvent(saveAs: false, root);
+                break;
+
+            case "dynamic_event_save_as":
+                SaveDynamicEvent(saveAs: true, root);
+                break;
+
+            case "dynamic_event_delete":
+                DeleteDynamicEvent();
+                break;
+
+            case "dynamic_event_spawn":
+                if (_currentDynamicEventDefinition is not null)
+                {
+                    // Ручная генерация — диагностический вызов Director. В отличие
+                    // от Location Editor она не меняет канонический Definition.
+                    _dynamicEventDirector.TrySpawn(_currentDynamicEventDefinition.Id);
+                }
+                break;
+
+            case "dynamic_event_mark_dirty":
+                if (root.TryGetProperty("definition", out var definitionNode) &&
+                    definitionNode.Deserialize<DynamicEventDefinition>(WebJsonOptions) is { } definition)
+                {
+                    _currentDynamicEventDefinition = definition;
+                }
+
+                _dynamicEventDirty = true;
+                UpdateWindowTitle();
+                break;
+        }
+    }
+
+    private static DynamicEventDefinition CreateDefaultDynamicEvent() =>
+        new(
+            "event_" + Guid.NewGuid().ToString("N")[..8],
+            "Новое динамическое событие")
+        {
+            Description = "Правило появления динамического события.",
+            LocationId = string.Empty,
+            Category = "Dynamic Event",
+            Trigger = new DynamicEventTriggerDefinition
+            {
+                Type = "DistanceTravelled",
+                MinDistanceMeters = 5000,
+                MaxDistanceMeters = 10000
+            },
+            SpawnPolicy = new DynamicEventSpawnPolicy
+            {
+                MaxActiveInstances = 1,
+                SpawnChance = 1,
+                LifetimeGameHours = 24,
+                RemoveOnCompleted = true
+            }
+        };
+
+    private void OpenDynamicEvent()
+    {
+        using var dialog = new OpenFileDialog
+        {
+            Title = "Открыть Dynamic Event",
+            Filter = ResourceFileTypes.Filter(ResourceFileTypes.Get(".aqevent")),
+            Multiselect = false
+        };
+
+        if (dialog.ShowDialog(this) == DialogResult.OK)
+            OpenDynamicEventResource(dialog.FileName);
+    }
+
+    private bool OpenDynamicEventResource(string path)
+    {
+        var document = JsonSerializer.Deserialize<DynamicEventDefinitionDocument>(
+            File.ReadAllText(path),
+            ResourceJsonFormat.Options)
+            ?? throw new InvalidOperationException("Dynamic Event файл пуст или повреждён.");
+
+        if (document.SchemaVersion != DynamicEventDefinitionRules.CurrentSchemaVersion ||
+            !string.Equals(document.Format, DynamicEventDefinitionRules.FormatName, StringComparison.OrdinalIgnoreCase) ||
+            document.Definition is null)
+        {
+            throw new InvalidOperationException(
+                "Файл не является поддерживаемым Dynamic Event resource. Format=" +
+                document.Format + "; schema=" + document.SchemaVersion + ".");
+        }
+
+        _currentDynamicEventDefinition = document.Definition;
+        _currentDynamicEventPath = Path.GetFullPath(path);
+        _dynamicEventDirty = false;
+        UpdateWindowTitle();
+        PostDynamicEventEditorState();
+
+        AppLogger.Info(
+            "Dynamic Event Editor: документ открыт.",
+            "path=" + _currentDynamicEventPath + "; event=" + document.Definition.Id);
+
+        return true;
+    }
+
+    private bool SaveDynamicEvent()
+    {
+        if (_currentDynamicEventDefinition is null || string.IsNullOrWhiteSpace(_currentDynamicEventPath))
+            return false;
+
+        _dynamicEventStore.Save(_currentDynamicEventDefinition, _currentDynamicEventPath);
+        _dynamicEventDirty = false;
+        UpdateWindowTitle();
+        PostDynamicEventEditorState();
+        PublishDocumentSaved(_currentDynamicEventPath);
+        return true;
+    }
+
+    private bool SaveDynamicEvent(bool saveAs, JsonElement root)
+    {
+        if (!root.TryGetProperty("definition", out var definitionNode) ||
+            definitionNode.Deserialize<DynamicEventDefinition>(WebJsonOptions) is not { } definition)
+            throw new InvalidOperationException("Не передано определение Dynamic Event.");
+
+        var path = _currentDynamicEventPath;
+        if (saveAs || string.IsNullOrWhiteSpace(path))
+        {
+            using var dialog = new SaveFileDialog
+            {
+                Title = "Сохранить Dynamic Event",
+                Filter = ResourceFileTypes.Filter(ResourceFileTypes.Get(".aqevent")),
+                DefaultExt = "aqevent",
+                AddExtension = true,
+                InitialDirectory = _dynamicEventStore.Root,
+                FileName = string.IsNullOrWhiteSpace(path)
+                    ? SanitizeFileName(definition.Name) + ".aqevent"
+                    : Path.GetFileName(path)
+            };
+
+            if (dialog.ShowDialog(this) != DialogResult.OK)
+                return false;
+
+            path = dialog.FileName;
+
+            if (!_dynamicEventStore.ContainsPath(path))
+            {
+                MessageBox.Show(
+                    this,
+                    "Dynamic Event сохраняются только в библиотеку:\r\n" + _dynamicEventStore.Root +
+                    "\r\n\r\nВыбранный файл находится вне неё, поэтому сохранение отменено.",
+                    "Сохранение Dynamic Event",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Warning);
+                return false;
+            }
+        }
+
+        _dynamicEventStore.Save(definition, path);
+        _currentDynamicEventDefinition = definition;
+        _currentDynamicEventPath = Path.GetFullPath(path!);
+        _dynamicEventDirty = false;
+        UpdateWindowTitle();
+        PostDynamicEventEditorState();
+        PublishDocumentSaved(_currentDynamicEventPath);
+        AppLogger.Info(
+            "Dynamic Event Editor: документ сохранён.",
+            "path=" + _currentDynamicEventPath + "; event=" + definition.Id);
+        return true;
+    }
+
+    private void DeleteDynamicEvent()
+    {
+        if (_currentDynamicEventDefinition is null)
+            return;
+
+        var answer = MessageBox.Show(
+            this,
+            "Удалить Dynamic Event «" + _currentDynamicEventDefinition.Name + "»?\r\n\r\n" +
+            "Файл будет удалён из пользовательской библиотеки.",
+            "Удаление Dynamic Event",
+            MessageBoxButtons.YesNo,
+            MessageBoxIcon.Warning);
+
+        if (answer != DialogResult.Yes)
+            return;
+
+        _dynamicEventStore.Delete(_currentDynamicEventDefinition.Id);
+        _currentDynamicEventDefinition = CreateDefaultDynamicEvent();
+        _currentDynamicEventPath = null;
+        _dynamicEventDirty = false;
+        UpdateWindowTitle();
+        PostDynamicEventEditorState();
+    }
+
+    private void PostDynamicEventEditorState()
+    {
+        if (!IsDynamicEvent || Browser.CoreWebView2 is null)
+            return;
+
+        PostJson(JsonSerializer.Serialize(new
+        {
+            type = "dynamic_event_editor_state",
+            definition = _currentDynamicEventDefinition,
+            documentPath = _currentDynamicEventPath ?? string.Empty,
+            documentDirty = _dynamicEventDirty,
+            readOnly = _dynamicEventStore.IsReadOnly,
+            events = _dynamicEventStore.Definitions.Select(item => new
+            {
+                id = item.Id,
+                name = item.Name,
+                locationId = item.LocationId,
+                trigger = item.Trigger.Type
+            }).ToArray(),
+            locations = _locationStore.Definitions.Select(item => new
+            {
+                id = item.Id,
+                name = item.Name,
+                mode = item.Mode
+            }).ToArray(),
+            runtime = _dynamicEventDirector.State
         }, WebJsonOptions));
     }
 

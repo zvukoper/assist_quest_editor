@@ -15,6 +15,8 @@ public sealed class MainForm : WebViewForm
     private readonly SceneRuntime _sceneRuntime;
     private readonly LocationStore _locationStore;
     private readonly LocationRuntimeResolver _locationResolver;
+    private readonly DynamicEventStore _dynamicEventStore;
+    private readonly IDynamicEventDirector _dynamicEventDirector;
     private readonly IQuestRuntimeController _runtime;
 
     /// <summary>
@@ -143,6 +145,13 @@ public sealed class MainForm : WebViewForm
             ? new LocationStore(Path.Combine(Path.GetTempPath(), "AssistQuestEditor-CI-Locations"), readOnly: true)
             : new LocationStore(AppPaths.UserLocationRoot);
         _locationResolver = new LocationRuntimeResolver(_locationStore, _hub, _roads, _junctions, _cityBoundaries);
+        _dynamicEventStore = ciTest
+            ? new DynamicEventStore(Path.Combine(Path.GetTempPath(), "AssistQuestEditor-CI-DynamicEvents"), readOnly: true)
+            : new DynamicEventStore(AppPaths.UserDynamicEventRoot);
+        _dynamicEventDirector = new DynamicEventDirector(
+            _hub,
+            _locationResolver,
+            () => _dynamicEventStore.Definitions);
         _sceneDocument = new SceneDocumentSession(
             initialScene.Id,
             ResolveScenePath(initialScene.Id),
@@ -191,6 +200,7 @@ public sealed class MainForm : WebViewForm
             _runtime.Published -= Runtime_Published;
             _sceneCatalog.Changed -= SceneCatalog_Changed;
             _runtime.Dispose();
+            _dynamicEventDirector.Dispose();
             _recentQuestFiles.Changed -= RecentQuestFiles_Changed;
             _recentSceneFiles.Changed -= RecentSceneFiles_Changed;
 
@@ -353,6 +363,7 @@ public sealed class MainForm : WebViewForm
             "Quest" => "graph",
             "Scene" => "scene",
             "Location" => "locations",
+            "DynamicEvent" => "events",
             _ => string.Empty
         };
 
@@ -1662,6 +1673,8 @@ public sealed class MainForm : WebViewForm
             _sceneDocument,
             _runtime,
             _locationStore,
+            _dynamicEventStore,
+            _dynamicEventDirector,
             _roads,
             _junctions,
             _cityBoundaries);
@@ -1700,6 +1713,7 @@ public sealed class MainForm : WebViewForm
             "dialogue" => ("Рабочее пространство диалогов", "editor.html#dialogue"),
             "world" => ("Редактор мира", "editor.html#world"),
             "locations" or "location" => ("Редактор локаций", "editor.html#locations"),
+            "events" or "dynamic-events" => ("Редактор динамических событий", "editor.html#events"),
             "channels" => ("Инспектор каналов", "editor.html#channels"),
             "conditions" => ("Редактор условий и действий", "editor.html#conditions"),
             "localization" => ("Редактор локализации", "editor.html#localization"),
@@ -1749,13 +1763,28 @@ public sealed class MainForm : WebViewForm
         // включающей области для определения локальной переменной).
         foreach (var window in _editors.ToArray())
         {
-            if (!window.IsDisposed)
-                window.RefreshLocationCatalog();
+            if (window.IsDisposed)
+                continue;
+
+            window.RefreshLocationCatalog();
+
+            if (string.Equals(
+                    Path.GetExtension(path),
+                    DynamicEventStore.Extension,
+                    StringComparison.OrdinalIgnoreCase))
+            {
+                window.RefreshDynamicEventCatalog();
+            }
         }
 
         if (string.Equals(Path.GetExtension(path), LocationStore.Extension, StringComparison.OrdinalIgnoreCase))
         {
             _locationResolver.Reset();
+        }
+
+        if (string.Equals(Path.GetExtension(path), DynamicEventStore.Extension, StringComparison.OrdinalIgnoreCase))
+        {
+            _dynamicEventStore.Reload();
         }
 
         if (_simulator is null || _simulator.IsDisposed)
@@ -1933,6 +1962,7 @@ public sealed class MainForm : WebViewForm
             _campaignStore,
             path => OpenStartupResource(path),
             _locationResolver,
+            _dynamicEventDirector,
             _roads,
             // Мир передаётся явно: Симулятор показывает его кампании, и без
             // ссылки на мир он видел бы кампании ВСЕХ миров сразу.

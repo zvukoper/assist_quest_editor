@@ -605,6 +605,106 @@ Spatial Query намеренно не объединён с общим Condition
 
 Пока поле поиска точки пустое, список НЕ выводится: раньше пустой запрос считался «совпадает всё», и панель сразу показывала первые произвольные точки мира — это выглядело как случайные результаты, не имеющие отношения к тому, что автор ищет. Список формируется только когда начинается поиск по вводу («Начните вводить имя или ID точки»).
 
+## 8.1 Dynamic Event Director и runtime-экземпляры
+
+Dynamic Location отвечает только на вопрос «где можно разместить событие». Он не
+отвечает на вопрос «когда нужно создать событие». Для этого существует отдельный
+World Runtime слой — **Dynamic Event Director**.
+
+Канонический ресурс `.aqevent` содержит правило генерации, а не созданную точку:
+
+- `DynamicEventDefinition` — ID, имя, ссылка на `Location`, TriggerRadius, категорию;
+- `DynamicEventTriggerDefinition` — условие/расписание запуска;
+- `DynamicEventSpawnPolicy` — лимит активных экземпляров, вероятность, cooldown и lifetime;
+- presentation-параметры;
+- необязательную ссылку на Quest, который может появиться после вовлечения.
+
+Runtime создаёт отдельный `DynamicEventInstance`. Экземпляр имеет собственный
+`InstanceId`, concrete `WorldPoint`, статус и timestamps. Поэтому один Location
+может одновременно разрешить несколько разных экземпляров в разные конкретные
+точки.
+
+Типовой поток:
+
+```text
+World Provider / Data Channels / Event Bus
+        ↓
+Dynamic Event Director
+        ↓
+Trigger / Schedule
+        ↓
+DynamicEventDefinition
+        ↓
+Location Resolver
+        ↓
+concrete WorldPoint
+        ↓
+DynamicEventInstance
+        ↓
+Interaction / Radio / Marker / Quest / Effect
+```
+
+Для `DistanceTravelled` применяется накопительный бюджет, а не проверка
+`distance % N`: пройденное расстояние добавляется в `DistanceBudgetMeters`, после
+достижения случайного порога из `[MinDistance, MaxDistance]` выполняется одна
+попытка генерации, остаток бюджета сохраняется, а следующий порог выбирается
+заново. Это не теряет прогресс между тик-ами и не зависит от совпадения шага
+таймера с координатами.
+
+Director разделяет дешёвый `Tick()` и дорогостоящий spatial resolution: на каждом
+тике проверяются расписания и состояние мира, а Location Resolver запускается
+только после реального срабатывания триггера.
+
+Базовые триггеры Sandbox:
+
+- `Manual` — диагностическое ручное создание;
+- `DistanceTravelled` — например, новый тайник каждые 5–10 км;
+- `GameTime` — периодические события по игровым часам;
+- `RealTime` — события по системному времени;
+- `WorldEvent` — реакция на существующее событие Event Bus с фильтром payload.
+
+Архитектурно предусмотрено расширение через строковый Type: далее добавляются
+`PlayerEvent`, `RegionEntered`, `RegionLeft`, `QuestCompleted`,
+`InteractionCompleted`, `RadioEvent`, `WeatherChanged`, `InventoryChanged`,
+`ReputationChanged` и provider-specific triggers без изменения старых `.aqevent`.
+
+Жизненный цикл экземпляра:
+
+```text
+Spawned → Active → Discovered → Engaged → Completed
+                         ↘
+                    Expired / Cancelled / Abandoned / Failed / Consumed
+```
+
+`Completed`/`Consumed`/`Cancelled`/`Abandoned` могут удаляться из Runtime State по
+политике Definition. `Expired` сохраняется достаточно долго для диагностики и
+журнала.
+
+Presentation не является частью Director logic. Один и тот же Dynamic Event
+может быть скрыт до обнаружения, показываться на minimap, становиться AR-маркером
+или сопровождаться Radio offer. Director только публикует состояние и payload;
+конкретное представление решает Presentation layer.
+
+Dynamic Event не обязан быть Quest:
+
+- тайник может сразу иметь Interaction и Effect;
+- попутчик может после взаимодействия породить Quest Instance;
+- курьерское предложение сначала может прийти по Radio, а Quest создать только
+  после принятия.
+
+Это сохраняет разделение `Content ≠ Runtime State ≠ Presentation` и не заставляет
+каждую случайную активность превращать в граф квеста.
+
+Resolution scope: Runtime передаёт уникальный `InstanceId` в
+`ILocationResolver.Resolve(locationId, resolutionKey)`. Так кэш Dynamic Location
+разделён по runtime-экземплярам, но старый одноаргументный контракт остаётся
+совместимым.
+
+Состояние Director входит в `dynamic-events` Data Channel и в Simulator Save.
+Поэтому активные динамические события и их расписания переживают перезапуск
+симулятора. Canonical `.aqevent` при этом остаётся неизменным: сохранение
+concrete resolved point обратно в авторский resource запрещено.
+
 ## 8.1 Дорожная геометрия как отдельный слой и критерий
 
 Дороги — не точки мира, а отдельный ресурс `data/world/roads.json` рядом с `sdo_points.json` и `cities.json`. Формат — плоский массив чисел `x1,z1,x2,z2`: JSON из 98 000 объектов читался бы заметно дольше, а сжимать массив бессмысленно, файл локальный. Источник — `roads.geojson` из репозитория ETS2 Assist (45.1 МБ), конвертируется скриптом `ci/import_roads.mjs` (3.5 МБ, округление до 1 см, вырожденные отрезки отбрасываются).

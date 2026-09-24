@@ -71,6 +71,24 @@ Provider переводит свои данные в эти контракты.
 ### Presentation
 Карта, маркеры, диалоги, уведомления, инвентарь, магазин, радио, мини-игры, HUD и будущий overlay.
 
+### Dynamic World Events
+
+Для непрерывно меняющегося мира Runtime дополнительно содержит **Dynamic Event
+Director**. Он материализует runtime-экземпляры из канонических правил `.aqevent`
+по расписанию, накопленной дистанции или событиям Event Bus.
+
+Director не заменяет Location Resolver:
+
+`DynamicEventDefinition → LocationId → Location Resolver → concrete WorldPoint → DynamicEventInstance`.
+
+Поэтому один и тот же spatial query может обслуживать много независимых событий,
+а конкретная выбранная точка живёт только в Runtime State/Save.
+
+Dynamic Event может быть самостоятельной интерактивной активностью, предложением
+по Radio или входом в Quest. Это позволяет добавлять тайники, попутчиков,
+случайные услуги, дорожные события и другие повторяющиеся активности без
+превращения каждой из них в заранее нарисованный квестовый граф.
+
 ### Authoring
 Инструменты создания Content: Quest Graph, Scene/Dialogue, World/Point, NPC, Item, Condition/Effect, Interaction, Validation и Resource Browser.
 

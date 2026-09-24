@@ -78,6 +78,11 @@ public static class AppPaths
     public static string SimulationSaveRoot => Path.Combine(UserRoot, "saves");
 
     /// <summary>
+    /// Постоянная пользовательская библиотека Dynamic Event Definitions.
+    /// </summary>
+    public static string UserDynamicEventRoot => Path.Combine(UserRoot, "events");
+
+    /// <summary>
     /// Технические данные WebView2 (кеш, профиль).
     ///
     /// Остаются в AppData: это не пользовательские данные, их не нужно видеть и

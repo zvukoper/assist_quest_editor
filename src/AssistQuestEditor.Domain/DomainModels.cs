@@ -278,4 +278,12 @@ public sealed record SimulatorSnapshot(
     EnvironmentState Environment,
     WorldClockState Clock,
     SystemState System,
-    InterfaceState Interfaces);
+    InterfaceState Interfaces)
+{
+    /// <summary>
+    /// Активные/завершённые runtime-экземпляры динамических событий.
+    /// Это состояние мира, а не canonical authoring resource.
+    /// </summary>
+    public DynamicEventRuntimeState DynamicEvents { get; init; } =
+        DynamicEventRuntimeState.Empty;
+}

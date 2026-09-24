@@ -606,3 +606,25 @@ Enabled/Active — доступность ресурса для симуляци
 резолвера точек и всех окон редактора — отдельная работа, а «заголовок сменился,
 содержимое нет» — худший вид поломки.
 
+
+## 2026-09-24 — Dynamic Event Director
+
+Dynamic Location теперь используется как spatial resolver, а непрерывную materialization
+событий выполняет отдельный World Runtime Director.
+
+Canonical resource: `.aqevent` → `DynamicEventDefinition`.
+Runtime state: `DynamicEventInstance` + `DynamicEventScheduleState` в канале `dynamic-events`.
+
+Ключевые свойства:
+- правило генерации не хранит конкретную сгенерированную точку;
+- Director создаёт конкретный экземпляр только после Trigger/Schedule;
+- Location Resolver получает отдельный `resolutionKey`, поэтому один Location может
+  обслуживать одновременно несколько экземпляров;
+- `DistanceTravelled` накапливает бюджет и использует случайный следующий порог;
+- `WorldEvent`, `GameTime` и `RealTime` уже поддержаны в первом Sandbox runtime slice;
+- активные экземпляры отображаются отдельным слоем на карте Simulator;
+- состояние Director сохраняется вместе с Simulator Save;
+- Dynamic Event Editor использует тот же Director для диагностической кнопки «Создать сейчас».
+
+Следующий этап — Discovery/Presentation, Interaction/Effect lifecycle и расширение Trigger
+системы, а не превращение каждого динамического события в Quest.

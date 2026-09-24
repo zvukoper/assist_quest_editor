@@ -142,10 +142,10 @@ public static class SimulationSaveCodec
     private static SimulationSaveHeader ReadHeader(BinaryReader reader)
     {
         var formatVersion = reader.ReadInt32();
-        if (formatVersion != SimulationSaveState.CurrentFormatVersion)
+        if (formatVersion < 1 || formatVersion > SimulationSaveState.CurrentFormatVersion)
         {
             throw new InvalidDataException(
-                $"Сохрание создано форматом v{formatVersion}, поддерживается v{SimulationSaveState.CurrentFormatVersion}.");
+                $"Сохрание создано форматом v{formatVersion}, поддерживаются v1..v{SimulationSaveState.CurrentFormatVersion}.");
         }
 
         var name = ReadString(reader);
@@ -206,6 +206,20 @@ public static class SimulationSaveCodec
         foreach (var id in state.UnlockedSkills) strings.Add(id);
         strings.Add(state.Weather);
 
+        foreach (var instance in state.DynamicEvents.Instances)
+        {
+            strings.Add(instance.InstanceId);
+            strings.Add(instance.DefinitionId);
+            strings.Add(instance.Point.Id);
+            strings.Add(instance.Point.Name);
+            strings.Add(instance.Point.Category);
+            strings.Add(instance.Point.Color);
+            if (instance.LastReason is not null) strings.Add(instance.LastReason);
+        }
+
+        foreach (var schedule in state.DynamicEvents.Schedules)
+            strings.Add(schedule.DefinitionId);
+
         WriteStringTable(writer, strings);
 
         WritePairs(writer, strings, facts);
@@ -253,6 +267,9 @@ public static class SimulationSaveCodec
         foreach (var id in state.UnlockedSkills) writer.Write(strings.Index(id));
 
         writer.Write(strings.Index(state.Weather));
+
+        if (header.FormatVersion >= 2)
+            WriteDynamicEvents(writer, strings, state.DynamicEvents);
     }
 
     private static SimulationSaveState ReadInner(BinaryReader reader, int formatVersion)
@@ -323,11 +340,176 @@ public static class SimulationSaveCodec
         for (var index = 0; index < unlockedCount; index++) unlocked.Add(strings[reader.ReadInt32()]);
 
         var weather = strings[reader.ReadInt32()];
+        var dynamicEvents = formatVersion >= 2
+            ? ReadDynamicEvents(reader, strings)
+            : DynamicEventRuntimeState.Empty;
 
         return new SimulationSaveState(
             player, clock, facts, variables, flags, questStatuses,
             inventory, newItemIds, reputation, contacts, vitals, progress,
-            characterStats, buffs, debuffs, skillLevels, unlocked, weather);
+            characterStats, buffs, debuffs, skillLevels, unlocked, weather)
+        {
+            DynamicEvents = dynamicEvents
+        };
+    }
+
+    private static void WriteDynamicEvents(
+        BinaryWriter writer,
+        StringTable strings,
+        DynamicEventRuntimeState state)
+    {
+        writer.Write(state.Instances.Count);
+        foreach (var instance in state.Instances)
+        {
+            writer.Write(strings.Index(instance.InstanceId));
+            writer.Write(strings.Index(instance.DefinitionId));
+            writer.Write((int)instance.Status);
+
+            var point = instance.Point;
+            writer.Write(strings.Index(point.Id));
+            writer.Write(strings.Index(point.Name));
+            writer.Write(strings.Index(point.Category));
+            writer.Write(strings.Index(point.Color));
+            writer.Write(point.Editable);
+            writer.Write(point.IsCity);
+            WriteDouble(writer, point.Position.X);
+            WriteDouble(writer, point.Position.Y);
+            WriteDouble(writer, point.Position.Z);
+            WriteDouble(writer, point.TriggerRadius);
+
+            WriteTimestamp(writer, instance.SpawnedUtc);
+            writer.Write(instance.SpawnedGameElapsed.Ticks);
+
+            writer.Write(instance.DiscoveredUtc.HasValue);
+            if (instance.DiscoveredUtc.HasValue)
+                WriteTimestamp(writer, instance.DiscoveredUtc.Value);
+
+            writer.Write(instance.CompletedUtc.HasValue);
+            if (instance.CompletedUtc.HasValue)
+                WriteTimestamp(writer, instance.CompletedUtc.Value);
+
+            writer.Write(instance.LastReason is not null);
+            if (instance.LastReason is not null)
+                writer.Write(strings.Index(instance.LastReason));
+        }
+
+        writer.Write(state.Schedules.Count);
+        foreach (var schedule in state.Schedules)
+        {
+            writer.Write(strings.Index(schedule.DefinitionId));
+            WriteDouble(writer, schedule.DistanceBudgetMeters);
+
+            writer.Write(schedule.NextDistanceThresholdMeters.HasValue);
+            if (schedule.NextDistanceThresholdMeters.HasValue)
+                WriteDouble(writer, schedule.NextDistanceThresholdMeters.Value);
+
+            writer.Write(schedule.NextGameElapsed.HasValue);
+            if (schedule.NextGameElapsed.HasValue)
+                writer.Write(schedule.NextGameElapsed.Value.Ticks);
+
+            writer.Write(schedule.NextRealUtc.HasValue);
+            if (schedule.NextRealUtc.HasValue)
+                WriteTimestamp(writer, schedule.NextRealUtc.Value);
+
+            writer.Write(schedule.LastSpawnUtc.HasValue);
+            if (schedule.LastSpawnUtc.HasValue)
+                WriteTimestamp(writer, schedule.LastSpawnUtc.Value);
+
+            writer.Write(schedule.LastSpawnGameElapsed.HasValue);
+            if (schedule.LastSpawnGameElapsed.HasValue)
+                writer.Write(schedule.LastSpawnGameElapsed.Value.Ticks);
+
+            writer.Write(schedule.TriggerPending);
+        }
+    }
+
+    private static DynamicEventRuntimeState ReadDynamicEvents(
+        BinaryReader reader,
+        StringTable strings)
+    {
+        var instanceCount = reader.ReadInt32();
+        var instances = new List<DynamicEventInstance>(instanceCount);
+
+        for (var index = 0; index < instanceCount; index++)
+        {
+            var instanceId = strings[reader.ReadInt32()];
+            var definitionId = strings[reader.ReadInt32()];
+            var status = (DynamicEventInstanceStatus)reader.ReadInt32();
+
+            var point = new WorldPoint(
+                strings[reader.ReadInt32()],
+                strings[reader.ReadInt32()],
+                strings[reader.ReadInt32()],
+                new WorldCoordinate(
+                    ReadDouble(reader),
+                    ReadDouble(reader),
+                    ReadDouble(reader)),
+                ReadDouble(reader))
+            {
+                Color = strings[reader.ReadInt32()],
+                Editable = reader.ReadBoolean(),
+                IsCity = reader.ReadBoolean()
+            };
+
+            var spawnedUtc = ReadTimestamp(reader);
+            var spawnedGameElapsed = TimeSpan.FromTicks(reader.ReadInt64());
+
+            DateTimeOffset? discoveredUtc = reader.ReadBoolean()
+                ? ReadTimestamp(reader)
+                : null;
+
+            DateTimeOffset? completedUtc = reader.ReadBoolean()
+                ? ReadTimestamp(reader)
+                : null;
+
+            var lastReason = reader.ReadBoolean()
+                ? strings[reader.ReadInt32()]
+                : null;
+
+            instances.Add(new DynamicEventInstance(
+                instanceId,
+                definitionId,
+                status,
+                point)
+            {
+                SpawnedUtc = spawnedUtc,
+                SpawnedGameElapsed = spawnedGameElapsed,
+                DiscoveredUtc = discoveredUtc,
+                CompletedUtc = completedUtc,
+                LastReason = lastReason
+            });
+        }
+
+        var scheduleCount = reader.ReadInt32();
+        var schedules = new List<DynamicEventScheduleState>(scheduleCount);
+
+        for (var index = 0; index < scheduleCount; index++)
+        {
+            var schedule = new DynamicEventScheduleState(strings[reader.ReadInt32()])
+            {
+                DistanceBudgetMeters = ReadDouble(reader),
+                NextDistanceThresholdMeters = reader.ReadBoolean()
+                    ? ReadDouble(reader)
+                    : null,
+                NextGameElapsed = reader.ReadBoolean()
+                    ? TimeSpan.FromTicks(reader.ReadInt64())
+                    : null,
+                NextRealUtc = reader.ReadBoolean()
+                    ? ReadTimestamp(reader)
+                    : null,
+                LastSpawnUtc = reader.ReadBoolean()
+                    ? ReadTimestamp(reader)
+                    : null,
+                LastSpawnGameElapsed = reader.ReadBoolean()
+                    ? TimeSpan.FromTicks(reader.ReadInt64())
+                    : null,
+                TriggerPending = reader.ReadBoolean()
+            };
+
+            schedules.Add(schedule);
+        }
+
+        return new DynamicEventRuntimeState(instances, schedules);
     }
 
     // --- Таблица строк -----------------------------------------------------

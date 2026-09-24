@@ -58,7 +58,10 @@ public static class SimulationSaveMapper
                 skill => skill.Level,
                 StringComparer.OrdinalIgnoreCase),
             character.Skills.Where(skill => skill.Unlocked).Select(skill => skill.Id).ToArray(),
-            hub.Get<EnvironmentState>("environment").Value.Weather);
+            hub.Get<EnvironmentState>("environment").Value.Weather)
+        {
+            DynamicEvents = hub.Get<DynamicEventRuntimeState>("dynamic-events").Value
+        };
     }
 
     /// <summary>
@@ -122,6 +125,10 @@ public static class SimulationSaveMapper
         var environment = hub.Get<EnvironmentState>("environment").Value;
         hub.Get<EnvironmentState>("environment").Set(
             environment with { Weather = state.Weather },
+            LoadSource);
+
+        hub.Get<DynamicEventRuntimeState>("dynamic-events").Set(
+            state.DynamicEvents ?? DynamicEventRuntimeState.Empty,
             LoadSource);
     }
 

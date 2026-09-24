@@ -244,6 +244,11 @@ public sealed class SimulatorDataChannelHub : IDataChannelHub
             "Интерфейсы",
             new InterfaceState(null));
 
+        DynamicEvents = new DataChannel<DynamicEventRuntimeState>(
+            "dynamic-events",
+            "Динамические события",
+            DynamicEventRuntimeState.Empty);
+
         _channels = new Dictionary<string, IDataChannel>(StringComparer.OrdinalIgnoreCase)
         {
             [Player.Key] = Player,
@@ -261,7 +266,8 @@ public sealed class SimulatorDataChannelHub : IDataChannelHub
             [Environment.Key] = Environment,
             [Clock.Key] = Clock,
             [System.Key] = System,
-            [Interfaces.Key] = Interfaces
+            [Interfaces.Key] = Interfaces,
+            [DynamicEvents.Key] = DynamicEvents
         };
 
         foreach (var channel in _channels.Values)
@@ -286,6 +292,7 @@ public sealed class SimulatorDataChannelHub : IDataChannelHub
     public DataChannel<WorldClockState> Clock { get; }
     public DataChannel<SystemState> System { get; }
     public DataChannel<InterfaceState> Interfaces { get; }
+    public DataChannel<DynamicEventRuntimeState> DynamicEvents { get; }
 
     public EventChannel<SimulatorEvent> Events { get; } = new();
     IEventChannel<SimulatorEvent> IDataChannelHub.Events => Events;
@@ -364,6 +371,7 @@ public sealed class SimulatorDataChannelHub : IDataChannelHub
         Clock.Set(WorldClockState.CreateDefault(), "Сброс симулятора");
         System.Set(new SystemState(true, "Симулятор", "", "Симуляция сброшена"), "Сброс симулятора");
         Interfaces.Set(new InterfaceState(null), "Сброс симулятора");
+        DynamicEvents.Set(DynamicEventRuntimeState.Empty, "Сброс симулятора");
     }
 
     public IReadOnlyCollection<DataChannelDescriptor> Describe() =>
@@ -393,7 +401,10 @@ public sealed class SimulatorDataChannelHub : IDataChannelHub
             Environment.Value,
             Clock.Value,
             System.Value,
-            Interfaces.Value);
+            Interfaces.Value)
+        {
+            DynamicEvents = DynamicEvents.Value
+        };
 
     private void Subscribe(IDataChannel channel)
     {
@@ -486,6 +497,13 @@ public sealed class SimulatorDataChannelHub : IDataChannelHub
                 args.CurrentValue.ActiveDialog is null
                     ? "Интерфейсный запрос закрыт"
                     : $"Открыт диалог выбора {args.CurrentValue.ActiveDialog.RequestId}");
+        }
+        else if (channel is DataChannel<DynamicEventRuntimeState> dynamicEvents)
+        {
+            dynamicEvents.Changed += (_, args) => PublishTransition(
+                "dynamic-events",
+                args.Source,
+                $"Динамических событий: {args.CurrentValue.Instances.Count}");
         }
     }
 

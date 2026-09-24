@@ -374,6 +374,11 @@
     for (const entry of inactiveQuests) drawQuestMarker(ctx, entry, false);
     for (const entry of activeQuests) drawQuestMarker(ctx, entry, true);
 
+    // Динамические события — отдельный runtime-слой. Они не превращаются в
+    // Quest marker и не меняют статический WorldPoint catalogue: экземпляр
+    // содержит собственную resolved WorldPoint.
+    drawDynamicEventMarkers(ctx, width, height);
+
     // Отобранные точки рисуются поверх карты и квестов, но под игроком:
     // положение игрока остаётся главным ориентиром даже в этом режиме.
     if (locationVisualisation) {
@@ -489,6 +494,65 @@
     return !!hoveredQuest &&
       hoveredQuest.campaignId.toLowerCase() === String(entry.campaignId || "").toLowerCase() &&
       hoveredQuest.questId.toLowerCase() === String(entry.questId || "").toLowerCase();
+  }
+
+  function drawDynamicEventMarkers(ctx, width, height) {
+    const instances = snapshot?.dynamicEvents?.instances || [];
+    if (!instances.length) return;
+
+    for (const instance of instances) {
+      const point = instance?.point;
+      if (!point?.position) continue;
+
+      const q = worldToScreen(Number(point.position.x) || 0, Number(point.position.z) || 0);
+      if (q.x < -30 || q.y < -30 || q.x > width + 30 || q.y > height + 30) continue;
+
+      const status = String(instance.status || "Active");
+      const radiusMeters = Math.max(
+        0,
+        Number(point.triggerRadius || 0)
+      );
+      const radiusPx = radiusMeters / Math.max(camera.mpp, 0.0001);
+
+      ctx.save();
+
+      if (radiusPx >= 8 && radiusPx <= 900) {
+        ctx.beginPath();
+        ctx.arc(q.x, q.y, radiusPx, 0, Math.PI * 2);
+        ctx.strokeStyle = "rgba(255, 180, 60, .34)";
+        ctx.lineWidth = 1;
+        ctx.setLineDash([5, 4]);
+        ctx.stroke();
+        ctx.setLineDash([]);
+      }
+
+      // Общая форма динамического события — ромб. В дальнейшем presentation
+      // policy может заменить её на скрытый/AR/иконку, не меняя Runtime.
+      ctx.beginPath();
+      ctx.moveTo(q.x, q.y - 8);
+      ctx.lineTo(q.x + 8, q.y);
+      ctx.lineTo(q.x, q.y + 8);
+      ctx.lineTo(q.x - 8, q.y);
+      ctx.closePath();
+      ctx.fillStyle = status === "Discovered" || status === "Engaged"
+        ? "rgba(255, 195, 75, .95)"
+        : "rgba(255, 166, 45, .75)";
+      ctx.fill();
+      ctx.strokeStyle = "#151515";
+      ctx.lineWidth = 2;
+      ctx.stroke();
+
+      const label = String(instance.definitionId || instance.instanceId || "Dynamic Event");
+      if (camera.mpp < 120) {
+        ctx.font = "12px Segoe UI, sans-serif";
+        ctx.textAlign = "left";
+        ctx.textBaseline = "middle";
+        ctx.fillStyle = "#f7d28c";
+        ctx.fillText(label, q.x + 12, q.y);
+      }
+
+      ctx.restore();
+    }
   }
 
   function drawWorldPoint(ctx, point, width, height, occupied, showAllLabels, labelLimit) {

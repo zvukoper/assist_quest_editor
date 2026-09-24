@@ -79,6 +79,38 @@ Quest Graph больше не является статической SVG-заг
 - часы в шапке Симулятора показывают время с секундами (`GameCalendar.FormatClock`),
   по ним видно ход времени; поля ввода и восход/закат остаются без секунд.
 
+## 2026-09-24 — Dynamic Event Director
+
+Реализован первый runtime-слой непрерывной генерации событий поверх Dynamic Location.
+
+- добавлены canonical `.aqevent` и `DynamicEventDefinition`;
+- добавлен `DynamicEventInstance` с независимым concrete WorldPoint и lifecycle;
+- добавлен `DynamicEventDirector`, который запускается/останавливается вместе с Simulator;
+- `DistanceTravelled` использует накопительный бюджет и новый случайный threshold;
+- добавлены `GameTime`, `RealTime` и `WorldEvent` triggers;
+- active limit/cooldown не теряют накопленный distance budget;
+- один Dynamic Location может разрешать разные runtime instances через `resolutionKey`;
+- состояние Director вынесено в `dynamic-events` Data Channel и в Simulator Save v2;
+- Simulator показывает активные Dynamic Event instances отдельным слоем карты;
+- добавлен Dynamic Event Editor с кнопкой «Создать сейчас» для диагностической materialization;
+- добавлен Playwright smoke `ci/dynamic_event_editor_smoke.mjs` и проверка web syntax;
+- добавлены доменные тесты Director и round-trip тест состояния в save codec.
+
+Ключевой инвариант: `.aqevent` никогда не превращается в сохранённую сгенерированную
+точку. Canonical Definition хранит правило, Runtime State хранит конкретный экземпляр.
+
+### Следующий слой
+
+1. Сделать полноценную `Presentation/Discovery Policy`: Hidden/Minimap/WorldMarker/AR/Radio.
+2. Добавить общую модель Interaction для Dynamic Event Instance и переход `Discovered → Engaged`.
+3. Подключить Event/Condition/Effect к lifecycle Director: spawn conditions, discover condition,
+   completion effects, rewards и опциональное создание Quest Instance.
+4. Добавить provider spatial capabilities и группы (`InGroup`, Near/Far Group).
+5. Реализовать более богатые scheduler triggers: PlayerEvent, RegionEntered/Left,
+   QuestCompleted, InteractionCompleted, RadioEvent, Weather/Inventory/ReputationChanged.
+6. Добавить Selection/Visit history и weighted anti-repeat selection.
+7. После стабилизации runtime — расширить authoring editor отдельными панелями Trigger,
+   Discovery, Effects и Runtime Event Inspector.
 ## Сейчас делать
 
 Текущий рабочий слой — Quest Runtime + системная автоматическая проверка. Quest Graph authoring baseline уже подключён к canonical Runtime и Simulator. Ручным тестом подтверждены цепи из нескольких Interaction и маршрут через несколько Trigger/ветвлений.

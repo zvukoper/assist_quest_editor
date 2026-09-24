@@ -235,6 +235,46 @@ F. Scenario Runtime — RESET, SET WORLD, SET PLAYER, SET FACT, SET INVENTORY, R
 
 Они строятся позже на уже закреплённых World/State/Content/Runtime границах.
 
+## 16.1 Dynamic Event Editor
+
+После Location Editor вводится отдельный **Dynamic Event Editor**.
+
+Главное правило UX: автор редактирует не созданную точку, а политику появления.
+`Test`/`Создать сейчас` не записывают resolved WorldPoint обратно в `.aqevent`.
+
+`.aqevent` должен позволять задать:
+- Location;
+- Trigger: Manual, DistanceTravelled, GameTime, RealTime, WorldEvent;
+- диапазоны расстояния/времени;
+- Spawn Policy: active cap, chance, cooldown, lifetime;
+- presentation hint;
+- необязательный Quest, который может быть создан после вовлечения.
+
+Кнопка **«Создать сейчас»** — диагностический путь Director. Она должна
+использовать тот же Runtime, что и автоматическая генерация, чтобы автор видел
+реальный результат без второго скрытого механизма.
+
+Runtime Inspector редактора показывает только текущие Dynamic Event instances
+данного Definition и не превращает их в содержимое `.aqevent`.
+
+## 16.2 Dynamic Event Director
+
+Director отвечает за расписание и materialization runtime instances.
+Location Resolver отвечает только за spatial resolution.
+
+Для дистанционных триггеров используется накопительный `DistanceBudgetMeters`
+с новым случайным threshold после каждого срабатывания. Нельзя использовать
+проверку по модулю расстояния: она теряет расстояние между тик-ами и плохо
+работает при больших шагах телеметрии/симуляции.
+
+В Simulator Director включается вместе с Runtime, останавливается на Pause/Stop
+и перед загрузкой Save. Его состояние входит в snapshot/save, но не в статический
+WorldPoint catalog.
+
+Следующий UX-этап после базового Editor — отдельные панели условий появления,
+Discovery/Presentation и Runtime Event Inspector. Они не должны смешивать
+авторское правило с живым состоянием.
+
 ## 17. Итог
 
 Authoring UX теперь рассматривается как первая инфраструктура World Authoring.

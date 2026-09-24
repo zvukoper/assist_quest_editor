@@ -89,6 +89,10 @@
       title: "Редактор локаций",
       draw: (ws, ins) => window.__assistLocationEditor?.render?.(ws, ins)
     },
+    events: {
+      title: "Редактор динамических событий",
+      draw: (ws, ins) => window.__assistDynamicEventEditor?.render?.(ws, ins)
+    },
     world: { title: "Редактор мира и координат", draw: renderWorld },
     channels: { title: "Инспектор Data Channels", draw: renderChannels },
     conditions: { title: "Редактор условий и действий", draw: renderConditions },
@@ -145,7 +149,7 @@
   // Один WebView показывает любую из них, но данные приходят из Host, поэтому
   // переключение всегда идёт через activate_pane.
   function isHostedPane(id) {
-    return id === "graph" || id === "scene" || id === "dialogue" || id === "locations";
+    return id === "graph" || id === "scene" || id === "dialogue" || id === "locations" || id === "events";
   }
 
   function render() {

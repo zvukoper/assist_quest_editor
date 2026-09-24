@@ -17,8 +17,8 @@ public sealed class LocationRuntimeResolver : ILocationResolver, ILocationResolu
     private readonly JunctionIndex _junctions;
     private readonly ICityBoundarySource _cityBoundaries;
     private readonly LocationResolver _resolver = new();
-    private readonly Dictionary<string, WorldPoint> _resolved =
-        new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<(string LocationId, string? ResolutionKey), WorldPoint> _resolved =
+        new();
 
     /// <summary>Индекс черт, по которому построен кэш разрешений.</summary>
     private CityBoundaryIndex? _lastCities;
@@ -39,13 +39,21 @@ public sealed class LocationRuntimeResolver : ILocationResolver, ILocationResolu
         _cityBoundaries = cityBoundaries ?? new StaticCityBoundarySource();
     }
 
-    public WorldPoint? Resolve(string locationId)
+    public WorldPoint? Resolve(string locationId) => Resolve(locationId, null);
+
+    public WorldPoint? Resolve(string locationId, string? resolutionKey)
     {
         if (string.IsNullOrWhiteSpace(locationId) ||
             !_store.TryGet(locationId, out var definition))
             return null;
 
-        if (_resolved.TryGetValue(locationId, out var cached))
+        var key = (
+            LocationId: locationId,
+            ResolutionKey: string.IsNullOrWhiteSpace(resolutionKey)
+                ? null
+                : resolutionKey.Trim());
+
+        if (_resolved.TryGetValue(key, out var cached))
             return cached;
 
         // Черты могли перерисовать уже после того, как часть локаций разрешилась.
@@ -71,7 +79,7 @@ public sealed class LocationRuntimeResolver : ILocationResolver, ILocationResolu
             cities: cities).Point;
 
         if (point is not null)
-            _resolved[locationId] = point;
+            _resolved[key] = point;
 
         return point;
     }
@@ -97,7 +105,26 @@ public sealed class LocationRuntimeResolver : ILocationResolver, ILocationResolu
 
     public void Invalidate(string locationId)
     {
-        if (!string.IsNullOrWhiteSpace(locationId))
-            _resolved.Remove(locationId);
+        if (string.IsNullOrWhiteSpace(locationId))
+            return;
+
+        var keys = _resolved.Keys
+            .Where(key => key.LocationId.Equals(locationId, StringComparison.OrdinalIgnoreCase))
+            .ToArray();
+
+        foreach (var key in keys)
+            _resolved.Remove(key);
+    }
+
+    public void Invalidate(string locationId, string? resolutionKey)
+    {
+        if (string.IsNullOrWhiteSpace(locationId))
+            return;
+
+        var key = (
+            LocationId: locationId,
+            ResolutionKey: string.IsNullOrWhiteSpace(resolutionKey) ? null : resolutionKey.Trim());
+
+        _resolved.Remove(key);
     }
 }

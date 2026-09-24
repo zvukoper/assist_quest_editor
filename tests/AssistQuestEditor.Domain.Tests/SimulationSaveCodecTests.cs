@@ -69,6 +69,44 @@ public sealed class SimulationSaveCodecTests
             new[] { "ce-driver" },
             "Дождь");
 
+        state = state with
+        {
+            DynamicEvents = new DynamicEventRuntimeState(
+                new[]
+                {
+                    new DynamicEventInstance(
+                        "cache#123",
+                        "cache",
+                        DynamicEventInstanceStatus.Active,
+                        new WorldPoint(
+                            "wp-cache",
+                            "Тайник у дома",
+                            "cache",
+                            new WorldCoordinate(100, 0, 200))
+                        {
+                            TriggerRadius = 35,
+                            Color = "#ffbb44",
+                            Editable = false,
+                            IsCity = false
+                        })
+                    {
+                        SpawnedUtc = Created,
+                        SpawnedGameElapsed = TimeSpan.FromHours(5),
+                        LastReason = "создано Director"
+                    }
+                },
+                new[]
+                {
+                    new DynamicEventScheduleState("cache")
+                    {
+                        DistanceBudgetMeters = 1200,
+                        NextDistanceThresholdMeters = 7800,
+                        LastSpawnUtc = Created,
+                        LastSpawnGameElapsed = TimeSpan.FromHours(5)
+                    }
+                })
+        };
+
         var header = new SimulationSaveHeader(
             SimulationSaveState.CurrentFormatVersion,
             "2026-05-15 18-30-42",
@@ -120,6 +158,13 @@ public sealed class SimulationSaveCodecTests
 
         Assert.Equal(original.State.PlayerVitals, decoded.State.PlayerVitals);
         Assert.Equal(original.State.PlayerProgress, decoded.State.PlayerProgress);
+
+        Assert.Equal(1, decoded.State.DynamicEvents.Instances.Count);
+        Assert.Equal("cache#123", decoded.State.DynamicEvents.Instances[0].InstanceId);
+        Assert.Equal("wp-cache", decoded.State.DynamicEvents.Instances[0].Point.Id);
+        Assert.Equal(DynamicEventInstanceStatus.Active, decoded.State.DynamicEvents.Instances[0].Status);
+        Assert.Equal(1, decoded.State.DynamicEvents.Schedules.Count);
+        Assert.Equal(1200, decoded.State.DynamicEvents.Schedules[0].DistanceBudgetMeters);
 
         Assert.Equal(original.State.QuestStatuses.Count, decoded.State.QuestStatuses.Count);
         for (var index = 0; index < original.State.QuestStatuses.Count; index++)
