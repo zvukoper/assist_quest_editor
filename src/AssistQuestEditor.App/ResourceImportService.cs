@@ -139,7 +139,9 @@ public static class ResourceImportService
                 name =>
                     File.Exists(Path.Combine(questsFolder, name + QuestExtension)) ||
                     campaign.Definition.Quests.Any(item =>
-                        item.QuestId.Equals(name, StringComparison.OrdinalIgnoreCase)));
+                        item.QuestId.Equals(
+                            ToResourceId(name),
+                            StringComparison.OrdinalIgnoreCase)));
 
         var targetFile = Path.Combine(questsFolder, targetName + QuestExtension);
         var existingEntry = campaign.Definition.Quests.FirstOrDefault(item =>
@@ -250,6 +252,7 @@ public static class ResourceImportService
 
     private static bool _CampaignIdExists(WorldRecord world, string candidate)
     {
+        var wantedId = ToResourceId(candidate);
         var root = WorldPaths.CampaignsRoot(world.FolderPath);
         if (!Directory.Exists(root))
             return false;
@@ -257,7 +260,7 @@ public static class ResourceImportService
         foreach (var folder in Directory.EnumerateDirectories(root))
         {
             var definition = ReadCampaign(folder);
-            if (definition?.Id.Equals(candidate, StringComparison.OrdinalIgnoreCase) == true)
+            if (definition?.Id.Equals(wantedId, StringComparison.OrdinalIgnoreCase) == true)
                 return true;
         }
 
