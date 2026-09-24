@@ -1123,28 +1123,18 @@ public sealed class MainForm : WebViewForm
         IReadOnlyList<ResourceExportService.ExportDependency> allDependencies,
         DateTimeOffset moment)
     {
-        var dependencies = includeDependencies ? allDependencies : Array.Empty<ResourceExportService.ExportDependency>();
+        var dependencies = includeDependencies
+            ? allDependencies
+            : Array.Empty<ResourceExportService.ExportDependency>();
 
-        // Quest exporter requires a real staging directory only for the selected Quest file.
-        var temp = Path.Combine(Path.GetTempPath(), "aq-quest-source-" + Guid.NewGuid().ToString("N"));
-        try
-        {
-            Directory.CreateDirectory(temp);
-            File.Copy(questPath, Path.Combine(temp, Path.GetFileName(questPath)), overwrite: true);
-
-            return ResourceExportService.ExportArchive(
-                AppPaths.UserRoot,
-                temp,
-                displayName,
-                ResourceExportService.ManifestForQuest(quest),
-                moment,
-                dependencies).WithArchiveMode(asArchive);
-        }
-        finally
-        {
-            try { if (Directory.Exists(temp)) Directory.Delete(temp, true); }
-            catch { }
-        }
+        return ResourceExportService.ExportQuest(
+            AppPaths.UserRoot,
+            questPath,
+            displayName,
+            ResourceExportService.ManifestForQuest(quest),
+            moment,
+            asArchive,
+            dependencies);
     }
 
     private static string FormatBytes(long bytes)
