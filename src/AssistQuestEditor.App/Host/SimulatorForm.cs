@@ -845,8 +845,14 @@ public sealed class SimulatorForm : WebViewForm
         // и правкой, и дублировать эту логику в симуляторе значило бы получить
         // две реализации сохранения свойств.
         _campaignsForm.WorldPropertiesRequested += (_, _) => WorldPropertiesRequested?.Invoke(this, EventArgs.Empty);
+        _campaignsForm.WorldExportRequested += (_, _) => WorldExportRequested?.Invoke(this, EventArgs.Empty);
         _campaignsForm.CampaignPropertiesRequested += (_, e) =>
             CampaignPropertiesRequested?.Invoke(this, e);
+        _campaignsForm.CampaignExportRequested += (_, e) =>
+            CampaignExportRequested?.Invoke(this, e);
+        _campaignsForm.QuestExportRequested += (_, e) =>
+            QuestExportRequested?.Invoke(this, e);
+        _campaignsForm.ImportArchiveRequested += (_, _) => ImportArchiveRequested?.Invoke(this, EventArgs.Empty);
         _campaignsForm.FormClosed += (_, _) =>
         {
             _campaignsForm = null;
@@ -866,6 +872,10 @@ public sealed class SimulatorForm : WebViewForm
     /// сохранения в симуляторе неизбежно разошлась бы с первой.
     /// </summary>
     public event EventHandler? WorldPropertiesRequested;
+    public event EventHandler? WorldExportRequested;
+    public event EventHandler<CampaignExportRequestedEventArgs>? CampaignExportRequested;
+    public event EventHandler<QuestExportRequestedEventArgs>? QuestExportRequested;
+    public event EventHandler? ImportArchiveRequested;
     public event EventHandler<WorldSelectionRequestedEventArgs>? WorldSwitchRequested;
     public event EventHandler<CampaignSelectionRequestedEventArgs>? CampaignSelectionRequested;
 
