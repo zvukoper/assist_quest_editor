@@ -464,7 +464,7 @@ public sealed class CampaignsForm : Form
         info.Margin = new Padding(4, 0, 8, 0);
         info.Click += (_, _) => WorldPropertiesRequested?.Invoke(this, EventArgs.Empty);
 
-        var folder = CreateMicroButton("Папка");
+        var folder = CreateMicroButton("ПАПКА");
         folder.Click += (_, _) => WorldFolderOpenRequested?.Invoke(this, EventArgs.Empty);
 
         var export = CreateMicroButton("Экспорт");
