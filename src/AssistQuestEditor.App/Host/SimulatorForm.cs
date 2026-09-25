@@ -1075,7 +1075,7 @@ public sealed class SimulatorForm : WebViewForm
         AppLogger.Info(
             "SimulatorForm: движение по маршруту включено.",
             $"waypoints={_routeState.Waypoints.Count}; defaultSpeed={_routeState.DefaultSpeedKmh}; " +
-            $"targetWaypoint={_routeTargetWaypointIndex is int target ? target + 1 : 0}");
+            $"targetWaypoint={(_routeTargetWaypointIndex is int target ? target + 1 : 0)}");
 
         PersistSession("автосохранение: движение по маршруту включено", force: true);
         RequestSnapshot("route movement enabled");
@@ -1247,7 +1247,7 @@ public sealed class SimulatorForm : WebViewForm
                 "SimulatorForm: движение по маршруту остановлено.",
                 result.StoppedAtWaypoint
                     ? $"причина=скорость точки 0; waypoint={_routeStoppedWaypointIndex.GetValueOrDefault() + 1}; " +
-                      $"target={_routeTargetWaypointIndex is int target ? target + 1 : 0}"
+                      $"target={(_routeTargetWaypointIndex is int nextTarget ? nextTarget + 1 : 0)}"
                     : result.Completed
                         ? "причина=достигнута последняя точка"
                         : "причина=маршрут завершён");

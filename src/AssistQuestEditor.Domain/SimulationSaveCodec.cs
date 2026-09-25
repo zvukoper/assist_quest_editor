@@ -410,7 +410,10 @@ public static class SimulationSaveCodec
         if (!hasExtendedRuntime)
             return new RouteRuntimeState(cursor);
 
-        var target = reader.ReadBoolean() ? reader.ReadInt32() : null;
+        // Явный целевой тип обязателен: у `var` нет цели для условного выражения,
+        // и общий тип между int и null не выводится (CS0173). В вызове выше это
+        // работает только потому, что параметр конструктора уже имеет тип int?.
+        int? target = reader.ReadBoolean() ? reader.ReadInt32() : null;
 
         return new RouteRuntimeState(
             cursor,

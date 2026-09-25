@@ -566,17 +566,25 @@ public sealed class RoadRoutePlanner
             null);
     }
 
-    private static RouteLeg BuildDirectLeg(
+    /// <summary>
+    /// Прямой leg без дорожной геометрии. Возвращает тот же кортеж, что и
+    /// <see cref="BuildLeg"/>, иначе ветви одного условного выражения в <see cref="Build"/>
+    /// имеют разные типы (RouteLeg и (RouteLeg?, string?)) и общий тип не выводится.
+    /// Ошибки у прямого leg нет: он строится всегда.
+    /// </summary>
+    private static (RouteLeg? Leg, string? Error) BuildDirectLeg(
         int startWaypointIndex,
         int endWaypointIndex,
         WorldCoordinate start,
         WorldCoordinate end)
     {
-        return new RouteLeg(
-            startWaypointIndex,
-            endWaypointIndex,
-            new[] { start, end },
-            Distance(start, end));
+        return (
+            new RouteLeg(
+                startWaypointIndex,
+                endWaypointIndex,
+                new[] { start, end },
+                Distance(start, end)),
+            null);
     }
 
     private IEnumerable<Edge> NeighborsWithVirtuals(
@@ -588,6 +596,21 @@ public sealed class RoadRoutePlanner
     {
         if (node == virtualStart)
         {
+            // Обе привязки лежат на ОДНОМ под-отрезке дороги: кратчайший путь между
+            // ними — прямое движение вдоль него. Без этого ребра A* обязан был сперва
+            // дойти до узла графа и вернуться, и маршрут делал «крюк» назад: на прямой
+            // 0→250 м путь 50→100 м считался как 50 м к узлу и 100 м обратно к цели
+            // (150 м вместо 50 м). Нулевое расстояние пропускаем: полилиния из одной
+            // точки непригодна, там остаётся прежний обход через узлы.
+            if (SameFragment(start, end) &&
+                Distance(start.Position, end.Position) > 0.001d)
+            {
+                yield return new Edge(
+                    virtualEnd,
+                    Distance(start.Position, end.Position),
+                    false);
+            }
+
             yield return new Edge(
                 start.NodeA,
                 DistanceToNode(start.Position, start.NodeA),
@@ -642,6 +665,13 @@ public sealed class RoadRoutePlanner
         var dz = point.Z - node.Z;
         return Math.Sqrt(dx * dx + dz * dz);
     }
+
+    /// <summary>
+    /// Обе привязки лежат на одном дорожном под-отрезке, то есть между их
+    /// узлами есть прямое ребро без промежуточных узлов.
+    /// </summary>
+    private static bool SameFragment(RoadProjection start, RoadProjection end) =>
+        start.NodeA == end.NodeA && start.NodeB == end.NodeB;
 
     private int GetOrCreateNode(double x, double z)
     {
