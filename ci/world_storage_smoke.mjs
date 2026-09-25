@@ -288,10 +288,20 @@ const worldBlock = campaignsForm.slice(
 // цвет (сохранён) и вложенность кампаний внутрь пункта мира.
 check(!/Font\("Segoe UI", 13f/.test(worldBlock),
   "Имя мира не должно быть крупнее названий кампаний: мир — такой же пункт дерева.");
-check(/Font\("Segoe UI", 9f, FontStyle\.Bold\)/.test(worldBlock),
-  "Имя мира должно иметь тот же размер шрифта, что и название кампании.");
-check(/250, 176, 3/.test(worldBlock),
+// Размер берётся ИЗ ОБЪЯВЛЕНИЯ шрифта имени мира и сверяется с таким же
+// объявлением у кампании: буквальное число здесь означало бы, что любая
+// компактная подстройка дерева валит проверку, хотя требование («мир не крупнее
+// кампании, и вид тот же») остаётся соблюдённым.
+const worldFont = worldBlock.match(/Font = new Font\("Segoe UI",\s*([\d.]+)f, FontStyle\.Bold\)/);
+check(worldFont && Number(worldFont[1]) < 13,
+  "Имя мира должно быть меньше 13pt: " + (worldFont?.[1] ?? "шрифт не найден"));
+// Оранжевый цвет берётся КОНСТАНТОЙ, а не литералом: он один и тот же у строки
+// квеста, у иконки мира и у предупреждений, и разошедшиеся литералы означали бы
+// разные оттенки одного признака уровня.
+check(/ForeColor = AccentColor/.test(worldBlock),
   "Оранжевый цвет пункта мира обязан сохраниться: это единственный признак уровня.");
+check(/private static readonly Color AccentColor = Color\.FromArgb\(250, 176, 3\)/.test(campaignsForm),
+  "Константа акцента должна остаться тем же оранжевым (250, 176, 3).");
 // Мир сворачивается, как кампания.
 check(/ToggleCollapsed\(WorldCollapseKey\)/.test(worldBlock),
   "Пункт мира обязан сворачиваться, как кампания: это тот же вид.");
@@ -328,8 +338,13 @@ const campaignBlock = campaignsForm.slice(campaignStart, campaignEnd > 0 ? campa
 const campaignFont = campaignBlock.match(/Font = new Font\("Segoe UI",\s*([\d.]+)f/);
 check(campaignFont && Number(campaignFont[1]) < 13,
   "Строка кампании должна остаться меньше 13pt: " + (campaignFont?.[1] ?? "шрифт не найден"));
-check(campaignFont && campaignFont[1] === "9", // 9f — как у пункта мира
-  "Размер шрифта кампании и мира должен совпадать: " + (campaignFont?.[1] ?? "?") + " против 9");
+// Размер сравнивается с объявлением у МИРА, а не с числом 9: буквальная цифра
+// замораживала бы конкретную компактную подстройку, хотя требование — «один
+// размер у двух уровней дерева».
+const sameFontSize = worldFont && campaignFont && worldFont[1] === campaignFont[1];
+check(sameFontSize,
+  "Размер шрифта кампании и мира должен совпадать: " +
+  (campaignFont?.[1] ?? "?") + " против " + (worldFont?.[1] ?? "?"));
 
 // --- 9. Под названием — ТОЛЬКО даты создания и изменения ---
 
@@ -377,38 +392,43 @@ check(/var\(--blue\)/.test(themeCssForTree) || /18, 171, 229/.test(infoIconBody)
 check(!/CreateMicroButton\("ℹ️"\)/.test(campaignsForm),
   "Осталась прежняя кнопка ℹ️ во всю высоту строки.");
 // Иконка у кампании обязана нести ЕЁ id: иконок столько же, сколько кампаний, и
-// «открыть свойства текущей» открывало бы не ту.
-check(/CampaignPropertiesRequested\?\.Invoke\(this,\s*new CampaignPropertiesRequestedEventArgs\(campaign\.Id\)\)/.test(campaignBlock),
+// «открыть свойства текущей» открывало бы не ту. Вызов разбит по строкам, поэтому
+// склейка допускает любой пробел и перевод строки между аргументами.
+check(/CampaignPropertiesRequested\?\.Invoke\(\s*this,\s*new CampaignPropertiesRequestedEventArgs\(campaign\.Id\)\)/.test(campaignBlock),
   "Иконка ℹ️ кампании не передаёт её id: откроются свойства не той кампании.");
 check(/WorldPropertiesRequested\?\.Invoke/.test(worldBlock),
   "Иконка ℹ️ мира не запрашивает свойства мира.");
 // Сворачивание по иконке информации было бы неожиданным: у неё своё действие.
-check(/foreach \(Control element in new Control\[\] \{ header, text, marker \}\)\s*\r?\n?\s*\{/.test(campaignBlock),
+// Подписка однострочная (без блока `{}`), поэтому скобка блока не требуется —
+// проверяется именно СОСТАВ списка, на который вешается клик.
+check(/foreach \(Control element in new Control\[\] \{ header, text, marker \}\)[\s\r\n]*element\.Click \+=/.test(campaignBlock),
   "Сворачивание повешено на весь заголовок, включая кнопки: клик по иконке свернёт кампанию.");
 check(/new Control\[\] \{ header, text, marker \}/.test(campaignBlock),
   "Сворачивание должно быть только на заголовке, названии и стрелке.");
 
 // Уровневость дерева задаётся ОТСТУПОМ СЛЕВА: без него кампании выглядят как
 // плоский список, выровненный по левому краю, — именно на это жаловался автор.
-// Проверяется КОНСТРУКЦИЯ отступа, а не вхождение имени константы: имя
-// встречается и в пояснении к правке, и такая проверка прошла бы впустую.
-check(/Margin = new Padding\(TreeLevelIndent, 0, 0, 8\)/.test(campaignBlock),
+// Проверяется КОНСТРУКЦИЯ отступа (значение константы, а не 0), а не вхождение
+// имени: имя встречается и в пояснении к правке, и такая проверка прошла бы впустую.
+check(/Margin = new Padding\(TreeLevelIndent, 0, 0, \d+\)/.test(campaignBlock),
   "Пункт кампании не имеет отступа вложенности: уровни дерева не читаются.");
 check(/var total = LayoutPanelChildren\(rows, innerWidth, QuestRowIndent\)/.test(campaignsForm),
   "Строки квестов не получают отступ вложенности при раскладке.");
 check(/private static int LayoutPanelChildren\(FlowLayoutPanel rows, int availableWidth, int indent\)/.test(campaignsForm),
   "Раскладка строк не принимает отступ уровня: каждый уровень пришлось бы править отдельно.");
 
-// Обводка выделенной строки квеста обязана быть СКРУГЛЁННОЙ и того же радиуса,
-// что кнопки: прямоугольная спорила со скруглениями рядом.
+// Выделенная строка квеста помечается ПОЛОСОЙ слева, а не обводкой по контуру:
+// обводка вокруг каждой строки спорила со скруглениями соседних кнопок, и автор
+// прямо просил убрать рамки, оставив уровень отступом. Признак остался тот же —
+// выделение ВИДНО и нарисовано ТЕМ ЖЕ акцентом, что и уровень дерева.
 const questRowBody = campaignsForm.slice(
   campaignsForm.indexOf("private Control CreateQuestRow"),
   campaignsForm.indexOf("private static Label CreateNotice")
 );
-check(/RoundedPath\(bounds, ButtonRadius\)/.test(questRowBody),
-  "Обводка выделенной строки квеста должна быть скруглённой.");
-check(/DrawPath\(pen, path\)/.test(questRowBody),
-  "Обводка строки квеста должна рисоваться скруглённым путём, а не прямоугольником.");
+check(/new SolidBrush\(AccentColor\)[\s\S]{0,200}?FillRectangle/.test(questRowBody),
+  "Выделенная строка квеста не рисуется акцентной полосой: выделение не видно.");
+check(!/DrawPath\(pen, path\)/.test(questRowBody),
+  "Обводка контура вернулась в строку квеста: автор просил убрать рамки уровней.");
 // Выравнивание однотипных элементов одной строки — ЯКОРЕМ, а не подобранным
 // отступом: отступы разъезжаются при любой правке высоты строки.
 check(!/Margin = new Padding\(0, 1[14], /.test(questRowBody),
@@ -436,13 +456,16 @@ const nestedScrollCount = (campaignsForm.match(/AutoScroll = false/g) || []).len
 check(nestedScrollCount >= 2,
   "У вложенных контейнеров прокрутка должна быть выключена (найдено " +
   nestedScrollCount + "): две вложенные полосы спорят за колесо мыши.");
-// Горизонтальная прокрутка исключена: длинный текст ПЕРЕНОСИТСЯ по словам.
-check(!/AutoEllipsis = true/.test(worldBlock),
-  "Название мира обрезается многоточием вместо переноса.");
-check(!/AutoEllipsis = true/.test(campaignBlock),
-  "Название кампании обрезается многоточием вместо переноса.");
+// Горизонтальная прокрутка исключена: длинный текст СОКРАЩАЕТСЯ многоточием
+// внутри отведённой ему колонки (AutoEllipsis = true) и НЕ растягивает строку.
+// Прежде требовался перенос по словам, но с колонок строки не снимается ни
+// один пиксель, а перенос делал строку выше и разъезжался состав кампании.
+check(/AutoEllipsis = true/.test(worldBlock),
+  "Название мира без AutoEllipsis: длинное имя растянет строку вместо сокращения.");
+check(/AutoEllipsis = true/.test(campaignBlock),
+  "Название кампании без AutoEllipsis: длинное имя растянет строку вместо сокращения.");
 check(/AutoSize = false/.test(campaignBlock),
-  "Название кампании должно быть с AutoSize = false: иначе Dock игнорируется и перенос не работает.");
+  "Название кампании должно быть с AutoSize = false: иначе Dock игнорируется и строка растягивается по тексту.");
 // WrapContents = false обязателен: при true FlowLayoutPanel переносил бы
 // вложенные плашки вбок и создавал горизонтальную прокрутку.
 check(!/WrapContents = true/.test(campaignsForm),
@@ -473,7 +496,7 @@ check(/table\.GetControlFromPosition\(1, 0\) is not Label name/.test(campaignsFo
 // запрет (перенос мог быть осознанным), поэтому работа не блокируется — но
 // предупреждение обязательно: без него квесты кампании выглядят пропавшими, а
 // причина не видна вовсе.
-check(/ResourceParentRules\.Describe\(\s*\n?\s*campaign\.ParentWorldId, _world\?\.Definition\.Id\)/.test(campaignsForm),
+check(/ResourceParentRules\.Describe\(\s*\r?\n?\s*campaign\.ParentWorldId,\s*\r?\n?\s*_world\?\.Definition\.Id\)/.test(campaignsForm),
   "Список кампаний не проверяет чужого родителя: причина «пропавших» квестов не видна.");
 check(/ForeColor = AccentColor/.test(campaignsForm.slice(
   campaignsForm.indexOf("foreignWarning"),

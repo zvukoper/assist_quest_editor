@@ -1,12 +1,13 @@
-// Инвентарь: отдельное окно, сетка 6×3, ячейки вчетверо меньше.
+// Инвентарь: ОДНО окно игрока — сетка 6×3 слева, персонаж и репутация справа.
 //
 // Проверка ПОВЕДЕНЧЕСКАЯ в той части, где дело касается раскладки: размер ячейки
 // задают ДВА места — CSS для страницы и InventoryLayoutRules для окна WinForms.
 // Разойдись они, и содержимое либо не влезет, либо останется пустая полоса.
 // Такое расхождение видно только сравнением, а не чтением кода.
 //
-// Размер окна сверяется с КЛИЕНТСКОЙ областью, а не с шириной сетки: ширина 478
-// задана образцом автора, и сетка выровнена по центру, то есть заведомо уже окна.
+// Размер окна сверяется с КЛИЕНТСКОЙ областью, а не с шириной сетки: ширина 800
+// рассчитана на ДВЕ колонки окна игрока (инвентарь и сведения об игроке) плюс
+// зазор между ними, поэтому сетка заведомо уже окна.
 // Лишние предметы обязаны давать НОВЫЙ РЯД и вертикальную прокрутку — прежде
 // девятнадцатый предмет просто исчезал.
 import fs from "node:fs";
@@ -27,6 +28,7 @@ const inventoryHtml = read("src/AssistQuestEditor.App/Web/inventory.html");
 const simulatorHtml = read("src/AssistQuestEditor.App/Web/simulator.html");
 const simulatorJs = read("src/AssistQuestEditor.App/Web/simulator.js");
 const layout = read("src/AssistQuestEditor.Domain/InventoryLayoutRules.cs");
+const playerPanelsJs = read("src/AssistQuestEditor.App/Web/playerPanels.js");
 const inventoryForm = read("src/AssistQuestEditor.App/Host/InventoryForm.cs");
 const simulatorForm = read("src/AssistQuestEditor.App/Host/SimulatorForm.cs");
 // Базовый класс окон: именно он подключает хранилище геометрии по ключу окна.
@@ -38,6 +40,10 @@ check(/class InventoryForm : WebViewForm/.test(inventoryForm),
   "Инвентарь должен быть отдельным окном (наследником WebViewForm), а не панелью.");
 check(/inventory\.html/.test(inventoryForm),
   "Окно инвентаря должно открывать свою страницу.");
+// Заголовок окна называет ИГРОКА, а не сумку: в одном окне лежат инвентарь,
+// персонаж и репутация, и «Инвентарь» обещало бы только содержимое сумки.
+check(/base\(\s*"Игрок",\s*"inventory\.html"/.test(inventoryForm),
+  "Окно игрока обязано называться «Игрок»: оно показывает не только сумку.");
 // Размер окна берётся из правила, а не задан числом: иначе окно и сетка разойдутся.
 check(/InventoryLayoutRules\.WindowWidth/.test(inventoryForm) &&
       /InventoryLayoutRules\.WindowHeight/.test(inventoryForm),
@@ -46,14 +52,28 @@ check(/InventoryLayoutRules\.WindowWidth/.test(inventoryForm) &&
 check(/MinimumSize = new Size\([\s\S]{0,120}?InventoryLayoutRules\.WindowWidth/.test(inventoryForm),
   "Минимальный размер окна меньше сетки: часть ячеек уедет за край.");
 
-// Панель инвентаря обязана УЙТИ с карты: иначе сумка и персонаж снова начнут
-// делить место в оверлее, ради чего окно и делалось.
+// ОБЕ панели обязаны УЙТИ с карты: инвентарь, персонаж и репутация теперь живут
+// в одном отдельном окне игрока (inventory.html), а оверлей на карте спорил
+// с ней за место. Требование изменилось осознанно: раньше на карте оставалась
+// панель персонажа, но с появлением окна игрока это стало ДВУМЯ местами с одними
+// и теми же данными, которые неизбежно разошлись бы.
 check(!/id="inventoryPanel"/.test(simulatorHtml),
   "Панель инвентаря осталась на карте: она должна переехать в отдельное окно.");
-check(/id="characterPanel"/.test(simulatorHtml),
-  "Панель персонажа должна остаться на карте: она читается вместе с картой.");
+check(!/id="characterPanel"/.test(simulatorHtml),
+  "Панель персонажа осталась на карте: она тоже переехала в окно игрока.");
+check(!/id="playerOverlay"/.test(simulatorHtml),
+  "Оверлей игрока остался на карте: панели переехали в окно игрока целиком.");
 check(!/const inventoryPanel = document\.getElementById/.test(simulatorJs),
   "Симулятор всё ещё ищет панель инвентаря, которой больше нет.");
+check(/id="inventoryPanel"/.test(inventoryHtml) && /id="playerInfoPanel"/.test(inventoryHtml),
+  "Окно игрока обязано содержать обе колонки: инвентарь и сведения об игроке.");
+// Персонаж и репутация — ОБЩИЙ модуль, а не копия разметки: те же данные
+// рисуются из одного места, иначе окно игрока и карта показывали бы разное.
+check(/AssistPlayerPanels\.renderTabs/.test(inventoryHtml),
+  "Окно игрока не использует общий модуль персонажа и репутации.");
+check(/window\.AssistPlayerPanels\s*=/.test(playerPanelsJs) &&
+      /function renderTabs\(container, snapshot, activeTab, onTabChanged\)/.test(playerPanelsJs),
+  "Модуль playerPanels.js обязан быть готовым к подключению и отдавать renderTabs.");
 
 // --- 2. Клавиша I открывает и закрывает окно, и решение принимает Host ---
 
@@ -223,19 +243,25 @@ if (exe === null) {
       `Ширина сетки не сходится: ${gridWidth}.`);
     check(gridHeight === 3 * 39 + 2 * 7 + 20,
       `Высота сетки не сходится: ${gridHeight}.`);
-    // Клиент берётся из образца автора, а не «по сетке»: ширина 478 означает,
-    // что сетка выровнена по центру и по бокам есть свободное место.
-    check(clientWidth === 478 && clientHeight === 392,
-      `Клиентская область должна быть 478×392 (образец автора): ${clientWidth}×${clientHeight}.`);
+    // Клиент считается под ДВЕ колонки окна игрока: инвентарь слева,
+    // персонаж и репутация справа. 800 задано правилом раскладки явно,
+    // а не выведено из сетки: колонка сведений занимает фиксированные 290 px.
+    check(clientWidth === 800 && clientHeight === 392,
+      `Клиентская область должна быть 800×392 (инвентарь + сведения об игроке): ` +
+      `${clientWidth}×${clientHeight}.`);
     check(clientWidth >= gridWidth,
       `Клиент (${clientWidth}) уже сетки (${gridWidth}): появится горизонтальная прокрутка.`);
     check(clientHeight >= gridHeight,
       `Клиент (${clientHeight}) ниже сетки (${gridHeight}): ячейки уедут за край.`);
     check(windowWidth === clientWidth + 4 && windowHeight === clientHeight + 4 + 31,
       `Внешний размер окна не сходится с клиентом: ${windowWidth}×${windowHeight}.`);
-    check(windowWidth < gridWidth * 2,
-      `Окно (${windowWidth}) вдвое шире сетки (${gridWidth}): размер считался ` +
-      "под две панели, а в окне панель одна.");
+    // Окно ДВУХКОЛОНОЧНОЕ, поэтому ширина — сетка плюс колонка сведений и зазор,
+    // а не «сетка на всю ширину». Проверяется, что колонке сведений реально
+    // хватает места: без него сведения сжались бы в ноль, а сетка осталась бы целой.
+    const infoColumn = clientWidth - gridWidth;
+    check(infoColumn >= 290,
+      `Под сведения об игроке осталось ${infoColumn} px при клиенте ${clientWidth} ` +
+      `и сетке ${gridWidth}: колонка сведений сжата.`);
     // Минимум — ровно одна строка сетки: меньше нельзя, больше запрещало бы
     // уменьшать окно, хотя прокрутка это уже позволяет.
     check(minimum > 0 && minimum < windowHeight,
@@ -250,7 +276,7 @@ if (exe === null) {
 const browser = await chromium.launch({ headless: true });
 
 try {
-  const page = await browser.newPage({ viewport: { width: 478, height: 392 } });
+  const page = await browser.newPage({ viewport: { width: 800, height: 392 } });
   const pageErrors = [];
   page.on("pageerror", error => pageErrors.push(String(error)));
 
@@ -367,7 +393,7 @@ try {
     "При 60 предметах должна появиться вертикальная прокрутка: " +
     `${overflowReport.scrollHeight} против ${overflowReport.clientHeight}.`);
   check(overflowReport.scrollWidth <= overflowReport.clientWidth + 1,
-    `Горизонтальная прокрутка при 25 предметах: ${overflowReport.scrollWidth} > ${overflowReport.clientWidth}.`);
+    `Горизонтальная прокрутка при 60 предметах: ${overflowReport.scrollWidth} > ${overflowReport.clientWidth}.`);
 } finally {
   await browser.close();
 }
@@ -378,7 +404,8 @@ if (failures.length) {
   process.exit(1);
 }
 
-console.log("Инвентарь: OK отдельное окно, сетка 6x3, ячейка 39px, лишние ряды с прокруткой, разметка одна.");
+console.log("Инвентарь: OK окно игрока (инвентарь + персонаж/репутация), сетка 6x3, ячейка 39px, " +
+  "лишние ряды с прокруткой, разметка одна.");
 
 function findExecutable() {
   const base = path.join(root, "src", "AssistQuestEditor.App", "bin");

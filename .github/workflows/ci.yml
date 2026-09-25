@@ -211,6 +211,8 @@ jobs:
           node --check .\src\AssistQuestEditor.App\Web\dynamicEventEditor.js
           node --check .\src\AssistQuestEditor.App\Web\interface.js
           node --check .\src\AssistQuestEditor.App\Web\simulator.js
+          node --check .\src\AssistQuestEditor.App\Web\inventory.js
+          node --check .\src\AssistQuestEditor.App\Web\playerPanels.js
           node --check .\src\AssistQuestEditor.App\Web\junctions.js
           node --check .\src\AssistQuestEditor.App\Web\cityBoundaries.js
           node --check .\src\AssistQuestEditor.App\Web\web_log.js

@@ -723,10 +723,10 @@ Invoke-Check -Name 'Автосохранение прохождения' -Body {
     node ci/autosave_smoke.mjs
 }
 
-# Инвентарь отдельным окном: сетка 6×3, ячейка вчетверо меньше. Размер ячейки
-# задают ДВА места (CSS страницы и правило раскладки окна), и расхождение видно
-# только сравнением — иначе содержимое либо не влезает, либо остаётся пустая
-# полоса. Здесь же проверяется фактическая отрисовка в браузере.
+# Окно игрока: сетка инвентаря 6×3 слева, персонаж и репутация справа. Размер
+# ячейки задают ДВА места (CSS страницы и правило раскладки окна), и расхождение
+# видно только сравнением — иначе содержимое либо не влезает, либо остаётся
+# пустая полоса. Здесь же проверяется фактическая отрисовка в браузере.
 Invoke-Check -Name 'Инвентарь отдельным окном' -Body {
     node ci/inventory_smoke.mjs
 }
@@ -817,8 +817,11 @@ Invoke-Check -Name 'Синтаксис web JavaScript' -Body {
         '.\src\AssistQuestEditor.App\Web\sceneEditor.js',
         '.\src\AssistQuestEditor.App\Web\dialogueWorkspace.js',
         '.\src\AssistQuestEditor.App\Web\locationEditor.js',
+        '.\src\AssistQuestEditor.App\Web\dynamicEventEditor.js',
         '.\src\AssistQuestEditor.App\Web\interface.js',
         '.\src\AssistQuestEditor.App\Web\simulator.js',
+        '.\src\AssistQuestEditor.App\Web\inventory.js',
+        '.\src\AssistQuestEditor.App\Web\playerPanels.js',
         '.\src\AssistQuestEditor.App\Web\junctions.js',
         '.\src\AssistQuestEditor.App\Web\cityBoundaries.js',
         '.\src\AssistQuestEditor.App\Web\web_log.js'

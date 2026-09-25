@@ -75,28 +75,55 @@ const mutations = [
     why: "пауза обязана отличаться пульсацией"
   },
   {
-    name: "обводка строки квеста прямоугольная",
+    name: "выделение строки квеста без акцентной полосы",
     file: "src/AssistQuestEditor.App/Host/CampaignsForm.cs",
     probe: "storage",
-    from: "using var path = RoundedPath(bounds, ButtonRadius);",
-    to: "using var path = new System.Drawing.Drawing2D.GraphicsPath();",
-    why: "обводка выделенной строки должна быть скруглённой"
+    // Полоса рисуется ЦВЕТОМ ФОНА строки: строка остаётся подсвеченной только
+    // заливкой, а акцентная метка слева не видна — именно тот дефект, от
+    // которого автор и просил выделить строку.
+    from: "using var brush = new SolidBrush(AccentColor);",
+    to: "using var brush = new SolidBrush(RowBackColor);",
+    why: "выделенная строка квеста обязана рисоваться акцентной полосой"
   },
   {
     name: "кампании без отступа вложенности",
     file: "src/AssistQuestEditor.App/Host/CampaignsForm.cs",
     probe: "storage",
-    from: "Margin = new Padding(TreeLevelIndent, 0, 0, 8)",
-    to: "Margin = new Padding(0, 0, 0, 8)",
+    from: "Margin = new Padding(TreeLevelIndent, 0, 0, 4)",
+    to: "Margin = new Padding(0, 0, 0, 4)",
     why: "уровни дерева обязаны читаться по отступу слева"
+  },
+  {
+    name: "иконка информации кампании без её id",
+    file: "src/AssistQuestEditor.App/Host/CampaignsForm.cs",
+    probe: "storage",
+    // Открывается «текущая» кампания вместо той, у которой нажата иконка:
+    // событие перестаёт нести идентификатор.
+    from: "                new CampaignPropertiesRequestedEventArgs(campaign.Id));\n",
+    to: "                new CampaignPropertiesRequestedEventArgs(string.Empty));\n",
+    why: "иконок столько же, сколько кампаний: события обязано несть id кампании"
   },
   {
     name: "строка квеста с подобранными отступами",
     file: "src/AssistQuestEditor.App/Host/CampaignsForm.cs",
     probe: "storage",
-    from: "Anchor = AnchorStyles.Right, Margin = new Padding(0, 0, 7, 0)",
-    to: "Margin = new Padding(0, 14, 7, 0)",
+    // Вертикаль задаётся не якорем: на строке другой высоты элемент уезжает
+    // вверх/вниз — именно так «галочка уехала вверх, а кнопка „Ред.“ вниз»
+    // и выглядело. Готовый отступ добавить нельзя (Margin у метки уже задан —
+    // CS1912), поэтому снимается САМ якорь.
+    from: "            Anchor = AnchorStyles.Right,\n",
+    to: "            Anchor = AnchorStyles.None,\n",
     why: "вертикаль обязана задаваться якорем, а не отступом"
+  },
+  {
+    name: "окно игрока без второй колонки",
+    file: "src/AssistQuestEditor.App/Web/inventory.html",
+    probe: "inventory",
+    // Остаётся только колонка инвентаря: персонаж и репутация снова недостижимы,
+    // хотя окно по-прежнему открывается и сумка в нём видна.
+    from: "<section class=\"gamePanel playerInfoPanel\" id=\"playerInfoPanel\"></section>",
+    to: "<section class=\"gamePanel playerInfoPanel\" id=\"playerPanelRemoved\"></section>",
+    why: "окно игрока обязано содержать обе колонки: инвентарь и сведения"
   },
   {
     name: "выключенные кнопки без своей отрисовки",
