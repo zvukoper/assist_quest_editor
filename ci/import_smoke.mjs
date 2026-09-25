@@ -70,8 +70,14 @@ check(/QuestExtension = "\.aqquest"/.test(importService) &&
 // Path.Combine, поэтому переводы строк между ними допустимы.
 check(/Path\.GetTempPath\(\),\s*\n\s*"aq-import-"/.test(importService),
   "Импорт распаковывает сразу на место: прерванный импорт оставит битый ресурс.");
-check(/Directory\.Move\(staging, targetFolder\)/.test(importService),
-  "Импорт кампании не переносит содержимое целиком.");
+// Перенос на место — НЕ безусловный Directory.Move: временная папка лежит на
+// системном диске, а папка мира часто на другом, и переименование между томами
+// невозможно в принципе. Прежняя проверка требовала именно Directory.Move, то
+// есть закрепляла дефект: импорт падал у автора, а CI был зелёным.
+check(/StagedFolderMover\.IntoPlace\(/.test(importService),
+  "Импорт кампании должен ставить папку на место через StagedFolderMover.");
+check(!/Directory\.Move\(staging/.test(importService),
+  "Безусловный Directory.Move временной папки запрещён: он не работает между томами.");
 // Без проверки на месте появился бы ресурс, который стор не увидит.
 check(/throw new InvalidDataException\(\s*\n\s*"В архиве нет "/.test(importService),
   "Отсутствие файла ресурса в архиве не проверяется до переноса.");
@@ -105,10 +111,15 @@ check(/PostWorldSelection\(\);\s*\n\s*\}\s*\n\s*catch/.test(mainForm) ||
 
 // --- 5. Настоящий запуск ---
 const exe = findExecutable();
+
+// Рабочий каталог объявлен ЗДЕСЬ, а не внутри ветки: убирать его нужно и при
+// ошибке, и он должен быть виден коду уборки ниже.
+let workspace = null;
+
 if (exe === null) {
   failures.push("Не найден собранный AssistQuestEditor.exe для проверки импорта.");
 } else {
-  const workspace = fs.mkdtempSync(path.join(os.tmpdir(), "aq-import-"));
+  workspace = fs.mkdtempSync(path.join(os.tmpdir(), "aq-import-"));
   const worldFolder = path.join(workspace, "worlds", "TestWorld");
   const commonFolder = path.join(worldFolder, "campaigns", "common");
   const otherFolder = path.join(worldFolder, "campaigns", "story");
@@ -132,12 +143,16 @@ if (exe === null) {
   buildArchive(exe, workspace, "quest", questArchive);
 
   let probeCounter = 0;
-  const runImport = (worldId, campaignId, archive, extra = []) => {
+  const runImport = (worldId, campaignId, archive, options = {}) => {
     probeCounter += 1;
     const report = path.join(workspace, `import-${probeCounter}.txt`);
+    // Корень по умолчанию — рабочий каталог проверки. Импорт МИРА идёт в
+    // отдельный корень: у мира нет родителя, и его адрес задаёт сам каталог
+    // миров, поэтому проверка не должна зависеть от ранее созданных миров.
+    const root = options.root ?? workspace;
 
-    execFileSync(exe, ["--import-probe", workspace, worldId, campaignId, archive,
-                       "--report", report, ...extra],
+    execFileSync(exe, ["--import-probe", root, worldId, campaignId, archive,
+                       "--report", report, ...(options.extra ?? [])],
       { stdio: "pipe", timeout: 120000 });
 
     return fs.existsSync(report) ? fs.readFileSync(report, "utf8") : "";
@@ -187,6 +202,72 @@ if (exe === null) {
   check(fs.existsSync(importedQuestPath), "Первый импортированный квест исчез после повтора.");
   check(fs.existsSync(neighbour), "Повторный импорт стёр соседний квест.");
 
+  // --- Импорт МИРА ---
+  //
+  // Раньше этот путь не вызывался из командной строки вообще: «Пропустить» в
+  // окне первого мира шло в WorldStore.ImportBundledDemoWorld, и та же ветка
+  // переноса временной папки оставалась непроверяемой. Именно поэтому дефект
+  // «Move will not work across volumes» — временная папка на системном диске,
+  // каталог миров на другом — дожил до ручного запуска у автора. Здесь
+  // проверяется ФАКТИЧЕСКАЯ раскладка на диске: мир появился целиком, вместе с
+  // содержимым, а не только файлом мира.
+  const worldSource = path.join(workspace, "src-world");
+  fs.mkdirSync(path.join(worldSource, "campaigns", "story", "quests"), { recursive: true });
+  fs.mkdirSync(path.join(worldSource, "Saves"), { recursive: true });
+  fs.writeFileSync(path.join(worldSource, "world.aqworld"),
+    JSON.stringify({
+      schemaVersion: 1, format: "aqworld",
+      definition: {
+        id: "importedworld", name: "ImportedWorld", fullName: "Импортированный Мир",
+        version: 1, metadata: { createdBy: "Тест", createdOn: "2026-09-01T10:00:00+00:00" }
+      }
+    }, null, 2) + "\n", "utf8");
+  fs.writeFileSync(path.join(worldSource, "campaigns", "story", "campaign.aqcampaign"),
+    JSON.stringify({
+      schemaVersion: 1, format: "aqcampaign",
+      definition: {
+        id: "story", name: "Сюжет", version: 3, active: true,
+        quests: [], files: [], worldId: "importedworld",
+        metadata: { createdBy: "Тест", createdOn: "2026-09-01T10:00:00+00:00" }
+      }
+    }, null, 2) + "\n", "utf8");
+
+  const worldArchive = path.join(workspace, "imported-world.aqezip");
+  execFileSync(exe, ["--build-archive", worldSource, worldArchive, "world", "importedworld"],
+    { stdio: "pipe", timeout: 120000 });
+
+  // Импорт идёт в ОТДЕЛЬНЫЙ корень: у мира нет родителя, и адрес ему задаёт
+  // каталог миров. Так проверка не зависит от уже созданного TestWorld.
+  const worldRoot = path.join(workspace, "world-target");
+  const worldReport = runImport("-", "-", worldArchive, { root: worldRoot });
+  check(/Импорт выполнен/.test(worldReport), "Импорт мира не подтверждён: " + worldReport);
+
+  const importedWorldPath = /Путь: (.+)/.exec(worldReport)?.[1]?.trim() ?? "";
+  check(importedWorldPath.startsWith(path.join(worldRoot, "worlds")),
+    "Мир лёг вне каталога миров: " + importedWorldPath);
+  // Проверяется СОДЕРЖИМОЕ, а не только определитель: при переносе между томами
+  // копирование могло бы донести один файл мира и потерять остальное — и мир
+  // выглядел бы пустым, хотя «импорт прошёл».
+  check(fs.existsSync(path.join(importedWorldPath, "world.aqworld")),
+    "В импортированном мире нет world.aqworld: " + listTree(importedWorldPath).join(", "));
+  check(fs.existsSync(path.join(importedWorldPath, "campaigns", "story", "campaign.aqcampaign")),
+    "Импорт мира потерял кампанию: " + listTree(importedWorldPath).join(", "));
+  check(fs.existsSync(path.join(importedWorldPath, "Saves")),
+    "Импорт мира потерял ПУСТОЙ каталог Saves: " + listTree(importedWorldPath).join(", "));
+
+  // Промежуточная папка не должна оставаться рядом: незавершённая установка
+  // выглядела бы как второй мир.
+  check(!fs.existsSync(importedWorldPath + ".installing"),
+    "Рядом с импортированным миром осталась промежуточная папка установки.");
+
+  // Повторный импорт того же архива кладётся рядом и НЕ трогает первый.
+  const repeatWorldReport = runImport("-", "-", worldArchive, { root: worldRoot });
+  const repeatWorldPath = /Путь: (.+)/.exec(repeatWorldReport)?.[1]?.trim() ?? "";
+  check(repeatWorldPath !== importedWorldPath,
+    "Повторный импорт мира перезаписал существующий: " + repeatWorldPath);
+  check(fs.existsSync(path.join(importedWorldPath, "world.aqworld")),
+    "Первый импортированный мир исчез после повторного импорта.");
+
   // --- Вид архива проверяется ---
   let kindRejected = false;
   try {
@@ -205,6 +286,21 @@ if (exe === null) {
     parentRejected = true;
   }
   check(parentRejected, "Импорт квеста принял несуществующую кампанию.");
+}
+
+// Рабочий каталог убирается ВСЕГДА, до вердикта: он временный и на 61 запись в
+// каждой прогонке, и при провале проверки его оставляли в TEMP. Каталог
+// назывался тем же префиксом `aq-import-`, что и подготовительные папки самого
+// приложения, поэтому брошенные каталоги выглядели как «импорт не убирает за
+// собой» — на них и ловилась ложная тревога. Уборка в `finally` не даёт проверке
+// ни упасть на ошибке удаления, ни скрыть её: файл мог остаться заблокированным.
+if (workspace !== null) {
+  try {
+    fs.rmSync(workspace, { recursive: true, force: true });
+  } catch (cleanupError) {
+    console.log("Предупреждение: не удалось убрать рабочий каталог " +
+      workspace + ": " + cleanupError.message);
+  }
 }
 
 if (failures.length) {

@@ -949,15 +949,20 @@ internal static class Program
     }
 
     /// <summary>
-    /// Проба импорта кампании и квеста в родителя.
+    /// Проба импорта мира, кампании и квеста.
     ///
     /// Запускается так:
-    /// `--import-probe &lt;корень&gt; &lt;worldId&gt; &lt;campaignId|-> &lt;архив&gt; [--overwrite] [--report &lt;файл&gt;]`
+    /// `--import-probe &lt;корень&gt; &lt;worldId|-&gt; &lt;campaignId|-&gt; &lt;архив&gt; [--overwrite] [--report &lt;файл&gt;]`
     ///
-    /// <c>campaignId</c> задаётся только для квеста; «-» означает «кампания не
-    /// нужна». Вызывает те же <see cref="ResourceImportService"/>-методы, что
-    /// диалог импорта, поэтому проверяет и раскладку папок, и перенос через
-    /// временную папку.
+    /// <c>worldId = "-"</c> означает импорт МИРА: у него нет родителя, адрес
+    /// задаёт сам каталог миров. <c>campaignId</c> задаётся только для квеста;
+    /// «-» означает «кампания не нужна».
+    ///
+    /// Импорт мира добавлен в пробу именно потому, что падавший путь был
+    /// НЕПРОВЕРЯЕМЫМ: «Пропустить» в окне первого мира вызывает
+    /// <see cref="WorldStore.ImportBundledDemoWorld"/>, а из командной строки тот
+    /// же путь не вызывался ничем. Дефект — перенос временной папки между
+    /// дисками — жил поэтому до ручного запуска у автора.
     ///
     /// Код возврата: 0 — импортировано, 1 — не удалось.
     /// </summary>
@@ -982,7 +987,7 @@ internal static class Program
 
             if (positional.Length < 4)
                 throw new ArgumentException(
-                    "Ожидалось: --import-probe <корень> <worldId> <campaignId|-> <архив> " +
+                    "Ожидалось: --import-probe <корень> <worldId|-> <campaignId|-> <архив> " +
                     "[--overwrite] [--report <файл>]");
 
             var userRoot = positional[0];
@@ -991,6 +996,28 @@ internal static class Program
             var archivePath = positional[3];
             var overwrite = args.Any(arg =>
                 string.Equals(arg, "--overwrite", StringComparison.OrdinalIgnoreCase));
+
+            // Импорт МИРА: родителя нет, поэтому ни мир, ни кампания не ищутся.
+            if (worldId is "" or "-")
+            {
+                var worldsStore = new WorldStore(userRoot, "import-probe", readOnly: false);
+                var importedWorld = worldsStore.ImportWorldFromArchive(archivePath, overwrite);
+
+                var worldLines = new[]
+                {
+                    "Импорт выполнен.",
+                    "Вид: " + WorldArchiveKinds.World,
+                    "Id: " + importedWorld.Definition.Id,
+                    "Название: " + importedWorld.DisplayName,
+                    "Путь: " + importedWorld.FolderPath
+                };
+
+                foreach (var line in worldLines)
+                    Console.WriteLine(line);
+
+                WriteResourceLines(report, worldLines);
+                return 0;
+            }
 
             var worlds = new WorldStore(userRoot, "import-probe", readOnly: false);
             var world = worlds.FindWorld(worldId)
@@ -1933,6 +1960,18 @@ internal static class Program
 
         return bitmap;
     }
+
+    /// <summary>
+    /// Меряет читаемость контролов ПО СНИМКУ ЭКРАНА и сохраняет вырезку каждой
+    /// кнопки.
+    ///
+    /// Вырезки нужны, чтобы увидеть глазами то же, что измерил замер: спор «светлый
+    /// текст или тёмный» разрешается одним взглядом на увеличенный фрагмент, и
+    /// ошибку в самом замере так видно сразу.
+    ///
+    /// Координаты берутся у САМОГО контрола (`RectangleToScreen`), а не подбираются
+    /// по картинке: подбор однажды уже дал вырезку соседнего окна.
+    /// </summary>
 
     /// <summary>
     /// Меряет читаемость контролов ПО СНИМКУ ЭКРАНА и сохраняет вырезку каждой

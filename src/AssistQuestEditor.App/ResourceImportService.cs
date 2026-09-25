@@ -94,7 +94,10 @@ public static class ResourceImportService
             if (Directory.Exists(targetFolder))
                 Directory.Delete(targetFolder, recursive: true);
 
-            Directory.Move(staging, targetFolder);
+            // Тот же перенос, что и при импорте мира: переименование внутри
+            // тома и копирование между томами. Безусловный Directory.Move здесь
+            // падал так же — временная папка и папка мира часто на разных дисках.
+            StagedFolderMover.IntoPlace(staging, targetFolder, WorldPaths.CampaignFileName);
 
             var installed = ReadCampaign(targetFolder)
                 ?? throw new InvalidDataException("Кампания распакована, но не читается.");

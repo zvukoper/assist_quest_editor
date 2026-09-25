@@ -267,8 +267,11 @@ public sealed class WorldStore
                 }
             }
 
-            Directory.CreateDirectory(Path.GetDirectoryName(targetFolder)!);
-            Directory.Move(staging, targetFolder);
+            // Внутри тома папка переименовывается, между томами — копируется:
+            // временная папка лежит на системном диске, а каталог миров часто
+            // перенесён в Документы на другом диске, и прежний безусловный
+            // Directory.Move падал на такой машине ВСЕГДА.
+            StagedFolderMover.IntoPlace(staging, targetFolder, WorldPaths.WorldFileName);
         }
         catch
         {

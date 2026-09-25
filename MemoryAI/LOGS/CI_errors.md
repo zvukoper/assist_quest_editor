@@ -3,9 +3,9 @@
 Файл перезаписывается каждым прогоном `ci/run_local.ps1`.
 CI его не проверяет и не загружает: это диагностический материал для агента.
 
-- Время: 2026-09-25 16:43:31
+- Время: 2026-09-25 19:42:20
 - Ветка: main
-- Commit: 73cfda1
+- Commit: a3f6132
 - Итог: успех
 
 ## Сводка
@@ -14,19 +14,19 @@ CI его не проверяет и не загружает: это диагн�
 |---|---|---|---|
 | Установить Playwright | успех | 0 |  |
 | Установить Chromium | успех | 0 |  |
-| Playwright + Chromium smoke | успех | 0.7 |  |
-| Simulator smoke | успех | 12.5 |  |
-| Editor smoke | успех | 6.3 |  |
-| Scene smoke | успех | 2.6 |  |
-| Location smoke | успех | 6.4 |  |
+| Playwright + Chromium smoke | успех | 0.6 |  |
+| Simulator smoke | успех | 12.2 |  |
+| Editor smoke | успех | 6.5 |  |
+| Scene smoke | успех | 2.9 |  |
+| Location smoke | успех | 6 |  |
 | Dynamic Event smoke | успех | 1.2 |  |
 | Road/Map smoke | успех | 2.4 |  |
 | Campaign integrity | успех | 0.4 |  |
 | Quest graph integrity | успех | 0.4 |  |
-| Reputation flow | успех | 2.1 |  |
-| Синтаксис web JavaScript | успех | 0.5 |  |
-| Сборка проектов .NET | успех | 5.1 |  |
-| Тесты домена | успех | 3.5 |  |
+| Reputation flow | успех | 2 |  |
+| Синтаксис web JavaScript | успех | 0.6 |  |
+| Сборка проектов .NET | успех | 4.7 |  |
+| Тесты домена | успех | 3.3 |  |
 
 ## Ошибки
 

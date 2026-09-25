@@ -237,6 +237,8 @@ public static class WorldArchiveService
     /// код, зная, что именно он перезаписывает. Молчаливое удаление содержимого
     /// было бы худшим видом «помощи».
     /// </summary>
+    /// <param name="archivePath">Архив `.aqezip`.</param>
+    /// <param name="targetFolder">Папка, куда распаковать содержимое.</param>
     public static void Unpack(string archivePath, string targetFolder)
     {
         using var stream = new FileStream(archivePath, FileMode.Open, FileAccess.Read, FileShare.Read);
@@ -245,11 +247,36 @@ public static class WorldArchiveService
         Directory.CreateDirectory(targetFolder);
         var root = Path.GetFullPath(targetFolder);
         var written = 0;
+        var folders = 0;
 
         foreach (var entry in archive.Entries)
         {
+            // Запись каталога — это имя с завершающим слэшем и нулевой длиной.
+            // Такие записи упаковщик пишет СПЕЦИАЛЬНО, потому что ZIP хранит
+            // только файлы (см. Pack). Пропускать их значило бы терять пустые
+            // папки: мир, выгруженный и импортированный обратно, терял `Saves` —
+            // а туда пишет автосохранение, и папка нужна до первой остановки.
             if (entry.FullName.EndsWith('/'))
+            {
+                var folderRelative = entry.FullName.Replace('\\', '/').TrimEnd('/');
+                if (folderRelative.Length == 0)
+                    continue;
+
+                if (!WorldArchiveRules.IsSafeEntryPath(folderRelative))
+                    throw new InvalidDataException(
+                        "Архив содержит небезопасный путь каталога: " + entry.FullName);
+
+                var folderTarget = Path.GetFullPath(Path.Combine(root, folderRelative));
+                if (!folderTarget.StartsWith(root + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))
+                {
+                    throw new InvalidDataException(
+                        "Путь каталога выходит за пределы папки назначения: " + entry.FullName);
+                }
+
+                Directory.CreateDirectory(folderTarget);
+                folders += 1;
                 continue;
+            }
 
             var relative = entry.FullName.Replace('\\', '/');
             if (!WorldArchiveRules.IsSafeEntryPath(relative))
@@ -275,6 +302,6 @@ public static class WorldArchiveService
         }
 
         AppLogger.Info("WorldArchiveService: архив распакован.",
-            $"archive={archivePath}; target={targetFolder}; files={written}");
+            $"archive={archivePath}; target={targetFolder}; files={written}; folders={folders}");
     }
 }
