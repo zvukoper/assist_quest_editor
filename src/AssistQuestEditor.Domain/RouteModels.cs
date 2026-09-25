@@ -188,9 +188,9 @@ public static class RouteMovementEngine
                 true);
         }
 
-        var remaining = speed / 3.6d * safeElapsed;
+        var remainingSeconds = safeElapsed;
 
-        while (remaining > 0.000001d && legIndex < plan.Legs.Count)
+        while (remainingSeconds > 0.000001d && legIndex < plan.Legs.Count)
         {
             var leg = plan.Legs[legIndex];
             var points = leg.Polyline;
@@ -225,9 +225,11 @@ public static class RouteMovementEngine
             var directionZ = dz / segmentLength;
             heading = HeadingDegrees(directionX, directionZ);
 
-            if (remaining < available - 0.000001d)
+            var distanceForThisSpeed = speed / 3.6d * remainingSeconds;
+            if (distanceForThisSpeed < available - 0.000001d)
             {
-                progress += remaining;
+                progress += distanceForThisSpeed;
+                remainingSeconds = 0d;
                 var t = progress / segmentLength;
 
                 position = new WorldCoordinate(
@@ -253,7 +255,7 @@ public static class RouteMovementEngine
             }
 
             position = new WorldCoordinate(b.X, currentPosition.Y, b.Z);
-            remaining -= available;
+            remainingSeconds -= available / Math.Max(speed, 0.000001d) * 3.6d;
             segmentIndex++;
             progress = 0d;
 
