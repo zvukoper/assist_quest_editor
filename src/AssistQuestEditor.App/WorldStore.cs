@@ -286,23 +286,79 @@ public sealed class WorldStore
     }
 
     /// <summary>
-    /// Записывает автосохранение демо-мира из поставляемого архива.
+    /// Импортирует демо-мир тем же <see cref="ImportWorldFromArchive"/> путём,
+    /// что и любой пользовательский архив.
     ///
-    /// Используется кнопкой «Пропустить»: она импортирует <c>data/DemoWorld.aqezip</c>
-    /// — то есть ровно тот же архив, что и любой другой автор. Отдельного
-    /// «сгенерировать демо-мир» пути нет намеренно: он неизбежно разошёлся бы с
-    /// импортом, и «Пропустить» перестало бы проверять настоящую дорогу.
+    /// Старый/повреждённый bundled archive не должен превращаться в пустой или
+    /// невалидный первый мир после обновления приложения. Если архив не содержит
+    /// актуальный Training/Dispatcher набор, он восстанавливается во временный
+    /// файл canonical-упаковщиком DemoWorldSeeder, затем импортируется тем же
+    /// обычным кодом архива.
     /// </summary>
     public WorldRecord ImportBundledDemoWorld(bool overwrite = false)
     {
         var archive = DemoWorldSeeder.BundledArchivePath;
-        if (!File.Exists(archive))
-        {
-            throw new FileNotFoundException(
-                "Поставляемый демо-мир не найден. Ожидался файл: " + archive, archive);
-        }
 
-        return ImportWorldFromArchive(archive, overwrite);
+        if (File.Exists(archive) && IsCurrentBundledDemoWorld(archive))
+            return ImportWorldFromArchive(archive, overwrite);
+
+        var tempArchive = Path.Combine(
+            Path.GetTempPath(),
+            "aq-demo-import-" + Guid.NewGuid().ToString("N") + WorldArchiveRules.Extension);
+
+        try
+        {
+            DemoWorldSeeder.BuildArchive(
+                tempArchive,
+                DemoWorldSeeder.DemoAuthor,
+                DemoWorldSeeder.DemoMoment);
+
+            return ImportWorldFromArchive(tempArchive, overwrite);
+        }
+        finally
+        {
+            try
+            {
+                if (File.Exists(tempArchive))
+                    File.Delete(tempArchive);
+            }
+            catch (Exception ex)
+            {
+                AppLogger.Warn(
+                    "WorldStore: не удалось удалить временный демо-архив.",
+                    tempArchive + "; " + ex.Message);
+            }
+        }
+    }
+
+    private static bool IsCurrentBundledDemoWorld(string archivePath)
+    {
+        try
+        {
+            var inspection = WorldArchiveService.Inspect(archivePath);
+            var expected = new[]
+            {
+                "world.aqworld",
+                "campaigns/training/campaign.aqcampaign",
+                "campaigns/training/quests/test_dynamic_cache.aqquest",
+                "locations/training_dynamic_cache_location.aqlocation",
+                "events/test_dynamic_cache.aqevent"
+            };
+
+            return inspection.Manifest.Id.Equals(
+                       DemoWorldSeeder.WorldId,
+                       StringComparison.OrdinalIgnoreCase) &&
+                   expected.All(path =>
+                       inspection.Entries.Any(entry =>
+                           entry.Path.Equals(path, StringComparison.OrdinalIgnoreCase)));
+        }
+        catch (Exception ex)
+        {
+            AppLogger.Warn(
+                "WorldStore: bundled DemoWorld нельзя проверить, он будет пересобран.",
+                archivePath + "; " + ex.Message);
+            return false;
+        }
     }
 
     public void SaveWorld(WorldRecord record)
