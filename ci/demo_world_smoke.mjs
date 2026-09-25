@@ -95,9 +95,9 @@ if (extracted) {
 
   // --- Дерево ресурсов ---
   check(exists("world.aqworld"), "В архиве нет файла мира world.aqworld.");
-  check(exists("campaigns/obuchenie/campaign.aqcampaign"),
+  check(exists("campaigns/training/campaign.aqcampaign"),
     "В архиве нет кампании «Обучение».");
-  check(exists("campaigns/obuchenie/quests/test_dynamic_cache.aqquest"),
+  check(exists("campaigns/training/quests/test_dynamic_cache.aqquest"),
     "В архиве нет квеста «Тестовый динамический тайник».");
   check(exists("locations/training_dynamic_cache_location.aqlocation"),
     "В архиве нет Dynamic Location для тайника.");
@@ -126,7 +126,7 @@ if (extracted) {
     }
   }
 
-  const campaignText = read("campaigns/obuchenie/campaign.aqcampaign");
+  const campaignText = read("campaigns/training/campaign.aqcampaign");
   if (campaignText) {
     try {
       const doc = JSON.parse(campaignText);
@@ -192,7 +192,7 @@ if (extracted) {
     }
   }
 
-  const questText = read("campaigns/obuchenie/quests/test_dynamic_cache.aqquest");
+  const questText = read("campaigns/training/quests/test_dynamic_cache.aqquest");
   if (questText) {
     try {
       const doc = JSON.parse(questText);
