@@ -82,7 +82,7 @@ public sealed class RoadRoutePlanner
         if (route.Waypoints.Count == 0)
             return RoutePlan.Empty;
 
-        if (IsEmpty)
+        if (IsEmpty && route.Waypoints.All(item => !item.IsOffRoad))
         {
             return new RoutePlan(
                 Array.Empty<RouteLeg>(),
@@ -99,14 +99,16 @@ public sealed class RoadRoutePlanner
         if (playerPosition is WorldCoordinate currentPlayer)
         {
             var first = route.Waypoints[0];
-            var firstResult = BuildLeg(
-                -1,
-                0,
-                "текущей позиции игрока",
-                "точки 1",
-                currentPlayer,
-                first.Position,
-                includeExactStart: true);
+            var firstResult = first.IsOffRoad
+                ? BuildDirectLeg(-1, 0, currentPlayer, first.Position)
+                : BuildLeg(
+                    -1,
+                    0,
+                    "текущей позиции игрока",
+                    "точки 1",
+                    currentPlayer,
+                    first.Position,
+                    includeExactStart: true);
 
             if (firstResult.Leg is not null)
                 legs.Add(firstResult.Leg);
@@ -123,14 +125,17 @@ public sealed class RoadRoutePlanner
         {
             var start = route.Waypoints[index];
             var end = route.Waypoints[index + 1];
-            var result = BuildLeg(
-                index,
-                index + 1,
-                "точки " + (index + 1),
-                "точки " + (index + 2),
-                start.Position,
-                end.Position,
-                includeExactStart: false);
+            var result = end.IsOffRoad
+                ? BuildDirectLeg(index, index + 1, start.Position, end.Position)
+                : BuildLeg(
+                    index,
+                    index + 1,
+                    "точки " + (index + 1),
+                    "точки " + (index + 2),
+                    start.Position,
+                    end.Position,
+                    includeExactStart: false,
+                    allowStartOffRoad: start.IsOffRoad);
 
             if (result.Leg is not null)
                 legs.Add(result.Leg);
@@ -404,7 +409,8 @@ public sealed class RoadRoutePlanner
         string endLabel,
         WorldCoordinate startPosition,
         WorldCoordinate endPosition,
-        bool includeExactStart)
+        bool includeExactStart,
+        bool allowStartOffRoad = false)
     {
         var start = ProjectToRoad(startPosition);
         if (start is null)
@@ -415,7 +421,7 @@ public sealed class RoadRoutePlanner
                 "для начальной позиции не найдена дорожная геометрия.");
         }
 
-        if (start.Value.DistanceMeters > MaxRouteSnapDistanceMeters)
+        if (start.Value.DistanceMeters > MaxRouteSnapDistanceMeters && !allowStartOffRoad)
         {
             return (
                 null,
@@ -520,7 +526,7 @@ public sealed class RoadRoutePlanner
         path.Reverse();
 
         var polyline = new List<WorldCoordinate>();
-        if (includeExactStart)
+        if (includeExactStart || allowStartOffRoad)
             AddUnique(polyline, startPosition);
 
         AddUnique(polyline, start.Value.Position);
@@ -558,6 +564,19 @@ public sealed class RoadRoutePlanner
                 polyline,
                 length),
             null);
+    }
+
+    private static RouteLeg BuildDirectLeg(
+        int startWaypointIndex,
+        int endWaypointIndex,
+        WorldCoordinate start,
+        WorldCoordinate end)
+    {
+        return new RouteLeg(
+            startWaypointIndex,
+            endWaypointIndex,
+            new[] { start, end },
+            Distance(start, end));
     }
 
     private IEnumerable<Edge> NeighborsWithVirtuals(

@@ -274,9 +274,9 @@ public static class SimulationSaveCodec
         if (header.FormatVersion >= 2)
             WriteDynamicEvents(writer, strings, state.DynamicEvents);
         if (header.FormatVersion >= 3)
-            WriteRoute(writer, strings, state.Route);
+            WriteRoute(writer, strings, state.Route, header.FormatVersion >= 5);
         if (header.FormatVersion >= 4)
-            WriteRouteRuntime(writer, state.RouteRuntime);
+            WriteRouteRuntime(writer, state.RouteRuntime, header.FormatVersion);
     }
 
     private static SimulationSaveState ReadInner(BinaryReader reader, int formatVersion)
@@ -351,10 +351,10 @@ public static class SimulationSaveCodec
             ? ReadDynamicEvents(reader, strings)
             : DynamicEventRuntimeState.Empty;
         var route = formatVersion >= 3
-            ? ReadRoute(reader, strings)
+            ? ReadRoute(reader, strings, formatVersion >= 5)
             : RouteState.Empty;
         var routeRuntime = formatVersion >= 4
-            ? ReadRouteRuntime(reader)
+            ? ReadRouteRuntime(reader, formatVersion >= 5)
             : RouteRuntimeState.Empty;
 
         return new SimulationSaveState(
@@ -368,7 +368,10 @@ public static class SimulationSaveCodec
         };
     }
 
-    private static void WriteRouteRuntime(BinaryWriter writer, RouteRuntimeState runtime)
+    private static void WriteRouteRuntime(
+        BinaryWriter writer,
+        RouteRuntimeState runtime,
+        int formatVersion)
     {
         var cursor = runtime.Cursor;
         writer.Write(cursor.Initialized);
@@ -380,9 +383,20 @@ public static class SimulationSaveCodec
         if (cursor.StoppedAtWaypointIndex.HasValue)
             writer.Write(cursor.StoppedAtWaypointIndex.Value);
         WriteDouble(writer, cursor.LastHeadingDegrees);
+
+        if (formatVersion >= 5)
+        {
+            writer.Write(runtime.CurrentTargetWaypointIndex.HasValue);
+            if (runtime.CurrentTargetWaypointIndex.HasValue)
+                writer.Write(runtime.CurrentTargetWaypointIndex.Value);
+            WriteDouble(writer, runtime.TravelRealSeconds);
+            WriteDouble(writer, runtime.TravelGameSeconds);
+        }
     }
 
-    private static RouteRuntimeState ReadRouteRuntime(BinaryReader reader)
+    private static RouteRuntimeState ReadRouteRuntime(
+        BinaryReader reader,
+        bool hasExtendedRuntime)
     {
         var cursor = new RouteCursor(
             reader.ReadBoolean(),
@@ -393,10 +407,23 @@ public static class SimulationSaveCodec
             reader.ReadBoolean() ? reader.ReadInt32() : null,
             ReadDouble(reader));
 
-        return new RouteRuntimeState(cursor);
+        if (!hasExtendedRuntime)
+            return new RouteRuntimeState(cursor);
+
+        var target = reader.ReadBoolean() ? reader.ReadInt32() : null;
+
+        return new RouteRuntimeState(
+            cursor,
+            target,
+            ReadDouble(reader),
+            ReadDouble(reader));
     }
 
-    private static void WriteRoute(BinaryWriter writer, StringTable strings, RouteState route)
+    private static void WriteRoute(
+        BinaryWriter writer,
+        StringTable strings,
+        RouteState route,
+        bool includeOffRoad)
     {
         route = (route ?? RouteState.Empty).Normalize();
         WriteDouble(writer, route.DefaultSpeedKmh);
@@ -409,10 +436,15 @@ public static class SimulationSaveCodec
             WriteDouble(writer, waypoint.Position.Y);
             WriteDouble(writer, waypoint.Position.Z);
             WriteDouble(writer, waypoint.SpeedKmh);
+            if (includeOffRoad)
+                writer.Write(waypoint.IsOffRoad);
         }
     }
 
-    private static RouteState ReadRoute(BinaryReader reader, StringTable strings)
+    private static RouteState ReadRoute(
+        BinaryReader reader,
+        StringTable strings,
+        bool hasOffRoad)
     {
         var defaultSpeed = ReadDouble(reader);
         var count = reader.ReadInt32();
@@ -428,7 +460,8 @@ public static class SimulationSaveCodec
                 ReadDouble(reader),
                 ReadDouble(reader));
             var speed = ReadDouble(reader);
-            waypoints.Add(new RouteWaypoint(id, position, speed));
+            var isOffRoad = hasOffRoad && reader.ReadBoolean();
+            waypoints.Add(new RouteWaypoint(id, position, speed, isOffRoad));
         }
 
         return new RouteState(defaultSpeed, waypoints).Normalize();
