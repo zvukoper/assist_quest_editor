@@ -415,6 +415,10 @@ public sealed class SimulatorForm : WebViewForm
                     SelectPoint(root);
                     break;
 
+                case "activate_dynamic_event":
+                    ActivateDynamicEvent(root);
+                    break;
+
                 case "clear_selection":
                     _hub.Get<WorldSelectionState>("world-selection").Set(
                         new WorldSelectionState(null, "Карта симулятора"),
@@ -927,6 +931,20 @@ public sealed class SimulatorForm : WebViewForm
     /// Единая точка смены выделенного квеста. Вызывается и картой, и окном
     /// кампаний, поэтому обе стороны и левый сайдбар всегда согласованы.
     /// </summary>
+    private void ActivateDynamicEvent(JsonElement root)
+    {
+        var instanceId = Required(root, "instanceId");
+        if (!_dynamicEventDispatcher.Activate(instanceId))
+        {
+            PostSaveError("Не удалось активировать динамическое событие: " + instanceId);
+            return;
+        }
+
+        AppLogger.Info(
+            "SimulatorForm: динамическое событие активировано.",
+            $"instanceId={instanceId}");
+    }
+
     private void SelectQuest(string campaignId, string questId)
     {
         if (string.IsNullOrWhiteSpace(questId))
