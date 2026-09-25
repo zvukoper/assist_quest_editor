@@ -6,7 +6,7 @@
 // монтируется настоящий main.js и проверяется реальная разметка.
 import fs from "node:fs";
 import path from "node:path";
-import { chromium } from "playwright";
+import { openBrowser, closeBrowser } from "./lib/browser.mjs";
 
 const root = process.cwd();
 const read = rel => fs.readFileSync(path.join(root, ...rel.split("/")), "utf8");
@@ -109,7 +109,7 @@ for (const action of ["world_info", "world_edit", "campaign_info", "campaign_edi
 }
 
 // --- 5. Поведение реального main.js ---
-const browser = await chromium.launch({ headless: true });
+const { browser } = await openBrowser();
 
 try {
   const page = await browser.newPage({ viewport: { width: 1400, height: 900 } });
@@ -355,7 +355,7 @@ try {
 
   check(pageErrors.length === 0, "Ошибки страницы: " + pageErrors.join(" | "));
 } finally {
-  await browser.close();
+  await closeBrowser(browser);
 }
 
 if (failures.length) {

@@ -1,6 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
-import { chromium } from "playwright";
+import { openBrowser, closeBrowser } from "./lib/browser.mjs";
 
 // Проверка окна рисования черт городов и связки критериев с панелью локаций.
 //
@@ -271,7 +271,7 @@ if (!/\.filter\(point => point\.isCity\)/.test(locationEditorJs))
 
 // --- Динамическая часть ---
 
-const browser = await chromium.launch({ headless: true });
+const { browser } = await openBrowser();
 try {
   const page = await browser.newPage({ viewport: { width: 1200, height: 800 } });
   const errors = [];
@@ -440,5 +440,5 @@ try {
   console.log("Окно черт городов: OK (приём данных, контур, замыкание, сохранение, отказ)");
   console.log("Критерии города: OK (цепочка имён, подсказки городов, проверка параметра)");
 } finally {
-  await browser.close();
+  await closeBrowser(browser);
 }

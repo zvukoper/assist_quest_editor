@@ -11,7 +11,7 @@
 // из трёх частей не даёт ни ошибки компиляции, ни падения других проверок.
 import fs from "node:fs";
 import path from "node:path";
-import { chromium } from "playwright";
+import { openBrowser, closeBrowser } from "./lib/browser.mjs";
 
 const root = process.cwd();
 const failures = [];
@@ -77,7 +77,7 @@ check(/getElementById\("reloadCatalog"\)/.test(simulatorJs) &&
 // Поведенческая часть: клик по кнопке в реальном simulator.js должен дать
 // сообщение Host'у. Статическая проверка выше не поймает, например, ранний
 // return или удаление обработчика.
-const browser = await chromium.launch({ headless: true });
+const { browser } = await openBrowser();
 
 try {
   const page = await browser.newPage();
@@ -168,7 +168,7 @@ try {
 
   check(pageErrors.length === 0, "Ошибки страницы: " + pageErrors.join("; "));
 } finally {
-  await browser.close();
+  await closeBrowser(browser);
 }
 
 if (failures.length) {

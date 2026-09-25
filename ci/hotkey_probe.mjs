@@ -1,6 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
-import { chromium } from "playwright";
+import { openBrowser, closeBrowser } from "./lib/browser.mjs";
 
 const root = process.cwd();
 const simulatorJs = fs.readFileSync(
@@ -8,7 +8,7 @@ const simulatorJs = fs.readFileSync(
   "utf8"
 );
 
-const browser = await chromium.launch({ headless: true });
+const { browser } = await openBrowser();
 const failures = [];
 let page;
 
@@ -140,7 +140,7 @@ try {
 
   if (pageErrors.length) failures.push("pageerror: " + pageErrors.join(" | "));
 } finally {
-  await browser.close();
+  await closeBrowser(browser);
 }
 
 if (failures.length) {

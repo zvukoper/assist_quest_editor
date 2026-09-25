@@ -1,6 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
-import { chromium } from "playwright";
+import { openBrowser, closeBrowser } from "./lib/browser.mjs";
 
 // Проверка концепции левого сайдбара: он выбирает содержимое рабочей области
 // ТОГО ЖЕ окна, а не открывает второе окно (как File Editor в WolvenKit).
@@ -13,7 +13,7 @@ const dialogueJs = read("src/AssistQuestEditor.App/Web/dialogueWorkspace.js");
 const locationJs = read("src/AssistQuestEditor.App/Web/locationEditor.js");
 const theme = read("src/AssistQuestEditor.App/Web/theme.css");
 
-const browser = await chromium.launch({ headless: true });
+const { browser } = await openBrowser();
 try {
   const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
   const errors = [];
@@ -67,5 +67,5 @@ try {
   if (errors.length) throw new Error("pageerror: " + errors.join(" | "));
   console.log("Sidebar pane switch smoke: OK");
 } finally {
-  await browser.close();
+  await closeBrowser(browser);
 }

@@ -1,6 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
-import { chromium } from "playwright";
+import { openBrowser, closeBrowser } from "./lib/browser.mjs";
 
 // Проверка маркера игрока на карте Simulator:
 //   1. красная обводка + чёрная обводка снаружи неё;
@@ -20,7 +20,7 @@ const simulatorJs = fs.readFileSync(
   "utf8"
 );
 
-const browser = await chromium.launch({ headless: true });
+const { browser } = await openBrowser();
 try {
   const page = await browser.newPage({ viewport: { width: 1200, height: 800 } });
   const pageErrors = [];
@@ -328,7 +328,7 @@ try {
 
   check(pageErrors.length === 0, "pageerror при отрисовке маркера: " + pageErrors.join(" | "));
 } finally {
-  await browser.close();
+  await closeBrowser(browser);
 }
 
 if (failures.length) {

@@ -10,7 +10,7 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { chromium } from "playwright";
+import { openBrowser, closeBrowser } from "./lib/browser.mjs";
 
 const root = process.cwd();
 const failures = [];
@@ -70,7 +70,7 @@ try {
     telemetry: {}, environment: {}, system: { runtimeRunning: false, runtimeMode: "Simulator", lastEvent: "", lastTransition: "" }
   };
 
-  const browser = await chromium.launch({ headless: true });
+  const { browser } = await openBrowser();
   try {
     const page = await browser.newPage();
     const failedRequests = [], pageErrors = [];
@@ -136,7 +136,7 @@ try {
       forms.rootRelative > 0,
       `форма ../data/ должна загружаться, получено naturalWidth=${forms.rootRelative}`);
   } finally {
-    await browser.close();
+    await closeBrowser(browser);
   }
 } finally {
   fs.rmSync(tmp, { recursive: true, force: true });

@@ -1,6 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
-import { chromium } from "playwright";
+import { openBrowser, closeBrowser } from "./lib/browser.mjs";
 
 const root = process.cwd();
 const editorSource = fs.readFileSync(path.join(root, "src", "AssistQuestEditor.App", "Web", "editor.js"), "utf8");
@@ -8,7 +8,7 @@ const sceneSource = fs.readFileSync(path.join(root, "src", "AssistQuestEditor.Ap
 const dialogueSource = fs.readFileSync(path.join(root, "src", "AssistQuestEditor.App", "Web", "dialogueWorkspace.js"), "utf8");
 const theme = fs.readFileSync(path.join(root, "src", "AssistQuestEditor.App", "Web", "theme.css"), "utf8");
 
-const browser = await chromium.launch({ headless: true });
+const { browser } = await openBrowser();
 try {
   const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
   const errors = [];
@@ -128,5 +128,5 @@ try {
 
   console.log("Resource navigation smoke: OK");
 } finally {
-  await browser.close();
+  await closeBrowser(browser);
 }

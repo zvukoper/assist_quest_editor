@@ -11,7 +11,7 @@
 // обводки, и появление нового прямого вызова strokeText без помощника.
 import fs from "node:fs";
 import path from "node:path";
-import { chromium } from "playwright";
+import { openBrowser, closeBrowser } from "./lib/browser.mjs";
 
 const root = process.cwd();
 const failures = [];
@@ -49,7 +49,7 @@ check(
   "strokeTextOutline обязан задавать lineJoin=\"round\" и miterLimit=2."
 );
 
-const browser = await chromium.launch({ headless: true });
+const { browser } = await openBrowser();
 
 try {
   const page = await browser.newPage({ viewport: { width: 900, height: 700 } });
@@ -245,7 +245,7 @@ try {
     );
   }
 } finally {
-  await browser.close();
+  await closeBrowser(browser);
 }
 
 if (failures.length) {

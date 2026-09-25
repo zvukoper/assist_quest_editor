@@ -1,6 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
-import { chromium } from "playwright";
+import { openBrowser, closeBrowser } from "./lib/browser.mjs";
 
 // Проверка дорожного слоя на карте Симулятора и того, что он НЕ едет в снимке.
 //
@@ -324,7 +324,7 @@ if (!/drawRoads\s*\(/.test(simulatorJs))
 
 // --- Динамическая часть: слой реально рисуется на canvas ---
 
-const browser = await chromium.launch({ headless: true });
+const { browser } = await openBrowser();
 try {
   const page = await browser.newPage({ viewport: { width: 1200, height: 800 } });
   const errors = [];
@@ -514,5 +514,5 @@ try {
 
   console.log("Дорожный слой: OK, " + roadPixels + " пикселей дорог.");
 } finally {
-  await browser.close();
+  await closeBrowser(browser);
 }

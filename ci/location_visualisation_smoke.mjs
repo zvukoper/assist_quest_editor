@@ -1,6 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
-import { chromium } from "playwright";
+import { openBrowser, closeBrowser } from "./lib/browser.mjs";
 
 // Проверка режима визуализации Location на основной карте Симулятора.
 //
@@ -20,7 +20,7 @@ const root = process.cwd();
 const read = rel => fs.readFileSync(path.join(root, ...rel.split("/")), "utf8");
 const simulatorJs = read("src/AssistQuestEditor.App/Web/simulator.js");
 
-const browser = await chromium.launch({ headless: true });
+const { browser } = await openBrowser();
 try {
   const page = await browser.newPage({ viewport: { width: 1200, height: 800 } });
   const errors = [];
@@ -248,5 +248,5 @@ try {
 
   console.log("Location visualisation smoke: OK");
 } finally {
-  await browser.close();
+  await closeBrowser(browser);
 }

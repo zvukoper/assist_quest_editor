@@ -11,7 +11,7 @@
 // и смена прозрачности фона — то есть обе половины бага.
 import fs from "node:fs";
 import path from "node:path";
-import { chromium } from "playwright";
+import { openBrowser, closeBrowser } from "./lib/browser.mjs";
 
 const root = process.cwd();
 const failures = [];
@@ -25,7 +25,7 @@ const simulatorJs = fs.readFileSync(
   "utf8"
 );
 
-const browser = await chromium.launch({ headless: true });
+const { browser } = await openBrowser();
 
 try {
   const page = await browser.newPage({ viewport: { width: 1000, height: 800 } });
@@ -285,7 +285,7 @@ try {
     );
   }
 } finally {
-  await browser.close();
+  await closeBrowser(browser);
 }
 
 if (failures.length) {

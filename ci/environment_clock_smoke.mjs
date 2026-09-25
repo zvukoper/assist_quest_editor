@@ -11,7 +11,7 @@
 //   - кнопки кампании шлют правильные действия с валидными геокоординатами.
 import fs from "node:fs";
 import path from "node:path";
-import { chromium } from "playwright";
+import { openBrowser, closeBrowser } from "./lib/browser.mjs";
 
 const root = process.cwd();
 const failures = [];
@@ -458,7 +458,7 @@ check(/max-width:\d+px/.test(autoSaveBlockStyle),
 // Ширина берётся РЕАЛЬНАЯ, а не «сколько получится»: окно Симулятора открывается
 // в 1440 px и его нельзя сузить меньше 900. Проверка на 500 px мерила бы не
 // интерфейс, а собственную фикстуру, и «скомканность» была бы артефактом замера.
-const alignmentBrowser = await chromium.launch({ headless: true });
+const { browser: alignmentBrowser } = await openBrowser();
 
 try {
   const alignPage = await alignmentBrowser.newPage({ viewport: { width: 1440, height: 260 } });
@@ -563,7 +563,7 @@ try {
   check(align.overlap.length === 0,
     "Элементы шапки перекрываются: " + align.overlap.join(", "));
 } finally {
-  await alignmentBrowser.close();
+  await closeBrowser(alignmentBrowser);
 }
 
 
@@ -662,7 +662,7 @@ check(/const size = 22;/.test(simulatorJs) &&
   "SVG индикатора должен рисоваться в 22px: прежние 42px — это размер кнопки.");
 
 // 5. Поведенческая часть: реальный simulator.js.
-const browser = await chromium.launch({ headless: true });
+const { browser } = await openBrowser();
 
 try {
   const page = await browser.newPage({ viewport: { width: 1200, height: 820 } });
@@ -1070,7 +1070,7 @@ try {
       (labels.orange.minY - labels.white.maxY) + "px");
   }
 } finally {
-  await browser.close();
+  await closeBrowser(browser);
 }
 
 if (failures.length) {

@@ -12,7 +12,8 @@
     Проверка требует опубликованного exe: single instance — поведение процесса,
     а не домена, поэтому Playwright/юнит-тестом его не проверить.
 
-    Запускается как отдельная проверка в ci\run_local.ps1 при наличии publish.
+    Запускается как отдельная проверка набора «acceptance» в ci\run_local.ps1 (там
+публикация входит всегда) и в наборах fast/nightly при -IncludePublish.
 #>
 param(
     [string]$ExePath,

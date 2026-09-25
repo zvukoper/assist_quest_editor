@@ -1,0 +1,224 @@
+{
+  "comment": "Единственный источник состава групп smoke-проверок. Правя здесь, не забудьте, что число проверок в ci/run_local.ps1 считается ПО ЭТИМ группам и по спискам suites ниже.",
+  "groups": {
+    "simulator": {
+      "title": "Simulator smoke",
+      "browser": true,
+      "scripts": [
+        "ci/selection_context_smoke.mjs",
+        "ci/hotkey_probe.mjs",
+        "ci/catalog_reload_smoke.mjs",
+        "ci/quest_plate_smoke.mjs",
+        "ci/text_outline_smoke.mjs",
+        "ci/simulation_saves_smoke.mjs",
+        "ci/environment_clock_smoke.mjs",
+        "ci/player_marker_smoke.mjs",
+        "ci/world_selector_smoke.mjs"
+      ]
+    },
+    "editor": {
+      "title": "Editor smoke",
+      "browser": true,
+      "scripts": [
+        "ci/quest_graph_smoke.mjs",
+        "ci/graph_layout_smoke.mjs",
+        "ci/sidebar_pane_smoke.mjs",
+        "ci/resource_navigation_smoke.mjs",
+        "ci/dialogue_workspace_smoke.mjs",
+        "ci/pan_smoke.mjs"
+      ]
+    },
+    "scene": {
+      "title": "Scene smoke",
+      "browser": true,
+      "scripts": [
+        "ci/scene_graph_smoke.mjs",
+        "ci/scene_interface_smoke.mjs"
+      ]
+    },
+    "location": {
+      "title": "Location smoke",
+      "browser": true,
+      "scripts": [
+        "ci/location_editor_smoke.mjs"
+      ]
+    },
+    "dynamicEvent": {
+      "title": "Dynamic Event smoke",
+      "browser": true,
+      "scripts": [
+        "ci/dynamic_event_editor_smoke.mjs"
+      ]
+    },
+    "map": {
+      "title": "Road/Map smoke",
+      "browser": true,
+      "scripts": [
+        "ci/road_layer_smoke.mjs",
+        "ci/city_boundary_smoke.mjs"
+      ]
+    },
+    "campaignIntegrity": {
+      "title": "Campaign integrity",
+      "browser": false,
+      "scripts": [
+        "ci/check_campaigns.mjs"
+      ]
+    },
+    "questIntegrity": {
+      "title": "Quest graph integrity",
+      "browser": false,
+      "scripts": [
+        "ci/check_quest_graph.mjs"
+      ]
+    },
+    "reputation": {
+      "title": "Reputation flow",
+      "browser": true,
+      "scripts": [
+        "ci/reputation_flow.mjs",
+        "ci/reputation_avatar_smoke.mjs"
+      ]
+    },
+    "archive": {
+      "title": "Архивы и демо-мир",
+      "browser": false,
+      "scripts": [
+        "ci/archive_smoke.mjs",
+        "ci/demo_world_smoke.mjs"
+      ]
+    },
+    "import": {
+      "title": "Импорт кампании и квеста",
+      "browser": false,
+      "scripts": [
+        "ci/import_smoke.mjs"
+      ]
+    },
+    "export": {
+      "title": "Экспорт ресурсов",
+      "browser": false,
+      "scripts": [
+        "ci/export_smoke.mjs"
+      ]
+    },
+    "worldStorage": {
+      "title": "Хранение мира и папки",
+      "browser": false,
+      "scripts": [
+        "ci/world_storage_smoke.mjs"
+      ]
+    },
+    "resourceProperties": {
+      "title": "Свойства мира и кампании",
+      "browser": false,
+      "scripts": [
+        "ci/resource_properties_smoke.mjs"
+      ]
+    },
+    "createResources": {
+      "title": "Создание мира и кампании",
+      "browser": false,
+      "scripts": [
+        "ci/create_resource_smoke.mjs"
+      ]
+    },
+    "autosave": {
+      "title": "Автосохранение прохождения",
+      "browser": false,
+      "scripts": [
+        "ci/autosave_smoke.mjs"
+      ]
+    },
+    "inventory": {
+      "title": "Инвентарь отдельным окном",
+      "browser": true,
+      "scripts": [
+        "ci/inventory_smoke.mjs"
+      ]
+    },
+    "icon": {
+      "title": "Иконки приложения и файлов",
+      "browser": false,
+      "scripts": [
+        "ci/icon_smoke.mjs"
+      ]
+    },
+    "visualRegression": {
+      "title": "Визуальная регрессия диалогов",
+      "browser": false,
+      "scripts": [
+        "ci/contrast_smoke.mjs"
+      ]
+    },
+    "splash": {
+      "title": "Заставка и модальные диалоги",
+      "browser": false,
+      "scripts": [
+        "ci/splash_dialog_smoke.mjs"
+      ]
+    },
+    "heavyMap": {
+      "title": "Тяжёлые проверки карты",
+      "browser": true,
+      "scripts": [
+        "ci/junction_review_smoke.mjs",
+        "ci/location_visualisation_smoke.mjs"
+      ]
+    },
+    "memory": {
+      "title": "Проверка памяти",
+      "browser": false,
+      "scripts": [
+        "ci/validate_memory.mjs"
+      ]
+    },
+    "mutation": {
+      "title": "R32 мутационные контроли",
+      "browser": false,
+      "scripts": [
+        "ci/r32_mutation_check.mjs"
+      ]
+    }
+  },
+  "suites": {
+    "fast": {
+      "title": "Fast CI",
+      "groups": [
+        "simulator",
+        "editor",
+        "scene",
+        "location",
+        "dynamicEvent",
+        "map",
+        "campaignIntegrity",
+        "questIntegrity",
+        "reputation"
+      ]
+    },
+    "acceptance": {
+      "title": "Acceptance CI",
+      "groups": [
+        "archive",
+        "import",
+        "export",
+        "worldStorage",
+        "resourceProperties",
+        "createResources",
+        "autosave",
+        "inventory",
+        "icon",
+        "visualRegression",
+        "splash"
+      ]
+    },
+    "nightly": {
+      "title": "Nightly / maintenance",
+      "groups": [
+        "mutation",
+        "heavyMap",
+        "memory"
+      ]
+    }
+  }
+}

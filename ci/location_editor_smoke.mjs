@@ -1,6 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
-import { chromium } from "playwright";
+import { openBrowser, closeBrowser } from "./lib/browser.mjs";
 
 // Проверка редактора локаций: он «молча не работал» четырьмя разными способами,
 // и каждый раз это выглядело как «кнопка не активна» / «поиск ничего не ищет».
@@ -27,7 +27,7 @@ const dialogueJs = read("src/AssistQuestEditor.App/Web/dialogueWorkspace.js");
 const locationJs = read("src/AssistQuestEditor.App/Web/locationEditor.js");
 const theme = read("src/AssistQuestEditor.App/Web/theme.css");
 
-const browser = await chromium.launch({ headless: true });
+const { browser } = await openBrowser();
 try {
   const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
   const errors = [];
@@ -990,5 +990,5 @@ try {
 
   console.log("Location editor smoke: OK");
 } finally {
-  await browser.close();
+  await closeBrowser(browser);
 }

@@ -14,7 +14,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { execFileSync } from "node:child_process";
-import { chromium } from "playwright";
+import { openBrowser, closeBrowser } from "./lib/browser.mjs";
 
 const root = process.cwd();
 const read = rel => fs.readFileSync(path.join(root, ...rel.split("/")), "utf8");
@@ -273,7 +273,7 @@ if (exe === null) {
 
 // --- 7. Реальная отрисовка: 18 ячеек, все квадратные ---
 
-const browser = await chromium.launch({ headless: true });
+const { browser } = await openBrowser();
 
 try {
   const page = await browser.newPage({ viewport: { width: 800, height: 392 } });
@@ -395,7 +395,7 @@ try {
   check(overflowReport.scrollWidth <= overflowReport.clientWidth + 1,
     `Горизонтальная прокрутка при 60 предметах: ${overflowReport.scrollWidth} > ${overflowReport.clientWidth}.`);
 } finally {
-  await browser.close();
+  await closeBrowser(browser);
 }
 
 if (failures.length) {

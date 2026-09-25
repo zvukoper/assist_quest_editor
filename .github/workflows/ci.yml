@@ -309,6 +309,11 @@ jobs:
           CHROMIUM_INSTALL_OUTCOME: ${{ steps.chromium_install.outcome }}
           PLAYWRIGHT_SMOKE_OUTCOME: ${{ steps.playwright_smoke.outcome }}
           SELECTION_SMOKE_OUTCOME: ${{ steps.selection_smoke.outcome }}
+          CATALOG_RELOAD_SMOKE_OUTCOME: ${{ steps.catalog_reload_smoke.outcome }}
+          QUEST_PLATE_SMOKE_OUTCOME: ${{ steps.quest_plate_smoke.outcome }}
+          TEXT_OUTLINE_SMOKE_OUTCOME: ${{ steps.text_outline_smoke.outcome }}
+          SIMULATION_SAVES_SMOKE_OUTCOME: ${{ steps.simulation_saves_smoke.outcome }}
+          ENVIRONMENT_CLOCK_SMOKE_OUTCOME: ${{ steps.environment_clock_smoke.outcome }}
           QUEST_GRAPH_SMOKE_OUTCOME: ${{ steps.quest_graph_smoke.outcome }}
           SCENE_GRAPH_SMOKE_OUTCOME: ${{ steps.scene_graph_smoke.outcome }}
           DIALOGUE_WORKSPACE_SMOKE_OUTCOME: ${{ steps.dialogue_workspace_smoke.outcome }}
@@ -338,6 +343,11 @@ jobs:
             @{ Name = 'Chromium install'; Outcome = $env:CHROMIUM_INSTALL_OUTCOME },
             @{ Name = 'Playwright smoke'; Outcome = $env:PLAYWRIGHT_SMOKE_OUTCOME },
             @{ Name = 'Simulator ↔ Editor contract'; Outcome = $env:SELECTION_SMOKE_OUTCOME },
+            @{ Name = 'Quest catalog reload'; Outcome = $env:CATALOG_RELOAD_SMOKE_OUTCOME },
+            @{ Name = 'Quest plate readability'; Outcome = $env:QUEST_PLATE_SMOKE_OUTCOME },
+            @{ Name = 'Text outline without spikes'; Outcome = $env:TEXT_OUTLINE_SMOKE_OUTCOME },
+            @{ Name = 'Simulation saves'; Outcome = $env:SIMULATION_SAVES_SMOKE_OUTCOME },
+            @{ Name = 'Environment and map labels'; Outcome = $env:ENVIRONMENT_CLOCK_SMOKE_OUTCOME },
             @{ Name = 'Quest Graph UI smoke'; Outcome = $env:QUEST_GRAPH_SMOKE_OUTCOME },
             @{ Name = 'Scene Graph UI smoke'; Outcome = $env:SCENE_GRAPH_SMOKE_OUTCOME },
             @{ Name = 'Dialogue Workspace UI smoke'; Outcome = $env:DIALOGUE_WORKSPACE_SMOKE_OUTCOME },
@@ -363,6 +373,32 @@ jobs:
           )
           foreach ($check in $checks) {
             if ($check.Outcome -eq 'failure') { $failed += $check.Name }
+          }
+
+          # Проверка, что список выше НЕ ОТСТАЛ от шагов задания. Каждый шаг
+          # помечен `continue-on-error: true`, поэтому упавший шаг не валит
+          # задание сам по себе, и единственный блокирующий механизм — этот
+          # список. Пять smoke-проверок однажды выпали из него: шаги были,
+          # падение отражалось в summary, но сборку НЕ останавливало —
+          # «красный CI» при зелёном гейте.
+          #
+          # Число проверок выводим из САМОГО файла задания: строки с
+          # `continue-on-error` стоят ровно у проверок, и ни у кэша, ни у этого
+          # гейта их нет. Так список не может отстать молча — расхождение
+          # роняет сборку.
+          #
+          # Шаблон привязан к строке целиком: поиск «подстрока где-то в файле»
+          # ловил бы и это пояснение, и счёт выходил бы на единицу больше.
+          $workflowPath = Join-Path $env:GITHUB_WORKSPACE '.github/workflows/ci.yml'
+          if (Test-Path -LiteralPath $workflowPath) {
+            $workflowText = [IO.File]::ReadAllText($workflowPath)
+            $checkSteps = ([regex]::Matches($workflowText, '(?m)^\s+continue-on-error:\s+true\s*$')).Count
+            if ($checks.Count -ne $checkSteps) {
+              Write-Error ("Финальная проверка отстала от шагов задания: " +
+                "в списке $($checks.Count), шагов-проверок $checkSteps. " +
+                "Каждая проверка обязана быть и шагом, и строкой списка.")
+              exit 1
+            }
           }
 
           # Пишем сводку в summary запуска: без этого падение видно только в

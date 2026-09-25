@@ -1,6 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
-import { chromium } from "playwright";
+import { openBrowser, closeBrowser } from "./lib/browser.mjs";
 
 // Проверка окна ручной валидации перекрёстков.
 //
@@ -135,7 +135,7 @@ console.log("Статические проверки окна перекрёст
 
 // --- Динамическая часть ---
 
-const browser = await chromium.launch({ headless: true });
+const { browser } = await openBrowser();
 try {
   const page = await browser.newPage({ viewport: { width: 1200, height: 800 } });
   const errors = [];
@@ -904,5 +904,5 @@ try {
   console.log("Цвета исключённых: OK (красный до записи, серый после, зелёный остаётся)");
   console.log("Добавление поверх вычищенного: OK (приоритет ручного узла)");
 } finally {
-  await browser.close();
+  await closeBrowser(browser);
 }

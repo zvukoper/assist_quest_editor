@@ -1,6 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
-import { chromium } from "playwright";
+import { openBrowser, closeBrowser } from "./lib/browser.mjs";
 
 const root = process.cwd();
 const source = fs.readFileSync(
@@ -17,7 +17,7 @@ const theme = fs.readFileSync(
   "utf8"
 );
 
-const browser = await chromium.launch({ headless: true });
+const { browser } = await openBrowser();
 try {
   const page = await browser.newPage();
   const messages = [];
@@ -855,5 +855,5 @@ try {
   }
 
 } finally {
-  await browser.close();
+  await closeBrowser(browser);
 }

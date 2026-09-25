@@ -1,15 +1,28 @@
 ﻿<#
 .SYNOPSIS
-    Локальный прогон тех же проверок, что выполняет .github/workflows/ci.yml.
+    Локальный прогон проверок CI: быстрый гейт, приёмочный пакет или ночной набор.
 
 .DESCRIPTION
-    Повторяет шаги CI на этой машине без GitHub Actions:
-        Playwright install / Chromium install / Playwright smoke /
-        Simulator <-> Editor contract / Quest Graph UI smoke /
-        Scene Graph UI smoke / Scene interface UI smoke /
-        Quest Graph layout / Pan follows cursor /
-        Web JavaScript syntax / .NET SDK / .NET build / domain tests /
-        single-file publish.
+    Проверки разбиты на три НАБОРА, потому что держать все 49 проверок в одном
+    обязательном прогоне бессмысленно: R32 (контроль мутаций) занимает ~7 минут,
+    публикация разрушительна, а проверка заставки требует запуска exe. Раньше это
+    всё шло в одном гейте, из-за чего его никто не ждал, и он перестал быть гейтом.
+
+    -Suite fast       (по умолчанию) — то, что обязано проходить перед каждым
+                      pull. Около минуты: установка, smoke групп (Simulator,
+                      Editor, Scene, Location, Dynamic Event, Road/Map),
+                      целостность контента, репутация, синтаксис web, сборка .NET
+                      и тесты домена.
+    -Suite acceptance — ручная приёмка перед выпуском: публикация, единственный
+                      экземпляр, архив/импорт/экспорт, хранение мира, свойства
+                      ресурсов, создание, автосохранение, инвентарь, иконки,
+                      читаемость диалогов, заставка. Шаг публикации включён всегда:
+                      без него приёмка проверяла бы прошлую сборку.
+    -Suite nightly    — тяжёлое и внерелизное: контроль мутаций R32, ручные
+                      перекрёстки, визуализация Location, проверка памяти.
+
+    Группы smoke прогоняются через ci/lib/run_suite.mjs: одна сессия Chromium на
+    группу вместо браузера на каждую проверку. Состав групп — в ci/suites.json.
 
     Итог повторяет логику final_gate: если упала любая обязательная проверка,
     скрипт завершается кодом 1 и печатает имя упавшей проверки.
@@ -18,12 +31,15 @@
     проверкам, причина каждой ошибки и полный вывод упавших проверок.
     При успешном прогоне отчёт фиксирует это явно, без раздела с ошибками.
 
-    Проверка публикации разрушительна: compile.ps1 останавливает запущенный
-    AssistQuestEditor и удаляет bin, obj, publish и профиль WebView2.
-    Поэтому она выполняется только при явном -IncludePublish.
+    Шаг публикации разрушителен: compile.ps1 останавливает запущенный
+    AssistQuestEditor и удаляет bin, obj, publish и профиль WebView2. Поэтому он
+    входит только в -Suite acceptance (или явно через -IncludePublish).
+
+.PARAMETER Suite
+    Набор проверок: fast (по умолчанию), acceptance или nightly.
 
 .PARAMETER IncludePublish
-    Дополнительно выполнить шаг single-file publish (compile.ps1 -NoLaunch).
+    Выполнить шаг single-file publish и в наборе fast/nightly.
 
 .PARAMETER SkipInstall
     Не ставить Playwright и Chromium, а только проверить их наличие.
@@ -35,13 +51,22 @@
     powershell -ExecutionPolicy Bypass -File .\ci\run_local.ps1
 
 .EXAMPLE
-    powershell -ExecutionPolicy Bypass -File .\ci\run_local.ps1 -IncludePublish
+    powershell -ExecutionPolicy Bypass -File .\ci\run_local.ps1 -Suite acceptance
+
+.EXAMPLE
+    powershell -ExecutionPolicy Bypass -File .\ci\run_local.ps1 -Suite nightly
 #>
 param(
+    [ValidateSet('fast', 'acceptance', 'nightly')]
+    [string]$Suite = 'fast',
     [switch]$IncludePublish,
     [switch]$SkipInstall,
     [switch]$NoNotify
 )
+
+# Приёмка без публикации проверяла бы ПРОШЛУЮ сборку, поэтому там шаг включён
+# всегда и не отключается: это не удобство, а условие достоверности.
+if ($Suite -eq 'acceptance') { $IncludePublish = $true }
 
 $ErrorActionPreference = 'Stop'
 
@@ -76,10 +101,14 @@ $script:LocalStatePath = Join-Path $script:StateDir 'local-run.json'
 $script:HeartbeatPath = Join-Path $script:StateDir 'monitor.heartbeat'
 
 # Общее число проверок в прогоне — нужно для плашки расширения CI Monitor.
-# Значение фиксировано: publish присутствует всегда (как «пропущено»), поэтому
-# число не зависит от -IncludePublish.
-# Держать в актуальном состоянии при добавлении/удалении Invoke-Check.
-$script:TotalChecks = 50
+# Считается по фактическому набору и НЕ задаётся числом: прежде здесь стояла
+# константа, и после каждой правки списка она расходилась с действительностью
+# (доходило до 11 при 16 реальных проверках), а плашка показывала неверный
+# процент. Значение выводится из списка ниже.
+$script:TotalChecks = 0
+
+# Набор проверок: имя нужно отчёту и плашке («Локальный прогон (acceptance)»).
+$script:Suite = $Suite
 
 # Подавление уведомления скрипта. Вызывающий скрипт может взять уведомление на
 # себя: pull.ps1 показывает одно уведомление с учётом признака активности
@@ -397,6 +426,7 @@ function Write-CiReport {
 
 Write-Host '=== Локальный прогон проверок CI ===' -ForegroundColor Cyan
 Write-Host "Репозиторий: $root"
+Write-Host "Набор: $($script:Suite)"
 Write-Host "Node.js: $(& node --version 2>$null)"
 Write-Host "PowerShell: $($PSVersionTable.PSVersion)"
 
@@ -406,10 +436,10 @@ $script:GitCommit = (& git rev-parse --short HEAD 2>$null | Out-String).Trim()
 if (-not [string]::IsNullOrWhiteSpace($script:GitBranch)) { Write-Host "Ветка: $script:GitBranch" }
 if (-not [string]::IsNullOrWhiteSpace($script:GitCommit)) { Write-Host "Commit: $script:GitCommit" }
 
-# Заголовок прогона: имя ветки и коммит. Так плашка локального режима
+# Заголовок прогона: набор, имя ветки и коммит. Так плашка локального режима
 # отличается от предыдущего прогона, и в уведомлении видно, что проверялось.
 # Join-String доступен только в PowerShell 7, поэтому используем -join.
-$titleParts = @($script:GitBranch, $script:GitCommit) |
+$titleParts = @("набор $($script:Suite)", $script:GitBranch, $script:GitCommit) |
     Where-Object { -not [string]::IsNullOrWhiteSpace($_) }
 $script:RunTitle = $titleParts -join ' · '
 if ([string]::IsNullOrWhiteSpace($script:RunTitle)) { $script:RunTitle = 'Локальный прогон' }
@@ -439,13 +469,44 @@ if ($script:EditorMonitorActive) {
     Write-Host 'Расширение CI Monitor активно: уведомление покажет оно.' -ForegroundColor DarkGray
 }
 
-if (-not $IncludePublish) {
-    Write-Host 'Шаг single-file publish пропускается: он останавливает запущенный AssistQuestEditor и удаляет bin/obj/publish.' -ForegroundColor Yellow
-    Write-Host 'Для полного прогона добавьте -IncludePublish.' -ForegroundColor Yellow
+# ============================================================================
+# Список проверок набора
+# ============================================================================
+#
+# Проверки описываются данными, а не последовательными вызовами: так общее число
+# проверок набора (TotalChecks для плашки расширения) получается ИЗ СПИСКА и не
+# может разойтись с ним. Раньше число стояло константой и расходилось после
+# каждой правки — плашка показывала неверный процент.
+#
+# Порядок регистрации = порядок выполнения. Проверки, общие для всех наборов
+# (окружение), идут первыми; сборка .NET обязана идти до тестов домена.
+
+$checkList = New-Object System.Collections.Generic.List[object]
+
+function New-Check {
+    param(
+        [string]$Id,
+        [string]$Name,
+        [string[]]$Suites,
+        [scriptblock]$Body
+    )
+
+    $null = $checkList.Add([pscustomobject]@{
+        Id     = $Id
+        Name   = $Name
+        Suites = $Suites
+        Body   = $Body
+    })
 }
 
-# Шаг 1: установка Playwright (в CI это отдельный шаг с continue-on-error).
-Invoke-Check -Name 'Установить Playwright' -Body {
+# Публикация и проба единственного экземпляра входят в приёмку ВСЕГДА (без
+# публикации приёмка проверяла бы прошлую сборку), а в остальные наборы —
+# только по явному -IncludePublish.
+$publishSuites = if ($IncludePublish) { @('fast', 'acceptance', 'nightly') } else { @('acceptance') }
+
+# --- Окружение: нужно любому набору -----------------------------------------
+
+New-Check -Id 'playwright' -Name 'Установить Playwright' -Suites @('fast', 'acceptance', 'nightly') -Body {
     if (Test-Path -LiteralPath '.\node_modules\playwright') {
         Write-Host 'Playwright уже установлен локально.'
         return
@@ -461,8 +522,7 @@ Invoke-Check -Name 'Установить Playwright' -Body {
     }
 }
 
-# Шаг 2: установка Chromium (в CI это отдельный шаг с continue-on-error).
-Invoke-Check -Name 'Установить Chromium' -Body {
+New-Check -Id 'chromium' -Name 'Установить Chromium' -Suites @('fast', 'acceptance', 'nightly') -Body {
     $cache = Join-Path $env:LOCALAPPDATA 'ms-playwright'
     $installed = @(Get-ChildItem -LiteralPath $cache -Directory -Filter 'chromium-*' -ErrorAction SilentlyContinue)
 
@@ -481,336 +541,63 @@ Invoke-Check -Name 'Установить Chromium' -Body {
     }
 }
 
-# Шаг 3: базовый smoke реального browser engine.
-Invoke-Check -Name 'Playwright + Chromium smoke' -Body {
+# --- Быстрый гейт ------------------------------------------------------------
+
+# Базовый smoke реального browser engine.
+New-Check -Id 'playwrightSmoke' -Name 'Playwright + Chromium smoke' -Suites @('fast') -Body {
     node ci/playwright_smoke.mjs
 }
 
-# Шаг 4: контракт camelCase между Simulator и Editor.
-Invoke-Check -Name 'Контракт simulator <-> editor' -Body {
-    node ci/selection_context_smoke.mjs
+# Группы smoke. Одна сессия Chromium на группу: прогон через
+# ci/lib/run_suite.mjs, состав групп — ci/suites.json. Групповой прогон не
+# останавливается на первой упавшей проверке, поэтому за один запуск видно ВСЕ
+# расхождения группы, как это делал набор отдельных шагов.
+New-Check -Id 'simulator' -Name 'Simulator smoke' -Suites @('fast') -Body {
+    node ci/lib/run_suite.mjs simulator
 }
 
-# Шаг 4.1: горячие клавиши Simulator не должны зависеть от раскладки.
-Invoke-Check -Name 'Горячие клавиши Simulator' -Body {
-    node ci/hotkey_probe.mjs
+New-Check -Id 'editor' -Name 'Editor smoke' -Suites @('fast') -Body {
+    node ci/lib/run_suite.mjs editor
 }
 
-# Шаг 4.1.1: сохранение квеста должно обновлять каталог на карте.
-# Каталог квестов кэшируется, поэтому правка точки активации без перечитывания
-# файлов не видна: квест остаётся на прежнем месте, и это выглядит как ошибка
-# отрисовки, хотя данные просто не перечитаны.
-Invoke-Check -Name 'Обновление каталога квестов' -Body {
-    node ci/catalog_reload_smoke.mjs
+New-Check -Id 'scene' -Name 'Scene smoke' -Suites @('fast') -Body {
+    node ci/lib/run_suite.mjs scene
 }
 
-# Шаг 4.1.2: текст на плашке квеста должен читаться.
-# Проверка меряет реальные пиксели canvas: фон плашки однородный, поэтому
-# полупрозрачный фон + чёрный текст давали нечитаемую плашку («текст стал
-# чёрным»), и никакая другая проверка этого не видела.
-Invoke-Check -Name 'Читаемость плашки квеста' -Body {
-    node ci/quest_plate_smoke.mjs
+New-Check -Id 'location' -Name 'Location smoke' -Suites @('fast') -Body {
+    node ci/lib/run_suite.mjs location
 }
 
-# Шаг 4.1.3: обводка текста не должна давать «пиков» на буквах.
-# canvas соединяет линии митрой по умолчанию, поэтому на острых углах глифов
-# («М», «А», «Ц») толстая обводка вытягивается шипами за пределы буквы.
-Invoke-Check -Name 'Обводка текста без пиков' -Body {
-    node ci/text_outline_smoke.mjs
+New-Check -Id 'dynamicEvent' -Name 'Dynamic Event smoke' -Suites @('fast') -Body {
+    node ci/lib/run_suite.mjs dynamicEvent
 }
 
-# Шаг 4.1.4: сохранения симуляции, игровое время и световой день.
-# Проверяется и связка Host → Web, и правила режима: состояние пишется на диск
-# только при включённой симуляции, а загрузка снимка её выключает.
-Invoke-Check -Name 'Сохранения симуляции' -Body {
-    node ci/simulation_saves_smoke.mjs
+New-Check -Id 'map' -Name 'Road/Map smoke' -Suites @('fast') -Body {
+    node ci/lib/run_suite.mjs map
 }
 
-# Шаг 4.1.5: окружение (время/дата/кампания), подписи точек и кнопка симуляции.
-# Метка «(пауза)» показывалась при работающей симуляции, подписи СДО уходили
-# вбок от точки, а игрок не был подписан вообще — всё это молчало в CI.
-Invoke-Check -Name 'Окружение и подписи карты' -Body {
-    node ci/environment_clock_smoke.mjs
+# Целостность контента: граф квестов собирается и кодом, и правкой JSON, поэтому
+# проверяется отдельно от сборки — несвязанный Input или ссылка на
+# несуществующую сцену компилируются, но Runtime молча зависает на такой ноде.
+New-Check -Id 'campaignIntegrity' -Name 'Campaign integrity' -Suites @('fast') -Body {
+    node ci/lib/run_suite.mjs campaignIntegrity
 }
 
-# Шаг 4.2: маркер игрока (обводки, тень, перекрест) на canvas карты.
-Invoke-Check -Name 'Маркер игрока Simulator' -Body {
-    node ci/player_marker_smoke.mjs
+New-Check -Id 'questIntegrity' -Name 'Quest graph integrity' -Suites @('fast') -Body {
+    node ci/lib/run_suite.mjs questIntegrity
 }
 
-# Шаг 5: smoke реального editor.js, включая контекстные меню Quest Graph.
-Invoke-Check -Name 'Quest Graph Playwright smoke' -Body {
-    node ci/quest_graph_smoke.mjs
+# Правила репутации на реальном контенте: юнит-тесты собирают сцену кодом, а
+# здесь проверяется сам .aqquest — повторная покупка, цена и порог репутации.
+New-Check -Id 'reputation' -Name 'Reputation flow' -Suites @('fast') -Body {
+    node ci/lib/run_suite.mjs reputation
 }
 
-# Шаг 5.1: кнопка «Перестроить» в нодовом редакторе.
-Invoke-Check -Name 'Перестроение нод Quest Graph' -Body {
-    node ci/graph_layout_smoke.mjs
-}
-
-# Шаг 5.2: smoke реального sceneEditor.js. В workflow GitHub эта проверка есть,
-# а в локальном прогоне её не было — из-за этого проверка устарела незаметно
-# (ждала переименованный #sceneEditTitle) и падала ещё до сценария.
-Invoke-Check -Name 'Scene Graph UI smoke' -Body {
-    node ci/scene_graph_smoke.mjs
-}
-
-# Шаг 5.2: отдельное workspace для Dialogue/Choice content.
-Invoke-Check -Name 'Dialogue Workspace UI smoke' -Body {
-    node ci/dialogue_workspace_smoke.mjs
-}
-
-# Левый сайдбар выбирает содержимое рабочей области ЭТОГО ЖЕ окна, а не открывает
-# второе окно (концепция File Editor в WolvenKit). Проверка ловит возврат к
-# прежнему поведению, когда клик по сайдбару отправлял open_editor.
-Invoke-Check -Name 'Sidebar pane switch' -Body {
-    node ci/sidebar_pane_smoke.mjs
-}
-
-
-# Шаг 5.2.1: интерфейсный слой Scene Runtime (Dialogue Continue + Choice).
-# Та же причина, что и у проверки выше: она была только в GitHub Actions.
-Invoke-Check -Name 'Scene interface UI smoke' -Body {
-    node ci/scene_interface_smoke.mjs
-}
-
-# Навигация по resource reference: Quest node → Scene → обратно к исходной ноде.
-Invoke-Check -Name 'Resource navigation smoke' -Body {
-    node ci/resource_navigation_smoke.mjs
-}
-
-# Редактор локаций: панель трижды «молча не работала» — захват выбранной точки
-# (render() без аргументов), поиск точки (datalist на 5000+ пунктов) и подпись
-# «Нет точек» (SVG-текст через CSS color вместо fill).
-Invoke-Check -Name 'Location editor smoke' -Body {
-    node ci/location_editor_smoke.mjs
-}
-
-# Режим визуализации Location на основной карте Симулятора: обычные точки
-# приглушаются, отобранные рисуются поверх, камера вписывается в набор.
-Invoke-Check -Name 'Location visualisation smoke' -Body {
-    node ci/location_visualisation_smoke.mjs
-}
-
-# Дорожный слой основной карты. Дороги (~98 000 отрезков, 3.5 МБ) едут
-# ОТДЕЛЬНЫМ файлом, а не в снимке: с ними каждый снимок карты вырос бы с ~0.9 МБ
-# до ~19 МБ, а снимки уходят часто. Здесь же проверяется, что слой реально
-# ВИДЕН на канвасе и что галочка «дороги» его гасит: «файл загрузился» ничего
-# не говорит о том, что нарисовалось на экране.
-Invoke-Check -Name 'Дорожный слой карты' -Body {
-    node ci/road_layer_smoke.mjs
-}
-
-# Окно ручной проверки перекрёстков. Проверяется не только «окно открылось»:
-# исключение ложных узлов и добавление пропущенных ломаются незаметно, потому
-# что страница при этом выглядит совершенно исправной. Здесь же стережётся
-# порядок обхода: кнопки «следующий/предыдущий» обязаны идти в том порядке, в
-# котором узлы нашлись, — иначе автор пропускает часть перекрёстков.
-Invoke-Check -Name 'Ручная проверка перекрёстков' -Body {
-    node ci/junction_review_smoke.mjs
-}
-
-# Черты городов: окно рисования контура и два критерия отбора точек.
-# Единственное взаимодействие с картой там — рисование многоугольника, поэтому
-# проверяется именно КОНТУР: незамкнутый не должен уходить на сохранение, а
-# сохранённый обязан нести координаты. Отдельно стережётся ЦЕПОЧКА имён
-# критериев (панель → SupportedCriteria → switch → предикат): расхождение даёт
-# «критерий молча не поддерживается» без единой ошибки в интерфейсе.
-Invoke-Check -Name 'Черты городов' -Body {
-    node ci/city_boundary_smoke.mjs
-}
-
-# Шаг 5.3: pan средней кнопкой следует за курсором в обоих нодовых редакторах.
-# Отдельная проверка нужна потому, что pan-ассерты в quest/scene smoke требуют
-# лишь изменения viewBox: при несовпадении аспекта канваса и viewBox pan
-# «разбегается», но viewBox всё равно меняется, и слабые ассерты это пропускают.
-Invoke-Check -Name 'Pan следует за курсором' -Body {
-    node ci/pan_smoke.mjs
-}
-
-# Шаг 5.5: целостность игрового Quest Graph и сцен.
-# Граф собирается и кодом, и правкой JSON, поэтому его структура проверяется
-# отдельно: несвязанный Input или ссылка на несуществующую сцену не ломают
-# сборку, но Runtime молча зависает на такой ноде.
-Invoke-Check -Name 'Целостность Quest Graph и сцен' -Body {
-    node ci/check_quest_graph.mjs
-node ci/check_campaigns.mjs
-}
-
-# Шаг 5.6: правила репутации на реальном контенте.
-# Юнит-тесты собирают сцену кодом, а здесь проверяется сам .aqquest: повторная
-# покупка колбасы, цена 450 ₽, +25 репутации и доставка при репутации Гоши 400.
-Invoke-Check -Name 'Правила репутации в контенте' -Body {
-    node ci/reputation_flow.mjs
-}
-
-# Шаг 5.7: портрет НПЦ в списке репутации реально загружается.
-# Нужен отдельный шаг потому, что битая картинка не видна ни домену, ни обычному
-# smoke: элемент <img> в разметке есть, ошибка только в сетевом запросе.
-Invoke-Check -Name 'Портрет репутации загружается' -Body {
-    node ci/reputation_avatar_smoke.mjs
-}
-
-# Хранение контента: единое дерево миров, пользовательская папка в Документах,
-# автоматическая общая кампания с демо-квестом и первичная настройка ДО главного
-# окна. Проверка статическая: она стережёт КОНТРАКТ раскладки, который нельзя
-# увидеть по сборке — перепутанный сегмент пути компилируется без ошибок.
-Invoke-Check -Name 'Хранение мира и папки' -Body {
-    node ci/world_storage_smoke.mjs
-}
-
-# Демо-мир: архив, который ставит кнопка «Пропустить» при первом запуске.
-# Проверка РАСПАКОВЫВАЕТ архив и читает дерево ресурсов: сжатый бинарник нельзя
-# проверить ни по исходникам, ни по размеру файла.
-Invoke-Check -Name 'Архив демо-мира' -Body {
-    node ci/demo_world_smoke.mjs
-}
-
-# Архив .aqezip: упаковка сжимает, манифест читается БЕЗ распаковки, пути
-# защищены от выхода за пределы папки, импорт идёт через временную папку.
-# Отдельно от проверки демо-мира: там проверяется ПОСТАВЛЯЕМЫЙ файл, а здесь —
-# КОД упаковки и распаковки, который легко расходится сам с собой.
-Invoke-Check -Name 'Архив aqezip: упаковка и импорт' -Body {
-    node ci/archive_smoke.mjs
-}
-
-# Заставка запуска и модальные диалоги. Баг: при удалённой пользовательской
-# папке диалог первичной настройки открывался ПОД заставкой (она TopMost и
-# висит поверх всего), и ни ввести псевдоним, ни отменить было нельзя —
-# приложение выглядело зависшим на картинке.
-Invoke-Check -Name 'Заставка и модальные диалоги' -Body {
-    node ci/splash_dialog_smoke.mjs
-}
-
-# Селектор [МИР][КАМПАНИЯ][меню] в главном окне. Проверяется СТЫК Host ↔ Web:
-# списки рисуются только из сообщения Host, а выбор уходит обратно действием,
-# и расхождение этих сторон не видно ни сборке, ни чтению исходников.
-Invoke-Check -Name 'Селектор мир/кампания' -Body {
-    node ci/world_selector_smoke.mjs
-}
-
-# Экспорт мира и кампании: папкой и архивом. Проверяется настоящим запуском с
-# `--export-probe` — тем же кодом, что в меню, — и сравнением деревьев файлов.
-Invoke-Check -Name 'Экспорт ресурсов' -Body {
-    node ci/export_smoke.mjs
-}
-
-# Свойства мира и кампании («Ред.»/«ℹ️»). Проверяется НАСТОЯЩИЙ файл ресурса:
-# кампания хранит в одном файле и описание, и квесты, и стартовые условия мира,
-# поэтому потеря игрового поля при правке описания — самый дорогой дефект здесь.
-Invoke-Check -Name 'Свойства мира и кампании' -Body {
-    node ci/resource_properties_smoke.mjs
-}
-
-# Импорт кампании и квеста в родителя — ФАЙЛОВАЯ операция: проверяется
-# фактическое дерево на диске и то, что соседние ресурсы уцелели.
-Invoke-Check -Name 'Импорт кампании и квеста' -Body {
-    node ci/import_smoke.mjs
-}
-
-# Создание мира и кампании. Проверяется СТРУКТУРА на диске: мир без общей
-# кампании — мир, в котором нечего создавать, а кампания без папки quests —
-# ресурс, в который нельзя положить квест.
-Invoke-Check -Name 'Создание мира и кампании' -Body {
-    node ci/create_resource_smoke.mjs
-}
-
-# Автосохранение прохождения. Проверка обязана быть ПОВЕДЕНЧЕСКОЙ: прежний
-# дефект (запись в несуществующий каталог ВНЕ дерева миров) был невидим для
-# чтения исходников — код выглядел корректным, а запись падала, и ошибку
-# глушил вызывающий код. Поэтому здесь реальная запись файла и обратное чтение.
-Invoke-Check -Name 'Автосохранение прохождения' -Body {
-    node ci/autosave_smoke.mjs
-}
-
-# Окно игрока: сетка инвентаря 6×3 слева, персонаж и репутация справа. Размер
-# ячейки задают ДВА места (CSS страницы и правило раскладки окна), и расхождение
-# видно только сравнением — иначе содержимое либо не влезает, либо остаётся
-# пустая полоса. Здесь же проверяется фактическая отрисовка в браузере.
-Invoke-Check -Name 'Инвентарь отдельным окном' -Body {
-    node ci/inventory_smoke.mjs
-}
-
-# Иконки. У внутренних типов файлов нет собственных специконок, и все они
-# получают иконку приложения. Проверка поведенческая: ICO собирается тем же
-# кодом, что окна и ассоциации, и кадры извлекаются из полученных байтов —
-# наличие файла логотипа само по себе ничего не доказывает.
-Invoke-Check -Name 'Иконки приложения и файлов' -Body {
-    node ci/icon_smoke.mjs
-}
-
-# Читаемость текста в тёмных диалогах. Проверка ПОВЕДЕНЧЕСКАЯ и ЗАМЕРЯЮЩАЯ:
-# цвета заданы в коде верно, но у выключенной кнопки WinForms рисует текст
-# системным серым, и на тёмном фоне он становится нечитаемым (замерено 2,1:1 при
-# минимуме 4,5:1). В исходниках этого не видно — только замером отрисованного
-# окна.
-Invoke-Check -Name 'Читаемость диалогов' -Body {
-    node ci/contrast_smoke.mjs
-}
-
-# Негативные контроли: КАЖДАЯ новая проверка обязана упасть на возвращённом
-# дефекте. Проверка, которая проходит и с дефектом, не доказывает ничего. Мутация
-# вносится во временную копию дерева — рабочие файлы не трогаются, а базовая
-# линия проверяется тут же: иначе «пойманный мутант» мог бы означать, что сломана
-# сама проба.
-Invoke-Check -Name 'Контроль правок UI и инвентаря' -Body {
-    node ci/r32_mutation_check.mjs
-}
-
-# Шаг 5.8: синхронизация ресурсов и проверка по манифесту.
-# Проверка нужна отдельно от сборки: она ловит именно потерянные, необновлённые и
-# оставшиеся от прошлых сборок ресурсы, а не ошибки компиляции. Прогон идёт в
-# временный каталог, поэтому рабочие файлы не трогаются.
-Invoke-Check -Name 'Синхронизация ресурсов data' -Body {
-    $tmp = Join-Path $env:TEMP ("aq-resources-" + [Guid]::NewGuid().ToString('N'))
-    try {
-        & powershell -NoProfile -NonInteractive -ExecutionPolicy Bypass -File ci/sync_data_resources.ps1 `
-            -SourceDirectory (Join-Path $root 'data') `
-            -TargetDirectory $tmp `
-            -AppVersion 'ci' `
-            -Commit 'ci'
-        if ($LASTEXITCODE -ne 0) {
-            throw "sync_data_resources.ps1 завершился с кодом $LASTEXITCODE"
-        }
-
-        $manifest = Join-Path $tmp 'data-manifest.json'
-        if (-not (Test-Path -LiteralPath $manifest)) {
-            throw 'Манифест ресурсов не создан.'
-        }
-
-        $sourceCount = @(Get-ChildItem -LiteralPath (Join-Path $root 'data') -Recurse -File).Count
-        $targetCount = @(Get-ChildItem -LiteralPath $tmp -Recurse -File).Count
-        if ($targetCount -ne $sourceCount + 1) {
-            # +1 — сам манифест.
-            throw "Число ресурсов не совпало: источник $sourceCount, публикация $targetCount."
-        }
-
-        # Остаток прошлой сборки обязан удаляться, иначе в публикации накапливались
-        # бы файлы, которых уже нет в источнике.
-        $stale = Join-Path $tmp 'scenes\removed_by_test.aqscene'
-        Set-Content -LiteralPath $stale -Value '{}' -Encoding UTF8
-        & powershell -NoProfile -NonInteractive -ExecutionPolicy Bypass -File ci/sync_data_resources.ps1 `
-            -SourceDirectory (Join-Path $root 'data') `
-            -TargetDirectory $tmp `
-            -AppVersion 'ci' `
-            -Commit 'ci'
-        if (Test-Path -LiteralPath $stale) {
-            throw 'Лишний ресурс не удалён из публикации.'
-        }
-
-        Write-Host "Ресурсы синхронизированы: файлов $sourceCount, лишние удаляются, манифест создан." -ForegroundColor Green
-    } finally {
-        Remove-Item -LiteralPath $tmp -Recurse -Force -ErrorAction SilentlyContinue
-    }
-}
-
-# Шаг 6: синтаксис web JavaScript.
-# Список обязан покрывать ВСЕ скрипты, которые подключает WebView: пропущенный
-# файл не ловит даже ошибка синтаксиса, и панель просто остаётся пустой
-# (именно так locationEditor.js был сломан с самого создания редактора —
-# лишний `+` перед `:` в тернарном операторе, из-за чего скрипт не загружался
-# целиком и редактор локаций показывал «Ожидание Quest Graph от Host…»).
-Invoke-Check -Name 'Синтаксис web JavaScript' -Body {
+# Синтаксис web JavaScript. Список обязан покрывать ВСЕ скрипты, которые
+# подключает WebView: пропущенный файл не ловит даже ошибка синтаксиса, и панель
+# просто остаётся пустой (именно так locationEditor.js был сломан с самого
+# создания редактора — лишний `+` перед `:` в тернарном операторе).
+New-Check -Id 'webSyntax' -Name 'Синтаксис web JavaScript' -Suites @('fast') -Body {
     $files = @(
         '.\src\AssistQuestEditor.App\Web\main.js',
         '.\src\AssistQuestEditor.App\Web\editor.js',
@@ -835,16 +622,10 @@ Invoke-Check -Name 'Синтаксис web JavaScript' -Body {
     }
 }
 
-# Шаг 7: наличие .NET SDK.
-Invoke-Check -Name '.NET SDK' -Body {
-    dotnet --version
-    if ($LASTEXITCODE -ne 0) {
-        throw 'dotnet не найден в PATH.'
-    }
-}
-
-# Шаг 8: сборка всех исходных проектов.
-Invoke-Check -Name 'Сборка проектов .NET' -Body {
+# Сборка всех исходных проектов. Отдельной проверки «.NET SDK» больше нет: если
+# dotnet отсутствует, эта проверка падает с внятной ошибкой, а `dotnet --version`
+# дублировал её и добавлял лишний шаг в замер времени набора.
+New-Check -Id 'dotnetBuild' -Name 'Сборка проектов .NET' -Suites @('fast') -Body {
     $projects = @(Get-ChildItem -Path src -Recurse -File -Filter *.csproj)
     if ($projects.Count -eq 0) {
         throw 'В src нет C# проектов.'
@@ -865,8 +646,9 @@ Invoke-Check -Name 'Сборка проектов .NET' -Body {
     }
 }
 
-# Шаг 9: тесты домена с TRX, как в CI.
-Invoke-Check -Name 'Тесты домена' -Body {    $tests = @(Get-ChildItem -Path tests -Recurse -File -Filter *.csproj)
+# Тесты домена с TRX, как в CI.
+New-Check -Id 'domainTests' -Name 'Тесты домена' -Suites @('fast') -Body {
+    $tests = @(Get-ChildItem -Path tests -Recurse -File -Filter *.csproj)
     if ($tests.Count -eq 0) {
         throw 'В tests нет C# тестовых проектов.'
     }
@@ -892,85 +674,189 @@ Invoke-Check -Name 'Тесты домена' -Body {    $tests = @(Get-ChildItem
     Write-Host "TRX: $resultDir" -ForegroundColor DarkGray
 }
 
-# Шаг 10: single-file публикация. Разрушительна, поэтому только по запросу.
-if ($IncludePublish) {
-    Invoke-Check -Name 'Single-file publish' -Body {
-        powershell -NoProfile -NonInteractive -ExecutionPolicy Bypass -File .\compile.ps1 -NoLaunch
-        if ($LASTEXITCODE -ne 0) {
-            throw "compile.ps1 завершился с кодом $LASTEXITCODE"
-        }
+# --- Приёмка -----------------------------------------------------------------
 
-        $publish = Join-Path $root 'bin\Release\net10.0-windows\win-x64\publish'
-        $files = @(Get-ChildItem -LiteralPath $publish -File -Force)
-        $dataDir = Join-Path $publish 'data'
-        $manifest = Join-Path $dataDir 'data-manifest.json'
-
-        # Рядом с EXE допускаются папка ресурсов и отчёты сборки. Папка нужна
-        # потому, что содержимое single-file распаковывается в невидимый кэш,
-        # а отчёты пишут проверка целостности и сидер демо-мира (приложение —
-        # WinExe без консоли, поэтому его вердикт доходит только файлом). Любой
-        # другой файл — остаток прошлой сборки, который легко принять за данные.
-        $allowedPublishExtra = @('data-verify-report.txt', 'demo-world-report.txt')
-        $exeFiles = @($files | Where-Object { $_.Extension -eq '.exe' })
-        $unexpected = @($files | Where-Object {
-            $_.Extension -ne '.exe' -and $allowedPublishExtra -notcontains $_.Name
-        })
-
-        if ($exeFiles.Count -ne 1 -or $unexpected.Count -gt 0) {
-            Write-Host 'В каталоге публикации находятся:' -ForegroundColor Red
-            $files | ForEach-Object { Write-Host "  $($_.FullName)" -ForegroundColor Red }
-            throw 'compile.ps1 не создал ровно один EXE.'
-        }
-
-        # Ресурсы обязаны лежать рядом с EXE с манифестом: именно из этой папки
-        # приложение читает данные, а не из кэша распаковки single-file.
-        if (-not (Test-Path -LiteralPath $manifest)) {
-            throw "Ресурсы публикации не опубликованы: не найден $manifest"
-        }
-
-        $report = Join-Path $publish 'data-verify-report.txt'
-        if (Test-Path -LiteralPath $report) {
-            $reportLines = [IO.File]::ReadAllLines($report)
-            foreach ($line in $reportLines) { Write-Host "  $line" -ForegroundColor DarkGray }
-            if ($reportLines.Count -eq 0 -or $reportLines[0] -notmatch 'совпадают') {
-                throw "Проверка целостности ресурсов публикации не подтверждена: $($reportLines[0])"
-            }
-        } else {
-            throw "Приложение не оставило отчёт о ресурсах: $report"
-        }
-
-        $resourceCount = @(Get-ChildItem -LiteralPath $dataDir -Recurse -File).Count
-        Write-Host "Single-file публикация: $($exeFiles[0].FullName)" -ForegroundColor Green
-        Write-Host "Ресурсы рядом с EXE: файлов $resourceCount, манифест подтверждён." -ForegroundColor Green
-    }
-} else {
-    Add-Result -Name 'Single-file publish' -Ok $null -Seconds 0 -Detail 'пропущено' -Output @('Шаг пропущен: нужен -IncludePublish.')
-
-    # Пропущенный шаг тоже завершён: он есть в отчёте отдельной строкой.
-    # Без этого успешный прогон показывал бы 10 из 11 (91%) вместо 100%.
-    $script:LocalChecksCompleted++
-
-    Write-Host ''
-    Write-Host 'Single-file publish : пропущено (нужен -IncludePublish)' -ForegroundColor Yellow
+# Архив .aqezip: упаковка сжимает, манифест читается БЕЗ распаковки, пути
+# защищены от выхода за пределы папки, импорт идёт через временную папку.
+# Демо-мир проверяется ОТДЕЛЬНО и внутри той же группы: там стережётся
+# ПОСТАВЛЯЕМЫЙ файл, а здесь — код упаковки и распаковки, который легко
+# расходится сам с собой.
+New-Check -Id 'archive' -Name 'Archive smoke' -Suites @('acceptance') -Body {
+    node ci/lib/run_suite.mjs archive
 }
 
-# Шаг 11: единственный экземпляр приложения и режим проверок.
+# Импорт кампании и квеста в родителя — ФАЙЛОВАЯ операция: проверяется
+# фактическое дерево на диске и то, что соседние ресурсы уцелели.
+New-Check -Id 'import' -Name 'Import smoke' -Suites @('acceptance') -Body {
+    node ci/lib/run_suite.mjs import
+}
+
+# Экспорт мира и кампании: папкой и архивом. Проверяется настоящим запуском с
+# `--export-probe` — тем же кодом, что в меню, — и сравнением деревьев файлов.
+New-Check -Id 'export' -Name 'Export smoke' -Suites @('acceptance') -Body {
+    node ci/lib/run_suite.mjs export
+}
+
+# Хранение контента: единое дерево миров, пользовательская папка в Документах,
+# автоматическая общая кампания с демо-квестом и первичная настройка ДО главного
+# окна. Проверка статическая: перепутанный сегмент пути компилируется без ошибок.
+New-Check -Id 'worldStorage' -Name 'World storage smoke' -Suites @('acceptance') -Body {
+    node ci/lib/run_suite.mjs worldStorage
+}
+
+# Свойства мира и кампании. Проверяется НАСТОЯЩИЙ файл ресурса: кампания хранит
+# в одном файле и описание, и квесты, и стартовые условия мира, поэтому потеря
+# игрового поля при правке описания — самый дорогой дефект здесь.
+New-Check -Id 'resourceProperties' -Name 'Resource properties smoke' -Suites @('acceptance') -Body {
+    node ci/lib/run_suite.mjs resourceProperties
+}
+
+# Создание мира и кампании. Проверяется СТРУКТУРА на диске: мир без общей
+# кампании — мир, в котором нечего создавать.
+New-Check -Id 'createResources' -Name 'Create/import resources smoke' -Suites @('acceptance') -Body {
+    node ci/lib/run_suite.mjs createResources
+}
+
+# Автосохранение прохождения. Проверка обязана быть ПОВЕДЕНЧЕСКОЙ: прежний
+# дефект (запись в несуществующий каталог ВНЕ дерева миров) был невидим для
+# чтения исходников — код выглядел корректным, а запись падала.
+New-Check -Id 'autosave' -Name 'Autosave smoke' -Suites @('acceptance') -Body {
+    node ci/lib/run_suite.mjs autosave
+}
+
+# Окно игрока: сетка инвентаря слева, персонаж и репутация справа. Размер ячейки
+# задают ДВА места (CSS страницы и правило раскладки окна), и расхождение видно
+# только сравнением — иначе содержимое либо не влезает, либо остаётся пустая полоса.
+New-Check -Id 'inventory' -Name 'Inventory smoke' -Suites @('acceptance') -Body {
+    node ci/lib/run_suite.mjs inventory
+}
+
+# Иконки. У внутренних типов файлов нет собственных специконок, и все они
+# получают иконку приложения. Проверка поведенческая: ICO собирается тем же
+# кодом, что окна и ассоциации, и кадры извлекаются из полученных байтов.
+New-Check -Id 'icon' -Name 'Icon smoke' -Suites @('acceptance') -Body {
+    node ci/lib/run_suite.mjs icon
+}
+
+# Читаемость текста в тёмных диалогах. Проверка ЗАМЕРЯЮЩАЯ: цвета заданы в коде
+# верно, но у выключенной кнопки WinForms рисует текст системным серым, и на
+# тёмном фоне он становится нечитаемым (замерено 2,1:1 при минимуме 4,5:1).
+New-Check -Id 'visualRegression' -Name 'Visual regression smoke' -Suites @('acceptance') -Body {
+    node ci/lib/run_suite.mjs visualRegression
+}
+
+# Заставка запуска и модальные диалоги. Баг: при удалённой пользовательской
+# папке диалог первичной настройки открывался ПОД заставкой (она TopMost и висит
+# поверх всего), и ни ввести псевдоним, ни отменить было нельзя.
+New-Check -Id 'splash' -Name 'Splash smoke' -Suites @('acceptance') -Body {
+    node ci/lib/run_suite.mjs splash
+}
+
+# Single-file публикация. Разрушительна: compile.ps1 останавливает запущенный
+# AssistQuestEditor и удаляет bin, obj, publish и профиль WebView2.
+New-Check -Id 'publish' -Name 'Single-file publish' -Suites $publishSuites -Body {
+    powershell -NoProfile -NonInteractive -ExecutionPolicy Bypass -File .\compile.ps1 -NoLaunch
+    if ($LASTEXITCODE -ne 0) {
+        throw "compile.ps1 завершился с кодом $LASTEXITCODE"
+    }
+
+    $publish = Join-Path $root 'bin\Release\net10.0-windows\win-x64\publish'
+    $files = @(Get-ChildItem -LiteralPath $publish -File -Force)
+    $dataDir = Join-Path $publish 'data'
+    $manifest = Join-Path $dataDir 'data-manifest.json'
+
+    # Рядом с EXE допускаются папка ресурсов и отчёты сборки. Папка нужна
+    # потому, что содержимое single-file распаковывается в невидимый кэш,
+    # а отчёты пишут проверка целостности и сидер демо-мира (приложение —
+    # WinExe без консоли, поэтому его вердикт доходит только файлом). Любой
+    # другой файл — остаток прошлой сборки, который легко принять за данные.
+    $allowedPublishExtra = @('data-verify-report.txt', 'demo-world-report.txt')
+    $exeFiles = @($files | Where-Object { $_.Extension -eq '.exe' })
+    $unexpected = @($files | Where-Object {
+        $_.Extension -ne '.exe' -and $allowedPublishExtra -notcontains $_.Name
+    })
+
+    if ($exeFiles.Count -ne 1 -or $unexpected.Count -gt 0) {
+        Write-Host 'В каталоге публикации находятся:' -ForegroundColor Red
+        $files | ForEach-Object { Write-Host "  $($_.FullName)" -ForegroundColor Red }
+        throw 'compile.ps1 не создал ровно один EXE.'
+    }
+
+    # Ресурсы обязаны лежать рядом с EXE с манифестом: именно из этой папки
+    # приложение читает данные, а не из кэша распаковки single-file.
+    if (-not (Test-Path -LiteralPath $manifest)) {
+        throw "Ресурсы публикации не опубликованы: не найден $manifest"
+    }
+
+    $report = Join-Path $publish 'data-verify-report.txt'
+    if (Test-Path -LiteralPath $report) {
+        $reportLines = [IO.File]::ReadAllLines($report)
+        foreach ($line in $reportLines) { Write-Host "  $line" -ForegroundColor DarkGray }
+        if ($reportLines.Count -eq 0 -or $reportLines[0] -notmatch 'совпадают') {
+            throw "Проверка целостности ресурсов публикации не подтверждена: $($reportLines[0])"
+        }
+    } else {
+        throw "Приложение не оставило отчёт о ресурсах: $report"
+    }
+
+    $resourceCount = @(Get-ChildItem -LiteralPath $dataDir -Recurse -File).Count
+    Write-Host "Single-file публикация: $($exeFiles[0].FullName)" -ForegroundColor Green
+    Write-Host "Ресурсы рядом с EXE: файлов $resourceCount, манифест подтверждён." -ForegroundColor Green
+}
+
+# Единственный экземпляр приложения и режим проверок.
 # Проверка идёт после публикации: она запускает exe, и на файле прошлой сборки
 # результат был бы недостоверным. Старый exe не знает ключа -citest, принимает
 # его за путь к файлу и запускается как обычный пользовательский старт — вместе
 # с установочными сценариями. Поэтому проба сама сообщает «пропущено», если exe
 # отсутствует, собран из другого коммита или имеет другую версию.
-# Запускается с -citest: проверки не должны выполнять установочные сценарии.
-Invoke-Check -Name 'Single instance probe' -Body {
+New-Check -Id 'singleInstance' -Name 'Single instance probe' -Suites $publishSuites -Body {
     & powershell -NoProfile -ExecutionPolicy Bypass -File ci/single_instance_probe.ps1
     if ($LASTEXITCODE -ne 0) {
         throw "single instance probe не прошёл: код $LASTEXITCODE"
     }
 }
 
-# Дополнительно: проверка памяти. В CI не входит, но полезна локально.
-Invoke-Check -Name 'Проверка памяти (вне CI)' -Body {
-    node ci/validate_memory.mjs
+# --- Ночной набор ------------------------------------------------------------
+
+# Негативные контроли: КАЖДАЯ новая проверка обязана упасть на возвращённом
+# дефекте. Мутация вносится во временную копию дерева — рабочие файлы не
+# трогаются, а базовая линия проверяется тут же. Самый долгий шаг из всех
+# (около семи минут), поэтому он вынесен из быстрого гейта: в гейте проверка,
+# которую никто не ждёт, перестаёт быть гейтом.
+New-Check -Id 'mutation' -Name 'R32 mutation controls' -Suites @('nightly') -Body {
+    node ci/lib/run_suite.mjs mutation
+}
+
+# Тяжёлые проверки карты: ручной разбор перекрёстков и визуализация Location.
+New-Check -Id 'heavyMap' -Name 'Heavy map smoke' -Suites @('nightly') -Body {
+    node ci/lib/run_suite.mjs heavyMap
+}
+
+# Проверка памяти. В CI не входит, но полезна локально.
+New-Check -Id 'memory' -Name 'Проверка памяти (вне CI)' -Suites @('nightly') -Body {
+    node ci/lib/run_suite.mjs memory
+}
+
+# ============================================================================
+# Прогон выбранного набора
+# ============================================================================
+
+$selectedChecks = @($checkList | Where-Object { $_.Suites -contains $script:Suite })
+
+# Общее число проверок выводится из СПИСКА: расхождение с фактическим числом
+# теперь невозможно по построению.
+$script:TotalChecks = $selectedChecks.Count
+
+Write-Host ''
+Write-Host "=== Набор проверок: $($script:Suite) ===" -ForegroundColor Cyan
+
+# Состояние публикуется заново уже с верным TotalChecks: расширение могло
+# прочитать файл между нумерацией прогона и разбором списка проверок.
+Write-LocalRunState -Status 'in_progress' -Branch $script:GitBranch -Commit $script:GitCommit -Title $script:RunTitle
+
+foreach ($check in $selectedChecks) {
+    Invoke-Check -Name $check.Name -Body $check.Body
 }
 
 Write-Host ''

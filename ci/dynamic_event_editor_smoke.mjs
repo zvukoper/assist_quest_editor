@@ -1,6 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
-import { chromium } from "playwright";
+import { openBrowser, closeBrowser } from "./lib/browser.mjs";
 
 // Smoke-проверка нового Authoring слоя Dynamic Event:
 // Definition отделён от runtime instance, Location выбирается ссылкой,
@@ -9,11 +9,21 @@ import { chromium } from "playwright";
 const root = process.cwd();
 const read = rel => fs.readFileSync(path.join(root, ...rel.split("/")), "utf8");
 
+// Контрактные проверки исходников собираются, а не падают по первой: цель —
+// увидеть все расхождения за один прогон. Итог подводится в конце файла.
+const failures = [];
+function check(condition, message) {
+  if (!condition) failures.push(message);
+}
+
 const editorJs = read("src/AssistQuestEditor.App/Web/editor.js");
 const sceneJs = read("src/AssistQuestEditor.App/Web/sceneEditor.js");
 const dialogueJs = read("src/AssistQuestEditor.App/Web/dialogueWorkspace.js");
 const locationJs = read("src/AssistQuestEditor.App/Web/locationEditor.js");
 const dynamicJs = read("src/AssistQuestEditor.App/Web/dynamicEventEditor.js");
+// Действие активации отправляет симулятор, а не редактор события: редактор
+// описывает Definition, активирует её уже runtime.
+const simulatorJs = read("src/AssistQuestEditor.App/Web/simulator.js");
 check(/DynamicEventDiscovery/.test(dynamicJs),
   "Dynamic Event editor must expose DynamicEventDiscovery trigger.");
 check(/dynamicEventSourceDefinition/.test(dynamicJs),
@@ -22,7 +32,7 @@ check(/spawnOnSimulationStart/.test(dynamicJs) && /respawnOnExpired/.test(dynami
   "Dynamic Event editor must expose first-spawn and expiry-respawn policies.");
 const theme = read("src/AssistQuestEditor.App/Web/theme.css");
 
-const browser = await chromium.launch({ headless: true });
+const { browser } = await openBrowser();
 try {
   const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
   const errors = [];
@@ -169,8 +179,14 @@ try {
 
   console.log("Dynamic Event Editor smoke: OK");
 } finally {
-  await browser.close();
+  await closeBrowser(browser);
 }
 
-check(/activate_dynamic_event/.test(dynamicJs),
+check(/activate_dynamic_event/.test(simulatorJs),
   "Simulator must expose explicit dynamic event activation action.");
+
+if (failures.length) {
+  console.error("Dynamic Event Editor smoke: FAIL");
+  for (const failure of failures) console.error("  - " + failure);
+  process.exit(1);
+}

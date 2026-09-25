@@ -1,7 +1,7 @@
 {
   "name": "ci-monitor",
   "displayName": "CI Monitor",
-  "description": "Плашка статуса проверок рядом с Ollama Usage: GitHub-режим читает страницу Actions, локальный режим показывает прогон ci/run_local.ps1 числом пройденных проверок (например 5/24). Уведомляет только о проблемах.",
+    "description": "Плашка статуса проверок рядом с Ollama Usage: GitHub-режим читает страницу Actions, локальный режим показывает прогон ci/run_local.ps1 числом пройденных проверок (например 12/15 для набора fast). Уведомляет только о проблемах.",
   "version": "0.4.0",
   "publisher": "assist-quest-editor",
   "license": "MIT",

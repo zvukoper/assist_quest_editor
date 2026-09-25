@@ -1,6 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
-import { chromium } from "playwright";
+import { openBrowser, closeBrowser } from "./lib/browser.mjs";
 
 // Проверка кнопки «Перестроить» в нодовом редакторе.
 //
@@ -28,7 +28,7 @@ const check = (condition, message) => {
   if (!condition) failures.push(message);
 };
 
-const browser = await chromium.launch({ headless: true });
+const { browser } = await openBrowser();
 try {
   const page = await browser.newPage();
   const pageErrors = [];
@@ -194,7 +194,7 @@ try {
 
   check(pageErrors.length === 0, "pageerror при перестроении: " + pageErrors.join(" | "));
 } finally {
-  await browser.close();
+  await closeBrowser(browser);
 }
 
 if (failures.length) {

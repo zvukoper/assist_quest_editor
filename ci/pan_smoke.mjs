@@ -24,7 +24,7 @@
 
 import fs from "node:fs";
 import path from "node:path";
-import { chromium } from "playwright";
+import { openBrowser, closeBrowser } from "./lib/browser.mjs";
 
 const root = process.cwd();
 const theme = fs.readFileSync(
@@ -47,7 +47,7 @@ const check = (condition, message) => {
   if (!condition) failures.push(message);
 };
 
-const browser = await chromium.launch({ headless: true });
+const { browser } = await openBrowser();
 
 /**
  * Прогоняет pan во всех геометриях для одного редактора.
@@ -298,5 +298,5 @@ try {
     process.exitCode = 1;
   }
 } finally {
-  await browser.close();
+  await closeBrowser(browser);
 }
