@@ -3818,7 +3818,18 @@
     const pos = pointerPosition(event);
 
     if (event.button === 0) {
+      const routeWaypointId = hitRouteWaypoint(pos.x, pos.y);
+      if (routeWaypointId) {
+        send({ action: "route_select_waypoint", id: routeWaypointId });
+        event.preventDefault();
+        return;
+      }
+
       if (hitPlayer(pos.x, pos.y)) {
+        if (route.enabled && simulationRunning) {
+          event.preventDefault();
+          return;
+        }
         draggingPlayer = true;
         dragPlayerPosition = { x: snapshot.player.position.x, z: snapshot.player.position.z };
         map.setPointerCapture?.(event.pointerId);
@@ -3860,18 +3871,43 @@
         send({ action: "select_point", id: point.id });
       } else if (!point) {
         const world = screenToWorld(pos.x, pos.y);
-        send({
-          action: "create_temporary_point",
-          x: world.x,
-          y: snapshot?.player?.position?.y ?? 0,
-          z: world.z
-        });
+
+        if (route.enabled && !simulationRunning) {
+          send({
+            action: "route_add_waypoint",
+            x: world.x,
+            y: snapshot?.player?.position?.y ?? 0,
+            z: world.z
+          });
+        } else if (!route.enabled) {
+          send({
+            action: "create_temporary_point",
+            x: world.x,
+            y: snapshot?.player?.position?.y ?? 0,
+            z: world.z
+          });
+        }
+
         event.preventDefault();
       }
       return;
     }
 
     if (event.button === 1 || event.button === 2) {
+      if (event.button === 2 && route.enabled && !simulationRunning) {
+        const routeWaypointId = hitRouteWaypoint(pos.x, pos.y);
+        if (routeWaypointId) {
+          routeRightClickCandidate = {
+            id: routeWaypointId,
+            x: pos.x,
+            y: pos.y
+          };
+          map.setPointerCapture?.(event.pointerId);
+          event.preventDefault();
+          return;
+        }
+      }
+
       panning = true;
       panStart = { x: pos.x, y: pos.y, cx: camera.cx, cz: camera.cz };
       map.setPointerCapture?.(event.pointerId);
@@ -3882,16 +3918,42 @@
   map.addEventListener("pointermove", event => {
     const pos = pointerPosition(event);
 
+    if (routeRightClickCandidate && !panning) {
+      const moved = Math.hypot(
+        pos.x - routeRightClickCandidate.x,
+        pos.y - routeRightClickCandidate.y);
+
+      if (moved > 6) {
+        panning = true;
+        panStart = {
+          x: routeRightClickCandidate.x,
+          y: routeRightClickCandidate.y,
+          cx: camera.cx,
+          cz: camera.cz
+        };
+        routeRightClickCandidate = null;
+      }
+    }
+
     if (!draggingPlayer && !panning && snapshot) {
       // Приоритет подсветки повторяет приоритет нажатия: в pointerdown ЛКМ по
       // игроку начинает перетаскивание раньше любых проверок карты, значит и
       // подсветка обязана показывать игрока, а не элемент под ним.
-      const overPlayer = hitPlayer(pos.x, pos.y);
-      const overDynamicEvent = overPlayer ? null : hitDynamicEventMarker(pos.x, pos.y);
-      const overQuest = (overPlayer || overDynamicEvent) ? null : hitQuestMarker(pos.x, pos.y);
-      const hoveredPoint = (overPlayer || overDynamicEvent || overQuest) ? null : hitPoint(pos.x, pos.y);
+      const overRouteWaypoint = hitRouteWaypoint(pos.x, pos.y);
+      const overPlayer = overRouteWaypoint ? false : hitPlayer(pos.x, pos.y);
+      const overDynamicEvent = (overRouteWaypoint || overPlayer) ? null : hitDynamicEventMarker(pos.x, pos.y);
+      const overQuest = (overRouteWaypoint || overPlayer || overDynamicEvent)
+        ? null
+        : hitQuestMarker(pos.x, pos.y);
+      const hoveredPoint = (overRouteWaypoint || overPlayer || overDynamicEvent || overQuest)
+        ? null
+        : hitPoint(pos.x, pos.y);
 
       let needsRedraw = false;
+      if (overRouteWaypoint !== hoveredRouteWaypointId) {
+        hoveredRouteWaypointId = overRouteWaypoint;
+        needsRedraw = true;
+      }
       if (overPlayer !== hoveredPlayer) {
         hoveredPlayer = overPlayer;
         needsRedraw = true;
@@ -3907,11 +3969,13 @@
 
       // Курсор показывает, что элемент доступен: игрок перетаскивается («grab»),
       // квест и СДО кликабельны («pointer»). Приоритет тот же, что у подсветки.
-      const cursor = overPlayer
-        ? "grab"
-        : ((overDynamicEvent || overQuest)
-          ? "pointer"
-          : (hoveredPoint ? (hoveredPoint.isCity ? "default" : "pointer") : "default"));
+      const cursor = overRouteWaypoint
+        ? "pointer"
+        : (overPlayer
+          ? "grab"
+          : ((overDynamicEvent || overQuest)
+            ? "pointer"
+            : (hoveredPoint ? (hoveredPoint.isCity ? "default" : "pointer") : "default")));
       if (map.style.cursor !== cursor) map.style.cursor = cursor;
 
       if (needsRedraw) drawMap();
@@ -3933,6 +3997,16 @@
 
   map.addEventListener("pointerup", event => {
     const pos = pointerPosition(event);
+
+    if (routeRightClickCandidate) {
+      const id = routeRightClickCandidate.id;
+      routeRightClickCandidate = null;
+      send({ action: "route_delete_waypoint", id });
+      map.releasePointerCapture?.(event.pointerId);
+      map.style.cursor = "default";
+      event.preventDefault();
+      return;
+    }
 
     if (draggingPlayer && snapshot) {
       const world = screenToWorld(pos.x, pos.y);
@@ -3964,7 +4038,12 @@
   });
 
   map.addEventListener("pointerleave", event => {
-    if (hoveredPointId !== null || hoveredQuest !== null || hoveredPlayer) {
+    routeRightClickCandidate = null;
+    if (hoveredRouteWaypointId !== null ||
+        hoveredPointId !== null ||
+        hoveredQuest !== null ||
+        hoveredPlayer) {
+      hoveredRouteWaypointId = null;
       hoveredPointId = null;
       hoveredQuest = null;
       hoveredPlayer = false;
