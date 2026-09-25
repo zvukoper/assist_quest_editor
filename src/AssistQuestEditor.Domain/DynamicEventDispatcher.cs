@@ -412,7 +412,7 @@ public sealed class DynamicEventDispatcher : IDynamicEventDispatcher
             instance.InstanceId,
             instance.Point);
 
-        if (_definitions.TryGetValue(instance.DefinitionId, out var sourceDefinition))
+        if (_definitions.ContainsKey(instance.DefinitionId))
             ArmDiscoverySchedules(instance.DefinitionId, clock, now, schedules);
 
         // Для Dynamic Event, который связан с QuestId, обнаружение является
