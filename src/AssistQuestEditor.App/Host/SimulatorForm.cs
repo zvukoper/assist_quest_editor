@@ -27,6 +27,17 @@ public sealed class SimulatorForm : WebViewForm
     private readonly ILocationResolver _locationResolver;
     private readonly IDynamicEventDispatcher _dynamicEventDispatcher;
     private readonly RoadIndex _roads;
+    private readonly RoadRoutePlanner _routePlanner;
+    private RouteState _routeState = RouteState.Empty;
+    private RoutePlan _routePlan = RoutePlan.Empty;
+    private RouteCursor _routeCursor = RouteCursor.Initial;
+    private string? _selectedRouteWaypointId;
+    private bool _routeEnabled;
+    private DateTimeOffset? _routeMovementLastTick;
+    private double _routeLastHeading;
+    private int? _routeStoppedWaypointIndex;
+    private bool _resumeRouteAfterStop;
+    private bool _inventoryPausedSimulation;
     // Сохранения принадлежат МИРУ: снимок одного мира нельзя загрузить в
     // другой, где другие квесты и точки. Раньше стор брал общий каталог
     // `Документы\Assist Quest Editor\saves`, лежащий ВНЕ дерева миров — его
@@ -100,7 +111,8 @@ public sealed class SimulatorForm : WebViewForm
         ILocationResolver locationResolver,
         IDynamicEventDispatcher dynamicEventDispatcher,
         RoadIndex? roads = null,
-        WorldRecord? world = null)
+        WorldRecord? world = null,
+        JunctionIndex? junctions = null)
         : base(
             "Симулятор",
             "simulator.html",
@@ -127,6 +139,7 @@ public sealed class SimulatorForm : WebViewForm
         _locationResolver = locationResolver ?? throw new ArgumentNullException(nameof(locationResolver));
         _dynamicEventDispatcher = dynamicEventDispatcher ?? throw new ArgumentNullException(nameof(dynamicEventDispatcher));
         _roads = roads ?? new RoadIndex(Array.Empty<RoadSegment>());
+        _routePlanner = new RoadRoutePlanner(_roads.Segments, junctions?.ToPoints() ?? Array.Empty<JunctionPoint>());
         _journalDetached = AppUiPreferencesStore.Load().JournalDetached;
         Opacity = 0;
         _questGraph.Changed += QuestGraph_Changed;
@@ -134,6 +147,7 @@ public sealed class SimulatorForm : WebViewForm
         _runtimeTimer = new System.Windows.Forms.Timer { Interval = 250 };
         _runtimeTimer.Tick += (_, _) =>
         {
+            UpdateRouteMovement();
             _runtime.Tick();
             _dynamicEventDispatcher.Tick();
         };
@@ -339,6 +353,38 @@ public sealed class SimulatorForm : WebViewForm
             // перерисовывает всю карту, и без этого набор точек исчезал бы
             // через доли секунды после нажатия «Показать в симуляторе».
             locationVisualisation = _locationVisualisation,
+            route = new
+            {
+                enabled = _routeEnabled,
+                defaultSpeedKmh = _routeState.DefaultSpeedKmh,
+                selectedWaypointId = _selectedRouteWaypointId,
+                stoppedWaypointIndex = _routeStoppedWaypointIndex,
+                waypoints = _routeState.Waypoints.Select((waypoint, index) => new
+                {
+                    id = waypoint.Id,
+                    index = index + 1,
+                    x = waypoint.Position.X,
+                    y = waypoint.Position.Y,
+                    z = waypoint.Position.Z,
+                    speedKmh = waypoint.SpeedKmh
+                }).ToArray(),
+                legs = _routePlan.Legs.Select(leg => new
+                {
+                    startWaypointIndex = leg.StartWaypointIndex,
+                    endWaypointIndex = leg.EndWaypointIndex,
+                    lengthMeters = leg.LengthMeters,
+                    polyline = leg.Polyline.Select(point => new
+                    {
+                        x = point.X,
+                        y = point.Y,
+                        z = point.Z
+                    }).ToArray()
+                }).ToArray(),
+                errors = _routePlan.Errors,
+                fovAngleDegrees = RouteMovementEngine.FovAngleDegrees,
+                fovMinLengthMeters = RouteMovementEngine.FovMinLengthMeters,
+                fovMaxLengthMeters = RouteMovementEngine.FovMaxLengthMeters
+            },
             // Индикатор светового дня: астрономию считает домен, UI только рисует.
             daylight = BuildDaylight(snapshot),
             // Свойства мира из кампании: блок «Окружение» показывает их и умеет
@@ -430,6 +476,37 @@ public sealed class SimulatorForm : WebViewForm
             {
                 case "set_player_position":
                     SetPlayerPosition(root);
+                    break;
+
+                case "route_add_waypoint":
+                    AddRouteWaypoint(root);
+                    break;
+
+                case "route_delete_waypoint":
+                    DeleteRouteWaypoint(Required(root, "id"));
+                    break;
+
+                case "route_select_waypoint":
+                    SelectRouteWaypoint(Required(root, "id"));
+                    break;
+
+                case "route_set_waypoint_speed":
+                    SetRouteWaypointSpeed(
+                        Required(root, "id"),
+                        Number(root, "speed", RouteState.DefaultSpeedKmhValue));
+                    break;
+
+                case "route_set_default_speed":
+                    SetRouteDefaultSpeed(
+                        Number(root, "speed", RouteState.DefaultSpeedKmhValue));
+                    break;
+
+                case "route_toggle":
+                    SetRouteEnabled(root.GetProperty("enabled").GetBoolean());
+                    break;
+
+                case "route_clear":
+                    ClearRoute();
                     break;
 
                 case "select_point":
@@ -722,6 +799,10 @@ public sealed class SimulatorForm : WebViewForm
 
     private void SetPlayerPosition(JsonElement root)
     {
+        if (_routeEnabled && _runtime.SimulationRunning)
+            throw new InvalidOperationException(
+                "Координаты игрока нельзя менять во время движения по маршруту.");
+
         var old = _hub.Get<PlayerState>("player").Value;
         var position = new WorldCoordinate(
             Number(root, "x", old.Position.X),
@@ -731,6 +812,14 @@ public sealed class SimulatorForm : WebViewForm
         _hub.Get<PlayerState>("player").Set(
             old with { Position = position },
             "Редактор игрока");
+
+        if (_routeEnabled)
+        {
+            _routeCursor = RouteCursor.Initial;
+            _routeStoppedWaypointIndex = null;
+            _resumeRouteAfterStop = false;
+            _routeMovementLastTick = null;
+        }
 
         if (_runtime.State.Status == QuestRuntimeStatus.Waiting)
         {
