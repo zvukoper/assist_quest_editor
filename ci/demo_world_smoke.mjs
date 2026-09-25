@@ -188,6 +188,10 @@ if (extracted) {
         "Location тайника не содержит distancefromnearestcity.");
       check(types.includes("distancefromplayer"),
         "Location тайника не содержит distancefromplayer.");
+      const categoryCriterion = (doc.definition?.query?.criteria || [])
+        .find(c => String(c.type || "").toLowerCase() === "categoryisany");
+      check(String(categoryCriterion?.parameters?.value || "").includes("forest_fire"),
+        "Location тайника должна учитывать точки «Берегите лес» (forest_fire).");
       check(doc.definition?.query?.history?.maxSelectionCount === 0,
         "Location тайника должна исключать повторный выбор уже использованной точки.");
     } catch (error) {
