@@ -109,6 +109,19 @@
   // должны его сбрасывать.
   let locationVisualisation = null;
 
+  let route = {
+    enabled: false,
+    defaultSpeedKmh: 60,
+    selectedWaypointId: null,
+    stoppedWaypointIndex: null,
+    waypoints: [],
+    legs: [],
+    errors: []
+  };
+  let hoveredRouteWaypointId = null;
+  let routeWaypointHitAreas = [];
+  let routeRightClickCandidate = null;
+
   // Акцентный оранжевый приложения. Квестовая графика и подсветка выделения
   // обязаны совпадать с цветом в C#-окне кампаний, поэтому значение задано
   // строкой, а не вычисляется из темы: canvas не читает CSS-переменные.
@@ -319,6 +332,10 @@
     // Дороги рисуются между сеткой и точками: они фон, а не объект выбора.
     drawRoads(ctx, width, height);
 
+    // Маршрут лежит поверх дорог: чёрная обводка отделяет lime-линию от
+    // дорожной геометрии, а сами точки маршрута рисуются отдельным верхним слоем.
+    drawRouteLines(ctx, width, height);
+
     const points = snapshot.world?.points || [];
     const showAllLabels = camera.mpp < 24;
     const labelLimit = camera.mpp < 70 ? 140 : (camera.mpp < 180 ? 55 : 24);
@@ -391,8 +408,14 @@
     }
 
     const playerForDraw = currentPlayerForDraw();
+
+    // Конус обзора идёт до игрока и путевых точек: игрок остаётся самым верхним
+    // ориентиром, а сам конус не закрывает маркеры.
+    drawRouteFov(ctx, playerForDraw);
+
     drawDistanceRings(ctx, width, height, playerForDraw?.position);
     drawRuntimeTarget(ctx, playerForDraw?.position);
+    drawRouteWaypoints(ctx, width, height);
     drawPlayer(ctx, playerForDraw);
 
     const visualInfo = runtimeTargetInfo();
@@ -1118,6 +1141,206 @@
     strokeTextOutline(ctx, text, q.x, baseline);
     ctx.fillText(text, q.x, baseline);
     ctx.restore();
+  }
+
+  function drawRouteLines(ctx, width, height) {
+    if (!route?.legs?.length)
+      return;
+
+    ctx.save();
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
+
+    for (const leg of route.legs) {
+      const points = Array.isArray(leg.polyline) ? leg.polyline : [];
+      if (points.length < 2)
+        continue;
+
+      ctx.beginPath();
+      points.forEach((point, index) => {
+        const q = worldToScreen(Number(point.x), Number(point.z));
+        if (index === 0) ctx.moveTo(q.x, q.y);
+        else ctx.lineTo(q.x, q.y);
+      });
+
+      // Чёрная обводка 2 px с каждой стороны.
+      ctx.lineWidth = 6;
+      ctx.strokeStyle = "#000000";
+      ctx.stroke();
+
+      // Само lime-полотно маршрута.
+      ctx.lineWidth = 2;
+      ctx.strokeStyle = "#b8ff3f";
+      ctx.stroke();
+    }
+
+    ctx.restore();
+  }
+
+  function drawRouteFov(ctx, player) {
+    if (!route?.enabled || !route?.legs?.length || !player?.position)
+      return;
+
+    const speed = Math.max(0, Number(player.speedKmh) || 0);
+    const lengthMeters = 30 + (1 - Math.min(speed, 80) / 80) * 70;
+    const angle = Number(player.heading || 0) * Math.PI / 180;
+    const half = 40 * Math.PI / 180;
+
+    const left = worldToScreen(
+      player.position.x + Math.cos(angle - half) * lengthMeters,
+      player.position.z + Math.sin(angle - half) * lengthMeters);
+    const right = worldToScreen(
+      player.position.x + Math.cos(angle + half) * lengthMeters,
+      player.position.z + Math.sin(angle + half) * lengthMeters);
+    const center = worldToScreen(player.position.x, player.position.z);
+
+    ctx.save();
+    ctx.beginPath();
+    ctx.moveTo(center.x, center.y);
+    ctx.lineTo(left.x, left.y);
+    ctx.lineTo(right.x, right.y);
+    ctx.closePath();
+    ctx.fillStyle = "rgba(250,176,3,.10)";
+    ctx.strokeStyle = "rgba(250,176,3,.50)";
+    ctx.lineWidth = 1;
+    ctx.fill();
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  function drawRouteWaypoint(ctx, waypoint, selected) {
+    const q = worldToScreen(waypoint.x, waypoint.z);
+    const radius = 7.5;
+
+    ctx.save();
+
+    if (selected || waypoint.id === hoveredRouteWaypointId) {
+      ctx.beginPath();
+      ctx.arc(q.x, q.y, radius + 7, 0, Math.PI * 2);
+      ctx.lineWidth = 2.5;
+      ctx.strokeStyle = "#ffffff";
+      ctx.shadowColor = "rgba(255,255,255,.75)";
+      ctx.shadowBlur = 9;
+      ctx.stroke();
+      ctx.shadowColor = "transparent";
+      ctx.shadowBlur = 0;
+    }
+
+    ctx.beginPath();
+    ctx.arc(q.x, q.y, radius + 3, 0, Math.PI * 2);
+    ctx.lineWidth = 4;
+    ctx.strokeStyle = "rgba(0,0,0,.95)";
+    ctx.stroke();
+
+    ctx.beginPath();
+    ctx.arc(q.x, q.y, radius, 0, Math.PI * 2);
+    ctx.lineWidth = 3;
+    ctx.strokeStyle = "#d83a3a";
+    ctx.stroke();
+
+    ctx.beginPath();
+    ctx.arc(q.x, q.y, radius - 2, 0, Math.PI * 2);
+    ctx.lineWidth = 2;
+    ctx.strokeStyle = "#000000";
+    ctx.stroke();
+
+    ctx.beginPath();
+    ctx.arc(q.x, q.y, radius - 3.2, 0, Math.PI * 2);
+    ctx.fillStyle = ACCENT_COLOR;
+    ctx.fill();
+
+    ctx.font = "800 9px Open Sans, Arial, sans-serif";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillStyle = "#111419";
+    ctx.fillText(String(waypoint.index || 0), q.x, q.y + .4);
+
+    ctx.restore();
+
+    const label = Math.round(Number(waypoint.speedKmh) || 0) + " км/ч";
+    ctx.save();
+    ctx.font = "800 10px Open Sans, Arial, sans-serif";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "bottom";
+    ctx.fillStyle = "#ffffff";
+    ctx.lineWidth = 4;
+    ctx.strokeStyle = "rgba(0,0,0,.96)";
+    ctx.lineJoin = "round";
+    strokeTextOutline(ctx, label, q.x, q.y - radius - 7);
+    ctx.fillText(label, q.x, q.y - radius - 7);
+    ctx.restore();
+  }
+
+  function drawRouteWaypoints(ctx, width, height) {
+    routeWaypointHitAreas = [];
+
+    for (const waypoint of route.waypoints || []) {
+      const q = worldToScreen(Number(waypoint.x), Number(waypoint.z));
+      if (q.x < -40 || q.y < -50 || q.x > width + 40 || q.y > height + 50)
+        continue;
+
+      drawRouteWaypoint(
+        ctx,
+        waypoint,
+        String(waypoint.id) === String(route.selectedWaypointId));
+
+      routeWaypointHitAreas.push({
+        id: waypoint.id,
+        cx: q.x,
+        cy: q.y,
+        radius: 19
+      });
+    }
+  }
+
+  function hitRouteWaypoint(px, py) {
+    for (let index = routeWaypointHitAreas.length - 1; index >= 0; index -= 1) {
+      const area = routeWaypointHitAreas[index];
+      if (Math.hypot(area.cx - px, area.cy - py) <= area.radius)
+        return area.id;
+    }
+    return null;
+  }
+
+  function normalizeRoute(raw) {
+    const value = raw || {};
+    const waypoints = Array.isArray(value.waypoints)
+      ? value.waypoints.map((item, index) => ({
+          id: item.id,
+          index: Number(item.index) || index + 1,
+          x: Number(item.x) || 0,
+          y: Number(item.y) || 0,
+          z: Number(item.z) || 0,
+          speedKmh: Math.max(0, Math.min(150, Number(item.speedKmh) || 0))
+        }))
+      : [];
+
+    return {
+      enabled: !!value.enabled,
+      defaultSpeedKmh: Math.max(0, Math.min(150, Number(value.defaultSpeedKmh) || 0)),
+      selectedWaypointId: value.selectedWaypointId || null,
+      stoppedWaypointIndex: Number.isInteger(value.stoppedWaypointIndex)
+        ? value.stoppedWaypointIndex
+        : null,
+      waypoints,
+      legs: Array.isArray(value.legs) ? value.legs : [],
+      errors: Array.isArray(value.errors) ? value.errors : []
+    };
+  }
+
+  function renderRouteSpeedometer() {
+    const element = document.getElementById("routeSpeedometer");
+    const value = document.getElementById("routeSpeedValue");
+    if (!element || !value || !snapshot?.player)
+      return;
+
+    const speed = Math.max(0, Number(snapshot.player.speedKmh) || 0);
+    const visible = speed > 0.01;
+    element.hidden = !visible;
+    element.setAttribute("aria-hidden", visible ? "false" : "true");
+
+    if (visible)
+      value.textContent = Math.round(speed);
   }
 
   function drawPlayer(ctx, player) {
@@ -2826,12 +3049,60 @@
     if (id === "player") {
       const p = snapshot.player.position;
       const selected = snapshot.selection?.point;
+      const selectedRoute = (route.waypoints || []).find(item =>
+        String(item.id) === String(route.selectedWaypointId));
+      const routeSpeed = selectedRoute
+        ? selectedRoute.speedKmh
+        : route.defaultSpeedKmh;
+      const routeEditable = !simulationRunning;
+      const routeButtonLabel = route.enabled
+        ? "Движение по маршруту: ВКЛ"
+        : "Движение по маршруту";
+      const routeStatus =
+        route.errors?.length
+          ? "<div class='notice routeError' style='margin-top:6px'>" +
+              escapeHtml(route.errors[0]) +
+            "</div>"
+          : selectedRoute
+            ? "<div class='routeSelectionHint'>Выбрана путевая точка " +
+                escapeHtml(selectedRoute.index) +
+                ". Поле задаёт её скорость.</div>"
+            : "<div class='routeSelectionHint'>" +
+                (route.waypoints?.length
+                  ? "ЛКМ по пустому месту добавляет точку, ПКМ по точке удаляет её."
+                  : "Включите режим и поставьте первую точку ЛКМ на карте.") +
+              "</div>";
+
       return [
         "<div class='fieldGrid'>",
           "<div class='field'><label>X</label><input data-player='x' value='" + p.x + "'></div>",
           "<div class='field'><label>Y</label><input data-player='y' value='" + p.y + "'></div>",
           "<div class='field'><label>Z</label><input data-player='z' value='" + p.z + "'></div>",
-          "<div class='field'><label>Скорость</label><input value='" + snapshot.player.speedKmh + "' disabled></div>",
+          "<div class='field'><label>Факт. скорость</label><input value='" + Math.round(snapshot.player.speedKmh) + "' disabled></div>",
+        "</div>",
+        "<div class='routeControls'>",
+          "<button class='routeToggleButton" + (route.enabled ? " active" : "") + "' id='routeToggle' type='button' " +
+            "aria-pressed='" + (route.enabled ? "true" : "false") + "' " +
+            "title='Включить или выключить движение по маршруту'>" +
+            escapeHtml(routeButtonLabel) +
+          "</button>",
+          "<label class='routeSpeedField' title='" +
+            (selectedRoute
+              ? "Скорость выбранной путевой точки"
+              : "Скорость по умолчанию для новых путевых точек") +
+            "'><span>км/ч</span><input id='routeSpeedInput' type='number' min='0' max='150' step='1' value='" +
+              Math.round(routeSpeed) + "'" + (routeEditable ? "" : " disabled") + "></label>",
+          "<button class='routeClearButton' id='routeClear' type='button' title='Очистить маршрут'" +
+            (routeEditable && route.waypoints.length ? "" : " disabled") + ">✕</button>",
+        "</div>",
+        routeStatus,
+        "<div class='card routeSelectedCard' style='margin-top:6px;padding:7px'>",
+          "<div class='miniLabel'>Путевые точки</div>",
+          "<div class='kv'><span>Точек</span><span>" + route.waypoints.length + "</span></div>",
+          selectedRoute
+            ? "<div class='kv'><span>Выбрана</span><span>№ " + selectedRoute.index + " · " +
+                Math.round(selectedRoute.speedKmh) + " км/ч</span></div>"
+            : "",
         "</div>",
         "<div class='card' style='margin-top:8px;padding:8px'>",
           "<div class='miniLabel'>Выбранная СДО</div>",
@@ -3058,6 +3329,38 @@
           z: Number(side.querySelector("[data-player='z']").value)
         });
       });
+    });
+
+    side.querySelector("#routeToggle")?.addEventListener("click", () => {
+      send({
+        action: "route_toggle",
+        enabled: !route.enabled
+      });
+    });
+
+    side.querySelector("#routeSpeedInput")?.addEventListener("change", inputEvent => {
+      const input = inputEvent.currentTarget;
+      let speed = Number(input.value);
+      if (!Number.isFinite(speed)) speed = 60;
+      speed = Math.max(0, Math.min(150, Math.round(speed)));
+      input.value = String(speed);
+
+      if (route.selectedWaypointId) {
+        send({
+          action: "route_set_waypoint_speed",
+          id: route.selectedWaypointId,
+          speed
+        });
+      } else {
+        send({
+          action: "route_set_default_speed",
+          speed
+        });
+      }
+    });
+
+    side.querySelector("#routeClear")?.addEventListener("click", () => {
+      send({ action: "route_clear" });
     });
 
     side.querySelectorAll("[data-fact]").forEach(input => {
@@ -3333,6 +3636,7 @@
         campaignId: message.selectedQuest?.campaignId || "",
         questId: message.selectedQuest?.questId || ""
       };
+      route = normalizeRoute(message.route);
       questGraph = message.questGraph || questGraph;
       journalDetached = !!message.journalDetached;
       // Режим визуализации Location едет вместе со снимком: снимок перерисовывает
