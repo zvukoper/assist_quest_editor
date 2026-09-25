@@ -209,6 +209,55 @@ public sealed class RouteTests
     }
 
     [Fact]
+    public void ResumeAfterZeroSpeedKeepsUsingNextWaypointSpeedOnFollowingTick()
+    {
+        var plan = new RoutePlan(
+            new[]
+            {
+                new RouteLeg(-1, 0,
+                    new[] { new WorldCoordinate(0, 0, 0), new WorldCoordinate(10, 0, 0) },
+                    10),
+                new RouteLeg(0, 1,
+                    new[] { new WorldCoordinate(10, 0, 0), new WorldCoordinate(100, 0, 0) },
+                    90),
+                new RouteLeg(1, 2,
+                    new[] { new WorldCoordinate(100, 0, 0), new WorldCoordinate(200, 0, 0) },
+                    100)
+            },
+            Array.Empty<string>());
+
+        var route = new RouteState(60, new[]
+        {
+            new RouteWaypoint("a", new WorldCoordinate(10, 0, 0), 60),
+            new RouteWaypoint("b", new WorldCoordinate(100, 0, 0), 0),
+            new RouteWaypoint("c", new WorldCoordinate(200, 0, 0), 90)
+        });
+
+        var cursor = RouteMovementEngine.CreateResumeCursor(plan, 1, 0);
+        var first = RouteMovementEngine.Advance(
+            route,
+            plan,
+            cursor,
+            new WorldCoordinate(100, 0, 0),
+            1);
+
+        Assert.True(first.Enabled);
+        Assert.Equal(90, first.SpeedKmh, 6);
+        Assert.True(first.Cursor.ResumeAfterStop);
+
+        var second = RouteMovementEngine.Advance(
+            route,
+            plan,
+            first.Cursor,
+            first.Position,
+            1);
+
+        Assert.True(second.Enabled);
+        Assert.Equal(90, second.SpeedKmh, 6);
+        Assert.True(second.Position.X > first.Position.X);
+    }
+
+    [Fact]
     public void SmallRoadGapIsRecovered()
     {
         var planner = new RoadRoutePlanner(new[]
