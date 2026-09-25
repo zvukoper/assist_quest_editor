@@ -129,6 +129,10 @@
   let draggingRouteWaypointId = null;
   let dragRouteWaypointPosition = null;
   let lastPlayerSnapshotAt = 0;
+  let visualPlayerFrom = null;
+  let visualPlayerTo = null;
+  let visualPlayerAnimationStartedAt = 0;
+  let visualPlayerAnimationDurationMs = 0;
   let routeAnimationFrame = 0;
   let lastRouteAnimationPaintAt = 0;
 
@@ -1714,33 +1718,83 @@
     );
   }
 
-  function predictedRoutePlayer(player) {
-    if (!player || !route?.enabled || !simulationRunning)
-      return player;
-
-    const speed = Math.max(0, Number(player.speedKmh) || 0);
-    const delta = routeRenderDeltaSeconds();
-
-    if (speed <= 0 || delta <= 0)
-      return player;
-
-    const distance = speed / 3.6 * delta;
-    const heading = Number(player.heading || 0) * Math.PI / 180;
+  function clonePlayerForAnimation(player) {
+    if (!player?.position)
+      return null;
 
     return {
       ...player,
       position: {
         ...player.position,
-        x: player.position.x + Math.cos(heading) * distance,
-        z: player.position.z + Math.sin(heading) * distance
+        x: Number(player.position.x),
+        y: Number(player.position.y),
+        z: Number(player.position.z)
       }
+    };
+  }
+
+  function beginVisualPlayerTransition(previousPlayer, nextPlayer, now) {
+    const from = clonePlayerForAnimation(previousPlayer);
+    const to = clonePlayerForAnimation(nextPlayer);
+
+    if (!to) {
+      visualPlayerFrom = null;
+      visualPlayerTo = null;
+      visualPlayerAnimationDurationMs = 0;
+      return;
+    }
+
+    if (!from || !route?.enabled || !simulationRunning) {
+      visualPlayerFrom = to;
+      visualPlayerTo = to;
+      visualPlayerAnimationStartedAt = now;
+      visualPlayerAnimationDurationMs = 0;
+      return;
+    }
+
+    const previousTimestamp = lastPlayerSnapshotAt;
+    const intervalMs = previousTimestamp > 0
+      ? now - previousTimestamp
+      : 250;
+
+    visualPlayerFrom = from;
+    visualPlayerTo = to;
+    visualPlayerAnimationStartedAt = now;
+    visualPlayerAnimationDurationMs = Math.max(120, Math.min(420, intervalMs));
+  }
+
+  function animatedPlayerForDraw() {
+    if (!visualPlayerTo)
+      return snapshot?.player || null;
+
+    if (!visualPlayerFrom || visualPlayerAnimationDurationMs <= 0)
+      return visualPlayerTo;
+
+    const elapsed = Math.max(0, performance.now() - visualPlayerAnimationStartedAt);
+    const t = Math.max(0, Math.min(1, elapsed / visualPlayerAnimationDurationMs));
+    const eased = t * t * (3 - 2 * t);
+
+    return {
+      ...visualPlayerTo,
+      position: {
+        ...visualPlayerTo.position,
+        x: visualPlayerFrom.position.x +
+          (visualPlayerTo.position.x - visualPlayerFrom.position.x) * eased,
+        y: visualPlayerFrom.position.y +
+          (visualPlayerTo.position.y - visualPlayerFrom.position.y) * eased,
+        z: visualPlayerFrom.position.z +
+          (visualPlayerTo.position.z - visualPlayerFrom.position.z) * eased
+      },
+      speedKmh: Number(visualPlayerFrom.speedKmh || 0) +
+        (Number(visualPlayerTo.speedKmh || 0) - Number(visualPlayerFrom.speedKmh || 0)) * eased,
+      heading: visualPlayerTo.heading
     };
   }
 
   function currentPlayerForDraw() {
     if (!snapshot?.player) return null;
 
-    const player = predictedRoutePlayer(snapshot.player);
+    const player = animatedPlayerForDraw();
 
     if (!dragPlayerPosition) return player;
 
@@ -3990,6 +4044,7 @@
     if (message.type === "route_snapshot") {
       route = normalizeRoute(message.route);
       drawMap();
+      ensureRouteAnimation();
       // Do not rebuild the sidebar here: speed is emitted on every input event
       // and the focused number field must remain editable without losing focus.
       return;
@@ -4017,7 +4072,11 @@
 
     if (message.type === "snapshot") {
       const hadSnapshot = !!snapshot;
+      const previousPlayer = snapshot?.player || null;
+      const now = performance.now();
+
       snapshot = message.snapshot;
+      beginVisualPlayerTransition(previousPlayer, snapshot?.player || null, now);
       window.__assistItemCatalog = Array.isArray(message.itemCatalog) ? message.itemCatalog : [];
       runtime = message.runtime || null;
       simulationRunning = !!message.simulationRunning;
@@ -4033,7 +4092,7 @@
       };
       route = normalizeRoute(message.route);
       questGraph = message.questGraph || questGraph;
-      lastPlayerSnapshotAt = performance.now();
+      lastPlayerSnapshotAt = now;
       lastRouteAnimationPaintAt = 0;
       journalDetached = !!message.journalDetached;
       // Режим визуализации Location едет вместе со снимком: снимок перерисовывает
