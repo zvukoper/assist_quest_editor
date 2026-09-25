@@ -254,7 +254,8 @@ public sealed class RouteTests
         Assert.False(planner.Build(route).IsUsable);
     }
 
-
+    [Fact]
+    public void NearbyParallelRoadsAreNotMergedByDirectionRecovery()
     {
         var planner = new RoadRoutePlanner(new[]
         {
