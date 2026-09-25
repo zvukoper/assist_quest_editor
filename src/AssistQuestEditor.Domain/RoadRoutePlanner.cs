@@ -282,7 +282,7 @@ public sealed class RoadRoutePlanner
     {
         var degrees = _adjacency.Select(item => item.Count).ToArray();
         var cellRadius = (int)Math.Ceiling(RecoveryGapMaxMeters / GridCellSizeMeters);
-        var pairs = new HashSet<(int A, int B)>();
+        var paired = new HashSet<(int A, int B)>();
 
         foreach (var entry in _nodeGrid)
         {
@@ -298,34 +298,51 @@ public sealed class RoadRoutePlanner
                     continue;
 
                 foreach (var a in bucket)
-                foreach (var b in otherBucket)
                 {
-                    if (a == b)
+                    if (degrees[a] != 1)
                         continue;
 
-                    var key = a < b ? (a, b) : (b, a);
-                    if (!pairs.Add(key) || HasEdge(a, b))
+                    var bestNode = -1;
+                    var bestDistance = double.PositiveInfinity;
+
+                    foreach (var b in otherBucket)
+                    {
+                        if (a == b || degrees[b] != 1)
+                            continue;
+
+                        var vx = _nodes[b].X - _nodes[a].X;
+                        var vz = _nodes[b].Z - _nodes[a].Z;
+                        var distance = Math.Sqrt(vx * vx + vz * vz);
+
+                        if (distance <= NodeMergeToleranceMeters ||
+                            distance > RecoveryGapMaxMeters ||
+                            distance >= bestDistance)
+                            continue;
+
+                        var dirX = vx / distance;
+                        var dirZ = vz / distance;
+
+                        // CanContinue для тупика смотрит наружу от дороги к концу:
+                        // первый конец должен смотреть к второму, второй — к первому.
+                        if (!CanContinue(degrees, a, dirX, dirZ) ||
+                            !CanContinue(degrees, b, -dirX, -dirZ))
+                            continue;
+
+                        bestNode = b;
+                        bestDistance = distance;
+                    }
+
+                    if (bestNode < 0)
                         continue;
 
-                    var vx = _nodes[b].X - _nodes[a].X;
-                    var vz = _nodes[b].Z - _nodes[a].Z;
-                    var distance = Math.Sqrt(vx * vx + vz * vz);
+                    var key = a < bestNode
+                        ? (a, bestNode)
+                        : (bestNode, a);
 
-                    if (distance <= NodeMergeToleranceMeters ||
-                        distance > RecoveryGapMaxMeters)
+                    if (!paired.Add(key) || HasEdge(a, bestNode))
                         continue;
 
-                    var dirX = vx / distance;
-                    var dirZ = vz / distance;
-
-                    // CanContinue для тупика смотрит наружу от дороги к концу.
-                    // Поэтому первый конец должен смотреть в сторону второго,
-                    // а второй — обратно к первому.
-                    if (!CanContinue(degrees, a, dirX, dirZ) ||
-                        !CanContinue(degrees, b, -dirX, -dirZ))
-                        continue;
-
-                    AddEdge(a, b, distance, recovery: true);
+                    AddEdge(a, bestNode, bestDistance, recovery: true);
                 }
             }
         }
