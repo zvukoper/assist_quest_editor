@@ -1310,7 +1310,7 @@ public sealed class SimulatorForm : WebViewForm
         }
 
         _routeCursor = IsRouteCursorUsable(savedCursor)
-            ? savedCursor with { ResumeAfterStop = false }
+            ? savedCursor
             : RouteCursor.Initial;
 
         _routeStoppedWaypointIndex = _routeCursor.StoppedAtWaypointIndex;
