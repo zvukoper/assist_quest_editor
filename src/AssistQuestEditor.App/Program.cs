@@ -486,6 +486,7 @@ internal static class Program
     /// stdout из вызывающего процесса не читается, поэтому файл отчёта —
     /// единственный канал, который видит и сборка, и человек.
     ///
+    /// Аргументы: --build-demo-world [--output <path>].
     /// Код возврата: 0 — архив собран, 1 — не удалось.
     /// </summary>
     private static int BuildDemoWorldFromCommandLine()
@@ -496,9 +497,20 @@ internal static class Program
 
         try
         {
-            // Архив кладётся рядом с ресурсами приложения: именно там его ищет
-            // «Пропустить» при первом запуске (AppPaths.ResourceRoot).
-            var archive = Path.Combine(AppPaths.ResourceRoot, WorldArchiveRules.DemoWorldFileName);
+            // По умолчанию архив кладётся рядом с ресурсами приложения: именно
+            // там его ищет «Пропустить» при первом запуске. Для CI/локальной
+            // генерации можно передать --output <path>, чтобы собрать архив в
+            // отдельный временный или source-data каталог.
+            var outputIndex = Array.FindIndex(
+                Environment.GetCommandLineArgs(),
+                arg => arg.Equals("--output", StringComparison.OrdinalIgnoreCase));
+            var args = Environment.GetCommandLineArgs();
+            var archive =
+                outputIndex >= 0 &&
+                outputIndex + 1 < args.Length &&
+                !string.IsNullOrWhiteSpace(args[outputIndex + 1])
+                    ? Path.GetFullPath(args[outputIndex + 1])
+                    : Path.Combine(AppPaths.ResourceRoot, WorldArchiveRules.DemoWorldFileName);
 
             // Подпись и момент ФИКСИРОВАНЫ (DemoWorldSeeder.DemoMoment/DemoAuthor):
             // иначе архив менялся бы при каждой пересборке, и CI не мог бы
