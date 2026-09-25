@@ -346,6 +346,52 @@ public sealed class RouteTests
     }
 
     [Fact]
+    public void OffRoadWaypointUsesDirectLeg()
+    {
+        var planner = new RoadRoutePlanner(new[]
+        {
+            new RoadSegment(0, 0, 25, 0)
+        });
+
+        var route = new RouteState(60, new[]
+        {
+            new RouteWaypoint("p1", new WorldCoordinate(10, 0, 0), 60),
+            new RouteWaypoint("p2", new WorldCoordinate(100, 0, 100), 60, true)
+        });
+
+        var plan = planner.Build(route, new WorldCoordinate(10, 0, 0));
+
+        Assert.True(plan.IsUsable);
+        var direct = Assert.Single(plan.Legs.Where(item => item.StartWaypointIndex == 0));
+        Assert.Equal(Math.Sqrt(100d * 100d + 100d * 100d), direct.LengthMeters, 6);
+        Assert.Equal(new WorldCoordinate(100, 0, 100), direct.Polyline[^1]);
+    }
+
+    [Fact]
+    public void OffRoadWaypointCanStartNextRoadLeg()
+    {
+        var planner = new RoadRoutePlanner(new[]
+        {
+            new RoadSegment(0, 0, 25, 0),
+            new RoadSegment(100, 100, 150, 100)
+        });
+
+        var route = new RouteState(60, new[]
+        {
+            new RouteWaypoint("p1", new WorldCoordinate(10, 0, 0), 60),
+            new RouteWaypoint("p2", new WorldCoordinate(100, 0, 100), 60, true),
+            new RouteWaypoint("p3", new WorldCoordinate(140, 0, 100), 60)
+        });
+
+        var plan = planner.Build(route, new WorldCoordinate(10, 0, 0));
+
+        Assert.True(plan.IsUsable);
+        Assert.Equal(3, plan.Legs.Count);
+        Assert.True(plan.Legs[1].Polyline.Count >= 2);
+        Assert.Equal(new WorldCoordinate(100, 0, 100), plan.Legs[1].Polyline[0]);
+    }
+
+    [Fact]
     public void MovementUsesMetersPerSecond()
     {
         var plan = new RoutePlan(
@@ -415,6 +461,47 @@ public sealed class RouteTests
         Assert.True(result.StoppedAtWaypoint);
         Assert.Equal(100, result.Position.X, 6);
         Assert.Equal(0, result.SpeedKmh, 6);
+    }
+
+    [Fact]
+    public void VirtualPlayerPlanResumesAfterSecondZeroSpeedWaypointOnNextLeg()
+    {
+        var plan = new RoutePlan(
+            new[]
+            {
+                new RouteLeg(-1, 0,
+                    new[] { new WorldCoordinate(0, 0, 0), new WorldCoordinate(10, 0, 0) },
+                    10),
+                new RouteLeg(0, 1,
+                    new[] { new WorldCoordinate(10, 0, 0), new WorldCoordinate(100, 0, 0) },
+                    90),
+                new RouteLeg(1, 2,
+                    new[] { new WorldCoordinate(100, 0, 0), new WorldCoordinate(200, 0, 0) },
+                    100)
+            },
+            Array.Empty<string>());
+
+        var cursor = RouteMovementEngine.CreateResumeCursor(plan, 1, 0);
+
+        Assert.Equal(2, cursor.LegIndex);
+        Assert.True(cursor.ResumeAfterStop);
+
+        var route = new RouteState(60, new[]
+        {
+            new RouteWaypoint("a", new WorldCoordinate(10, 0, 0), 60),
+            new RouteWaypoint("b", new WorldCoordinate(100, 0, 0), 0),
+            new RouteWaypoint("c", new WorldCoordinate(200, 0, 0), 90)
+        });
+
+        var result = RouteMovementEngine.Advance(
+            route,
+            plan,
+            cursor,
+            new WorldCoordinate(100, 0, 0),
+            1);
+
+        Assert.Equal(90, result.SpeedKmh, 6);
+        Assert.Equal(125, result.Position.X, 6);
     }
 
     [Fact]
