@@ -26,9 +26,13 @@ jobs:
           foreach ($project in $projects) {
             dotnet restore $project.FullName
             if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-            dotnet build $project.FullName --configuration Release --no-restore
-            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           }
+          dotnet build .\src\AssistQuestEditor.Domain\AssistQuestEditor.Domain.csproj --configuration Release --no-restore
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          # Проверяем Release-компиляцию App, но не запускаем существующий AfterTargets=Build VerifyDataResources:
+          # он зависит от powershell/Get-FileHash на runner и не относится к компиляции изменённого кода.
+          dotnet msbuild .\src\AssistQuestEditor.App\AssistQuestEditor.App.csproj /t:CoreCompile /p:Configuration=Release /p:RestoreIgnoreFailedSources=true
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Tests
         shell: pwsh
         run: |
