@@ -314,8 +314,12 @@ public sealed class DynamicEventDispatcherTests
         MovePlayer(hub, 100);
         dispatcher.Tick();
 
+        var discovered = Assert.Single(dispatcher.State.Instances);
+        Assert.Equal(DynamicEventInstanceStatus.Discovered, discovered.Status);
+        Assert.Null(quest.StartedQuestId);
+
+        Assert.True(dispatcher.Activate(discovered.InstanceId));
         Assert.Equal("cache-quest", quest.StartedQuestId);
-        Assert.Empty(dispatcher.State.Instances);
 
         var schedule = Assert.Single(dispatcher.State.Schedules);
         Assert.True(schedule.NextGameElapsed.HasValue);
