@@ -465,7 +465,13 @@ public sealed class DynamicEventDispatcher : IDynamicEventDispatcher
             return false;
         }
 
-        return Engage(instanceId);
+        // Активированный тайник считается забранным/использованным. Это
+        // освобождает MaxActiveInstances для следующего тайника, который уже
+        // был запланирован по времени обнаружения предыдущего.
+        if (!Engage(instanceId))
+            return false;
+
+        return Complete(instanceId, consumed: true);
     }
 
     public bool Engage(string instanceId) =>
