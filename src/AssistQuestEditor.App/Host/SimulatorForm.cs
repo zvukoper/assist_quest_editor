@@ -63,8 +63,7 @@ public sealed class SimulatorForm : WebViewForm
     private CampaignsForm? _campaignsForm;
 
     /// <summary>
-    /// Окно инвентаря. Отдельное окно, а не панель поверх карты: сетка 6×3
-    /// занимала половину оверлея и делила место с панелью персонажа.
+    /// Единое окно игрока: слева инвентарь, справа «Персонаж / Репутация».
     /// </summary>
     private InventoryForm? _inventoryForm;
 
@@ -1153,6 +1152,23 @@ public sealed class SimulatorForm : WebViewForm
         _selectedRouteWaypointId = null;
         _routeEnabled = false;
         _routeMovementLastTick = null;
+
+        // Runtime cursor не входит в сохранение, но точка с speed=0 является
+        // частью пользовательского маршрута. Если автосохранение было сделано
+        // после такой остановки, позиция игрока указывает, на какой waypoint
+        // нужно продолжить после повторного включения режима.
+        var playerPosition = _hub.Get<PlayerState>("player").Value.Position;
+        for (var index = 0; index < _routeState.Waypoints.Count - 1; index++)
+        {
+            var waypoint = _routeState.Waypoints[index];
+            var dx = playerPosition.X - waypoint.Position.X;
+            var dz = playerPosition.Z - waypoint.Position.Z;
+            if (waypoint.SpeedKmh <= 0.001d && Math.Sqrt(dx * dx + dz * dz) <= 3d)
+            {
+                _routeStoppedWaypointIndex = index;
+                break;
+            }
+        }
     }
 
     private void SetFact(JsonElement root)
