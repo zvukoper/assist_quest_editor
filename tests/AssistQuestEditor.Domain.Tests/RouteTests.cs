@@ -179,6 +179,36 @@ public sealed class RouteTests
     }
 
     [Fact]
+    public void StopsAtSecondZeroSpeedWaypointAndStoresNextLeg()
+    {
+        var planner = new RoadRoutePlanner(new[]
+        {
+            new RoadSegment(0, 0, 250, 0)
+        });
+
+        var route = new RouteState(60, new[]
+        {
+            new RouteWaypoint("a", new WorldCoordinate(50, 0, 0), 60),
+            new RouteWaypoint("b", new WorldCoordinate(100, 0, 0), 0),
+            new RouteWaypoint("c", new WorldCoordinate(200, 0, 0), 90)
+        });
+
+        var plan = planner.Build(route, new WorldCoordinate(0, 0, 0));
+        var result = RouteMovementEngine.Advance(
+            route,
+            plan,
+            RouteCursor.Initial,
+            new WorldCoordinate(0, 0, 0),
+            10);
+
+        Assert.False(result.Enabled);
+        Assert.True(result.StoppedAtWaypoint);
+        Assert.Equal(1, result.Cursor.StoppedAtWaypointIndex);
+        Assert.Equal(2, result.Cursor.LegIndex);
+        Assert.Equal(100, result.Position.X, 6);
+    }
+
+    [Fact]
     public void SmallRoadGapIsRecovered()
     {
         var planner = new RoadRoutePlanner(new[]
