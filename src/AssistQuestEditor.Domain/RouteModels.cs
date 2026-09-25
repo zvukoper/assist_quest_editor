@@ -3,7 +3,8 @@ namespace AssistQuestEditor.Domain;
 public sealed record RouteWaypoint(
     string Id,
     WorldCoordinate Position,
-    double SpeedKmh);
+    double SpeedKmh,
+    bool IsOffRoad = false);
 
 public sealed record RouteState(
     double DefaultSpeedKmh,
@@ -339,14 +340,15 @@ public static class RouteMovementEngine
     {
         var nextLegIndex = stoppedWaypointIndex;
 
-        // В планах, начинающихся от игрока, leg 0 — виртуальный
-        // «игрок → точка 1». Если остановились на точке 1 (index 0), следующий
-        // leg — уже index 1, то есть «точка 1 → точка 2».
+        // Если план начинается с виртуального leg «игрок → точка 1», то
+        // следующий leg после ЛЮБОЙ достигнутой точки имеет индекс
+        // waypointIndex + 1. Раньше это было исправлено только для точки 1,
+        // поэтому после остановки на точке 2 Resume запускал снова leg 2
+        // (точка 1 → точка 2).
         if (plan.Legs.Count > 0 &&
-            plan.Legs[0].StartWaypointIndex < 0 &&
-            stoppedWaypointIndex == 0)
+            plan.Legs[0].StartWaypointIndex < 0)
         {
-            nextLegIndex = 1;
+            nextLegIndex = stoppedWaypointIndex + 1;
         }
 
         if (stoppedWaypointIndex < 0 ||
