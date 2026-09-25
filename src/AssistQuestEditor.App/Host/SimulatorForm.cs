@@ -427,11 +427,20 @@ public sealed class SimulatorForm : WebViewForm
         _inventoryForm.CloseRequested += (_, _) => CloseInventoryWindow();
         _inventoryForm.FormClosed += (_, _) =>
         {
+            var resumeSimulation = _inventoryPausedSimulation;
+            _inventoryPausedSimulation = false;
             _inventoryForm = null;
-            // Окно закрыли: карта должна узнать об этом, иначе кнопка на карте
-            // останется в состоянии «открыто».
+
+            if (resumeSimulation && _runtime.IsPaused)
+                ResumeSimulation();
+
             RequestSnapshot("inventory window closed");
         };
+
+        _inventoryPausedSimulation = _runtime.SimulationRunning;
+        if (_inventoryPausedSimulation)
+            PauseSimulation();
+
         _inventoryForm.Show(this);
         AppLogger.Info("SimulatorForm: окно инвентаря открыто.",
             $"size={_inventoryForm.Width}x{_inventoryForm.Height}");
@@ -444,7 +453,6 @@ public sealed class SimulatorForm : WebViewForm
             return;
 
         _inventoryForm.Close();
-        _inventoryForm = null;
     }
 
     /// <summary>
@@ -2484,12 +2492,14 @@ public sealed class SimulatorForm : WebViewForm
         {
             _runtime.ResumeSimulation();
             _dynamicEventDispatcher.SetSimulationRunning(true);
+            _routeMovementLastTick = null;
             AppLogger.Info("SimulatorForm: симуляция продолжена после паузы.");
         }
         else
         {
             _runtime.SetSimulationRunning(true);
             _dynamicEventDispatcher.SetSimulationRunning(true);
+            _routeMovementLastTick = null;
             AppLogger.Info("SimulatorForm: симуляция запущена.");
         }
 
@@ -2505,6 +2515,9 @@ public sealed class SimulatorForm : WebViewForm
     /// </summary>
     private void StopSimulation(string reason)
     {
+        _inventoryPausedSimulation = false;
+        SetRouteAfterSimulationStateChange();
+
         // Если симуляция уже полностью выключена, «Стоп» не должен создавать
         // новое автосохранение. Пауза считается активным прохождением и при Stop
         // фиксируется как обычное выключение.
@@ -2526,6 +2539,7 @@ public sealed class SimulatorForm : WebViewForm
     {
         _runtime.PauseSimulation();
         _dynamicEventDispatcher.SetSimulationRunning(false);
+        SetRouteAfterSimulationStateChange();
         AppLogger.Info("SimulatorForm: симуляция поставлена на паузу.");
         RequestSnapshot("simulation paused");
     }
@@ -2534,6 +2548,7 @@ public sealed class SimulatorForm : WebViewForm
     {
         _runtime.ResumeSimulation();
         _dynamicEventDispatcher.SetSimulationRunning(true);
+        _routeMovementLastTick = null;
         AppLogger.Info("SimulatorForm: симуляция продолжена.");
         RequestSnapshot("simulation resumed");
     }
@@ -2557,6 +2572,7 @@ public sealed class SimulatorForm : WebViewForm
 
         SimulationSaveMapper.Apply(_hub, session.State);
         SetRouteStateAfterLoad(session.State.Route);
+        _inventoryPausedSimulation = false;
         SyncRuntimeQuestEnabled();
         _autoSaveAt = session.Header.CreatedAt;
         // Мир восстановлен, но часы должны стоять: иначе время пойдёт само,
