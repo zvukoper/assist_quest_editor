@@ -126,10 +126,9 @@ public static class RouteMovementEngine
     {
         route = (route ?? RouteState.Empty).Normalize();
 
-        var safeElapsed = Math.Clamp(
-            double.IsFinite(elapsedSeconds) ? elapsedSeconds : 0d,
+        var safeElapsed = Math.Max(
             0d,
-            2d);
+            double.IsFinite(elapsedSeconds) ? elapsedSeconds : 0d);
 
         if (route.Waypoints.Count < 2 ||
             plan.Legs.Count == 0 ||
