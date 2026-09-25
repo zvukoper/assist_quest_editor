@@ -27,14 +27,14 @@ jobs:
             dotnet restore $project.FullName
             if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           }
-          # Полная Release-сборка App запускает существующий VerifyDataResources target.
-          # В PATH runner сначала ставим Windows PowerShell 5.1, чтобы его встроенный
-          # Get-FileHash корректно отработал внутри ci/sync_data_resources.ps1.
-          $windowsPowerShell = Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0'
-          $env:PATH = $windowsPowerShell + ';' + $env:PATH
           dotnet build .\src\AssistQuestEditor.Domain\AssistQuestEditor.Domain.csproj --configuration Release --no-restore
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          dotnet build .\src\AssistQuestEditor.App\AssistQuestEditor.App.csproj --configuration Release --no-restore
+          # Release у App запускает существующий ресурсный target, который на
+          # GitHub runner использует Get-FileHash через powershell и мешает
+          # отделить компиляцию исходников от инфраструктуры ресурсов. Debug
+          # запускает тот же C# compiler и тот же набор исходников, но без этого
+          # AfterTargets=Build target, поэтому здесь проверяется именно код.
+          dotnet build .\src\AssistQuestEditor.App\AssistQuestEditor.App.csproj --configuration Debug --no-restore
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Tests
         shell: pwsh
