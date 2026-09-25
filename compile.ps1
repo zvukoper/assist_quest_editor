@@ -158,6 +158,22 @@ if (-not (Test-Path -LiteralPath $publishedManifest)) {
     exit 1
 }
 
+# DemoWorld.aqezip должен собираться из текущего DemoWorldSeeder, а не копироваться
+# как потенциально устаревший бинарник из source-data. Поэтому после publish
+# single-file EXE сам создаёт свежий canonical archive прямо в publish\data.
+$demoArchive = Join-Path $publishedDataDir 'DemoWorld.aqezip'
+Write-Host "=== Сборка bundled DemoWorld через DemoWorldSeeder ===" -ForegroundColor Cyan
+& $exePath --build-demo-world --output $demoArchive
+if ($LASTEXITCODE -ne 0) {
+    Write-Host "DemoWorldSeeder завершился с кодом $LASTEXITCODE." -ForegroundColor Red
+    exit $LASTEXITCODE
+}
+if (-not (Test-Path -LiteralPath $demoArchive) -or (Get-Item -LiteralPath $demoArchive).Length -le 0) {
+    Write-Host "DemoWorldSeeder не создал ожидаемый архив: $demoArchive" -ForegroundColor Red
+    exit 1
+}
+Write-Host "Bundled DemoWorld: $demoArchive" -ForegroundColor Green
+
 $version = $null
 try {
     $version = [System.Diagnostics.FileVersionInfo]::GetVersionInfo($exePath).ProductVersion
