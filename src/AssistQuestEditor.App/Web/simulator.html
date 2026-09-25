@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Симулятор</title>
-<link rel="stylesheet" href="theme.css?v=1.0.40.185">
+<link rel="stylesheet" href="theme.css?v=1.0.40.186">
 <style>
   .mapSurface { position:relative; overflow:hidden; }
   #mapCanvas { display:block; width:100%; height:100%; cursor:default; touch-action:none; background:#0d1014; }
@@ -121,7 +121,7 @@
         <span class="mapStatusHint" id="mapStatusHint"></span>
       </div>
       <button class="backpackButton" id="backpackButton" type="button"
-              aria-controls="inventoryWindowLink" aria-expanded="false"
+              aria-haspopup="dialog"
               data-game-tooltip="Инвентарь — клавиша I (в любой раскладке)">
         <svg viewBox="0 0 24 24" aria-hidden="true">
           <path d="M7.5 8.5V7a4.5 4.5 0 0 1 9 0v1.5"/>
@@ -131,32 +131,10 @@
         </svg>
         <span class="backpackNewDot" id="backpackNewDot"></span>
       </button>
-      <!-- Персонаж — ОТДЕЛЬНАЯ кнопка, а не тот же рюкзак.
-           Прежде панель персонажа открывалась кнопкой инвентаря, а когда
-           инвентарь уехал в своё окно, рюкзак стал открывать ЕГО — и панель
-           персонажа с вкладками «Персонаж/Репутация» оказалась недостижимой:
-           её открывальщик исчез, а функция осталась. Две кнопки рядом, каждая
-           со своим значком: сумка и человек. -->
-      <button class="backpackButton characterButton" id="characterButton" type="button"
-              aria-controls="playerOverlay" aria-expanded="false"
-              data-game-tooltip="Персонаж и репутация">
-        <svg viewBox="0 0 24 24" aria-hidden="true">
-          <circle cx="12" cy="8" r="3.6"/>
-          <path d="M5 20.5c0-3.6 3.1-5.6 7-5.6s7 2 7 5.6"/>
-        </svg>
-      </button>
-      <div class="playerOverlay" id="playerOverlay" aria-hidden="true">
-        <!-- Инвентаря здесь больше НЕТ: он открывается отдельным окном по
-             клавише I (inventory.html). Оверлей на карте остался для панели
-             ПЕРСОНАЖА — характеристики читаются вместе с картой, а сумка
-             занимала половину оверлея и спорила с ними за место. -->
-        <section class="gamePanel characterPanel" id="characterPanel">
-          <!-- Табы переключают правую панель: персонаж или репутация с НПЦ.
-               Кнопки рисует simulator.js, здесь только контейнеры, чтобы
-               разметка не дублировала подписи. -->
-          <div class="gamePanelTabs" id="characterTabs" role="tablist"></div>
-          <div class="gamePanelTabBody" id="characterTabBody"></div>
-        </section>
+      <!-- Инвентарь, персонаж и репутация теперь находятся в одном
+           отдельном окне игрока. Кнопка рюкзака открывает его целиком. -->
+      <div class="routeSpeedometer" id="routeSpeedometer" aria-hidden="true">
+        <span id="routeSpeedValue">0</span>
       </div>
       <div class="inventoryNotifications" id="inventoryNotifications" aria-live="polite"></div>
     </section>
@@ -185,7 +163,7 @@
   </div>
 </div>
 <script src="web_log.js?v=1.0.40.185"></script>
-<script src="simulator.js?v=1.0.40.185"></script>
+<script src="simulator.js?v=1.0.40.186"></script>
 <script src="interface.js?v=1.0.40.185"></script>
 </body>
 </html>

@@ -43,7 +43,10 @@ public sealed record SimulationSaveState(
     public DynamicEventRuntimeState DynamicEvents { get; init; } = DynamicEventRuntimeState.Empty;
 
     /// <summary>Текущая версия формата.</summary>
-    public const int CurrentFormatVersion = 2;
+    public const int CurrentFormatVersion = 3;
+
+    /// <summary>Пользовательский маршрут Симулятора.</summary>
+    public RouteState Route { get; init; } = RouteState.Empty;
 }
 
 /// <summary>

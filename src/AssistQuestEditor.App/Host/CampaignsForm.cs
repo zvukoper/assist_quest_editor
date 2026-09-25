@@ -99,7 +99,7 @@ public sealed class CampaignsForm : Form
     private static readonly Color RowSelectedBackColor = Color.FromArgb(58, 44, 14);
     // Строка квеста идёт от отступа слева до правого края плашки кампании:
     // отступ показывает вложенность, правый край образует общую линию.
-    private const int CampaignHeaderHeight = 48;
+    private const int CampaignHeaderHeight = 26;
     // Раздел мира выше строки кампании: имя мира — заголовок дерева, а не
     // равноправный пункт списка.
     //
@@ -111,11 +111,11 @@ public sealed class CampaignsForm : Form
     private static readonly Color WorldRowBackColor = Color.FromArgb(28, 25, 18);
     // Минимальная высота строки: заголовок + строка деталей. Реальная высота
     // считается по переносу текста в MeasureRowHeight.
-    private const int QuestRowMinHeight = 46;
+    private const int QuestRowMinHeight = 24;
     // Высота подписи автора/даты. Константа, потому что подпись — одна строка
     // без переноса, и её высота должна быть видна формуле начальной высоты
     // плашки: иначе состав кампании уезжает под нижний край окна.
-    private const int SignatureRowHeight = 18;
+    private const int SignatureRowHeight = 15;
 
     /// <summary>
     /// Начальная высота блока вложенных кампаний до первой раскладки.
@@ -124,7 +124,7 @@ public sealed class CampaignsForm : Form
     /// плашек. Константа нужна только чтобы блок не был нулевой высоты до
     /// первого Resize — иначе вложенные кампании не отрисовались бы вообще.
     /// </summary>
-    private const int CampaignStackHeight = 200;
+    private const int CampaignStackHeight = 80;
 
     // --- Оформление в стиле основной формы редактора ---
     //
@@ -144,10 +144,10 @@ public sealed class CampaignsForm : Form
     /// влево-вправо — иначе пропадает древовидность. Без этого отступа все
     /// строки выравнивались по левому краю и уровни становились неразличимы.
     /// </summary>
-    private const int TreeLevelIndent = 16;
+    private const int TreeLevelIndent = 18;
 
     /// <summary>Отступ строк квестов ВНУТРИ кампании.</summary>
-    private const int QuestRowIndent = 30;
+    private const int QuestRowIndent = 18;
 
     private readonly FlowLayoutPanel _list;
     private readonly Label _title;
@@ -181,18 +181,18 @@ public sealed class CampaignsForm : Form
         BackColor = Color.FromArgb(10, 12, 16);
         ForeColor = Color.FromArgb(231, 237, 244);
         WindowGeometryStore.Attach(this, "campaigns");
-        var toolbar = new Panel { Dock = DockStyle.Top, Height = 44, Padding = new Padding(8, 6, 8, 6), BackColor = Color.FromArgb(23, 24, 25) };
+        var toolbar = new Panel { Dock = DockStyle.Top, Height = 34, Padding = new Padding(7, 4, 7, 4), BackColor = Color.FromArgb(23, 24, 25) };
         // Заголовок собирается из имени мира: окно принадлежит ОДНОМУ миру, и без
         // имени нельзя понять, чей это каталог, — особенно когда открыто два
         // мира подряд и состав кампаний похож.
         _title = new Label { Dock = DockStyle.Left, AutoSize = true, Text = "Кампании и квесты", ForeColor = AccentColor, Font = new Font("Segoe UI", 9f, FontStyle.Bold), TextAlign = ContentAlignment.MiddleLeft };
-        var hint = new Label { Dock = DockStyle.Right, AutoSize = true, Text = "ЛКМ по кампании — свернуть", ForeColor = Color.FromArgb(125, 135, 148), Font = new Font("Segoe UI", 8f), TextAlign = ContentAlignment.MiddleRight };
+        var hint = new Label { Dock = DockStyle.Right, AutoSize = true, Text = "ЛКМ — свернуть / развернуть", ForeColor = Color.FromArgb(125, 135, 148), Font = new Font("Segoe UI", 8f), TextAlign = ContentAlignment.MiddleRight };
         var import = CreateMicroButton("Импорт");
         import.Dock = DockStyle.Right;
         import.Margin = new Padding(0, 1, 8, 1);
         import.Click += (_, _) => ImportArchiveRequested?.Invoke(this, EventArgs.Empty);
         toolbar.Controls.Add(hint); toolbar.Controls.Add(import); toolbar.Controls.Add(_title);
-        _list = new FlowLayoutPanel { Dock = DockStyle.Fill, AutoScroll = true, FlowDirection = FlowDirection.TopDown, WrapContents = false, Padding = new Padding(8), BackColor = Color.FromArgb(13, 16, 20), BorderStyle = BorderStyle.None };
+        _list = new FlowLayoutPanel { Dock = DockStyle.Fill, AutoScroll = true, FlowDirection = FlowDirection.TopDown, WrapContents = false, Padding = new Padding(5), BackColor = Color.FromArgb(13, 16, 20), BorderStyle = BorderStyle.None };
         _list.Resize += (_, _) => ResizeBlocks();
         Controls.Add(_list); Controls.Add(toolbar);
 
@@ -398,23 +398,23 @@ public sealed class CampaignsForm : Form
     private Control CreateWorldBlock(WorldRecord world)
     {
         var collapsed = _collapsed.Contains(WorldCollapseKey);
+
         var block = new Panel
         {
             BackColor = WorldRowBackColor,
-            Margin = new Padding(0, 0, 0, 10)
+            Margin = new Padding(0, 0, 0, 6)
         };
 
-        // Колонки как у кампании, но состав другой: у мира нет галочки активности
-        // (мир не «включён» или «выключен» — он открыт) и нет статуса.
         var header = new TableLayoutPanel
         {
             Dock = DockStyle.Top,
             Height = CampaignHeaderHeight,
             ColumnCount = 5,
-            Padding = new Padding(8, 4, 7, 4),
+            Padding = new Padding(5, 2, 5, 2),
             BackColor = WorldHeaderColor,
             Cursor = Cursors.Hand
         };
+
         header.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
         header.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
         header.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
@@ -423,45 +423,33 @@ public sealed class CampaignsForm : Form
 
         var marker = new Label
         {
-            AutoSize = true,
+            AutoSize = false,
+            Width = 12,
+            Height = RowContentHeight,
             Text = collapsed ? "▸" : "▾",
             ForeColor = AccentColor,
-            Font = new Font("Segoe UI", 9f, FontStyle.Bold),
-            // Якорь Left центрирует стрелку в строке. Отдельный отступ сверху
-            // (был Margin.Top = 9) привязывал её к конкретной высоте строки: при
-            // смене CampaignHeaderHeight стрелка съезжала, а название — нет.
+            Font = new Font("Segoe UI", 8.5f, FontStyle.Bold),
+            TextAlign = ContentAlignment.MiddleCenter,
             Anchor = AnchorStyles.Left,
-            Margin = new Padding(0, 0, 6, 0),
             Cursor = Cursors.Hand
         };
 
-        // Размер шрифта как у кампании (9f) и БЕЗ AutoEllipsis: длинное имя
-        // должно переноситься, а не обрезаться многоточием. Оранжевый цвет
-        // сохранён — по нему мир отличают от кампаний, и это единственный
-        // оставшийся признак уровня.
-        //
-        // Вторая строка с составом УБРАНА: под названием должны быть только
-        // Created и Modified (отдельные подписи ниже). Состав показывает окно
-        // свойств — там для него есть место.
         var text = new Label
         {
             Dock = DockStyle.Fill,
             AutoSize = false,
-            AutoEllipsis = false,
-            Cursor = Cursors.Hand,
-            TextAlign = ContentAlignment.MiddleLeft,
+            AutoEllipsis = true,
             Text = world.DisplayName,
-            ForeColor = Color.FromArgb(250, 176, 3),
-            Font = new Font("Segoe UI", 9f, FontStyle.Bold),
-            Margin = new Padding(0, 2, 6, 2)
+            ForeColor = AccentColor,
+            Font = new Font("Segoe UI", 8.8f, FontStyle.Bold),
+            TextAlign = ContentAlignment.MiddleLeft,
+            Anchor = AnchorStyles.Left,
+            Margin = new Padding(2, 0, 5, 0),
+            Cursor = Cursors.Hand
         };
 
-        // ℹ️ открывает окно свойств мира: маленькая иконка, а не кнопка во всю
-        // высоту строки — она не должна спорить с названием за место.
-        // Отступ сверху НЕ подбирается: Anchor = Left центрирует иконку, а её
-        // высота совпадает с высотой названия (RowContentHeight).
         var info = CreateInfoIcon("Свойства мира");
-        info.Margin = new Padding(4, 0, 8, 0);
+        info.Margin = new Padding(3, 0, 5, 0);
         info.Click += (_, _) => WorldPropertiesRequested?.Invoke(this, EventArgs.Empty);
 
         var folder = CreateMicroButton("ПАПКА");
@@ -476,12 +464,8 @@ public sealed class CampaignsForm : Form
         header.Controls.Add(folder, 3, 0);
         header.Controls.Add(export, 4, 0);
 
-        // Сворачивание — по заголовку, названию и стрелке. Кнопки исключены:
-        // у них своё действие, и сворачивание по нажатию ℹ️ было бы неожиданным.
         foreach (Control element in new Control[] { header, text, marker })
-        {
             element.Click += (_, _) => ToggleCollapsed(WorldCollapseKey);
-        }
 
         block.Controls.Add(header);
 
@@ -490,9 +474,6 @@ public sealed class CampaignsForm : Form
             Dock = DockStyle.Fill,
             FlowDirection = FlowDirection.TopDown,
             WrapContents = false,
-            // Прокрутка ЗДЕСЬ отключена: она общая у всего дерева (см. _list).
-            // Иначе две вложенные полосы спорили бы за колесо мыши, и до
-            // кампаний было бы не добраться.
             AutoScroll = false,
             BackColor = WorldRowBackColor,
             Padding = new Padding(0)
@@ -500,17 +481,12 @@ public sealed class CampaignsForm : Form
 
         if (!collapsed)
         {
-            // Под названием — ТОЛЬКО даты создания и изменения (без автора):
-            // в строке рядом с названием автор читался бы как часть названия.
-            // Дата создания идёт первой — так читается хронология.
             AddSignature(rows, WorldDisplayRules.DescribeStamp(world.Definition.Metadata, modified: false));
             AddSignature(rows, WorldDisplayRules.DescribeStamp(world.Definition.Metadata));
 
             if (!string.IsNullOrWhiteSpace(world.Definition.Description))
                 rows.Controls.Add(CreateNotice(world.Definition.Description!));
 
-            // Кампании живут ВНУТРИ пункта мира: так дерево читается как дерево,
-            // и принадлежность кампании миру очевидна без подписи.
             foreach (var campaign in _catalog)
                 rows.Controls.Add(CreateCampaignBlock(campaign));
 
@@ -520,14 +496,11 @@ public sealed class CampaignsForm : Form
 
         block.Controls.Add(rows);
         rows.BringToFront();
-
-        // Начальная высота: заголовок, подписи и вложенные кампании. Точную
-        // высоту выставит ResizeBlocks, когда будет известна ширина колонки.
         block.Height = collapsed
             ? CampaignHeaderHeight
             : CampaignHeaderHeight + SignatureRowHeight * 2 + CampaignStackHeight;
 
-        block.Width = Math.Max(200, _list.ClientSize.Width - 24);
+        block.Width = Math.Max(200, _list.ClientSize.Width - 20);
         return block;
     }
 
@@ -608,8 +581,8 @@ public sealed class CampaignsForm : Form
     {
         var button = CreateRoundedButton(text, 0, 0, fontSize: 10);
         button.AutoSize = true;
-        button.Padding = new Padding(7, 2, 7, 2);
-        button.Font = new Font("Segoe UI", 8.6f);
+        button.Padding = new Padding(5, 1, 5, 1);
+        button.Font = new Font("Segoe UI", 8.1f);
         return button;
     }
 
@@ -663,7 +636,7 @@ public sealed class CampaignsForm : Form
     }
 
     /// <summary>Сторона квадрата иконки «i».</summary>
-    private const int InfoIconSize = 16;
+    private const int InfoIconSize = 14;
 
     /// <summary>
     /// Высота содержимого строки заголовка (названия и иконки).
@@ -672,7 +645,7 @@ public sealed class CampaignsForm : Form
     /// выравнивание по вертикали снова станет подбором, и пробная проверка
     /// покажет расхождение.
     /// </summary>
-    private const int RowContentHeight = 24;
+    private const int RowContentHeight = 20;
 
     /// <summary>Путь со скруглёнными углами для рисования кнопок и иконок.</summary>
     private static System.Drawing.Drawing2D.GraphicsPath RoundedPath(Rectangle bounds, int radius)
@@ -709,142 +682,168 @@ public sealed class CampaignsForm : Form
     {
         var collapsed = _collapsed.Contains(campaign.Id);
         var activeCount = campaign.Quests.Count(quest => quest.Status == CampaignQuestStatus.Enabled);
-        // Рамки у плашки кампании НЕТ: уровень показывается ОТСТУПОМ слева
-        // (Margin), а не рамкой. Обводка вокруг каждого пункта превращала дерево
-        // в набор прямоугольников, и уровни читались хуже.
-        var block = new Panel { BackColor = Color.FromArgb(23, 24, 25), Margin = new Padding(TreeLevelIndent, 0, 0, 8) };
-        // Колонок СЕМЬ, а не шесть: между иконкой информации и правыми кнопками
-        // стоит растяжимая распорка. Без неё колонка с названием растягивалась на
-        // всю ширину, и иконка уезжала к правому краю — далеко от имени, к
-        // которому относится.
-        var header = new TableLayoutPanel { Dock = DockStyle.Top, Height = CampaignHeaderHeight, ColumnCount = 8, Padding = new Padding(8, 4, 7, 4), BackColor = Color.FromArgb(20, 32, 38), Cursor = Cursors.Hand };
-        header.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));   // стрелка
-        header.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));   // галочка
-        header.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));   // название
-        header.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));   // ℹ️ сразу за именем
-        header.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100)); // распорка
-        header.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));   // статус
-        header.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));   // папка
-        header.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));   // экспорт
 
-        // Выравнивание по ОДНОЙ вертикали: Anchor = Left (без Top/Bottom) в
-        // TableLayoutPanel означает «по центру ячейки по вертикали». Прежде
-        // галочка и статус сдвигались вверх подобранными отступами Margin, а
-        // кнопка «Ред.» в строках квестов — вниз, и в одной строке они стояли на
-        // разных уровнях.
-        var active = new CheckBox { AutoSize = true, Checked = campaign.Active, Anchor = AnchorStyles.Left, Margin = new Padding(0, 0, 6, 0) };
-        active.CheckedChanged += (_, _) => CampaignActiveChanged?.Invoke(this, new CampaignActiveChangedEventArgs(campaign.Id, active.Checked));
-        var marker = new Label { AutoSize = true, Text = collapsed ? "▸" : "▾", ForeColor = Color.FromArgb(200, 208, 216), Font = new Font("Segoe UI", 9f, FontStyle.Bold), Anchor = AnchorStyles.Left, Margin = new Padding(0, 0, 6, 0), Cursor = Cursors.Hand };
-        // AutoEllipsis ВЫКЛЮЧен вместе с AutoSize: название должно ПЕРЕНОСИТЬСЯ.
-        // При AutoSize = true Label сам подстраивает ширину под текст, Dock
-        // игнорируется, и перенос не работает — текст вылезал за строку.
-        var text = new Label { AutoSize = false, Size = new Size(140, 24), AutoEllipsis = false, Cursor = Cursors.Hand, TextAlign = ContentAlignment.MiddleLeft, Text = campaign.Name, ForeColor = Color.FromArgb(238, 243, 248), Font = new Font("Segoe UI", 9f, FontStyle.Bold), Anchor = AnchorStyles.Left, Margin = new Padding(0, 0, 0, 0) };
-        // ℹ️ — маленькая синяя иконка возле ИМЕНИ (сразу после названия), а не
-        // кнопка справа: она относится к названию, и место рядом с ним читается
-        // как его пометка, а не как отдельное действие окна.
-        var info = CreateInfoIcon("Свойства кампании");
-        info.Anchor = AnchorStyles.Left;
-        info.Margin = new Padding(4, 0, 8, 0);
-        // Id передаётся явно: иконок столько же, сколько кампаний, и
-        // «открыть свойства текущей» открывало бы не ту.
-        info.Click += (_, _) => CampaignPropertiesRequested?.Invoke(this, new CampaignPropertiesRequestedEventArgs(campaign.Id));
-        var state = new Label { AutoSize = true, Text = campaign.Active ? "Активна" : "Отключена", ForeColor = campaign.Active ? Color.FromArgb(139, 216, 255) : Color.FromArgb(135, 145, 157), Font = new Font("Segoe UI", 8f), Anchor = AnchorStyles.Left, Margin = new Padding(0, 0, 8, 0) };
-        var folder = CreateMicroButton("Папка");
-        folder.Anchor = AnchorStyles.Left;
-        folder.Margin = new Padding(0, 0, 0, 0);
-        folder.Click += (_, _) => CampaignFolderOpenRequested?.Invoke(this, new CampaignFolderOpenRequestedEventArgs(campaign.Id));
-        var export = CreateMicroButton("Экспорт");
-        export.Anchor = AnchorStyles.Left;
-        export.Margin = new Padding(0, 0, 0, 0);
-        export.Click += (_, _) => CampaignExportRequested?.Invoke(this, new CampaignExportRequestedEventArgs(campaign.Id));
-        header.Controls.Add(marker, 0, 0); header.Controls.Add(active, 1, 0);
-        header.Controls.Add(text, 2, 0); header.Controls.Add(info, 3, 0);
-        header.Controls.Add(state, 5, 0); header.Controls.Add(folder, 6, 0); header.Controls.Add(export, 7, 0);
-        // ЛКМ по заголовку (кроме галочки, статуса и кнопок) сворачивает список
-        // квестов кампании: это позволяет держать длинный каталог компактным.
-        // Кнопка ℹ️ исключена: у неё своё действие, и сворачивание по нажатию
-        // на неё было бы неожиданным.
-        foreach (Control element in new Control[] { header, text, marker })
+        var block = new Panel
         {
+            BackColor = RowBackColor,
+            Margin = new Padding(TreeLevelIndent, 0, 0, 4)
+        };
+
+        var header = new TableLayoutPanel
+        {
+            Dock = DockStyle.Top,
+            Height = CampaignHeaderHeight,
+            ColumnCount = 8,
+            Padding = new Padding(4, 2, 4, 2),
+            BackColor = RowBackColor,
+            Cursor = Cursors.Hand
+        };
+
+        header.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+        header.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+        header.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+        header.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+        header.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+        header.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+        header.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+        header.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+
+        var marker = new Label
+        {
+            AutoSize = false,
+            Width = 12,
+            Height = RowContentHeight,
+            Text = collapsed ? "▸" : "▾",
+            ForeColor = Color.FromArgb(200, 208, 216),
+            Font = new Font("Segoe UI", 8.5f, FontStyle.Bold),
+            TextAlign = ContentAlignment.MiddleCenter,
+            Anchor = AnchorStyles.Left,
+            Margin = new Padding(0, 0, 3, 0),
+            Cursor = Cursors.Hand
+        };
+
+        var active = CreateTreeCheckBox(
+            campaign.Active,
+            checkedValue => CampaignActiveChanged?.Invoke(
+                this,
+                new CampaignActiveChangedEventArgs(campaign.Id, checkedValue)));
+        active.Margin = new Padding(0, 0, 5, 0);
+
+        var text = new Label
+        {
+            Dock = DockStyle.Fill,
+            AutoSize = false,
+            AutoEllipsis = true,
+            Text = campaign.Name,
+            ForeColor = Color.FromArgb(238, 243, 248),
+            Font = new Font("Segoe UI", 8.8f, FontStyle.Bold),
+            TextAlign = ContentAlignment.MiddleLeft,
+            Cursor = Cursors.Hand,
+            Anchor = AnchorStyles.Left,
+            Margin = new Padding(0, 0, 4, 0)
+        };
+
+        var info = CreateInfoIcon("Свойства кампании");
+        info.Margin = new Padding(2, 0, 5, 0);
+        info.Click += (_, _) =>
+            CampaignPropertiesRequested?.Invoke(
+                this,
+                new CampaignPropertiesRequestedEventArgs(campaign.Id));
+
+        var state = new Label
+        {
+            AutoSize = true,
+            Text = campaign.Active
+                ? $"Активна · {activeCount}/{campaign.Quests.Count}"
+                : "Отключена",
+            ForeColor = campaign.Active
+                ? Color.FromArgb(139, 216, 255)
+                : Color.FromArgb(135, 145, 157),
+            Font = new Font("Segoe UI", 7.8f),
+            Anchor = AnchorStyles.Left,
+            Margin = new Padding(0, 0, 6, 0)
+        };
+
+        var folder = CreateMicroButton("Папка");
+        folder.Click += (_, _) =>
+            CampaignFolderOpenRequested?.Invoke(
+                this,
+                new CampaignFolderOpenRequestedEventArgs(campaign.Id));
+
+        var export = CreateMicroButton("Экспорт");
+        export.Click += (_, _) =>
+            CampaignExportRequested?.Invoke(
+                this,
+                new CampaignExportRequestedEventArgs(campaign.Id));
+
+        header.Controls.Add(marker, 0, 0);
+        header.Controls.Add(active, 1, 0);
+        header.Controls.Add(text, 2, 0);
+        header.Controls.Add(info, 3, 0);
+        header.Controls.Add(state, 5, 0);
+        header.Controls.Add(folder, 6, 0);
+        header.Controls.Add(export, 7, 0);
+
+        foreach (Control element in new Control[] { header, text, marker })
             element.Click += (_, _) => ToggleCollapsed(campaign.Id);
-        }
-        // Порядок докинга в WinForms — обратный z-order: контролы укладываются
-        // от последнего в коллекции к первому. Добавляем сначала заголовок, а
-        // rows поднимаем наверх, поэтому список не уезжает под плашку кампании.
+
         block.Controls.Add(header);
 
-        // Предупреждение о чужом родителе — ОРАНЖЕВЫМ и ДО списка квестов.
-        //
-        // Не запрет: папку кампании мог перенести в чужой мир сам автор, и
-        // осознанный перенос — его право. Но без предупреждения квесты кампании
-        // выглядят пропавшими, а причина не видна вовсе. Цвет берётся тот же,
-        // что у акцента выделения: пользователь уже знает, что это «обрати
-        // внимание», а не «ошибка».
         var foreignWarning = ResourceParentRules.Describe(
-            campaign.ParentWorldId, _world?.Definition.Id);
+            campaign.ParentWorldId,
+            _world?.Definition.Id);
 
         if (foreignWarning is not null)
         {
             var warning = new Label
             {
                 Dock = DockStyle.Top,
-                Height = 42,
+                Height = 24,
                 AutoSize = false,
-                Padding = new Padding(12, 4, 8, 4),
-                // Перенос по словам, а не обрезка: текст объясняет причину, и
-                // многоточие в середине сделало бы его бесполезным.
+                AutoEllipsis = true,
+                Padding = new Padding(5, 2, 5, 2),
                 Text = "⚠ " + foreignWarning,
                 ForeColor = AccentColor,
-                Font = new Font("Segoe UI", 8.2f)
+                Font = new Font("Segoe UI", 7.8f)
             };
 
             block.Controls.Add(warning);
             warning.BringToFront();
         }
 
-        // Список квестов живёт в отдельном контейнере с прокруткой, а не в
-        // общем FlowLayoutPanel окна. Высота блока при этом фиксированная: она
-        // складывается из заголовка и строк, поэтому список не «наезжает» на
-        // заголовок следующей кампании и не вылезает под её плашку.
         var rows = new FlowLayoutPanel
         {
             Dock = DockStyle.Fill,
             FlowDirection = FlowDirection.TopDown,
             WrapContents = false,
-            // Прокрутка общая у всего дерева — здесь она ВЫКЛЮЧЕНА. Вложенные
-            // полосы спорили бы за колесо мыши, и колесо над кампанией
-            // прокручивало бы её список вместо дерева.
             AutoScroll = false,
-            BackColor = Color.FromArgb(23, 24, 25),
-            // Padding пустой: высота блока считается точно под строки, и лишние
-            // пиксели заставляли бы список показывать полосу прокрутки всегда.
+            BackColor = RowBackColor,
             Padding = new Padding(0)
         };
+
         if (!collapsed)
         {
-            // Зависимости включаются ВСЕГДА: подписи необязательны (у файлов,
-            // созданных до появления авторства, их нет), и добавление null в
-            // коллекцию контролов бросило бы ArgumentNullException — то есть
-            // окно кампаний падало бы на первом же «старом» ресурсе.
-            //
-            // Дата создания первой: так читается хронология.
             AddSignature(rows, WorldDisplayRules.DescribeStamp(campaign.Metadata, modified: false));
             AddSignature(rows, WorldDisplayRules.DescribeStamp(campaign.Metadata));
 
             foreach (var quest in campaign.Quests)
                 rows.Controls.Add(CreateQuestRow(campaign, quest));
+
             if (campaign.Quests.Count == 0)
                 rows.Controls.Add(CreateNotice("В кампании нет доступных файлов Quest."));
         }
+
         block.Controls.Add(rows);
         rows.BringToFront();
-        // Начальная высота: заголовок + строки минимальной высоты. Точную
-        // высоту выставит ResizeBlocks после раскладки, когда будет известна
-        // ширина колонки и фактический перенос названий.
+
+        var warningHeight = foreignWarning is null ? 0 : 24;
         block.Height = collapsed
             ? CampaignHeaderHeight
-            : CampaignHeaderHeight + SignatureRowHeight * 2
-                + Math.Max(1, campaign.Quests.Count) * QuestRowMinHeight + 7;
+            : CampaignHeaderHeight +
+              warningHeight +
+              SignatureRowHeight * 2 +
+              Math.Max(1, campaign.Quests.Count) * QuestRowMinHeight + 6;
+
         return block;
     }
 
@@ -858,89 +857,191 @@ public sealed class CampaignsForm : Form
 
     private Control CreateQuestRow(InstalledCampaignView campaign, InstalledQuestView quest)
     {
-        var selected = quest.QuestId.Equals(_selectedQuestId, StringComparison.OrdinalIgnoreCase) &&
+        var selected =
+            quest.QuestId.Equals(_selectedQuestId, StringComparison.OrdinalIgnoreCase) &&
             campaign.Id.Equals(_selectedCampaignId, StringComparison.OrdinalIgnoreCase);
-        var enabled = quest.Status == CampaignQuestStatus.Enabled;
-        var row = new TableLayoutPanel { Height = QuestRowMinHeight - 3, ColumnCount = 5, CellBorderStyle = TableLayoutPanelCellBorderStyle.None, Padding = new Padding(4, 2, 4, 2), BackColor = selected ? RowSelectedBackColor : RowBackColor, Margin = new Padding(0, 0, 0, 3), Cursor = Cursors.Hand, AutoSize = false };
-        // Выделенный квест подсвечивается оранжевой рамкой СКРУГЛЁННОЙ формы:
-        // прямоугольная обводка спорила со скруглениями кнопок и выглядела как
-        // чужой элемент. Радиус тот же, что у кнопок (ButtonRadius).
-        row.Paint += (_, e) =>
-        {
-            if (!selected) return;
 
-            e.Graphics.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
-            using var pen = new Pen(AccentColor, 2f);
-            var bounds = new Rectangle(1, 1, row.Width - 3, row.Height - 3);
-            using var path = RoundedPath(bounds, ButtonRadius);
-            e.Graphics.DrawPath(pen, path);
+        var enabled = quest.Status == CampaignQuestStatus.Enabled;
+
+        var row = new TableLayoutPanel
+        {
+            Height = QuestRowMinHeight,
+            ColumnCount = 5,
+            CellBorderStyle = TableLayoutPanelCellBorderStyle.None,
+            Padding = new Padding(4, 1, 4, 1),
+            BackColor = selected ? RowSelectedBackColor : RowBackColor,
+            Margin = new Padding(QuestRowIndent, 0, 0, 2),
+            Cursor = Cursors.Hand,
+            AutoSize = false
         };
-        // Колонки: галочка, название (растягивается и переносится по словам),
-        // статус, кнопка. Раньше название стояло в растягивающейся колонке, но
-        // AutoEllipsis резал длинный текст на одной строке — теперь название
-        // занимает две строки (заголовок + детали) и переносит слова по ширине.
+
+        if (selected)
+        {
+            row.Paint += (_, e) =>
+            {
+                using var brush = new SolidBrush(AccentColor);
+                e.Graphics.FillRectangle(
+                    brush,
+                    0,
+                    2,
+                    2,
+                    Math.Max(0, row.Height - 4));
+            };
+        }
+
         row.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
         row.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
         row.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
-        row.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));        row.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
-        var check = new CheckBox { AutoSize = true, Checked = enabled, Anchor = AnchorStyles.Left, Margin = new Padding(0, 0, 5, 0) };
-        check.CheckedChanged += (_, _) => QuestEnabledChanged?.Invoke(this, new QuestEnabledChangedEventArgs(campaign.Id, quest.QuestId, check.Checked));
+        row.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+        row.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+
+        var check = CreateTreeCheckBox(
+            enabled,
+            checkedValue => QuestEnabledChanged?.Invoke(
+                this,
+                new QuestEnabledChangedEventArgs(
+                    campaign.Id,
+                    quest.QuestId,
+                    checkedValue)));
+        check.Margin = new Padding(0, 0, 5, 0);
+
         var activation = quest.Activation;
         var details = activation is null
             ? $"#{quest.Order} · v{quest.Version}"
             : activation.Mode == QuestStartMode.Proximity
                 ? $"#{quest.Order} · v{quest.Version} · Радиус {activation.Radius:0} м"
                 : $"#{quest.Order} · v{quest.Version} · {activation.Mode}";
-        // Отключённый квест гасится курсивом и приглушённо-белым цветом: он
-        // остаётся читаемым, но сразу видно, что в игре его нет.
-        var nameFont = new Font("Segoe UI", 8.5f, enabled ? FontStyle.Regular : FontStyle.Italic);
-        var nameColor = selected
-            ? AccentColor
-            : enabled ? Color.FromArgb(231, 237, 244) : Color.FromArgb(178, 184, 192);
+
         var name = new Label
         {
             Dock = DockStyle.Fill,
-            // AutoSize обязан быть false: по умолчанию Label сам подстраивает
-            // ширину под текст, Dock при этом игнорируется, и перенос по словам
-            // не работает — заголовок просто вылезал бы за строку.
             AutoSize = false,
-            // Без AutoEllipsis: он обрезает длинный заголовок многоточием вместо
-            // переноса. Текст разбит на две строки, поэтому перенос идёт по
-            // ширине колонки, а не отбрасывается.
-            AutoEllipsis = false,
-            Cursor = Cursors.Hand,
+            AutoEllipsis = true,
+            Text = $"{quest.Title}  ·  {details}",
+            ForeColor = selected
+                ? Color.White
+                : enabled
+                    ? Color.FromArgb(231, 237, 244)
+                    : Color.FromArgb(178, 184, 192),
+            Font = new Font(
+                "Segoe UI",
+                8.2f,
+                selected
+                    ? FontStyle.Bold
+                    : enabled
+                        ? FontStyle.Regular
+                        : FontStyle.Italic),
             TextAlign = ContentAlignment.MiddleLeft,
-            Text = quest.Title + Environment.NewLine + details,
-            ForeColor = nameColor,
-            Font = nameFont,
-            Margin = new Padding(0, 2, 5, 2),
+            Margin = new Padding(0, 0, 4, 0),
+            Cursor = Cursors.Hand,
             UseMnemonic = false
         };
-        // Статус и кнопка выровнены по ОДНОЙ вертикали с галочкой и названием:
-        // Anchor = Left центрирует контрол в строке таблицы. Прежде вертикаль
-        // задавалась подобранными отступами Margin — галочка уезжала вверх, а
-        // «Ред.» вниз, и в одной строке они стояли на разных уровнях.
-        var status = new Label { AutoSize = true, Text = enabled ? "Включён" : "Отключён", TextAlign = ContentAlignment.MiddleRight, ForeColor = enabled ? Color.FromArgb(139, 216, 255) : Color.FromArgb(165, 172, 182), Font = new Font("Segoe UI", 8f, enabled ? FontStyle.Regular : FontStyle.Italic), Anchor = AnchorStyles.Right, Margin = new Padding(0, 0, 7, 0) };
+
+        var status = new Label
+        {
+            AutoSize = true,
+            Text = enabled ? "Включён" : "Отключён",
+            TextAlign = ContentAlignment.MiddleRight,
+            ForeColor = enabled
+                ? Color.FromArgb(139, 216, 255)
+                : Color.FromArgb(165, 172, 182),
+            Font = new Font("Segoe UI", 7.5f, enabled ? FontStyle.Regular : FontStyle.Italic),
+            Anchor = AnchorStyles.Right,
+            Margin = new Padding(0, 0, 6, 0)
+        };
+
         var edit = CreateMicroButton("Ред.");
-        edit.Anchor = AnchorStyles.Right;
-        edit.Margin = new Padding(0, 0, 0, 0);
-        edit.Click += (_, _) => QuestOpenRequested?.Invoke(this, new QuestOpenRequestedEventArgs(quest.FullPath));
+        edit.Click += (_, _) =>
+            QuestOpenRequested?.Invoke(
+                this,
+                new QuestOpenRequestedEventArgs(quest.FullPath));
+
         var export = CreateMicroButton("Экспорт");
-        export.Anchor = AnchorStyles.Right;
-        export.Margin = new Padding(0, 0, 0, 0);
-        export.Click += (_, _) => QuestExportRequested?.Invoke(
-            this, new QuestExportRequestedEventArgs(campaign.Id, quest.QuestId, quest.FullPath));
-        // Правое выравнивание задаётся TextAlign, а не RightToLeft: RightToLeft.Yes
-        // переставляет знаки в строках вида «#1 · v1» и ломает детали квеста.
-        row.Controls.Add(check, 0, 0); row.Controls.Add(name, 1, 0); row.Controls.Add(status, 2, 0); row.Controls.Add(edit, 3, 0); row.Controls.Add(export, 4, 0);
-        // Выделение по ЛКМ на любом элементе строки, кроме галочки и кнопки:
-        // клик по ним уже означает другое действие.
+        export.Click += (_, _) =>
+            QuestExportRequested?.Invoke(
+                this,
+                new QuestExportRequestedEventArgs(
+                    campaign.Id,
+                    quest.QuestId,
+                    quest.FullPath));
+
+        row.Controls.Add(check, 0, 0);
+        row.Controls.Add(name, 1, 0);
+        row.Controls.Add(status, 2, 0);
+        row.Controls.Add(edit, 3, 0);
+        row.Controls.Add(export, 4, 0);
+
         foreach (Control element in new Control[] { row, name, status })
         {
-            element.Click += (_, _) => QuestSelected?.Invoke(this, new QuestSelectedEventArgs(campaign.Id, quest.QuestId));
+            element.Click += (_, _) =>
+                QuestSelected?.Invoke(
+                    this,
+                    new QuestSelectedEventArgs(campaign.Id, quest.QuestId));
         }
+
         return row;
     }
+
+    private static Control CreateTreeCheckBox(
+        bool isChecked,
+        Action<bool> changed)
+    {
+        var value = isChecked;
+
+        var box = new Panel
+        {
+            Size = new Size(16, 16),
+            Margin = new Padding(0),
+            BackColor = Color.Transparent,
+            Cursor = Cursors.Hand,
+            AccessibleRole = AccessibleRole.CheckButton,
+            TabStop = false
+        };
+
+        box.Paint += (_, e) =>
+        {
+            e.Graphics.SmoothingMode =
+                System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
+
+            var bounds = new Rectangle(1, 1, 14, 14);
+
+            using var fill = new SolidBrush(
+                value ? AccentColor : Color.Transparent);
+            using var border = new Pen(ButtonBorderColor, 1f);
+
+            e.Graphics.FillRectangle(fill, bounds);
+            e.Graphics.DrawRectangle(border, bounds);
+
+            if (!value)
+                return;
+
+            using var pen = new Pen(Color.FromArgb(20, 22, 25), 1.6f)
+            {
+                StartCap = System.Drawing.Drawing2D.LineCap.Round,
+                EndCap = System.Drawing.Drawing2D.LineCap.Round,
+                LineJoin = System.Drawing.Drawing2D.LineJoin.Round
+            };
+
+            e.Graphics.DrawLines(
+                pen,
+                new[]
+                {
+                    new Point(4, 8),
+                    new Point(7, 11),
+                    new Point(12, 5)
+                });
+        };
+
+        box.Click += (_, _) =>
+        {
+            value = !value;
+            box.Invalidate();
+            changed(value);
+        };
+
+        return box;
+    }
+
     private static Label CreateNotice(string message) => new() { AutoSize = true, Text = message, ForeColor = Color.FromArgb(165, 175, 185), Font = new Font("Segoe UI", 8.5f), Padding = new Padding(4, 6, 4, 6), Margin = new Padding(0, 0, 0, 8) };
     private void ResizeBlocks()
     {

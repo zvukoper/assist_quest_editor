@@ -36,7 +36,7 @@ public sealed class InventoryForm : WebViewForm
 
     public InventoryForm()
         : base(
-            "Инвентарь",
+            "Игрок",
             "inventory.html",
             new Size(
                 InventoryLayoutRules.WindowWidth,

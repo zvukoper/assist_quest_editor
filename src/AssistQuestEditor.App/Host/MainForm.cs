@@ -2277,7 +2277,8 @@ public sealed class MainForm : WebViewForm
             _roads,
             // Мир передаётся явно: Симулятор показывает его кампании, и без
             // ссылки на мир он видел бы кампании ВСЕХ миров сразу.
-            SelectedWorld);
+            SelectedWorld,
+            _junctions);
         _simulator.WorldSwitchRequested += (_, e) => RequestWorldSwitch(e.WorldId);
         _simulator.CampaignSelectionRequested += (_, e) => SelectCampaign(e.CampaignId);
         _simulator.WorldExportRequested += (_, _) => ExportWorld();

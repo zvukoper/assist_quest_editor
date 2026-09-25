@@ -220,6 +220,9 @@ public static class SimulationSaveCodec
         foreach (var schedule in state.DynamicEvents.Schedules)
             strings.Add(schedule.DefinitionId);
 
+        foreach (var waypoint in state.Route.Waypoints)
+            strings.Add(waypoint.Id);
+
         WriteStringTable(writer, strings);
 
         WritePairs(writer, strings, facts);
@@ -270,6 +273,8 @@ public static class SimulationSaveCodec
 
         if (header.FormatVersion >= 2)
             WriteDynamicEvents(writer, strings, state.DynamicEvents);
+        if (header.FormatVersion >= 3)
+            WriteRoute(writer, strings, state.Route);
     }
 
     private static SimulationSaveState ReadInner(BinaryReader reader, int formatVersion)
@@ -343,14 +348,56 @@ public static class SimulationSaveCodec
         var dynamicEvents = formatVersion >= 2
             ? ReadDynamicEvents(reader, strings)
             : DynamicEventRuntimeState.Empty;
+        var route = formatVersion >= 3
+            ? ReadRoute(reader, strings)
+            : RouteState.Empty;
 
         return new SimulationSaveState(
             player, clock, facts, variables, flags, questStatuses,
             inventory, newItemIds, reputation, contacts, vitals, progress,
             characterStats, buffs, debuffs, skillLevels, unlocked, weather)
         {
-            DynamicEvents = dynamicEvents
+            DynamicEvents = dynamicEvents,
+            Route = route
         };
+    }
+
+    private static void WriteRoute(BinaryWriter writer, StringTable strings, RouteState route)
+    {
+        route = (route ?? RouteState.Empty).Normalize();
+        WriteDouble(writer, route.DefaultSpeedKmh);
+        writer.Write(route.Waypoints.Count);
+
+        foreach (var waypoint in route.Waypoints)
+        {
+            writer.Write(strings.Index(waypoint.Id));
+            WriteDouble(writer, waypoint.Position.X);
+            WriteDouble(writer, waypoint.Position.Y);
+            WriteDouble(writer, waypoint.Position.Z);
+            WriteDouble(writer, waypoint.SpeedKmh);
+        }
+    }
+
+    private static RouteState ReadRoute(BinaryReader reader, StringTable strings)
+    {
+        var defaultSpeed = ReadDouble(reader);
+        var count = reader.ReadInt32();
+        if (count < 0 || count > 10000)
+            throw new InvalidDataException("Некорректное число путевых точек в сохранении.");
+
+        var waypoints = new List<RouteWaypoint>(count);
+        for (var index = 0; index < count; index++)
+        {
+            var id = strings[reader.ReadInt32()];
+            var position = new WorldCoordinate(
+                ReadDouble(reader),
+                ReadDouble(reader),
+                ReadDouble(reader));
+            var speed = ReadDouble(reader);
+            waypoints.Add(new RouteWaypoint(id, position, speed));
+        }
+
+        return new RouteState(defaultSpeed, waypoints).Normalize();
     }
 
     private static void WriteDynamicEvents(

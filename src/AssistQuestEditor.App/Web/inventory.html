@@ -3,66 +3,114 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Инвентарь</title>
-<link rel="stylesheet" href="theme.css?v=1.0.40.185">
+<title>Игрок</title>
+<link rel="stylesheet" href="theme.css?v=1.0.40.186">
 <style>
-  /* Окно инвентаря — самостоятельное окно Windows, а не панель поверх карты.
-     Поэтому страница занимает ровно размер окна и не имеет прокрутки: сетка
-     рассчитана на этот размер, и прокрутка СТРАНИЦЫ здесь означала бы, что
-     размеры разъехались. Прокручивается только сама сетка, и только когда
-     предметов больше, чем помещается. */
   html, body { height:100%; margin:0; overflow:hidden; }
-  .inventoryWindow { height:100%; display:flex; flex-direction:column; }
-  /* Панель растягивается на всё окно: она — единственное содержимое. */
-  .inventoryWindow .gamePanel { flex:1 1 auto; border-radius:0; border:none; }
+  .playerWindow {
+    height:100%;
+    box-sizing:border-box;
+    display:grid;
+    grid-template-columns:minmax(0, 1fr) 290px;
+    gap:10px;
+    padding:8px;
+    background:#0d1014;
+  }
+  .playerInventoryColumn,
+  .playerInfoColumn {
+    min-width:0;
+    min-height:0;
+    overflow:hidden;
+  }
+  .playerInventoryColumn .gamePanel,
+  .playerInfoColumn .gamePanel {
+    height:100%;
+    box-sizing:border-box;
+    border-radius:6px;
+  }
+  .playerInventoryColumn .gamePanel {
+    overflow:hidden;
+  }
+  .playerInfoColumn .gamePanel {
+    display:flex;
+    flex-direction:column;
+  }
+  .playerWindowTabs {
+    flex:0 0 auto;
+    padding:6px 8px 0;
+  }
+  .playerWindowTabBody {
+    flex:1 1 auto;
+    min-height:0;
+    overflow:auto;
+    padding:8px;
+  }
 </style>
 </head>
 <body>
-<div class="inventoryWindow">
-  <section class="gamePanel inventoryPanel" id="inventoryPanel"></section>
+<div class="playerWindow">
+  <section class="playerInventoryColumn">
+    <section class="gamePanel inventoryPanel" id="inventoryPanel"></section>
+  </section>
+
+  <section class="playerInfoColumn">
+    <section class="gamePanel playerInfoPanel" id="playerInfoPanel"></section>
+  </section>
 </div>
+
 <div class="inventoryNotifications" id="inventoryNotifications" aria-live="polite"></div>
 
-<script src="inventory.js?v=1.0.40.185"></script>
+<script src="inventory.js?v=1.0.40.186"></script>
+<script src="playerPanels.js?v=1.0.40.186"></script>
 <script>
 (function () {
   "use strict";
 
   var panel = document.getElementById("inventoryPanel");
+  var playerInfoPanel = document.getElementById("playerInfoPanel");
   var notifications = document.getElementById("inventoryNotifications");
   var snapshot = null;
   var catalog = [];
-  // Предметы, которые уже показаны игроку: значок «новый предмет» не должен
-  // возвращаться после наведения курсора. Состояние живёт здесь, а не в
-  // Симуляторе: окно владеет своим показом.
+  var activePlayerTab = "character";
+
   var seenItemIds = new Set();
 
   function render() {
-    if (!panel) return;
+    if (!panel || !playerInfoPanel) return;
 
     if (!snapshot) {
-      // Пустой снимок — не ошибка на старте: окно открывается до первого
-      // сообщения Host, и вместо белого экрана показывается объяснение.
       panel.innerHTML =
         "<div class='gamePanelHeader'><div><div class='gamePanelTitle'>Инвентарь</div>" +
         "<div class='gamePanelSub'>Ожидание данных от Симулятора</div></div></div>" +
         "<div class='notice' style='margin:12px'>Окно обновляется, пока открыт Симулятор.</div>";
+
+      playerInfoPanel.innerHTML =
+        "<div class='gamePanelHeader'><div class='gamePanelTitle'>Игрок</div></div>" +
+        "<div class='notice' style='margin:12px'>Ожидание данных от Симулятора.</div>";
       return;
     }
 
-    // Заголовка нет: он уже есть в системной рамке окна, и второй такой же
-    // читался бы как дубликат.
     panel.innerHTML = AssistInventory.panelMarkup(snapshot, catalog, {
-      seenItemIds: seenItemIds
+      seenItemIds: seenItemIds,
+      withHeader: true,
+      hotkeyHint: "I — открыть / закрыть"
     });
+
+    AssistPlayerPanels.renderTabs(
+      playerInfoPanel,
+      snapshot,
+      activePlayerTab,
+      function (next) {
+        activePlayerTab = next;
+        render();
+      });
 
     panel.querySelectorAll("[data-inventory-item]").forEach(function (button) {
       button.addEventListener("mouseenter", function () {
         var id = String(button.dataset.inventoryItem || "").toLowerCase();
         if (!id) return;
+
         seenItemIds.add(id);
-        // Host запоминает показ и в своём состоянии: иначе значок вернулся бы
-        // на следующем же снимке.
         send({ action: "mark_inventory_seen", itemId: id });
         render();
       });
@@ -71,11 +119,10 @@
 
   function send(payload) {
     try {
-      if (window.chrome && window.chrome.webview) {
+      if (window.chrome && window.chrome.webview)
         window.chrome.webview.postMessage(JSON.stringify(payload));
-      }
     } catch (error) {
-      // Молча: окно не должно падать из-за недоступного канала.
+      // WebView2 channel failure must not take down the player window.
     }
   }
 
@@ -85,6 +132,7 @@
     var amount = Math.abs(Number(delta) || 0);
     var item = AssistInventory.itemDefinition(catalog, itemId);
     var type = Number(delta) > 0 ? "add" : "remove";
+
     var toast = document.createElement("div");
     toast.className = "inventoryNotification " + type + " in";
     toast.innerHTML =
@@ -92,6 +140,7 @@
         (type === "add" ? "Получено" : "Изъято") + "</div>" +
       "<div class='inventoryNotificationName'>" +
         AssistInventory.escapeHtml(item.name || itemId) + " ×" + amount + "</div>";
+
     notifications.appendChild(toast);
 
     window.setTimeout(function () {
@@ -102,11 +151,13 @@
 
   function handleMessage(raw) {
     var message;
+
     try {
       message = typeof raw === "string" ? JSON.parse(raw) : raw;
     } catch (error) {
       return;
     }
+
     if (!message) return;
 
     if (message.type === "snapshot") {
@@ -121,13 +172,6 @@
     }
   }
 
-  /**
-   * Подписка на ОБА источника сообщений.
-   *
-   * `chrome.webview` есть только в WebView2; `window` используется стендом
-   * проверок. Подписка на оба канала — единственный способ, чтобы один и тот же
-   * код работал и в приложении, и в прогоне.
-   */
   if (window.chrome && window.chrome.webview) {
     window.chrome.webview.addEventListener("message", function (event) {
       handleMessage(event.data);
@@ -138,40 +182,27 @@
     handleMessage(event.data);
   });
 
-  // Готовность окна: Host присылает снимок после этого сообщения, иначе первое
-  // состояние потерялось бы — окно ещё не подписано.
   send({ action: "inventory_ready" });
 
-  /**
-   * Клавиша I закрывает окно ИЗ САМОГО ОКНА.
-   *
-   * Прежде горячая клавиша работала только в окне Симулятора: обработчик жил в
-   * его странице, а окно инвентаря — отдельная форма со своей страницей, и
-   * нажатие в нём уходило в никуда. «Открывать и закрывать по I» означает, что
-   * клавиша обязана действовать в обоих окнах, иначе закрыть инвентарь можно
-   * только мышью, а это ровно то, ради чего клавиша и заведена.
-   *
-   * Раскладка не важна: `event.code` привязан к позиции клавиши, поэтому
-   * проверяются оба варианта `event.key` — латинский и русский.
-   */
   var HOTKEY_CODES = new Set(["KeyI", "Escape"]);
   var HOTKEY_KEYS = new Set(["i", "ш"]);
 
   document.addEventListener("keydown", function (event) {
     if (event.repeat) return;
 
-    // Поля ввода не перехватываем: в них «i» — это буква, а не команда.
     var tag = event.target && event.target.tagName;
     if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" ||
-        (event.target && event.target.isContentEditable)) return;
+        (event.target && event.target.isContentEditable)) {
+      return;
+    }
 
-    var isHotkey = HOTKEY_CODES.has(event.code) ||
+    var isHotkey =
+      HOTKEY_CODES.has(event.code) ||
       HOTKEY_KEYS.has(String(event.key || "").toLowerCase());
+
     if (!isHotkey) return;
 
     event.preventDefault();
-    // Закрывает окно Host: страница не может закрыть форму Windows. Escape
-    // ведёт себя так же — это привычный способ закрыть окно.
     send({ action: "close_inventory" });
   });
 

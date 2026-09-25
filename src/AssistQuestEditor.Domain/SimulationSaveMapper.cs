@@ -18,7 +18,7 @@ public static class SimulationSaveMapper
     /// <summary>Источник записи для журнала каналов.</summary>
     public const string LoadSource = "Загрузка сохранения";
 
-    public static SimulationSaveState Capture(IDataChannelHub hub, string campaignId)
+    public static SimulationSaveState Capture(IDataChannelHub hub, string campaignId, RouteState? route = null)
     {
         ArgumentNullException.ThrowIfNull(hub);
 
@@ -60,7 +60,8 @@ public static class SimulationSaveMapper
             character.Skills.Where(skill => skill.Unlocked).Select(skill => skill.Id).ToArray(),
             hub.Get<EnvironmentState>("environment").Value.Weather)
         {
-            DynamicEvents = hub.Get<DynamicEventRuntimeState>("dynamic-events").Value
+            DynamicEvents = hub.Get<DynamicEventRuntimeState>("dynamic-events").Value,
+            Route = (route ?? RouteState.Empty).Normalize()
         };
     }
 

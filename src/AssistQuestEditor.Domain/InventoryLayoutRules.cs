@@ -65,7 +65,7 @@ public static class InventoryLayoutRules
     /// свободное место. Берётся ровно образец, а не «сколько нужно сетке»:
     /// иначе окно было бы уже и выглядело сжатым.
     /// </summary>
-    public const int ClientWidth = 478;
+    public const int ClientWidth = 800;
 
     /// <summary>
     /// Высота КЛИЕНТСКОЙ области окна из образца: три строки сетки.
