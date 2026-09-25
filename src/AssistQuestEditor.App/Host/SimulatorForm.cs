@@ -1183,6 +1183,15 @@ public sealed class SimulatorForm : WebViewForm
         _routeCursor = result.Cursor;
         _routeLastHeading = result.HeadingDegrees;
         _resumeRouteAfterStop = false;
+
+        if (_routeStoppedWaypointIndex.HasValue &&
+            result.Enabled &&
+            !result.StoppedAtWaypoint &&
+            result.SpeedKmh > 0.001d)
+        {
+            _routeStoppedWaypointIndex = null;
+        }
+
         _routeTargetWaypointIndex = GetTargetWaypointIndex(result.Cursor);
 
         if (_routeTargetWaypointIndex is int target &&
@@ -2685,19 +2694,21 @@ public sealed class SimulatorForm : WebViewForm
         if (!cursor.Initialized)
             return null;
 
+        // При остановке по speed=0 именно эта точка остаётся текущей целью.
+        if (!cursor.ResumeAfterStop &&
+            cursor.StoppedAtWaypointIndex is int stopped &&
+            stopped >= 0 &&
+            stopped < _routeState.Waypoints.Count)
+        {
+            return stopped;
+        }
+
         if (cursor.LegIndex >= 0 &&
             cursor.LegIndex < _routePlan.Legs.Count)
         {
             var endIndex = _routePlan.Legs[cursor.LegIndex].EndWaypointIndex;
             if (endIndex >= 0 && endIndex < _routeState.Waypoints.Count)
                 return endIndex;
-        }
-
-        if (cursor.StoppedAtWaypointIndex is int stopped &&
-            stopped >= 0 &&
-            stopped < _routeState.Waypoints.Count)
-        {
-            return stopped;
         }
 
         return null;
@@ -2737,7 +2748,12 @@ public sealed class SimulatorForm : WebViewForm
         for (var index = startLeg; index < _routePlan.Legs.Count; index++)
         {
             var leg = _routePlan.Legs[index];
-            var speed = RouteLegSpeed(index);
+            var speed =
+                index == startLeg &&
+                _routeStoppedWaypointIndex is int
+                    ? _routeState.Waypoints[leg.EndWaypointIndex].SpeedKmh
+                    : RouteLegSpeed(index);
+
             if (speed <= 0.001d)
                 return null;
 
@@ -2783,7 +2799,8 @@ public sealed class SimulatorForm : WebViewForm
             DateTimeOffset.UtcNow,
             "Движение по маршруту",
             $"{(resumed ? "Движение по маршруту продолжено" : "Движение по маршруту запущено")}. " +
-            $"Точек: {_routeState.Waypoints.Count}; скорость по умолчанию: " +
+            $"Точек: {_routeState.Waypoints.Count}; общая длина: " +
+            $"{GetTotalRouteDistanceMeters():0.#} м; скорость по умолчанию: " +
             $"{_routeState.DefaultSpeedKmh:0.#} км/ч; осталось {remainingDistance:0.#} м; " +
             $"время до конца: {FormatRouteDuration(remainingGame)} игрового / " +
             $"{FormatRouteDuration(remainingReal)} реального; текущая цель — {target}.");
@@ -2922,7 +2939,10 @@ public sealed class SimulatorForm : WebViewForm
                 if (leg.EndWaypointIndex > targetIndex)
                     break;
 
-                var speed = RouteLegSpeed(legIndex);
+                var speed =
+                    legIndex == stopped + 1
+                        ? _routeState.Waypoints[leg.EndWaypointIndex].SpeedKmh
+                        : RouteLegSpeed(legIndex);
                 if (speed <= 0.001d)
                     return null;
 
@@ -2976,6 +2996,9 @@ public sealed class SimulatorForm : WebViewForm
             : _routeState.Waypoints[leg.StartWaypointIndex].SpeedKmh;
     }
 
+    private double GetTotalRouteDistanceMeters() =>
+        _routePlan.Legs.Sum(leg => leg.LengthMeters);
+
     private static double Distance2D(WorldCoordinate a, WorldCoordinate b)
     {
         var dx = a.X - b.X;
@@ -3009,7 +3032,11 @@ public sealed class SimulatorForm : WebViewForm
             _hub,
             CurrentCampaignId(),
             _routeState,
-            new RouteRuntimeState(_routeCursor));
+            new RouteRuntimeState(
+                _routeCursor,
+                _routeTargetWaypointIndex,
+                _routeTravelRealSeconds,
+                _routeTravelGameSeconds));
 
     /// <summary>
     /// Запускает режим прохождения.
