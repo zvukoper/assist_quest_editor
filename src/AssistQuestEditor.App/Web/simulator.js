@@ -50,6 +50,7 @@
   let roadsFilter = true;
   // Плоский массив [x1,z1,x2,z2, ...]: раскладка та же, что в data/world/roads.json.
   let roadSegments = [];
+  let roadDebugNodes = [];
   let questHitAreas = [];
   // Зоны попадания маркеров динамических событий. Живут рядом с questHitAreas
   // и перезаписываются на каждой перерисовке: они зависят от камеры, поэтому
@@ -910,7 +911,7 @@
    */
   function drawRoads(ctx, width, height) {
     if (!roadsFilter || !roadSegments.length) return;
-    const lineWidth = Math.max(0.6, Math.min(2.6, 20 / camera.mpp));
+    const lineWidth = 3;
     // Запас в пикселях: отрезок может быть виден, даже если оба его конца за
     // кадром (длинная прямая дорога через весь экран).
     const margin = 40;
@@ -934,6 +935,27 @@
     }
 
     ctx.stroke();
+    drawRoadDebugNodes(ctx, width, height);
+    ctx.restore();
+  }
+
+  function drawRoadDebugNodes(ctx, width, height) {
+    if (!roadsFilter || roadDebugNodes.length < 2)
+      return;
+
+    ctx.save();
+    ctx.fillStyle = "rgba(255,255,255,.42)";
+
+    for (let index = 0; index + 1 < roadDebugNodes.length; index += 2) {
+      const q = worldToScreen(roadDebugNodes[index], roadDebugNodes[index + 1]);
+      if (q.x < -6 || q.y < -6 || q.x > width + 6 || q.y > height + 6)
+        continue;
+
+      ctx.beginPath();
+      ctx.arc(q.x, q.y, 2, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
     ctx.restore();
   }
 
@@ -957,8 +979,10 @@
     }
 
     roadSegments = segments;
+    roadDebugNodes = Array.isArray(message.debugNodes) ? message.debugNodes : [];
     window.assistWebLog?.("INFO", "Дорожная геометрия получена.", {
-      segments: roadSegments.length / 4
+      segments: roadSegments.length / 4,
+      graphNodes: roadDebugNodes.length / 2
     });
     drawMap();
   }

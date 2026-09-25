@@ -6,7 +6,8 @@ public sealed class RoadRoutePlanner
 {
     private const double NodeMergeToleranceMeters = 8d;
     private const double JunctionSnapToleranceMeters = 8d;
-    private const double RecoveryGapMaxMeters = 30d;
+    /// <summary>Максимальный восстанавливаемый разрыв дорожной геометрии.</summary>
+    private const double RecoveryGapMaxMeters = 300d;
     private const double RecoveryDirectionDot = 0.45d;
     private const double GridCellSizeMeters = 100d;
 
@@ -280,6 +281,7 @@ public sealed class RoadRoutePlanner
     private void AddDirectionalRecoveryEdges()
     {
         var degrees = _adjacency.Select(item => item.Count).ToArray();
+        var cellRadius = (int)Math.Ceiling(RecoveryGapMaxMeters / GridCellSizeMeters);
         var pairs = new HashSet<(int A, int B)>();
 
         foreach (var entry in _nodeGrid)
@@ -287,38 +289,70 @@ public sealed class RoadRoutePlanner
             var (cellX, cellZ) = entry.Key;
             var bucket = entry.Value;
 
-            for (var dxCell = -1; dxCell <= 1; dxCell++)
-            for (var dzCell = -1; dzCell <= 1; dzCell++)
+            for (var dxCell = -cellRadius; dxCell <= cellRadius; dxCell++)
+            for (var dzCell = -cellRadius; dzCell <= cellRadius; dzCell++)
             {
                 if (!_nodeGrid.TryGetValue((cellX + dxCell, cellZ + dzCell), out var otherBucket))
                     continue;
 
-                foreach (var a in bucket)
-                foreach (var b in otherBucket)
+                foreach (var nodeA in bucket)
                 {
-                    if (a == b)
+                    if (degrees[nodeA] != 1)
                         continue;
 
-                    var key = a < b ? (a, b) : (b, a);
-                    if (!pairs.Add(key) || HasEdge(a, b))
-                        continue;
+                    var bestNode = -1;
+                    var bestDistance = double.PositiveInfinity;
 
-                    var vx = _nodes[b].X - _nodes[a].X;
-                    var vz = _nodes[b].Z - _nodes[a].Z;
-                    var distance = Math.Sqrt(vx * vx + vz * vz);
-                    if (distance <= NodeMergeToleranceMeters || distance > RecoveryGapMaxMeters)
-                        continue;
+                    foreach (var nodeB in otherBucket)
+                    {
+                        if (nodeA == nodeB || degrees[nodeB] != 1)
+                            continue;
 
-                    var dirX = vx / distance;
-                    var dirZ = vz / distance;
-                    if (!CanContinue(degrees, a, dirX, dirZ) ||
-                        !CanContinue(degrees, b, -dirX, -dirZ))
-                        continue;
+                        var key = nodeA < nodeB ? (nodeA, nodeB) : (nodeB, nodeA);
+                        if (!pairs.Add(key) || HasEdge(nodeA, nodeB))
+                            continue;
 
-                    AddEdge(a, b, distance, recovery: true);
+                        var vx = _nodes[nodeB].X - _nodes[nodeA].X;
+                        var vz = _nodes[nodeB].Z - _nodes[nodeA].Z;
+                        var distance = Math.Sqrt(vx * vx + vz * vz);
+
+                        if (distance <= NodeMergeToleranceMeters ||
+                            distance > RecoveryGapMaxMeters ||
+                            distance >= bestDistance)
+                            continue;
+
+                        var dirX = vx / distance;
+                        var dirZ = vz / distance;
+
+                        // У обоих концов существующее дорожное ребро смотрит
+                        // наружу от разрыва: для A нужно направление ПРОТИВ A->B,
+                        // для B — В СТОРОНУ A->B.
+                        if (!CanContinue(degrees, nodeA, -dirX, -dirZ) ||
+                            !CanContinue(degrees, nodeB, dirX, dirZ))
+                            continue;
+
+                        bestNode = nodeB;
+                        bestDistance = distance;
+                    }
+
+                    if (bestNode >= 0)
+                        AddEdge(nodeA, bestNode, bestDistance, recovery: true);
                 }
             }
         }
+    }
+
+    /// <summary>Графовые узлы, которыми реально пользуется планировщик.</summary>
+    public double[] DebugNodesFlatArray()
+    {
+        var result = new double[_nodes.Count * 2];
+        for (var index = 0; index < _nodes.Count; index++)
+        {
+            result[index * 2] = _nodes[index].X;
+            result[index * 2 + 1] = _nodes[index].Z;
+        }
+
+        return result;
     }
 
     private bool CanContinue(int[] degrees, int nodeId, double dirX, double dirZ)

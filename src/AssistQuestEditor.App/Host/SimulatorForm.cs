@@ -262,6 +262,7 @@ public sealed class SimulatorForm : WebViewForm
         {
             type = "roads",
             segments = _roads.ToFlatArray(),
+            debugNodes = _routePlanner.DebugNodesFlatArray(),
             segmentCount = _roads.SegmentCount
         }, SnapshotJsonOptions);
 
