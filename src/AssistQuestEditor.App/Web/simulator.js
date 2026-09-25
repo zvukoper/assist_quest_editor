@@ -115,6 +115,9 @@
     defaultSpeedKmh: 60,
     selectedWaypointId: null,
     stoppedWaypointIndex: null,
+    currentTargetWaypointIndex: null,
+    travelTimeRealSeconds: 0,
+    travelTimeGameSeconds: 0,
     waypoints: [],
     legs: [],
     errors: []
@@ -125,6 +128,9 @@
   let routeWaypointDragCandidate = null;
   let draggingRouteWaypointId = null;
   let dragRouteWaypointPosition = null;
+  let lastPlayerSnapshotAt = 0;
+  let routeAnimationFrame = 0;
+  let lastRouteAnimationPaintAt = 0;
 
   // Акцентный оранжевый приложения. Квестовая графика и подсветка выделения
   // обязаны совпадать с цветом в C#-окне кампаний, поэтому значение задано
@@ -1206,6 +1212,20 @@
       ctx.strokeStyle = "#11fb06";
       ctx.stroke();
 
+      // Графовые узлы дороги повторяются и на линии маршрута.
+      ctx.save();
+      for (const point of points) {
+        const q = worldToScreen(Number(point.x), Number(point.z));
+        ctx.beginPath();
+        ctx.arc(q.x, q.y, 2.3, 0, Math.PI * 2);
+        ctx.fillStyle = "rgba(255,255,255,.78)";
+        ctx.fill();
+        ctx.lineWidth = 1;
+        ctx.strokeStyle = "rgba(0,0,0,.85)";
+        ctx.stroke();
+      }
+      ctx.restore();
+
       if (leg.startWaypointIndex >= 0 &&
           Number.isFinite(Number(leg.lengthMeters))) {
         const labelPoint = routeLegLabelPoint(points);
@@ -1379,13 +1399,19 @@
     routeWaypointHitAreas = [];
 
     for (const waypoint of route.waypoints || []) {
-      const q = worldToScreen(Number(waypoint.x), Number(waypoint.z));
+      const displayWaypoint =
+        String(waypoint.id) === String(draggingRouteWaypointId) &&
+        dragRouteWaypointPosition
+          ? { ...waypoint, ...dragRouteWaypointPosition }
+          : waypoint;
+
+      const q = worldToScreen(Number(displayWaypoint.x), Number(displayWaypoint.z));
       if (q.x < -40 || q.y < -50 || q.x > width + 40 || q.y > height + 50)
         continue;
 
       drawRouteWaypoint(
         ctx,
-        waypoint,
+        displayWaypoint,
         String(waypoint.id) === String(route.selectedWaypointId));
 
       routeWaypointHitAreas.push({
@@ -1471,6 +1497,7 @@
           y: Number(item.y) || 0,
           z: Number(item.z) || 0,
           speedKmh: Math.max(0, Math.min(150, Number(item.speedKmh) || 0)),
+          isOffRoad: !!item.isOffRoad,
           distanceFromFirstMeters: Math.max(0, Number(item.distanceFromFirstMeters) || 0),
           estimatedArrivalGameTime: String(item.estimatedArrivalGameTime || "—"),
           countdownRealSeconds: Number.isFinite(Number(item.countdownRealSeconds))
@@ -1491,6 +1518,11 @@
       stoppedWaypointIndex: Number.isInteger(value.stoppedWaypointIndex)
         ? value.stoppedWaypointIndex
         : null,
+      currentTargetWaypointIndex: Number.isInteger(value.currentTargetWaypointIndex)
+        ? value.currentTargetWaypointIndex
+        : null,
+      travelTimeRealSeconds: Math.max(0, Number(value.travelTimeRealSeconds) || 0),
+      travelTimeGameSeconds: Math.max(0, Number(value.travelTimeGameSeconds) || 0),
       totalDistanceMeters: Number(value.totalDistanceMeters) || 0,
       distanceFromFirstWaypointMeters: Number(value.distanceFromFirstWaypointMeters) || 0,
       waypoints,
@@ -1618,29 +1650,140 @@
     // Точка передаётся как псевдо-точка: геометрия подписи общая для всех.
     drawPointLabel(ctx, { name: "Игрок", isPlayer: true, color: ACCENT_COLOR }, q, false, false);
 
-    if (route?.enabled &&
-        simulationRunning &&
+    if (route?.waypoints?.length &&
         Number.isFinite(Number(route.distanceFromFirstWaypointMeters))) {
+      const routeDistance = Math.max(
+        0,
+        Number(route.distanceFromFirstWaypointMeters)
+      ) / 1000;
+
+      const targetIsAfterFirst =
+        Number.isInteger(route.currentTargetWaypointIndex) &&
+        route.currentTargetWaypointIndex > 0;
+
+      const extraDistance =
+        route.enabled &&
+        simulationRunning &&
+        targetIsAfterFirst
+          ? (Math.max(0, Number(snapshot.player.speedKmh) || 0) / 3.6) * routeRenderDeltaSeconds()
+          : 0;
+
       drawRouteText(
         ctx,
-        (Math.max(0, Number(route.distanceFromFirstWaypointMeters)) / 1000).toFixed(1) + " км",
+        (routeDistance + extraDistance / 1000).toFixed(1) + " км",
         q.x,
-        q.y + radius + 28);
+        q.y + radius + 27);
+
+      drawRouteText(
+        ctx,
+        formatTravelTime(currentTravelGameSeconds()) +
+          " / " +
+          formatTravelTime(currentTravelRealSeconds()) +
+          " (игр. / реал.)",
+        q.x,
+        q.y + radius + 41);
     }
+  }
+
+  function routeRenderDeltaSeconds() {
+    if (!simulationRunning ||
+        !route?.enabled ||
+        !lastPlayerSnapshotAt)
+      return 0;
+
+    return Math.max(
+      0,
+      Math.min(
+        0.35,
+        (performance.now() - lastPlayerSnapshotAt) / 1000
+      )
+    );
+  }
+
+  function predictedRoutePlayer(player) {
+    if (!player || !route?.enabled || !simulationRunning)
+      return player;
+
+    const speed = Math.max(0, Number(player.speedKmh) || 0);
+    const delta = routeRenderDeltaSeconds();
+
+    if (speed <= 0 || delta <= 0)
+      return player;
+
+    const distance = speed / 3.6 * delta;
+    const heading = Number(player.heading || 0) * Math.PI / 180;
+
+    return {
+      ...player,
+      position: {
+        ...player.position,
+        x: player.position.x + Math.cos(heading) * distance,
+        z: player.position.z + Math.sin(heading) * distance
+      }
+    };
   }
 
   function currentPlayerForDraw() {
     if (!snapshot?.player) return null;
-    if (!dragPlayerPosition) return snapshot.player;
+
+    const player = predictedRoutePlayer(snapshot.player);
+
+    if (!dragPlayerPosition) return player;
 
     return {
-      ...snapshot.player,
+      ...player,
       position: {
-        ...snapshot.player.position,
+        ...player.position,
         x: dragPlayerPosition.x,
         z: dragPlayerPosition.z
       }
     };
+  }
+
+  function currentTravelRealSeconds() {
+    return Math.max(0, Number(route.travelTimeRealSeconds) || 0) +
+      routeRenderDeltaSeconds();
+  }
+
+  function currentTravelGameSeconds() {
+    return Math.max(0, Number(route.travelTimeGameSeconds) || 0) +
+      routeRenderDeltaSeconds() * Math.max(0, Number(simulationSpeed) || 0);
+  }
+
+  function formatTravelTime(seconds) {
+    let value = Math.max(0, Math.round(Number(seconds) || 0));
+    const hours = Math.floor(value / 3600);
+    value %= 3600;
+    const minutes = Math.floor(value / 60);
+    const sec = value % 60;
+
+    if (hours > 0)
+      return hours + ":" + String(minutes).padStart(2, "0") + ":" + String(sec).padStart(2, "0");
+
+    return minutes + ":" + String(sec).padStart(2, "0");
+  }
+
+  function ensureRouteAnimation() {
+    if (routeAnimationFrame || !route?.enabled || !simulationRunning)
+      return;
+
+    routeAnimationFrame = requestAnimationFrame(paintRouteAnimation);
+  }
+
+  function paintRouteAnimation(timestamp) {
+    routeAnimationFrame = 0;
+
+    if (!route?.enabled || !simulationRunning || !snapshot)
+      return;
+
+    if (timestamp - lastRouteAnimationPaintAt < 33) {
+      ensureRouteAnimation();
+      return;
+    }
+
+    lastRouteAnimationPaintAt = timestamp;
+    drawMap();
+    ensureRouteAnimation();
   }
 
   function hitPlayer(px, py) {
@@ -3281,22 +3424,38 @@
             "title='Включить или выключить движение по маршруту'>" +
             escapeHtml(routeButtonLabel) +
           "</button>",
+          "<button class='routeClearButton' id='routeClear' type='button' title='Очистить маршрут'" +
+            (routeEditable && route.waypoints.length ? "" : " disabled") + ">✕</button>",
+        "</div>",
+        "<div class='routeSpeedRow'>" +
+          "<span class='routeSpeedOwner'>" +
+            escapeHtml(selectedRoute ? "Точка №" + selectedRoute.index : "Новая точка") +
+          "</span>" +
           "<label class='routeSpeedField' title='" +
             (selectedRoute
               ? "Скорость выбранной путевой точки"
               : "Скорость по умолчанию для новых путевых точек") +
-            "'><span>км/ч</span><input id='routeSpeedInput' type='number' min='0' max='150' step='1' value='" +
-              Math.round(routeSpeed) + "'" + (routeEditable ? "" : " disabled") + "></label>",
-          "<button class='routeClearButton' id='routeClear' type='button' title='Очистить маршрут'" +
-            (routeEditable && route.waypoints.length ? "" : " disabled") + ">✕</button>",
+            "'><span>Скорость</span><input id='routeSpeedInput' type='number' min='0' max='150' step='1' value='" +
+              Math.round(routeSpeed) + "'" + (routeEditable ? "" : " disabled") + "><span>км/ч</span></label>" +
         "</div>",
         routeStatus,
+        selectedRoute
+          ? "<label class='routeOffroadField'>" +
+              "<input id='routeOffroad' type='checkbox'" +
+                (selectedRoute.isOffRoad ? " checked" : "") +
+                (routeEditable ? "" : " disabled") +
+              "> Бездорожье</label>"
+          : "",
         "<div class='card routeSelectedCard' style='margin-top:6px;padding:7px'>",
           "<div class='miniLabel'>Путевые точки</div>",
           "<div class='kv'><span>Точек</span><span>" + route.waypoints.length + "</span></div>",
           selectedRoute
             ? "<div class='kv'><span>Выбрана</span><span>№ " + selectedRoute.index + " · " +
                 Math.round(selectedRoute.speedKmh) + " км/ч</span></div>"
+            : "",
+          Number.isInteger(route.currentTargetWaypointIndex)
+            ? "<div class='kv'><span>Цель</span><span>№ " +
+                (route.currentTargetWaypointIndex + 1) + "</span></div>"
             : "",
         "</div>",
         "<div class='card' style='margin-top:8px;padding:8px'>",
@@ -3533,12 +3692,20 @@
       });
     });
 
-    side.querySelector("#routeSpeedInput")?.addEventListener("change", inputEvent => {
+    side.querySelector("#routeSpeedInput")?.addEventListener("input", inputEvent => {
       const input = inputEvent.currentTarget;
-      let speed = Number(input.value);
-      if (!Number.isFinite(speed)) speed = 60;
+      const raw = input.value.trim();
+
+      if (!raw)
+        return;
+
+      let speed = Number(raw);
+      if (!Number.isFinite(speed))
+        return;
+
       speed = Math.max(0, Math.min(150, Math.round(speed)));
-      input.value = String(speed);
+      if (String(speed) !== raw)
+        input.value = String(speed);
 
       if (route.selectedWaypointId) {
         send({
@@ -3552,6 +3719,17 @@
           speed
         });
       }
+    });
+
+    side.querySelector("#routeOffroad")?.addEventListener("change", inputEvent => {
+      if (!route.selectedWaypointId)
+        return;
+
+      send({
+        action: "route_set_waypoint_offroad",
+        id: route.selectedWaypointId,
+        offRoad: !!inputEvent.currentTarget.checked
+      });
     });
 
     side.querySelector("#routeClear")?.addEventListener("click", () => {
@@ -3795,6 +3973,14 @@
       return;
     }
 
+    if (message.type === "route_snapshot") {
+      route = normalizeRoute(message.route);
+      drawMap();
+      // Do not rebuild the sidebar here: speed is emitted on every input event
+      // and the focused number field must remain editable without losing focus.
+      return;
+    }
+
     if (message.type === "world_selection") {
       worldSelection = {
         worlds: Array.isArray(message.worlds) ? message.worlds : [],
@@ -3833,6 +4019,8 @@
       };
       route = normalizeRoute(message.route);
       questGraph = message.questGraph || questGraph;
+      lastPlayerSnapshotAt = performance.now();
+      lastRouteAnimationPaintAt = 0;
       journalDetached = !!message.journalDetached;
       // Режим визуализации Location едет вместе со снимком: снимок перерисовывает
       // всю карту, поэтому хранить режим только в UI значило бы гасить его на
@@ -3881,6 +4069,7 @@
       syncClockAnchor();
       scheduleUiRender();
       renderSide();
+      ensureRouteAnimation();
       return;
     }
 
