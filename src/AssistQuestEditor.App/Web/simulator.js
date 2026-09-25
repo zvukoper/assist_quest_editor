@@ -1315,9 +1315,14 @@
         }))
       : [];
 
+    const rawDefaultSpeed = Number(value.defaultSpeedKmh);
+    const defaultSpeedKmh = Number.isFinite(rawDefaultSpeed)
+      ? Math.max(0, Math.min(150, rawDefaultSpeed))
+      : 60;
+
     return {
       enabled: !!value.enabled,
-      defaultSpeedKmh: Math.max(0, Math.min(150, Number(value.defaultSpeedKmh) || 0)),
+      defaultSpeedKmh,
       selectedWaypointId: value.selectedWaypointId || null,
       stoppedWaypointIndex: Number.isInteger(value.stoppedWaypointIndex)
         ? value.stoppedWaypointIndex
@@ -2948,6 +2953,7 @@
 
     renderDaylight();
     renderRuntimeSidebar();
+    renderRouteSpeedometer();
   }
 
   /**
