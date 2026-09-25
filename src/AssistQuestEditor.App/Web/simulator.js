@@ -438,16 +438,30 @@
     const targetVisible = !!targetScreen &&
       targetScreen.x >= -24 && targetScreen.y >= -24 &&
       targetScreen.x <= width + 24 && targetScreen.y <= height + 24;
-    const visualKey = [
-      runtimeStatusName(runtime?.status),
-      runtime?.currentNodeId || "",
-      visualInfo.point?.id || "",
-      Math.round(playerScreen?.x || 0),
-      Math.round(playerScreen?.y || 0),
-      Math.round(targetScreen?.x || 0),
-      Math.round(targetScreen?.y || 0),
-      Math.round(camera.mpp * 100) / 100
-    ].join("|");
+    const visualKey = route?.enabled
+      ? [
+          runtimeStatusName(runtime?.status),
+          runtime?.currentNodeId || "",
+          visualInfo.point?.id || "",
+          Number.isInteger(route.currentTargetWaypointIndex)
+            ? route.currentTargetWaypointIndex
+            : "",
+          Math.floor((playerScreen?.x || 0) / 24),
+          Math.floor((playerScreen?.y || 0) / 24),
+          Math.round((targetScreen?.x || 0) / 24),
+          Math.round((targetScreen?.y || 0) / 24),
+          Math.round(camera.mpp * 100) / 100
+        ].join("|")
+      : [
+          runtimeStatusName(runtime?.status),
+          runtime?.currentNodeId || "",
+          visualInfo.point?.id || "",
+          Math.round(playerScreen?.x || 0),
+          Math.round(playerScreen?.y || 0),
+          Math.round(targetScreen?.x || 0),
+          Math.round(targetScreen?.y || 0),
+          Math.round(camera.mpp * 100) / 100
+        ].join("|");
     if (visualKey !== lastQuestVisualLogKey) {
       lastQuestVisualLogKey = visualKey;
       window.assistQuestLog?.("INFO", "Quest UI: карта перерисована.", {
