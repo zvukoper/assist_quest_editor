@@ -275,6 +275,8 @@ public static class SimulationSaveCodec
             WriteDynamicEvents(writer, strings, state.DynamicEvents);
         if (header.FormatVersion >= 3)
             WriteRoute(writer, strings, state.Route);
+        if (header.FormatVersion >= 4)
+            WriteRouteRuntime(writer, state.RouteRuntime);
     }
 
     private static SimulationSaveState ReadInner(BinaryReader reader, int formatVersion)
@@ -351,6 +353,9 @@ public static class SimulationSaveCodec
         var route = formatVersion >= 3
             ? ReadRoute(reader, strings)
             : RouteState.Empty;
+        var routeRuntime = formatVersion >= 4
+            ? ReadRouteRuntime(reader)
+            : RouteRuntimeState.Empty;
 
         return new SimulationSaveState(
             player, clock, facts, variables, flags, questStatuses,
@@ -358,8 +363,37 @@ public static class SimulationSaveCodec
             characterStats, buffs, debuffs, skillLevels, unlocked, weather)
         {
             DynamicEvents = dynamicEvents,
-            Route = route
+            Route = route,
+            RouteRuntime = routeRuntime
         };
+    }
+
+    private static void WriteRouteRuntime(BinaryWriter writer, RouteRuntimeState runtime)
+    {
+        var cursor = runtime.Cursor;
+        writer.Write(cursor.Initialized);
+        writer.Write(cursor.LegIndex);
+        writer.Write(cursor.SegmentIndex);
+        WriteDouble(writer, cursor.SegmentProgressMeters);
+        writer.Write(cursor.ResumeAfterStop);
+        writer.Write(cursor.StoppedAtWaypointIndex.HasValue);
+        if (cursor.StoppedAtWaypointIndex.HasValue)
+            writer.Write(cursor.StoppedAtWaypointIndex.Value);
+        WriteDouble(writer, cursor.LastHeadingDegrees);
+    }
+
+    private static RouteRuntimeState ReadRouteRuntime(BinaryReader reader)
+    {
+        var cursor = new RouteCursor(
+            reader.ReadBoolean(),
+            reader.ReadInt32(),
+            reader.ReadInt32(),
+            ReadDouble(reader),
+            reader.ReadBoolean(),
+            reader.ReadBoolean() ? reader.ReadInt32() : null,
+            ReadDouble(reader));
+
+        return new RouteRuntimeState(cursor);
     }
 
     private static void WriteRoute(BinaryWriter writer, StringTable strings, RouteState route)

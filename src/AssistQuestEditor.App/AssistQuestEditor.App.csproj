@@ -11,10 +11,10 @@
     <Prefer32Bit>false</Prefer32Bit>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
 
-    <Version>1.0.40.187</Version>
-    <AssemblyVersion>1.0.40.187</AssemblyVersion>
-    <FileVersion>1.0.40.187</FileVersion>
-    <AssemblyInformationalVersion>1.0.40.187-CROSS-VOLUME-IMPORT-R1</AssemblyInformationalVersion>
+    <Version>1.0.40.188</Version>
+    <AssemblyVersion>1.0.40.188</AssemblyVersion>
+    <FileVersion>1.0.40.188</FileVersion>
+    <AssemblyInformationalVersion>1.0.40.188-ROUTE-R4</AssemblyInformationalVersion>
     <PublishSingleFile>true</PublishSingleFile>
     <SelfContained>true</SelfContained>
     <RuntimeIdentifier>win-x64</RuntimeIdentifier>

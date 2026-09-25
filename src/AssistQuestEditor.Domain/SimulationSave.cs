@@ -43,10 +43,19 @@ public sealed record SimulationSaveState(
     public DynamicEventRuntimeState DynamicEvents { get; init; } = DynamicEventRuntimeState.Empty;
 
     /// <summary>Текущая версия формата.</summary>
-    public const int CurrentFormatVersion = 3;
+    public const int CurrentFormatVersion = 4;
 
     /// <summary>Пользовательский маршрут Симулятора.</summary>
     public RouteState Route { get; init; } = RouteState.Empty;
+
+    /// <summary>Runtime-прогресс движения по маршруту.</summary>
+    public RouteRuntimeState RouteRuntime { get; init; } = RouteRuntimeState.Empty;
+}
+
+/// <summary>Восстанавливаемая runtime-позиция движения по маршруту.</summary>
+public sealed record RouteRuntimeState(RouteCursor Cursor)
+{
+    public static RouteRuntimeState Empty => new(RouteCursor.Initial);
 }
 
 /// <summary>

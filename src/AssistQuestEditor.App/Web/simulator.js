@@ -122,6 +122,9 @@
   let hoveredRouteWaypointId = null;
   let routeWaypointHitAreas = [];
   let routeRightClickCandidate = null;
+  let routeWaypointDragCandidate = null;
+  let draggingRouteWaypointId = null;
+  let dragRouteWaypointPosition = null;
 
   // Акцентный оранжевый приложения. Квестовая графика и подсветка выделения
   // обязаны совпадать с цветом в C#-окне кампаний, поэтому значение задано
@@ -1181,23 +1184,75 @@
         continue;
 
       ctx.beginPath();
+
       points.forEach((point, index) => {
         const q = worldToScreen(Number(point.x), Number(point.z));
-        if (index === 0) ctx.moveTo(q.x, q.y);
-        else ctx.lineTo(q.x, q.y);
+        if (index === 0)
+          ctx.moveTo(q.x, q.y);
+        else
+          ctx.lineTo(q.x, q.y);
       });
 
-      // Чёрная обводка 2 px с каждой стороны.
-      ctx.lineWidth = 6;
-      ctx.strokeStyle = "#000000";
+      ctx.save();
+      ctx.lineWidth = 8;
+      ctx.strokeStyle = "#ffffff";
+      ctx.shadowColor = "rgba(0,0,0,.72)";
+      ctx.shadowBlur = 5;
+      ctx.shadowOffsetY = 2;
       ctx.stroke();
+      ctx.restore();
 
-      // Само lime-полотно маршрута.
-      ctx.lineWidth = 2;
+      ctx.lineWidth = 4;
       ctx.strokeStyle = "#11fb06";
       ctx.stroke();
+
+      if (leg.startWaypointIndex >= 0 &&
+          Number.isFinite(Number(leg.lengthMeters))) {
+        const labelPoint = routeLegLabelPoint(points);
+
+        if (labelPoint) {
+          drawRouteText(
+            ctx,
+            Math.round(Number(leg.lengthMeters)) + " м",
+            labelPoint.x,
+            labelPoint.y - 5);
+        }
+      }
     }
 
+    ctx.restore();
+  }
+
+  function routeLegLabelPoint(points) {
+    const index = Math.floor((points.length - 1) / 2);
+
+    if (index < 0 || !points[index] || !points[index + 1])
+      return null;
+
+    const a = worldToScreen(
+      Number(points[index].x),
+      Number(points[index].z));
+    const b = worldToScreen(
+      Number(points[index + 1].x),
+      Number(points[index + 1].z));
+
+    return {
+      x: (a.x + b.x) / 2,
+      y: (a.y + b.y) / 2
+    };
+  }
+
+  function drawRouteText(ctx, text, x, y, align = "center") {
+    ctx.save();
+    ctx.font = "800 9px Open Sans, Arial, sans-serif";
+    ctx.textAlign = align;
+    ctx.textBaseline = "bottom";
+    ctx.fillStyle = "#ffffff";
+    ctx.lineWidth = 4;
+    ctx.strokeStyle = "rgba(0,0,0,.96)";
+    ctx.lineJoin = "round";
+    strokeTextOutline(ctx, text, x, y);
+    ctx.fillText(text, x, y);
     ctx.restore();
   }
 
@@ -1284,18 +1339,40 @@
 
     ctx.restore();
 
-    const label = Math.round(Number(waypoint.speedKmh) || 0) + " км/ч";
-    ctx.save();
-    ctx.font = "800 10px Open Sans, Arial, sans-serif";
-    ctx.textAlign = "center";
-    ctx.textBaseline = "bottom";
-    ctx.fillStyle = "#ffffff";
-    ctx.lineWidth = 4;
-    ctx.strokeStyle = "rgba(0,0,0,.96)";
-    ctx.lineJoin = "round";
-    strokeTextOutline(ctx, label, q.x, q.y - radius - 7);
-    ctx.fillText(label, q.x, q.y - radius - 7);
-    ctx.restore();
+    const speed = Math.round(Number(waypoint.speedKmh) || 0);
+    const distance = Math.max(0, Number(waypoint.distanceFromFirstMeters) || 0);
+    const distanceLabel = distance <= 1000
+      ? Math.round(distance) + " м"
+      : (distance / 1000).toFixed(2) + " км";
+
+    drawRouteText(
+      ctx,
+      speed + " км/ч · " + distanceLabel,
+      q.x,
+      q.y - radius - 7);
+
+    const eta = String(waypoint.estimatedArrivalGameTime || "—");
+    const seconds = Number(waypoint.countdownRealSeconds);
+
+    let countdown = "—";
+
+    if (Number.isFinite(seconds)) {
+      const whole = Math.max(0, Math.ceil(seconds));
+      const minutes = Math.floor(whole / 60);
+      const rest = whole % 60;
+
+      countdown = minutes > 0
+        ? minutes + " мин" + (rest ? " " + rest + " с" : "")
+        : rest + " с";
+    }
+
+    drawRouteText(ctx, eta, q.x, q.y + radius + 17);
+    drawRouteText(
+      ctx,
+      "(" + countdown + ")",
+      q.x + radius + 36,
+      q.y + radius + 17,
+      "left");
   }
 
   function drawRouteWaypoints(ctx, width, height) {
@@ -1329,6 +1406,61 @@
     return null;
   }
 
+  function hitRouteLine(px, py) {
+    if (!route?.legs?.length || simulationRunning)
+      return null;
+
+    let best = null;
+
+    for (const leg of route.legs) {
+      const points = Array.isArray(leg.polyline) ? leg.polyline : [];
+
+      for (let index = 0; index < points.length - 1; index++) {
+        const a = worldToScreen(
+          Number(points[index].x),
+          Number(points[index].z));
+        const b = worldToScreen(
+          Number(points[index + 1].x),
+          Number(points[index + 1].z));
+
+        const dx = b.x - a.x;
+        const dy = b.y - a.y;
+        const len2 = dx * dx + dy * dy;
+
+        const t = len2 <= 0.0001
+          ? 0
+          : Math.max(
+              0,
+              Math.min(
+                1,
+                ((px - a.x) * dx + (py - a.y) * dy) / len2));
+
+        const qx = a.x + dx * t;
+        const qy = a.y + dy * t;
+        const distance = Math.hypot(px - qx, py - qy);
+
+        if (!best || distance < best.distance) {
+          best = {
+            distance,
+            world: {
+              x: Number(points[index].x) +
+                (Number(points[index + 1].x) - Number(points[index].x)) * t,
+              y: Number(points[index].y) +
+                (Number(points[index + 1].y) - Number(points[index].y)) * t,
+              z: Number(points[index].z) +
+                (Number(points[index + 1].z) - Number(points[index].z)) * t
+            },
+            insertAt: leg.startWaypointIndex < 0
+              ? 0
+              : leg.startWaypointIndex + 1
+          };
+        }
+      }
+    }
+
+    return best && best.distance <= 10 ? best : null;
+  }
+
   function normalizeRoute(raw) {
     const value = raw || {};
     const waypoints = Array.isArray(value.waypoints)
@@ -1338,7 +1470,12 @@
           x: Number(item.x) || 0,
           y: Number(item.y) || 0,
           z: Number(item.z) || 0,
-          speedKmh: Math.max(0, Math.min(150, Number(item.speedKmh) || 0))
+          speedKmh: Math.max(0, Math.min(150, Number(item.speedKmh) || 0)),
+          distanceFromFirstMeters: Math.max(0, Number(item.distanceFromFirstMeters) || 0),
+          estimatedArrivalGameTime: String(item.estimatedArrivalGameTime || "—"),
+          countdownRealSeconds: Number.isFinite(Number(item.countdownRealSeconds))
+            ? Math.max(0, Number(item.countdownRealSeconds))
+            : null
         }))
       : [];
 
@@ -1354,6 +1491,8 @@
       stoppedWaypointIndex: Number.isInteger(value.stoppedWaypointIndex)
         ? value.stoppedWaypointIndex
         : null,
+      totalDistanceMeters: Number(value.totalDistanceMeters) || 0,
+      distanceFromFirstWaypointMeters: Number(value.distanceFromFirstWaypointMeters) || 0,
       waypoints,
       legs: Array.isArray(value.legs) ? value.legs : [],
       errors: Array.isArray(value.errors) ? value.errors : []
@@ -1367,7 +1506,7 @@
       return;
 
     const speed = Math.max(0, Number(snapshot.player.speedKmh) || 0);
-    const visible = speed > 0.01;
+    const visible = Array.isArray(route?.waypoints) && route.waypoints.length > 0;
     element.hidden = !visible;
     element.setAttribute("aria-hidden", visible ? "false" : "true");
 
@@ -1478,6 +1617,16 @@
     // точки СДО, поэтому отступ больше, чтобы текст не пересекался с обводками.
     // Точка передаётся как псевдо-точка: геометрия подписи общая для всех.
     drawPointLabel(ctx, { name: "Игрок", isPlayer: true, color: ACCENT_COLOR }, q, false, false);
+
+    if (route?.enabled &&
+        simulationRunning &&
+        Number.isFinite(Number(route.distanceFromFirstWaypointMeters))) {
+      drawRouteText(
+        ctx,
+        (Math.max(0, Number(route.distanceFromFirstWaypointMeters)) / 1000).toFixed(1) + " км",
+        q.x,
+        q.y + radius + 28);
+    }
   }
 
   function currentPlayerForDraw() {
@@ -3088,9 +3237,16 @@
         ? selectedRoute.speedKmh
         : route.defaultSpeedKmh;
       const routeEditable = !simulationRunning;
+      const plannedStop = !route.enabled &&
+        Number.isInteger(route.stoppedWaypointIndex) &&
+        route.stoppedWaypointIndex >= 0 &&
+        route.stoppedWaypointIndex < route.waypoints.length - 1;
+
       const routeButtonLabel = route.enabled
         ? "Движение по маршруту: ВКЛ"
-        : "Движение по маршруту";
+        : (plannedStop
+          ? "Движение по маршруту: продолжить"
+          : "Движение по маршруту");
       const routeStatus =
         route.errors?.length
           ? "<div class='notice routeError' style='margin-top:6px'>" +
@@ -3117,7 +3273,10 @@
           "<div class='field'><label>Факт. скорость</label><input value='" + Math.round(snapshot.player.speedKmh) + "' disabled></div>",
         "</div>",
         "<div class='routeControls'>",
-          "<button class='routeToggleButton" + (route.enabled ? " active" : "") + "' id='routeToggle' type='button' " +
+          "<button class='routeToggleButton" +
+            (route.enabled ? " active" : "") +
+            (plannedStop ? " plannedStopPulse" : "") +
+            "' id='routeToggle' type='button' " +
             "aria-pressed='" + (route.enabled ? "true" : "false") + "' " +
             "title='Включить или выключить движение по маршруту'>" +
             escapeHtml(routeButtonLabel) +
@@ -3830,6 +3989,11 @@
       return;
     }
 
+    if (message.type === "route_completed") {
+      window.alert("Маршрут пройден");
+      return;
+    }
+
     if (message.type === "error") {
       window.alert(message.message || "Ошибка симулятора");
     }
@@ -3855,8 +4019,21 @@
 
     if (event.button === 0) {
       const routeWaypointId = hitRouteWaypoint(pos.x, pos.y);
-      if (routeWaypointId) {
-        send({ action: "route_select_waypoint", id: routeWaypointId });
+
+      if (routeWaypointId && !simulationRunning) {
+        const waypoint = (route.waypoints || []).find(item =>
+          String(item.id) === String(routeWaypointId));
+
+        routeWaypointDragCandidate = {
+          id: routeWaypointId,
+          startX: pos.x,
+          startY: pos.y,
+          world: waypoint
+            ? { x: waypoint.x, y: waypoint.y, z: waypoint.z }
+            : screenToWorld(pos.x, pos.y)
+        };
+
+        map.setPointerCapture?.(event.pointerId);
         event.preventDefault();
         return;
       }
@@ -3866,15 +4043,18 @@
           event.preventDefault();
           return;
         }
+
         draggingPlayer = true;
-        dragPlayerPosition = { x: snapshot.player.position.x, z: snapshot.player.position.z };
+        dragPlayerPosition = {
+          x: snapshot.player.position.x,
+          z: snapshot.player.position.z
+        };
+
         map.setPointerCapture?.(event.pointerId);
         event.preventDefault();
         return;
       }
 
-      // Динамический тайник — самый верхний интерактивный слой. После
-      // обнаружения ЛКМ по ромбу означает явную активацию, а не просто просмотр.
       const dynamicEvent = hitDynamicEventMarker(pos.x, pos.y);
       if (dynamicEvent) {
         if (String(dynamicEvent.status || "") === "Discovered") {
@@ -3883,12 +4063,11 @@
             instanceId: dynamicEvent.instanceId
           });
         }
+
         event.preventDefault();
         return;
       }
 
-      // Квестовая графика рисуется верхним слоем, поэтому первой проверяется
-      // именно она: иначе плашка квеста «съедалась» бы точкой СДО под ней.
       const quest = hitQuestMarker(pos.x, pos.y);
       if (quest) {
         selectQuestFromMap(quest);
@@ -3897,18 +4076,29 @@
       }
 
       const point = hitPoint(pos.x, pos.y);
+
       if (point && !point.isCity) {
         if (String(point.id || "").toLowerCase().startsWith("temporary:")) {
-          // Временная точка уже является текущим выбором. Она не попадает в
-          // World catalog и не требует отдельной команды select_point.
           event.preventDefault();
           return;
         }
-        send({ action: "select_point", id: point.id });
-      } else if (!point) {
-        const world = screenToWorld(pos.x, pos.y);
 
-        if (route.enabled && !simulationRunning) {
+        send({ action: "select_point", id: point.id });
+      } else {
+        const lineHit = !simulationRunning
+          ? hitRouteLine(pos.x, pos.y)
+          : null;
+
+        if (lineHit) {
+          send({
+            action: "route_insert_waypoint",
+            insertAt: lineHit.insertAt,
+            x: lineHit.world.x,
+            y: lineHit.world.y,
+            z: lineHit.world.z
+          });
+        } else if (route.enabled && !simulationRunning) {
+          const world = screenToWorld(pos.x, pos.y);
           send({
             action: "route_add_waypoint",
             x: world.x,
@@ -3916,6 +4106,7 @@
             z: world.z
           });
         } else if (!route.enabled) {
+          const world = screenToWorld(pos.x, pos.y);
           send({
             action: "create_temporary_point",
             x: world.x,
@@ -3926,26 +4117,48 @@
 
         event.preventDefault();
       }
+
       return;
     }
 
-    if (event.button === 1 || event.button === 2) {
-      if (event.button === 2 && route.enabled && !simulationRunning) {
+    if (event.button === 1) {
+      panning = true;
+      panStart = {
+        x: pos.x,
+        y: pos.y,
+        cx: camera.cx,
+        cz: camera.cz
+      };
+
+      map.setPointerCapture?.(event.pointerId);
+      event.preventDefault();
+      return;
+    }
+
+    if (event.button === 2) {
+      if (route.waypoints?.length && !simulationRunning) {
         const routeWaypointId = hitRouteWaypoint(pos.x, pos.y);
+
         if (routeWaypointId) {
-          routeRightClickCandidate = {
-            id: routeWaypointId,
-            x: pos.x,
-            y: pos.y
-          };
-          map.setPointerCapture?.(event.pointerId);
+          send({
+            action: "route_delete_waypoint",
+            id: routeWaypointId
+          });
+
+          hoveredRouteWaypointId = null;
           event.preventDefault();
           return;
         }
       }
 
       panning = true;
-      panStart = { x: pos.x, y: pos.y, cx: camera.cx, cz: camera.cz };
+      panStart = {
+        x: pos.x,
+        y: pos.y,
+        cx: camera.cx,
+        cz: camera.cz
+      };
+
       map.setPointerCapture?.(event.pointerId);
       event.preventDefault();
     }
@@ -3954,30 +4167,37 @@
   map.addEventListener("pointermove", event => {
     const pos = pointerPosition(event);
 
-    if (routeRightClickCandidate && !panning) {
+    if (routeWaypointDragCandidate && !draggingRouteWaypointId) {
       const moved = Math.hypot(
-        pos.x - routeRightClickCandidate.x,
-        pos.y - routeRightClickCandidate.y);
+        pos.x - routeWaypointDragCandidate.startX,
+        pos.y - routeWaypointDragCandidate.startY);
 
-      if (moved > 6) {
-        panning = true;
-        panStart = {
-          x: routeRightClickCandidate.x,
-          y: routeRightClickCandidate.y,
-          cx: camera.cx,
-          cz: camera.cz
-        };
-        routeRightClickCandidate = null;
+      if (moved > 4) {
+        draggingRouteWaypointId = routeWaypointDragCandidate.id;
+        dragRouteWaypointPosition = routeWaypointDragCandidate.world;
       }
     }
 
+    if (draggingRouteWaypointId) {
+      const world = screenToWorld(pos.x, pos.y);
+
+      dragRouteWaypointPosition = {
+        x: world.x,
+        y: routeWaypointDragCandidate?.world?.y ?? 0,
+        z: world.z
+      };
+
+      drawMap();
+      event.preventDefault();
+      return;
+    }
+
     if (!draggingPlayer && !panning && snapshot) {
-      // Приоритет подсветки повторяет приоритет нажатия: в pointerdown ЛКМ по
-      // игроку начинает перетаскивание раньше любых проверок карты, значит и
-      // подсветка обязана показывать игрока, а не элемент под ним.
       const overRouteWaypoint = hitRouteWaypoint(pos.x, pos.y);
       const overPlayer = overRouteWaypoint ? false : hitPlayer(pos.x, pos.y);
-      const overDynamicEvent = (overRouteWaypoint || overPlayer) ? null : hitDynamicEventMarker(pos.x, pos.y);
+      const overDynamicEvent = (overRouteWaypoint || overPlayer)
+        ? null
+        : hitDynamicEventMarker(pos.x, pos.y);
       const overQuest = (overRouteWaypoint || overPlayer || overDynamicEvent)
         ? null
         : hitQuestMarker(pos.x, pos.y);
@@ -3986,16 +4206,21 @@
         : hitPoint(pos.x, pos.y);
 
       let needsRedraw = false;
+
       if (overRouteWaypoint !== hoveredRouteWaypointId) {
         hoveredRouteWaypointId = overRouteWaypoint;
         needsRedraw = true;
       }
+
       if (overPlayer !== hoveredPlayer) {
         hoveredPlayer = overPlayer;
         needsRedraw = true;
       }
-      if (overQuest !== hoveredQuest) needsRedraw = true;
-      hoveredQuest = overQuest;
+
+      if (overQuest !== hoveredQuest) {
+        hoveredQuest = overQuest;
+        needsRedraw = true;
+      }
 
       const nextHoveredPointId = hoveredPoint?.id || null;
       if (nextHoveredPointId !== hoveredPointId) {
@@ -4003,18 +4228,21 @@
         needsRedraw = true;
       }
 
-      // Курсор показывает, что элемент доступен: игрок перетаскивается («grab»),
-      // квест и СДО кликабельны («pointer»). Приоритет тот же, что у подсветки.
       const cursor = overRouteWaypoint
-        ? "pointer"
+        ? (!simulationRunning ? "grab" : "pointer")
         : (overPlayer
           ? "grab"
           : ((overDynamicEvent || overQuest)
             ? "pointer"
-            : (hoveredPoint ? (hoveredPoint.isCity ? "default" : "pointer") : "default")));
-      if (map.style.cursor !== cursor) map.style.cursor = cursor;
+            : (hoveredPoint
+              ? (hoveredPoint.isCity ? "default" : "pointer")
+              : "default")));
 
-      if (needsRedraw) drawMap();
+      if (map.style.cursor !== cursor)
+        map.style.cursor = cursor;
+
+      if (needsRedraw)
+        drawMap();
     }
 
     if (draggingPlayer && snapshot) {
@@ -4034,10 +4262,29 @@
   map.addEventListener("pointerup", event => {
     const pos = pointerPosition(event);
 
-    if (routeRightClickCandidate) {
-      const id = routeRightClickCandidate.id;
-      routeRightClickCandidate = null;
-      send({ action: "route_delete_waypoint", id });
+    if (routeWaypointDragCandidate) {
+      const candidate = routeWaypointDragCandidate;
+
+      if (draggingRouteWaypointId) {
+        const world = dragRouteWaypointPosition || candidate.world;
+
+        send({
+          action: "route_move_waypoint",
+          id: candidate.id,
+          x: world.x,
+          y: world.y,
+          z: world.z
+        });
+      } else {
+        send({
+          action: "route_select_waypoint",
+          id: candidate.id
+        });
+      }
+
+      routeWaypointDragCandidate = null;
+      draggingRouteWaypointId = null;
+      dragRouteWaypointPosition = null;
       map.releasePointerCapture?.(event.pointerId);
       map.style.cursor = "default";
       event.preventDefault();
@@ -4046,18 +4293,14 @@
 
     if (draggingPlayer && snapshot) {
       const world = screenToWorld(pos.x, pos.y);
+
       send({
         action: "set_player_position",
         x: world.x,
         y: snapshot.player.position.y,
         z: world.z
       });
-      window.assistQuestLog?.("INFO", "Quest UI: игрок перемещён.", {
-        position: { x: world.x, y: snapshot.player.position.y, z: world.z },
-        runtimeStatus: runtimeStatusName(runtime?.status),
-        waitingFor: runtime?.waitingFor || null,
-        currentNodeId: runtime?.currentNodeId || null
-      });
+
       draggingPlayer = false;
       dragPlayerPosition = null;
       map.releasePointerCapture?.(event.pointerId);
@@ -4075,6 +4318,9 @@
 
   map.addEventListener("pointerleave", event => {
     routeRightClickCandidate = null;
+    routeWaypointDragCandidate = null;
+    draggingRouteWaypointId = null;
+    dragRouteWaypointPosition = null;
     if (hoveredRouteWaypointId !== null ||
         hoveredPointId !== null ||
         hoveredQuest !== null ||

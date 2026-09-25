@@ -353,38 +353,7 @@ public sealed class SimulatorForm : WebViewForm
             // перерисовывает всю карту, и без этого набор точек исчезал бы
             // через доли секунды после нажатия «Показать в симуляторе».
             locationVisualisation = _locationVisualisation,
-            route = new
-            {
-                enabled = _routeEnabled,
-                defaultSpeedKmh = _routeState.DefaultSpeedKmh,
-                selectedWaypointId = _selectedRouteWaypointId,
-                stoppedWaypointIndex = _routeStoppedWaypointIndex,
-                waypoints = _routeState.Waypoints.Select((waypoint, index) => new
-                {
-                    id = waypoint.Id,
-                    index = index + 1,
-                    x = waypoint.Position.X,
-                    y = waypoint.Position.Y,
-                    z = waypoint.Position.Z,
-                    speedKmh = waypoint.SpeedKmh
-                }).ToArray(),
-                legs = _routePlan.Legs.Select(leg => new
-                {
-                    startWaypointIndex = leg.StartWaypointIndex,
-                    endWaypointIndex = leg.EndWaypointIndex,
-                    lengthMeters = leg.LengthMeters,
-                    polyline = leg.Polyline.Select(point => new
-                    {
-                        x = point.X,
-                        y = point.Y,
-                        z = point.Z
-                    }).ToArray()
-                }).ToArray(),
-                errors = _routePlan.Errors,
-                fovAngleDegrees = RouteMovementEngine.FovAngleDegrees,
-                fovMinLengthMeters = RouteMovementEngine.FovMinLengthMeters,
-                fovMaxLengthMeters = RouteMovementEngine.FovMaxLengthMeters
-            },
+            route = BuildRouteSnapshot(),
             // Индикатор светового дня: астрономию считает домен, UI только рисует.
             daylight = BuildDaylight(snapshot),
             // Свойства мира из кампании: блок «Окружение» показывает их и умеет
@@ -488,6 +457,14 @@ public sealed class SimulatorForm : WebViewForm
 
                 case "route_add_waypoint":
                     AddRouteWaypoint(root);
+                    break;
+
+                case "route_insert_waypoint":
+                    InsertRouteWaypoint(root);
+                    break;
+
+                case "route_move_waypoint":
+                    MoveRouteWaypoint(root);
                     break;
 
                 case "route_delete_waypoint":
@@ -878,6 +855,76 @@ public sealed class SimulatorForm : WebViewForm
         _routeStoppedWaypointIndex = null;
         _resumeRouteAfterStop = false;
         RebuildRoute("waypoint added");
+        PersistSession("автосохранение: waypoint added", force: true);
+    }
+
+    private void InsertRouteWaypoint(JsonElement root)
+    {
+        EnsureRouteEditingAllowed();
+
+        var player = _hub.Get<PlayerState>("player").Value;
+        var position = new WorldCoordinate(
+            Number(root, "x", player.Position.X),
+            Number(root, "y", player.Position.Y),
+            Number(root, "z", player.Position.Z));
+
+        var insertAt = Math.Clamp(
+            root.TryGetProperty("insertAt", out var insertNode) &&
+            insertNode.TryGetInt32(out var parsed)
+                ? parsed
+                : _routeState.Waypoints.Count,
+            0,
+            _routeState.Waypoints.Count);
+
+        var list = _routeState.Waypoints.ToList();
+        list.Insert(
+            insertAt,
+            new RouteWaypoint(
+                "route:" + Guid.NewGuid().ToString("N"),
+                position,
+                _routeState.DefaultSpeedKmh));
+
+        _routeState = _routeState with { Waypoints = list };
+        _selectedRouteWaypointId = _routeState.Waypoints[insertAt].Id;
+        _routeStoppedWaypointIndex = null;
+        _resumeRouteAfterStop = false;
+
+        RebuildRoute("waypoint inserted on route line");
+        PersistSession("автосохранение: waypoint inserted", force: true);
+    }
+
+    private void MoveRouteWaypoint(JsonElement root)
+    {
+        EnsureRouteEditingAllowed();
+
+        var id = Required(root, "id");
+        var found = false;
+
+        var waypoints = _routeState.Waypoints.Select(item =>
+        {
+            if (!item.Id.Equals(id, StringComparison.OrdinalIgnoreCase))
+                return item;
+
+            found = true;
+            return item with
+            {
+                Position = new WorldCoordinate(
+                    Number(root, "x", item.Position.X),
+                    Number(root, "y", item.Position.Y),
+                    Number(root, "z", item.Position.Z))
+            };
+        }).ToArray();
+
+        if (!found)
+            return;
+
+        _routeState = _routeState with { Waypoints = waypoints };
+        _selectedRouteWaypointId = id;
+        _routeStoppedWaypointIndex = null;
+        _resumeRouteAfterStop = false;
+
+        RebuildRoute("route waypoint moved");
+        PersistSession("автосохранение: waypoint moved", force: true);
     }
 
     private void DeleteRouteWaypoint(string id)
@@ -896,6 +943,7 @@ public sealed class SimulatorForm : WebViewForm
         _routeStoppedWaypointIndex = null;
         _resumeRouteAfterStop = false;
         RebuildRoute("waypoint deleted");
+        PersistSession("автосохранение: waypoint deleted", force: true);
     }
 
     private void SelectRouteWaypoint(string id)
@@ -934,12 +982,14 @@ public sealed class SimulatorForm : WebViewForm
 
         _routeState = _routeState with { Waypoints = waypoints };
         RebuildRoute("waypoint speed changed");
+        PersistSession("автосохранение: waypoint speed changed", force: true);
     }
 
     private void SetRouteDefaultSpeed(double speed)
     {
         _routeState = _routeState.WithDefaultSpeed(speed);
         RequestSnapshot("route default speed changed");
+        PersistSession("автосохранение: route default speed changed", force: true);
     }
 
     private void SetRouteEnabled(bool enabled)
@@ -979,12 +1029,9 @@ public sealed class SimulatorForm : WebViewForm
         }
         else
         {
-            _routeCursor = _routeCursor with
-            {
-                Initialized = false,
-                ResumeAfterStop = false
-            };
             _resumeRouteAfterStop = false;
+            if (!_routeCursor.Initialized)
+                _routeCursor = _routeCursor with { ResumeAfterStop = false };
         }
 
         AppLogger.Info(
@@ -1008,6 +1055,7 @@ public sealed class SimulatorForm : WebViewForm
         _routeMovementLastTick = null;
         SetPlayerMovementIdle();
         RequestSnapshot("route cleared");
+        PersistSession("автосохранение: route cleared", force: true);
     }
 
     private void EnsureRouteEditingAllowed()
@@ -1111,6 +1159,15 @@ public sealed class SimulatorForm : WebViewForm
             if (result.Completed)
                 _routeStoppedWaypointIndex = _routeState.Waypoints.Count - 1;
 
+            if (result.Completed)
+            {
+                PostJson(JsonSerializer.Serialize(new
+                {
+                    type = "route_completed",
+                    message = "Маршрут пройден"
+                }, SnapshotJsonOptions));
+            }
+
             AppLogger.Info(
                 "SimulatorForm: движение по маршруту остановлено.",
                 result.StoppedAtWaypoint
@@ -1150,33 +1207,59 @@ public sealed class SimulatorForm : WebViewForm
             SetPlayerMovementIdle();
     }
 
-    private void SetRouteStateAfterLoad(RouteState route)
+    private void SetRouteStateAfterLoad(RouteState route, RouteRuntimeState? runtime = null)
     {
         _routeState = (route ?? RouteState.Empty).Normalize();
         var playerPosition = _hub.Get<PlayerState>("player").Value.Position;
         _routePlan = _routePlanner.Build(_routeState, playerPosition);
-        _routeCursor = RouteCursor.Initial;
-        _routeStoppedWaypointIndex = null;
+
+        var savedCursor = runtime?.Cursor ?? RouteCursor.Initial;
+
+        if (savedCursor.Initialized &&
+            savedCursor.LegIndex == 0 &&
+            _routePlan.Legs.Count > 0 &&
+            _routePlan.Legs[0].StartWaypointIndex < 0)
+        {
+            savedCursor = savedCursor with
+            {
+                SegmentIndex = 0,
+                SegmentProgressMeters = 0d
+            };
+        }
+
+        _routeCursor = IsRouteCursorUsable(savedCursor)
+            ? savedCursor with { ResumeAfterStop = false }
+            : RouteCursor.Initial;
+
+        _routeStoppedWaypointIndex = _routeCursor.StoppedAtWaypointIndex;
+        _routeLastHeading = _routeCursor.LastHeadingDegrees;
         _resumeRouteAfterStop = false;
         _selectedRouteWaypointId = null;
         _routeEnabled = false;
         _routeMovementLastTick = null;
+    }
 
-        // Runtime cursor не входит в сохранение, но точка с speed=0 является
-        // частью пользовательского маршрута. Если автосохранение было сделано
-        // после такой остановки, позиция игрока указывает, на какой waypoint
-        // нужно продолжить после повторного включения режима.
-        for (var index = 0; index < _routeState.Waypoints.Count - 1; index++)
-        {
-            var waypoint = _routeState.Waypoints[index];
-            var dx = playerPosition.X - waypoint.Position.X;
-            var dz = playerPosition.Z - waypoint.Position.Z;
-            if (waypoint.SpeedKmh <= 0.001d && Math.Sqrt(dx * dx + dz * dz) <= 3d)
-            {
-                _routeStoppedWaypointIndex = index;
-                break;
-            }
-        }
+    private bool IsRouteCursorUsable(RouteCursor cursor)
+    {
+        if (!cursor.Initialized || !_routePlan.IsUsable)
+            return false;
+
+        if (cursor.LegIndex < 0 || cursor.LegIndex >= _routePlan.Legs.Count)
+            return false;
+
+        var points = _routePlan.Legs[cursor.LegIndex].Polyline;
+        if (points.Count < 2 ||
+            cursor.SegmentIndex < 0 ||
+            cursor.SegmentIndex >= points.Count - 1)
+            return false;
+
+        if (!double.IsFinite(cursor.SegmentProgressMeters) ||
+            cursor.SegmentProgressMeters < 0d)
+            return false;
+
+        return cursor.StoppedAtWaypointIndex is null ||
+               (cursor.StoppedAtWaypointIndex.Value >= 0 &&
+                cursor.StoppedAtWaypointIndex.Value < _routeState.Waypoints.Count);
     }
 
     private void SetFact(JsonElement root)
@@ -2435,7 +2518,7 @@ public sealed class SimulatorForm : WebViewForm
         // до того, как получил новое состояние.
         _dynamicEventDispatcher.SetSimulationRunning(false);
         SimulationSaveMapper.Apply(_hub, save.State);
-        SetRouteStateAfterLoad(save.State.Route);
+        SetRouteStateAfterLoad(save.State.Route, save.State.RouteRuntime);
         _inventoryPausedSimulation = false;
         // Пауза вместо полной остановки: мир сохранён, продолжить можно одним
         // нажатием. Автосохранение при этом НЕ делается — загрузка не является
@@ -2501,8 +2584,211 @@ public sealed class SimulatorForm : WebViewForm
         PostSaveResult("renamed", item.Path, "Переименовано в «" + item.Name + "».");
     }
 
+    private object BuildRouteSnapshot()
+    {
+        var cumulative = new double[_routeState.Waypoints.Count];
+
+        for (var index = 1; index < cumulative.Length; index++)
+        {
+            var leg = _routePlan.Legs.FirstOrDefault(item =>
+                item.StartWaypointIndex == index - 1 &&
+                item.EndWaypointIndex == index);
+
+            cumulative[index] =
+                cumulative[index - 1] + (leg?.LengthMeters ?? 0d);
+        }
+
+        var currentDistance = 0d;
+
+        if (_routeStoppedWaypointIndex is int stopped &&
+            stopped >= 0 &&
+            stopped < cumulative.Length &&
+            !_routeCursor.Initialized)
+        {
+            currentDistance = cumulative[stopped];
+        }
+        else if (_routeCursor.Initialized &&
+                 _routePlan.Legs.Count > 0 &&
+                 _routeCursor.LegIndex >= 0 &&
+                 _routeCursor.LegIndex < _routePlan.Legs.Count)
+        {
+            var leg = _routePlan.Legs[_routeCursor.LegIndex];
+
+            if (leg.StartWaypointIndex >= 0 &&
+                leg.StartWaypointIndex < cumulative.Length)
+            {
+                currentDistance =
+                    cumulative[leg.StartWaypointIndex] +
+                    DistanceAlongLeg(leg, _routeCursor);
+            }
+        }
+
+        var clock = _hub.Get<WorldClockState>("sim-time").Value;
+        var speedScale = Math.Max(0d, _runtime.SimulationSpeed);
+
+        var waypoints = _routeState.Waypoints.Select((waypoint, index) =>
+        {
+            var countdown = EstimateRouteSeconds(index);
+
+            return new
+            {
+                id = waypoint.Id,
+                index = index + 1,
+                x = waypoint.Position.X,
+                y = waypoint.Position.Y,
+                z = waypoint.Position.Z,
+                speedKmh = waypoint.SpeedKmh,
+                distanceFromFirstMeters = cumulative[index],
+                estimatedArrivalGameTime = countdown.HasValue
+                    ? GameCalendar.FormatTime(
+                        clock.Now + TimeSpan.FromSeconds(
+                            countdown.Value * speedScale))
+                    : "—",
+                countdownRealSeconds = countdown
+            };
+        }).ToArray();
+
+        return new
+        {
+            enabled = _routeEnabled,
+            defaultSpeedKmh = _routeState.DefaultSpeedKmh,
+            selectedWaypointId = _selectedRouteWaypointId,
+            stoppedWaypointIndex = _routeStoppedWaypointIndex,
+            totalDistanceMeters =
+                cumulative.Length == 0 ? 0d : cumulative[^1],
+            distanceFromFirstWaypointMeters =
+                Math.Max(0d, currentDistance),
+            waypoints,
+            legs = _routePlan.Legs.Select(leg => new
+            {
+                startWaypointIndex = leg.StartWaypointIndex,
+                endWaypointIndex = leg.EndWaypointIndex,
+                lengthMeters = leg.LengthMeters,
+                polyline = leg.Polyline.Select(point => new
+                {
+                    x = point.X,
+                    y = point.Y,
+                    z = point.Z
+                }).ToArray()
+            }).ToArray(),
+            errors = _routePlan.Errors,
+            fovAngleDegrees = RouteMovementEngine.FovAngleDegrees,
+            fovMinLengthMeters = RouteMovementEngine.FovMinLengthMeters,
+            fovMaxLengthMeters = RouteMovementEngine.FovMaxLengthMeters
+        };
+    }
+
+    private double? EstimateRouteSeconds(int targetIndex)
+    {
+        if (targetIndex < 0 ||
+            targetIndex >= _routeState.Waypoints.Count ||
+            !_routePlan.IsUsable ||
+            _routePlan.Legs.Count == 0)
+            return null;
+
+        if (_routeStoppedWaypointIndex is int stopped)
+        {
+            if (targetIndex <= stopped)
+                return 0d;
+
+            var total = 0d;
+
+            for (var legIndex = stopped + 1;
+                 legIndex < _routePlan.Legs.Count;
+                 legIndex++)
+            {
+                var leg = _routePlan.Legs[legIndex];
+                if (leg.EndWaypointIndex > targetIndex)
+                    break;
+
+                var speed = RouteLegSpeed(legIndex);
+                if (speed <= 0.001d)
+                    return null;
+
+                total += leg.LengthMeters / (speed / 3.6d);
+            }
+
+            return total;
+        }
+
+        var startLeg = _routeCursor.Initialized
+            ? Math.Clamp(
+                _routeCursor.LegIndex,
+                0,
+                _routePlan.Legs.Count - 1)
+            : 0;
+
+        var totalSeconds = 0d;
+
+        for (var legIndex = startLeg;
+             legIndex < _routePlan.Legs.Count;
+             legIndex++)
+        {
+            var leg = _routePlan.Legs[legIndex];
+            if (leg.EndWaypointIndex > targetIndex)
+                break;
+
+            var speed = RouteLegSpeed(legIndex);
+            if (speed <= 0.001d)
+                return null;
+
+            var remaining = leg.LengthMeters;
+
+            if (_routeCursor.Initialized &&
+                legIndex == startLeg)
+            {
+                remaining -= DistanceAlongLeg(leg, _routeCursor);
+            }
+
+            totalSeconds += Math.Max(0d, remaining) / (speed / 3.6d);
+        }
+
+        return Math.Max(0d, totalSeconds);
+    }
+
+    private double RouteLegSpeed(int legIndex)
+    {
+        var leg = _routePlan.Legs[legIndex];
+
+        return leg.StartWaypointIndex < 0
+            ? _routeState.Waypoints[leg.EndWaypointIndex].SpeedKmh
+            : _routeState.Waypoints[leg.StartWaypointIndex].SpeedKmh;
+    }
+
+    private static double Distance2D(WorldCoordinate a, WorldCoordinate b)
+    {
+        var dx = a.X - b.X;
+        var dz = a.Z - b.Z;
+        return Math.Sqrt(dx * dx + dz * dz);
+    }
+
+    private static double DistanceAlongLeg(RouteLeg leg, RouteCursor cursor)
+    {
+        var points = leg.Polyline;
+        if (points.Count < 2)
+            return 0d;
+
+        var segment = Math.Clamp(cursor.SegmentIndex, 0, points.Count - 2);
+        var distance = 0d;
+
+        for (var index = 0; index < segment; index++)
+            distance += Distance2D(points[index], points[index + 1]);
+
+        var segmentLength =
+            Distance2D(points[segment], points[segment + 1]);
+
+        return distance + Math.Clamp(
+            cursor.SegmentProgressMeters,
+            0d,
+            segmentLength);
+    }
+
     private SimulationSaveState CaptureState() =>
-        SimulationSaveMapper.Capture(_hub, CurrentCampaignId(), _routeState);
+        SimulationSaveMapper.Capture(
+            _hub,
+            CurrentCampaignId(),
+            _routeState,
+            new RouteRuntimeState(_routeCursor));
 
     /// <summary>
     /// Запускает режим прохождения.
@@ -2603,7 +2889,7 @@ public sealed class SimulatorForm : WebViewForm
         }
 
         SimulationSaveMapper.Apply(_hub, session.State);
-        SetRouteStateAfterLoad(session.State.Route);
+        SetRouteStateAfterLoad(session.State.Route, session.State.RouteRuntime);
         _inventoryPausedSimulation = false;
         SyncRuntimeQuestEnabled();
         _autoSaveAt = session.Header.CreatedAt;

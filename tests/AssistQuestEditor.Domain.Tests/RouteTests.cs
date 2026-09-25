@@ -197,7 +197,42 @@ public sealed class RouteTests
     }
 
     [Fact]
-    public void NearbyParallelRoadsAreNotMergedByDirectionRecovery()
+    public void RoadGapUpToThreeHundredMetersIsRecovered()
+    {
+        var planner = new RoadRoutePlanner(new[]
+        {
+            new RoadSegment(0, 0, 50, 0),
+            new RoadSegment(350, 0, 400, 0)
+        });
+
+        var route = new RouteState(60, new[]
+        {
+            new RouteWaypoint("a", new WorldCoordinate(10, 0, 0), 60),
+            new RouteWaypoint("b", new WorldCoordinate(390, 0, 0), 60)
+        });
+
+        Assert.True(planner.Build(route).IsUsable);
+    }
+
+    [Fact]
+    public void RoadGapOverThreeHundredMetersIsRejected()
+    {
+        var planner = new RoadRoutePlanner(new[]
+        {
+            new RoadSegment(0, 0, 50, 0),
+            new RoadSegment(351, 0, 401, 0)
+        });
+
+        var route = new RouteState(60, new[]
+        {
+            new RouteWaypoint("a", new WorldCoordinate(10, 0, 0), 60),
+            new RouteWaypoint("b", new WorldCoordinate(391, 0, 0), 60)
+        });
+
+        Assert.False(planner.Build(route).IsUsable);
+    }
+
+
     {
         var planner = new RoadRoutePlanner(new[]
         {
