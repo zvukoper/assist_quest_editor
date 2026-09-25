@@ -97,6 +97,9 @@ public sealed class RoadIndex
 
     public int SegmentCount => _segmentCount;
 
+    /// <summary>Неизменяемая геометрия дорог для построения маршрутов.</summary>
+    public IReadOnlyList<RoadSegment> Segments => _segments;
+
     /// <summary>
     /// Дорожная геометрия плоским массивом <c>[x1,z1,x2,z2, ...]</c>.
     ///
