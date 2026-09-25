@@ -197,6 +197,28 @@ public sealed class RouteTests
     }
 
     [Fact]
+    public void RealWorldRouteGapBetweenNorthRoadFragmentsIsRecovered()
+    {
+        var planner = new RoadRoutePlanner(new[]
+        {
+            new RoadSegment(158320.23, -77248.03, 158120.69, -77172.06),
+            new RoadSegment(157680.12, -77072.67, 157837.48, -77138.06)
+        });
+
+        var route = new RouteState(60, new[]
+        {
+            new RouteWaypoint("p1", new WorldCoordinate(158308.6, 90, -77244.0), 60),
+            new RouteWaypoint("p2", new WorldCoordinate(157722.6, 90, -77090.3), 60)
+        });
+
+        var plan = planner.Build(route);
+
+        Assert.True(plan.IsUsable);
+        Assert.Single(plan.Legs);
+        Assert.True(plan.Legs[0].LengthMeters > 600);
+    }
+
+    [Fact]
     public void RoadGapUpToThreeHundredMetersIsRecovered()
     {
         var planner = new RoadRoutePlanner(new[]

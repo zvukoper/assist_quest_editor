@@ -292,51 +292,40 @@ public sealed class RoadRoutePlanner
             for (var dxCell = -cellRadius; dxCell <= cellRadius; dxCell++)
             for (var dzCell = -cellRadius; dzCell <= cellRadius; dzCell++)
             {
-                if (!_nodeGrid.TryGetValue((cellX + dxCell, cellZ + dzCell), out var otherBucket))
+                if (!_nodeGrid.TryGetValue(
+                        (cellX + dxCell, cellZ + dzCell),
+                        out var otherBucket))
                     continue;
 
-                foreach (var nodeA in bucket)
+                foreach (var a in bucket)
+                foreach (var b in otherBucket)
                 {
-                    if (degrees[nodeA] != 1)
+                    if (a == b)
                         continue;
 
-                    var bestNode = -1;
-                    var bestDistance = double.PositiveInfinity;
+                    var key = a < b ? (a, b) : (b, a);
+                    if (!pairs.Add(key) || HasEdge(a, b))
+                        continue;
 
-                    foreach (var nodeB in otherBucket)
-                    {
-                        if (nodeA == nodeB || degrees[nodeB] != 1)
-                            continue;
+                    var vx = _nodes[b].X - _nodes[a].X;
+                    var vz = _nodes[b].Z - _nodes[a].Z;
+                    var distance = Math.Sqrt(vx * vx + vz * vz);
 
-                        var key = nodeA < nodeB ? (nodeA, nodeB) : (nodeB, nodeA);
-                        if (!pairs.Add(key) || HasEdge(nodeA, nodeB))
-                            continue;
+                    if (distance <= NodeMergeToleranceMeters ||
+                        distance > RecoveryGapMaxMeters)
+                        continue;
 
-                        var vx = _nodes[nodeB].X - _nodes[nodeA].X;
-                        var vz = _nodes[nodeB].Z - _nodes[nodeA].Z;
-                        var distance = Math.Sqrt(vx * vx + vz * vz);
+                    var dirX = vx / distance;
+                    var dirZ = vz / distance;
 
-                        if (distance <= NodeMergeToleranceMeters ||
-                            distance > RecoveryGapMaxMeters ||
-                            distance >= bestDistance)
-                            continue;
+                    // CanContinue для тупика смотрит наружу от дороги к концу.
+                    // Поэтому первый конец должен смотреть в сторону второго,
+                    // а второй — обратно к первому.
+                    if (!CanContinue(degrees, a, dirX, dirZ) ||
+                        !CanContinue(degrees, b, -dirX, -dirZ))
+                        continue;
 
-                        var dirX = vx / distance;
-                        var dirZ = vz / distance;
-
-                        // У обоих концов существующее дорожное ребро смотрит
-                        // наружу от разрыва: для A нужно направление ПРОТИВ A->B,
-                        // для B — В СТОРОНУ A->B.
-                        if (!CanContinue(degrees, nodeA, -dirX, -dirZ) ||
-                            !CanContinue(degrees, nodeB, dirX, dirZ))
-                            continue;
-
-                        bestNode = nodeB;
-                        bestDistance = distance;
-                    }
-
-                    if (bestNode >= 0)
-                        AddEdge(nodeA, bestNode, bestDistance, recovery: true);
+                    AddEdge(a, b, distance, recovery: true);
                 }
             }
         }
