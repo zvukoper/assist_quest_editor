@@ -103,7 +103,7 @@ public sealed class RouteTests
 
         var route = new RouteState(60, new[]
         {
-            new RouteWaypoint("a", new WorldCoordinate(10, 10, 0), 60),
+            new RouteWaypoint("a", new WorldCoordinate(10, 0, 10), 60),
             new RouteWaypoint("b", new WorldCoordinate(90, 0, 10), 60)
         });
 
