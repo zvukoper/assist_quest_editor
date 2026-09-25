@@ -1178,7 +1178,10 @@
   }
 
   function drawRouteFov(ctx, player) {
-    if (!route?.enabled || !route?.legs?.length || !player?.position)
+    // При автоматической остановке на waypoint со скоростью 0 toggle
+    // выключается, но конус остаётся видимым и сохраняет последнее направление.
+    if ((!route?.enabled && route?.stoppedWaypointIndex == null) ||
+        !route?.legs?.length || !player?.position)
       return;
 
     const speed = Math.max(0, Number(player.speedKmh) || 0);
