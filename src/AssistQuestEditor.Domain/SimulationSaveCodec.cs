@@ -274,7 +274,7 @@ public static class SimulationSaveCodec
         if (header.FormatVersion >= 2)
             WriteDynamicEvents(writer, strings, state.DynamicEvents);
         if (header.FormatVersion >= 3)
-            WriteRoute(writer, strings, state.Route);
+            WriteRoute(writer, strings, state.Route, header.FormatVersion >= 5);
         if (header.FormatVersion >= 4)
             WriteRouteRuntime(writer, state.RouteRuntime, header.FormatVersion);
     }
@@ -419,7 +419,11 @@ public static class SimulationSaveCodec
             ReadDouble(reader));
     }
 
-    private static void WriteRoute(BinaryWriter writer, StringTable strings, RouteState route)
+    private static void WriteRoute(
+        BinaryWriter writer,
+        StringTable strings,
+        RouteState route,
+        bool includeOffRoad)
     {
         route = (route ?? RouteState.Empty).Normalize();
         WriteDouble(writer, route.DefaultSpeedKmh);
@@ -432,7 +436,8 @@ public static class SimulationSaveCodec
             WriteDouble(writer, waypoint.Position.Y);
             WriteDouble(writer, waypoint.Position.Z);
             WriteDouble(writer, waypoint.SpeedKmh);
-            writer.Write(waypoint.IsOffRoad);
+            if (includeOffRoad)
+                writer.Write(waypoint.IsOffRoad);
         }
     }
 
