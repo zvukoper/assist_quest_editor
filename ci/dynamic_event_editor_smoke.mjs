@@ -171,3 +171,6 @@ try {
 } finally {
   await browser.close();
 }
+
+check(/activate_dynamic_event/.test(dynamicJs),
+  "Simulator must expose explicit dynamic event activation action.");
