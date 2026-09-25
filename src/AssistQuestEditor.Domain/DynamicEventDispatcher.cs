@@ -415,43 +415,57 @@ public sealed class DynamicEventDispatcher : IDynamicEventDispatcher
         if (_definitions.ContainsKey(instance.DefinitionId))
             ArmDiscoverySchedules(instance.DefinitionId, clock, now, schedules);
 
-        // Для Dynamic Event, который связан с QuestId, обнаружение является
-        // активацией: Dispatcher передаёт управление обычному Quest Runtime.
-        // При успешном запуске экземпляр сразу считается использованным, чтобы
-        // карта не показывала уже активированный тайник.
-        if (_definitions.TryGetValue(instance.DefinitionId, out var definition) &&
-            !string.IsNullOrWhiteSpace(definition.QuestId))
-        {
-            if (_questRuntime is null)
-            {
-                Publish(
-                    "DynamicEventActivationFailed",
-                    $"Нельзя активировать «{definition.Name}»: Quest Runtime не подключён.",
-                    definition.Id,
-                    instance.InstanceId,
-                    instance.Point);
-            }
-            else if (_questRuntime.StartQuest(definition.QuestId))
-            {
-                Complete(instance.InstanceId, consumed: true);
-            }
-            else
-            {
-                Publish(
-                    "DynamicEventActivationFailed",
-                    $"Квест «{definition.QuestId}» не удалось активировать после обнаружения «{definition.Name}».",
-                    definition.Id,
-                    instance.InstanceId,
-                    instance.Point);
-            }
-        }
-
         WriteState(
             State.Instances,
             schedules.Values.OrderBy(item => item.DefinitionId, StringComparer.OrdinalIgnoreCase).ToArray(),
             "DynamicEventDispatcher.DiscoverySchedule");
 
         return true;
+    }
+
+    /// <summary>
+    /// Ручная активация обнаруженного события. Discovery и activation разделены:
+    /// карта может показать найденный тайник, но Quest Runtime запускается только
+    /// после явного действия игрока. Lifetime продолжает отсчитываться с момента
+    /// создания экземпляра.
+    /// </summary>
+    public bool Activate(string instanceId)
+    {
+        ThrowIfDisposed();
+
+        var instance = State.Instances.FirstOrDefault(item =>
+            item.InstanceId.Equals(instanceId, StringComparison.OrdinalIgnoreCase));
+        if (instance is null ||
+            instance.Status != DynamicEventInstanceStatus.Discovered)
+            return false;
+
+        if (!_definitions.TryGetValue(instance.DefinitionId, out var definition) ||
+            string.IsNullOrWhiteSpace(definition.QuestId))
+            return false;
+
+        if (_questRuntime is null)
+        {
+            Publish(
+                "DynamicEventActivationFailed",
+                $"Нельзя активировать «{definition.Name}»: Quest Runtime не подключён.",
+                definition.Id,
+                instance.InstanceId,
+                instance.Point);
+            return false;
+        }
+
+        if (!_questRuntime.StartQuest(definition.QuestId))
+        {
+            Publish(
+                "DynamicEventActivationFailed",
+                $"Квест «{definition.QuestId}» не удалось активировать после обнаружения «{definition.Name}».",
+                definition.Id,
+                instance.InstanceId,
+                instance.Point);
+            return false;
+        }
+
+        return Engage(instanceId);
     }
 
     public bool Engage(string instanceId) =>
