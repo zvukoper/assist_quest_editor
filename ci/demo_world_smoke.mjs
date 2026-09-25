@@ -23,6 +23,36 @@ if (!fs.existsSync(archive)) {
 const archiveBytes = fs.statSync(archive).size;
 check(archiveBytes > 0, "Архив демо-мира пуст.");
 
+// Архив в source-data может оставаться от предыдущего checkout. Smoke обязан
+// проверять именно текущий DemoWorldSeeder: приложение умеет самовосстанавливать
+// bundled archive, поэтому источник истины — canonical builder, а не старые zip-байты.
+let archiveForSmoke = archive;
+const candidateExecutables = [
+  path.join("src", "AssistQuestEditor.App", "bin", "Release", "net10.0-windows", "win-x64", "AssistQuestEditor.exe"),
+  path.join("src", "AssistQuestEditor.App", "bin", "Release", "net10.0-windows", "AssistQuestEditor.exe")
+];
+const builderExe = candidateExecutables.find(candidate => fs.existsSync(candidate));
+if (builderExe) {
+  const generatedArchive = path.join(
+    os.tmpdir(),
+    "aq-demo-generated-" + Date.now() + ".aqezip");
+  try {
+    execFileSync(builderExe, [
+      "--build-demo-world",
+      "--output",
+      generatedArchive
+    ], { stdio: ["ignore", "ignore", "pipe"] });
+    if (fs.existsSync(generatedArchive) && fs.statSync(generatedArchive).size > 0)
+      archiveForSmoke = generatedArchive;
+    else
+      failures.push("DemoWorldSeeder не создал временный архив.");
+  } catch (error) {
+    failures.push("DemoWorldSeeder не смог собрать демо-архив: " + String(error.stderr || error.message));
+  }
+} else {
+  failures.push("Для проверки текущего DemoWorldSeeder не найден собранный AssistQuestEditor.exe.");
+}
+
 // Распаковка через PowerShell Expand-Archive — стандартный инструмент, а не
 // самодельный распаковщик: если содержимое архива не читается штатным
 // архиватором, приложение тоже его не прочитает.
@@ -38,7 +68,7 @@ const staging = path.join(os.tmpdir(), "aq-demo-smoke-" + Date.now());
 fs.mkdirSync(staging, { recursive: true });
 
 const neutralCopy = path.join(staging, "DemoWorld.zip");
-fs.copyFileSync(archive, neutralCopy);
+fs.copyFileSync(archiveForSmoke, neutralCopy);
 
 let extracted = false;
 try {
