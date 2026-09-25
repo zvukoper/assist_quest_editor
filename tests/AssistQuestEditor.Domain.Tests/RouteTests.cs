@@ -52,6 +52,133 @@ public sealed class RouteTests
     }
 
     [Fact]
+    public void SingleWaypointRouteStartsFromCurrentPlayerPosition()
+    {
+        var planner = new RoadRoutePlanner(new[]
+        {
+            new RoadSegment(0, 0, 100, 0)
+        });
+
+        var route = new RouteState(60, new[]
+        {
+            new RouteWaypoint("target", new WorldCoordinate(90, 0, 0), 70)
+        });
+
+        var plan = planner.Build(route, new WorldCoordinate(10, 0, 0));
+
+        Assert.True(plan.IsUsable);
+        Assert.Single(plan.Legs);
+        Assert.Equal(-1, plan.Legs[0].StartWaypointIndex);
+        Assert.Equal(0, plan.Legs[0].EndWaypointIndex);
+        Assert.Equal(new WorldCoordinate(10, 0, 0), plan.Legs[0].Polyline[0]);
+        Assert.Equal(new WorldCoordinate(90, 0, 0), plan.Legs[0].Polyline[^1]);
+    }
+
+    [Fact]
+    public void RouteMovementCanAdvanceToSingleWaypoint()
+    {
+        var planner = new RoadRoutePlanner(new[]
+        {
+            new RoadSegment(0, 0, 100, 0)
+        });
+
+        var route = new RouteState(60, new[]
+        {
+            new RouteWaypoint("target", new WorldCoordinate(100, 0, 0), 60)
+        });
+
+        var plan = planner.Build(route, new WorldCoordinate(0, 0, 0));
+        var result = RouteMovementEngine.Advance(
+            route,
+            plan,
+            RouteCursor.Initial,
+            new WorldCoordinate(0, 0, 0),
+            1);
+
+        Assert.Equal(60, result.SpeedKmh, 6);
+        Assert.Equal(50d / 3d, result.Position.X, 6);
+        Assert.True(result.Enabled);
+        Assert.False(result.Completed);
+    }
+
+    [Fact]
+    public void RoutePlannerExplainsWhenWaypointIsTooFarFromRoad()
+    {
+        var planner = new RoadRoutePlanner(new[]
+        {
+            new RoadSegment(0, 0, 100, 0)
+        });
+
+        var route = new RouteState(60, new[]
+        {
+            new RouteWaypoint("target", new WorldCoordinate(1000, 0, 0), 60)
+        });
+
+        var plan = planner.Build(route, new WorldCoordinate(0, 0, 0));
+
+        Assert.False(plan.IsUsable);
+        Assert.Contains(plan.Errors, error => error.Contains("1000.0") && error.Contains("допустимое расстояние привязки"));
+    }
+
+    [Fact]
+    public void SingleWaypointWithZeroSpeedStopsAtWaypoint()
+    {
+        var planner = new RoadRoutePlanner(new[]
+        {
+            new RoadSegment(0, 0, 100, 0)
+        });
+
+        var route = new RouteState(60, new[]
+        {
+            new RouteWaypoint("target", new WorldCoordinate(80, 0, 0), 0)
+        });
+
+        var plan = planner.Build(route, new WorldCoordinate(0, 0, 0));
+        var result = RouteMovementEngine.Advance(
+            route,
+            plan,
+            RouteCursor.Initial,
+            new WorldCoordinate(0, 0, 0),
+            1);
+
+        Assert.False(result.Enabled);
+        Assert.True(result.StoppedAtWaypoint);
+        Assert.Equal(0, result.Cursor.StoppedAtWaypointIndex);
+        Assert.Equal(0, result.Position.X, 6);
+    }
+
+    [Fact]
+    public void ResumeAfterZeroSpeedFirstWaypointUsesNextLegSpeed()
+    {
+        var planner = new RoadRoutePlanner(new[]
+        {
+            new RoadSegment(0, 0, 100, 0),
+            new RoadSegment(100, 0, 200, 0)
+        });
+
+        var route = new RouteState(60, new[]
+        {
+            new RouteWaypoint("a", new WorldCoordinate(80, 0, 0), 0),
+            new RouteWaypoint("b", new WorldCoordinate(180, 0, 0), 90)
+        });
+
+        var plan = planner.Build(route, new WorldCoordinate(0, 0, 0));
+        var cursor = RouteMovementEngine.CreateResumeCursor(plan, 0, 0);
+
+        Assert.Equal(1, cursor.LegIndex);
+        var result = RouteMovementEngine.Advance(
+            route,
+            plan,
+            cursor,
+            new WorldCoordinate(80, 0, 0),
+            1);
+
+        Assert.True(result.Enabled);
+        Assert.Equal(90, result.SpeedKmh, 6);
+        Assert.Equal(105, result.Position.X, 6);
+    }
+
+    [Fact]
     public void SmallRoadGapIsRecovered()
     {
         var planner = new RoadRoutePlanner(new[]

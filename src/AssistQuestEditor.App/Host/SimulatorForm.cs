@@ -821,13 +821,8 @@ public sealed class SimulatorForm : WebViewForm
             old with { Position = position },
             "Редактор игрока");
 
-        if (_routeEnabled)
-        {
-            _routeCursor = RouteCursor.Initial;
-            _routeStoppedWaypointIndex = null;
-            _resumeRouteAfterStop = false;
-            _routeMovementLastTick = null;
-        }
+        if (_routeState.Waypoints.Count > 0)
+            RebuildRoute("player position changed");
 
         if (_runtime.State.Status == QuestRuntimeStatus.Waiting)
         {
@@ -948,12 +943,16 @@ public sealed class SimulatorForm : WebViewForm
 
     private void SetRouteEnabled(bool enabled)
     {
-        if (enabled &&
-            _routeState.Waypoints.Count >= 2 &&
-            _routePlan.Errors.Count > 0)
+        if (enabled && _routePlan.Errors.Count > 0)
         {
+            var details = string.Join(
+                Environment.NewLine,
+                _routePlan.Errors.Select(error => "• " + error));
+
             throw new InvalidOperationException(
-                "Движение по маршруту недоступно: маршрут содержит ошибку.");
+                "Движение по маршруту недоступно. Ошибка построения маршрута:" +
+                Environment.NewLine +
+                details);
         }
 
         _routeEnabled = enabled;
@@ -964,6 +963,7 @@ public sealed class SimulatorForm : WebViewForm
             SetPlayerMovementIdle();
             _resumeRouteAfterStop = false;
             AppLogger.Info("SimulatorForm: движение по маршруту выключено.");
+            RequestSnapshot("route movement disabled");
             return;
         }
 
@@ -989,6 +989,8 @@ public sealed class SimulatorForm : WebViewForm
         AppLogger.Info(
             "SimulatorForm: движение по маршруту включено.",
             $"waypoints={_routeState.Waypoints.Count}; defaultSpeed={_routeState.DefaultSpeedKmh}");
+
+        RequestSnapshot("route movement enabled");
     }
 
     private void ClearRoute()
@@ -1004,6 +1006,7 @@ public sealed class SimulatorForm : WebViewForm
         _routeEnabled = false;
         _routeMovementLastTick = null;
         SetPlayerMovementIdle();
+        RequestSnapshot("route cleared");
     }
 
     private void EnsureRouteEditingAllowed()
@@ -1018,7 +1021,8 @@ public sealed class SimulatorForm : WebViewForm
     private void RebuildRoute(string reason)
     {
         _routeState = _routeState.Normalize();
-        _routePlan = _routePlanner.Build(_routeState);
+        var playerPosition = _hub.Get<PlayerState>("player").Value.Position;
+        _routePlan = _routePlanner.Build(_routeState, playerPosition);
         _routeCursor = RouteCursor.Initial;
         _routeMovementLastTick = null;
         _routeStoppedWaypointIndex = null;
@@ -1031,6 +1035,8 @@ public sealed class SimulatorForm : WebViewForm
 
         foreach (var error in _routePlan.Errors)
             AppLogger.Warn("SimulatorForm: ошибка маршрута.", error);
+
+        RequestSnapshot("route rebuilt: " + reason);
     }
 
     private void UpdateRouteMovement()
@@ -1041,7 +1047,7 @@ public sealed class SimulatorForm : WebViewForm
             return;
         }
 
-        if (_routeState.Waypoints.Count < 2 || !_routePlan.IsUsable)
+        if (_routeState.Waypoints.Count < 1 || !_routePlan.IsUsable)
         {
             SetPlayerMovementIdle();
             return;
@@ -1111,6 +1117,7 @@ public sealed class SimulatorForm : WebViewForm
                     : result.Completed
                         ? "причина=достигнута последняя точка"
                         : "причина=маршрут завершён");
+            RequestSnapshot("route movement stopped");
         }
     }
 
@@ -1145,7 +1152,8 @@ public sealed class SimulatorForm : WebViewForm
     private void SetRouteStateAfterLoad(RouteState route)
     {
         _routeState = (route ?? RouteState.Empty).Normalize();
-        _routePlan = _routePlanner.Build(_routeState);
+        var playerPosition = _hub.Get<PlayerState>("player").Value.Position;
+        _routePlan = _routePlanner.Build(_routeState, playerPosition);
         _routeCursor = RouteCursor.Initial;
         _routeStoppedWaypointIndex = null;
         _resumeRouteAfterStop = false;

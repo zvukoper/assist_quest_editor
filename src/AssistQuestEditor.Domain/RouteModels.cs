@@ -130,7 +130,7 @@ public static class RouteMovementEngine
             0d,
             double.IsFinite(elapsedSeconds) ? elapsedSeconds : 0d);
 
-        if (route.Waypoints.Count < 2 ||
+        if (route.Waypoints.Count < 1 ||
             plan.Legs.Count == 0 ||
             plan.Errors.Count > 0)
         {
@@ -166,12 +166,18 @@ public static class RouteMovementEngine
         var segmentIndex = cursor.SegmentIndex;
         var progress = Math.Max(0d, cursor.SegmentProgressMeters);
 
-        var speed = resumeAfterStop
-            ? route.Waypoints[plan.Legs[legIndex].EndWaypointIndex].SpeedKmh
-            : route.Waypoints[plan.Legs[legIndex].StartWaypointIndex].SpeedKmh;
+        var speedLeg = plan.Legs[legIndex];
+        var speed = resumeAfterStop ||
+                    speedLeg.StartWaypointIndex < 0
+            ? route.Waypoints[speedLeg.EndWaypointIndex].SpeedKmh
+            : route.Waypoints[speedLeg.StartWaypointIndex].SpeedKmh;
 
         if (speed <= 0d && !resumeAfterStop)
         {
+            var stoppedWaypointIndex = speedLeg.StartWaypointIndex < 0
+                ? speedLeg.EndWaypointIndex
+                : speedLeg.StartWaypointIndex;
+
             return new RouteMovementResult(
                 position,
                 0d,
@@ -179,7 +185,7 @@ public static class RouteMovementEngine
                 cursor with
                 {
                     Initialized = true,
-                    StoppedAtWaypointIndex = plan.Legs[legIndex].StartWaypointIndex,
+                    StoppedAtWaypointIndex = stoppedWaypointIndex,
                     ResumeAfterStop = false
                 },
                 false,
@@ -331,8 +337,21 @@ public static class RouteMovementEngine
         int stoppedWaypointIndex,
         double lastHeadingDegrees)
     {
+        var nextLegIndex = stoppedWaypointIndex;
+
+        // В планах, начинающихся от игрока, leg 0 — виртуальный
+        // «игрок → точка 1». Если остановились на точке 1 (index 0), следующий
+        // leg — уже index 1, то есть «точка 1 → точка 2».
+        if (plan.Legs.Count > 0 &&
+            plan.Legs[0].StartWaypointIndex < 0 &&
+            stoppedWaypointIndex == 0)
+        {
+            nextLegIndex = 1;
+        }
+
         if (stoppedWaypointIndex < 0 ||
-            stoppedWaypointIndex >= plan.Legs.Count)
+            nextLegIndex < 0 ||
+            nextLegIndex >= plan.Legs.Count)
         {
             return RouteCursor.Initial with
             {
@@ -344,7 +363,7 @@ public static class RouteMovementEngine
 
         return new RouteCursor(
             true,
-            stoppedWaypointIndex,
+            nextLegIndex,
             0,
             0d,
             true,
@@ -357,6 +376,22 @@ public static class RouteMovementEngine
         WorldCoordinate position,
         RouteCursor previous)
     {
+        // Первый leg специально начинается из ТОЙ САМОЙ позиции игрока, которую
+        // использовал Planner. Не нужно искать «ближайший» поздний участок: при
+        // петлях маршрута он может оказаться физически ближе и курсор перепрыгнет
+        // через первые точки.
+        if (plan.Legs.Count > 0 &&
+            plan.Legs[0].StartWaypointIndex < 0)
+        {
+            return previous with
+            {
+                Initialized = true,
+                LegIndex = 0,
+                SegmentIndex = 0,
+                SegmentProgressMeters = 0d
+            };
+        }
+
         var bestDistance = double.PositiveInfinity;
         var bestLeg = 0;
         var bestSegment = 0;

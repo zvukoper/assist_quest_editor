@@ -7,6 +7,14 @@ public sealed class RoadRoutePlanner
     private const double RecoveryGapMaxMeters = 30d;
     private const double RecoveryDirectionDot = 0.45d;
     private const double GridCellSizeMeters = 100d;
+
+    /// <summary>
+    /// Максимальное расстояние от точки авторинга/игрока до оси дороги, при котором
+    /// точка автоматически привязывается к дорожному графу. Дальше маршрут почти
+    /// наверняка означает ошибочно поставленную точку, и скрытая длинная «прямая»
+    /// до дороги только маскировала бы проблему.
+    /// </summary>
+    public const double MaxRouteSnapDistanceMeters = 100d;
     private const double JunctionGridCellSizeMeters = 250d;
 
     private readonly List<Node> _nodes = new();
@@ -50,28 +58,81 @@ public sealed class RoadRoutePlanner
 
     public bool IsEmpty => _fragments.Count == 0;
 
-    public RoutePlan Build(RouteState route)
+    /// <summary>
+    /// Строит маршрут между сохранёнными путевыми точками. Этот overload оставляет
+    /// прежний контракт для доменных тестов и инструментов, где уже задана
+    /// начальная точка маршрута.
+    /// </summary>
+    public RoutePlan Build(RouteState route) =>
+        Build(route, null);
+
+    /// <summary>
+    /// Строит маршрут начиная С ТЕКУЩЕЙ ПОЗИЦИИ ИГРОКА.
+    ///
+    /// Поэтому маршрут с одной путевой точкой уже является полноценным маршрутом:
+    /// первый leg имеет StartWaypointIndex = -1 (игрок) и EndWaypointIndex = 0.
+    /// </summary>
+    public RoutePlan Build(RouteState route, WorldCoordinate? playerPosition)
     {
         route = (route ?? RouteState.Empty).Normalize();
-        if (route.Waypoints.Count < 2)
+
+        if (route.Waypoints.Count == 0)
             return RoutePlan.Empty;
+
+        if (IsEmpty)
+        {
+            return new RoutePlan(
+                Array.Empty<RouteLeg>(),
+                new[]
+                {
+                    "Маршрут не построен: дорожная геометрия пуста. " +
+                    "Файл data/world/roads.json не загружен или не содержит отрезков."
+                });
+        }
 
         var legs = new List<RouteLeg>();
         var errors = new List<string>();
+
+        if (playerPosition is WorldCoordinate currentPlayer)
+        {
+            var first = route.Waypoints[0];
+            var firstResult = BuildLeg(
+                -1,
+                0,
+                "текущей позиции игрока",
+                "точки 1",
+                currentPlayer,
+                first.Position,
+                includeExactStart: true);
+
+            if (firstResult.Leg is not null)
+                legs.Add(firstResult.Leg);
+            else if (!string.IsNullOrWhiteSpace(firstResult.Error))
+                errors.Add(firstResult.Error);
+        }
+        else if (route.Waypoints.Count == 1)
+        {
+            errors.Add(
+                "Маршрут с одной точкой не построен: для него нужна текущая позиция игрока.");
+        }
 
         for (var index = 0; index < route.Waypoints.Count - 1; index++)
         {
             var start = route.Waypoints[index];
             var end = route.Waypoints[index + 1];
-            var leg = BuildLeg(index, start.Position, end.Position);
+            var result = BuildLeg(
+                index,
+                index + 1,
+                "точки " + (index + 1),
+                "точки " + (index + 2),
+                start.Position,
+                end.Position,
+                includeExactStart: false);
 
-            if (leg is null)
-            {
-                errors.Add($"Маршрут между точками {index + 1} и {index + 2} не построен: не найдено соединение по дорогам.");
-                return new RoutePlan(Array.Empty<RouteLeg>(), errors);
-            }
-
-            legs.Add(leg);
+            if (result.Leg is not null)
+                legs.Add(result.Leg);
+            else if (!string.IsNullOrWhiteSpace(result.Error))
+                errors.Add(result.Error);
         }
 
         return new RoutePlan(legs, errors);
@@ -285,15 +346,52 @@ public sealed class RoadRoutePlanner
         return false;
     }
 
-    private RouteLeg? BuildLeg(
-        int waypointIndex,
+    private (RouteLeg? Leg, string? Error) BuildLeg(
+        int startWaypointIndex,
+        int endWaypointIndex,
+        string startLabel,
+        string endLabel,
         WorldCoordinate startPosition,
-        WorldCoordinate endPosition)
+        WorldCoordinate endPosition,
+        bool includeExactStart)
     {
         var start = ProjectToRoad(startPosition);
+        if (start is null)
+        {
+            return (
+                null,
+                $"Маршрут от {startLabel} к {endLabel} не построен: " +
+                "для начальной позиции не найдена дорожная геометрия.");
+        }
+
+        if (start.Value.DistanceMeters > MaxRouteSnapDistanceMeters)
+        {
+            return (
+                null,
+                $"Маршрут от {startLabel} к {endLabel} не построен: " +
+                $"{startLabel} находится в {start.Value.DistanceMeters:F1} м от ближайшей дороги, " +
+                $"а допустимое расстояние привязки — {MaxRouteSnapDistanceMeters:F0} м. " +
+                $"Ближайшая привязка: ({start.Value.Position.X:F1}, {start.Value.Position.Z:F1}).");
+        }
+
         var end = ProjectToRoad(endPosition);
-        if (start is null || end is null)
-            return null;
+        if (end is null)
+        {
+            return (
+                null,
+                $"Маршрут от {startLabel} к {endLabel} не построен: " +
+                "для конечной позиции не найдена дорожная геометрия.");
+        }
+
+        if (end.Value.DistanceMeters > MaxRouteSnapDistanceMeters)
+        {
+            return (
+                null,
+                $"Маршрут от {startLabel} к {endLabel} не построен: " +
+                $"{endLabel} находится в {end.Value.DistanceMeters:F1} м от ближайшей дороги, " +
+                $"а допустимое расстояние привязки — {MaxRouteSnapDistanceMeters:F0} м. " +
+                $"Ближайшая привязка: ({end.Value.Position.X:F1}, {end.Value.Position.Z:F1}).");
+        }
 
         const int virtualStart = -1;
         const int virtualEnd = -2;
@@ -335,7 +433,17 @@ public sealed class RoadRoutePlanner
         }
 
         if (!distances.ContainsKey(virtualEnd))
-            return null;
+        {
+            return (
+                null,
+                $"Маршрут от {startLabel} к {endLabel} не найден: " +
+                "обе позиции успешно привязаны к дороге, но между их дорожными узлами " +
+                "нет непрерывного пути в графе. Проверьте разрыв дороги, отсутствующий " +
+                "перекрёсток или точку, привязанную к другой изолированной части сети. " +
+                $"Начало привязано в ({start.Value.Position.X:F1}, {start.Value.Position.Z:F1}), " +
+                $"конец — в ({end.Value.Position.X:F1}, {end.Value.Position.Z:F1})."
+            );
+        }
 
         var path = new List<int> { virtualEnd };
         var node = virtualEnd;
@@ -348,11 +456,22 @@ public sealed class RoadRoutePlanner
         }
 
         if (path[^1] != virtualStart)
-            return null;
+        {
+            return (
+                null,
+                $"Маршрут от {startLabel} к {endLabel} не построен: " +
+                "служебный путь дорожного графа не вернулся к начальной позиции."
+            );
+        }
 
         path.Reverse();
 
-        var polyline = new List<WorldCoordinate> { start.Value.Position };
+        var polyline = new List<WorldCoordinate>();
+        if (includeExactStart)
+            AddUnique(polyline, startPosition);
+
+        AddUnique(polyline, start.Value.Position);
+
         foreach (var nodeId in path)
         {
             if (nodeId is virtualStart or virtualEnd)
@@ -367,17 +486,25 @@ public sealed class RoadRoutePlanner
 
         AddUnique(polyline, end.Value.Position);
         if (polyline.Count < 2)
-            return null;
+        {
+            return (
+                null,
+                $"Маршрут от {startLabel} к {endLabel} не построен: " +
+                "после построения дорожной полилинии осталось меньше двух точек."
+            );
+        }
 
         var length = 0d;
         for (var index = 0; index < polyline.Count - 1; index++)
             length += Distance(polyline[index], polyline[index + 1]);
 
-        return new RouteLeg(
-            waypointIndex,
-            waypointIndex + 1,
-            polyline,
-            length);
+        return (
+            new RouteLeg(
+                startWaypointIndex,
+                endWaypointIndex,
+                polyline,
+                length),
+            null);
     }
 
     private IEnumerable<Edge> NeighborsWithVirtuals(

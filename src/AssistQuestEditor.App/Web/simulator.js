@@ -3070,7 +3070,10 @@
       const routeStatus =
         route.errors?.length
           ? "<div class='notice routeError' style='margin-top:6px'>" +
-              escapeHtml(route.errors[0]) +
+              "<strong>Ошибка построения маршрута</strong>" +
+              "<div style='margin-top:4px'>" +
+                route.errors.map(error => "• " + escapeHtml(error)).join("<br>") +
+              "</div>" +
             "</div>"
           : selectedRoute
             ? "<div class='routeSelectionHint'>Выбрана путевая точка " +
