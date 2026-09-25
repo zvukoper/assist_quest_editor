@@ -722,6 +722,7 @@ public sealed class SimulatorForm : WebViewForm
                     // кампании.
                     _saveStore.ClearSession();
                     _autoSaveAt = null;
+                    SetRouteStateAfterLoad(RouteState.Empty);
 
                     // Свойства мира берутся из КАМПАНИИ, а не остаются какими были:
                     // сброс возвращает мир к состоянию «на входе», и погода с
@@ -847,6 +848,295 @@ public sealed class SimulatorForm : WebViewForm
         _hub.Get<WorldSelectionState>("world-selection").Set(
             new WorldSelectionState(point, "Карта симулятора"),
             "Карта симулятора");
+    }
+
+
+    private void AddRouteWaypoint(JsonElement root)
+    {
+        if (!_routeEnabled)
+            return;
+
+        EnsureRouteEditingAllowed();
+
+        var position = new WorldCoordinate(
+            Number(root, "x", _hub.Get<PlayerState>("player").Value.Position.X),
+            Number(root, "y", _hub.Get<PlayerState>("player").Value.Position.Y),
+            Number(root, "z", _hub.Get<PlayerState>("player").Value.Position.Z));
+
+        var id = "route:" + Guid.NewGuid().ToString("N");
+        var waypoint = new RouteWaypoint(id, position, _routeState.DefaultSpeedKmh);
+
+        _routeState = _routeState with
+        {
+            Waypoints = _routeState.Waypoints.Concat(new[] { waypoint }).ToArray()
+        };
+
+        _selectedRouteWaypointId = id;
+        _routeStoppedWaypointIndex = null;
+        _resumeRouteAfterStop = false;
+        RebuildRoute("waypoint added");
+    }
+
+    private void DeleteRouteWaypoint(string id)
+    {
+        EnsureRouteEditingAllowed();
+
+        var remaining = _routeState.Waypoints
+            .Where(item => !item.Id.Equals(id, StringComparison.OrdinalIgnoreCase))
+            .ToArray();
+
+        if (remaining.Length == _routeState.Waypoints.Count)
+            return;
+
+        _routeState = _routeState with { Waypoints = remaining };
+        _selectedRouteWaypointId = null;
+        _routeStoppedWaypointIndex = null;
+        _resumeRouteAfterStop = false;
+        RebuildRoute("waypoint deleted");
+    }
+
+    private void SelectRouteWaypoint(string id)
+    {
+        var waypoint = _routeState.Waypoints.FirstOrDefault(item =>
+            item.Id.Equals(id, StringComparison.OrdinalIgnoreCase));
+
+        if (waypoint is null)
+            return;
+
+        _selectedRouteWaypointId = waypoint.Id;
+        RequestSnapshot("route waypoint selected");
+    }
+
+    private void SetRouteWaypointSpeed(string id, double speed)
+    {
+        EnsureRouteEditingAllowed();
+
+        speed = Math.Clamp(
+            double.IsFinite(speed) ? speed : RouteState.DefaultSpeedKmhValue,
+            RouteState.MinSpeedKmh,
+            RouteState.MaxSpeedKmh);
+
+        var changed = false;
+        var waypoints = _routeState.Waypoints.Select(item =>
+        {
+            if (!item.Id.Equals(id, StringComparison.OrdinalIgnoreCase))
+                return item;
+
+            changed = true;
+            return item with { SpeedKmh = speed };
+        }).ToArray();
+
+        if (!changed)
+            return;
+
+        _routeState = _routeState with { Waypoints = waypoints };
+        RebuildRoute("waypoint speed changed");
+    }
+
+    private void SetRouteDefaultSpeed(double speed)
+    {
+        _routeState = _routeState.WithDefaultSpeed(speed);
+        RequestSnapshot("route default speed changed");
+    }
+
+    private void SetRouteEnabled(bool enabled)
+    {
+        if (enabled &&
+            _routeState.Waypoints.Count >= 2 &&
+            _routePlan.Errors.Count > 0)
+        {
+            throw new InvalidOperationException(
+                "Движение по маршруту недоступно: маршрут содержит ошибку.");
+        }
+
+        _routeEnabled = enabled;
+        _routeMovementLastTick = null;
+
+        if (!enabled)
+        {
+            SetPlayerMovementIdle();
+            _resumeRouteAfterStop = false;
+            AppLogger.Info("SimulatorForm: движение по маршруту выключено.");
+            return;
+        }
+
+        if (_routeStoppedWaypointIndex is int stopped &&
+            stopped < _routeState.Waypoints.Count - 1)
+        {
+            _routeCursor = RouteMovementEngine.CreateResumeCursor(
+                _routePlan,
+                stopped,
+                _routeLastHeading);
+            _resumeRouteAfterStop = true;
+        }
+        else
+        {
+            _routeCursor = _routeCursor with
+            {
+                Initialized = false,
+                ResumeAfterStop = false
+            };
+            _resumeRouteAfterStop = false;
+        }
+
+        AppLogger.Info(
+            "SimulatorForm: движение по маршруту включено.",
+            $"waypoints={_routeState.Waypoints.Count}; defaultSpeed={_routeState.DefaultSpeedKmh}");
+    }
+
+    private void ClearRoute()
+    {
+        EnsureRouteEditingAllowed();
+
+        _routeState = RouteState.Empty;
+        _routePlan = RoutePlan.Empty;
+        _routeCursor = RouteCursor.Initial;
+        _selectedRouteWaypointId = null;
+        _routeStoppedWaypointIndex = null;
+        _resumeRouteAfterStop = false;
+        _routeEnabled = false;
+        _routeMovementLastTick = null;
+        SetPlayerMovementIdle();
+    }
+
+    private void EnsureRouteEditingAllowed()
+    {
+        if (_runtime.SimulationRunning)
+        {
+            throw new InvalidOperationException(
+                "Маршрут можно изменять только при остановленной или приостановленной симуляции.");
+        }
+    }
+
+    private void RebuildRoute(string reason)
+    {
+        _routeState = _routeState.Normalize();
+        _routePlan = _routePlanner.Build(_routeState);
+        _routeCursor = RouteCursor.Initial;
+        _routeMovementLastTick = null;
+        _routeStoppedWaypointIndex = null;
+        _resumeRouteAfterStop = false;
+
+        AppLogger.Info(
+            "SimulatorForm: маршрут перестроен.",
+            $"reason={reason}; waypoints={_routeState.Waypoints.Count}; " +
+            $"legs={_routePlan.Legs.Count}; errors={_routePlan.Errors.Count}");
+
+        foreach (var error in _routePlan.Errors)
+            AppLogger.Warn("SimulatorForm: ошибка маршрута.", error);
+    }
+
+    private void UpdateRouteMovement()
+    {
+        if (!_routeEnabled || !_runtime.SimulationRunning)
+        {
+            _routeMovementLastTick = null;
+            return;
+        }
+
+        if (_routeState.Waypoints.Count < 2 || !_routePlan.IsUsable)
+        {
+            SetPlayerMovementIdle();
+            return;
+        }
+
+        var now = DateTimeOffset.UtcNow;
+        if (_routeMovementLastTick is null)
+        {
+            _routeMovementLastTick = now;
+            return;
+        }
+
+        var elapsed = (now - _routeMovementLastTick.Value).TotalSeconds;
+        _routeMovementLastTick = now;
+
+        if (elapsed <= 0d)
+            return;
+
+        elapsed = Math.Min(1d, elapsed);
+
+        var current = _hub.Get<PlayerState>("player").Value;
+        var cursor = _resumeRouteAfterStop
+            ? _routeCursor with { ResumeAfterStop = true }
+            : _routeCursor;
+
+        var result = RouteMovementEngine.Advance(
+            _routeState,
+            _routePlan,
+            cursor,
+            current.Position,
+            elapsed);
+
+        _routeCursor = result.Cursor;
+        _routeLastHeading = result.HeadingDegrees;
+        _resumeRouteAfterStop = false;
+
+        if (result.StoppedAtWaypoint)
+            _routeStoppedWaypointIndex = result.Cursor.StoppedAtWaypointIndex;
+
+        var nextPlayer = current with
+        {
+            Position = result.Position,
+            SpeedKmh = result.SpeedKmh,
+            Heading = result.HeadingDegrees,
+            Paused = false
+        };
+
+        if (current.Position != nextPlayer.Position ||
+            Math.Abs(current.SpeedKmh - nextPlayer.SpeedKmh) > 0.001d ||
+            Math.Abs(current.Heading - nextPlayer.Heading) > 0.001d)
+        {
+            _hub.Get<PlayerState>("player").Set(nextPlayer, "Движение по маршруту");
+        }
+
+        if (!result.Enabled)
+        {
+            _routeEnabled = false;
+            _routeMovementLastTick = null;
+
+            if (result.Completed)
+                _routeStoppedWaypointIndex = _routeState.Waypoints.Count - 1;
+
+            AppLogger.Info(
+                "SimulatorForm: движение по маршруту остановлено.",
+                result.StoppedAtWaypoint
+                    ? $"причина=скорость точки 0; waypoint={_routeStoppedWaypointIndex.GetValueOrDefault() + 1}"
+                    : result.Completed
+                        ? "причина=достигнута последняя точка"
+                        : "причина=маршрут завершён");
+        }
+    }
+
+    private void SetPlayerMovementIdle()
+    {
+        var current = _hub.Get<PlayerState>("player").Value;
+        _routeLastHeading = current.Heading;
+
+        if (Math.Abs(current.SpeedKmh) > 0.001d)
+        {
+            _hub.Get<PlayerState>("player").Set(
+                current with
+                {
+                    SpeedKmh = 0d,
+                    Heading = _routeLastHeading,
+                    Paused = false
+                },
+                "Движение по маршруту: остановка");
+        }
+
+        _routeMovementLastTick = null;
+    }
+
+    private void SetRouteStateAfterLoad(RouteState route)
+    {
+        _routeState = (route ?? RouteState.Empty).Normalize();
+        _routePlan = _routePlanner.Build(_routeState);
+        _routeCursor = RouteCursor.Initial;
+        _routeStoppedWaypointIndex = null;
+        _resumeRouteAfterStop = false;
+        _selectedRouteWaypointId = null;
+        _routeEnabled = false;
+        _routeMovementLastTick = null;
     }
 
     private void SetFact(JsonElement root)
@@ -2105,6 +2395,8 @@ public sealed class SimulatorForm : WebViewForm
         // до того, как получил новое состояние.
         _dynamicEventDispatcher.SetSimulationRunning(false);
         SimulationSaveMapper.Apply(_hub, save.State);
+        SetRouteStateAfterLoad(save.State.Route);
+        _inventoryPausedSimulation = false;
         // Пауза вместо полной остановки: мир сохранён, продолжить можно одним
         // нажатием. Автосохранение при этом НЕ делается — загрузка не является
         // выключением симуляции.
@@ -2170,7 +2462,7 @@ public sealed class SimulatorForm : WebViewForm
     }
 
     private SimulationSaveState CaptureState() =>
-        SimulationSaveMapper.Capture(_hub, CurrentCampaignId());
+        SimulationSaveMapper.Capture(_hub, CurrentCampaignId(), _routeState);
 
     /// <summary>
     /// Запускает режим прохождения.
@@ -2264,6 +2556,7 @@ public sealed class SimulatorForm : WebViewForm
         }
 
         SimulationSaveMapper.Apply(_hub, session.State);
+        SetRouteStateAfterLoad(session.State.Route);
         SyncRuntimeQuestEnabled();
         _autoSaveAt = session.Header.CreatedAt;
         // Мир восстановлен, но часы должны стоять: иначе время пойдёт само,
