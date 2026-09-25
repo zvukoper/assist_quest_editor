@@ -252,7 +252,7 @@ public static class RouteMovementEngine
                         legIndex,
                         segmentIndex,
                         progress,
-                        false,
+                        resumeAfterStop,
                         resumeAfterStop ? null : cursor.StoppedAtWaypointIndex,
                         heading),
                     true,
