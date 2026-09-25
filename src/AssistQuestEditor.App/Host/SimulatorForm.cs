@@ -1165,7 +1165,6 @@ public sealed class SimulatorForm : WebViewForm
         // частью пользовательского маршрута. Если автосохранение было сделано
         // после такой остановки, позиция игрока указывает, на какой waypoint
         // нужно продолжить после повторного включения режима.
-        var playerPosition = _hub.Get<PlayerState>("player").Value.Position;
         for (var index = 0; index < _routeState.Waypoints.Count - 1; index++)
         {
             var waypoint = _routeState.Waypoints[index];

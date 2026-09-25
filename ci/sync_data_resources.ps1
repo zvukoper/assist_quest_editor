@@ -162,6 +162,17 @@ if ($entries.Count -eq 0) {
     throw "В источнике нет ресурсов: $SourceDirectory"
 }
 
+# SourceDirectory и TargetDirectory могут совпадать: так compile.ps1 пересобирает
+# манифест УЖЕ СОБРАННОЙ папки, потому что DemoWorld.aqezip создаётся после
+# публикации самим приложением. Копировать файл в самого себя нельзя —
+# Copy-Item в PS 5.1 падает с IOException «Cannot overwrite the item ... with
+# itself», и это выглядело как поломка синхронизации, хотя манифест нужно было
+# всего лишь переписать по факту. При совпадении каталогов копирование пропускается:
+# расхождение размера и хеша здесь означает не устаревшую копию, а то, что
+# содержимое папки и есть источник истины.
+$sameDirectory = [string]::Equals(
+    $SourceDirectory, $TargetDirectory, [StringComparison]::OrdinalIgnoreCase)
+
 $expected = [System.Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
 foreach ($entry in $entries) { [void]$expected.Add($entry.path) }
 
@@ -184,6 +195,12 @@ foreach ($entry in $entries) {
             $skipped++
             continue
         }
+    }
+
+    if ($sameDirectory) {
+        # Источник и цель — одна папка: копировать нечего, файл уже на месте.
+        $skipped++
+        continue
     }
 
     Copy-Item -LiteralPath $source -Destination $target -Force

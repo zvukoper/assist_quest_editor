@@ -788,15 +788,19 @@ New-Check -Id 'publish' -Name 'Single-file publish' -Suites $publishSuites -Body
         throw "Ресурсы публикации не опубликованы: не найден $manifest"
     }
 
-    $report = Join-Path $publish 'data-verify-report.txt'
-    if (Test-Path -LiteralPath $report) {
-        $reportLines = [IO.File]::ReadAllLines($report)
-        foreach ($line in $reportLines) { Write-Host "  $line" -ForegroundColor DarkGray }
-        if ($reportLines.Count -eq 0 -or $reportLines[0] -notmatch 'совпадают') {
-            throw "Проверка целостности ресурсов публикации не подтверждена: $($reportLines[0])"
-        }
-    } else {
-        throw "Приложение не оставило отчёт о ресурсах: $report"
+    # Согласованность публикации проверяется ОТДЕЛЬНЫМ скриптом, и это важно:
+    # дефект («манифест записал DemoWorld.aqezip нулевой длины») был ГОНКОЙ.
+    # Приложение собрано как WinExe, поэтому `& $exe` не ждёт его завершения, и
+    # манифест читал архив в момент, когда упаковщик только успел усечь файл.
+    # Гонку нельзя проверить через саму сборку — упаковщик иногда успевает
+    # дописать файл, и дефектный код даёт то верный манифест, то пустой
+    # (проверено: мутация с несинхронным вызовом проходила насквозь). Поэтому
+    # утверждение «манифест описывает диск» проверяется на ГОТОВОМ каталоге и
+    # детерминированно, вместе с наличием отчёта проверки целостности.
+    & powershell -NoProfile -NonInteractive -ExecutionPolicy Bypass `
+        -File ci/check_publish_resources.ps1 -PublishDirectory $publish
+    if ($LASTEXITCODE -ne 0) {
+        throw "Проверка согласованности публикации не пройдена: код $LASTEXITCODE"
     }
 
     $resourceCount = @(Get-ChildItem -LiteralPath $dataDir -Recurse -File).Count

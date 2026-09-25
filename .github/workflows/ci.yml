@@ -298,6 +298,15 @@ jobs:
             Write-Error "Ресурсы публикации не опубликованы: не найден $manifest"
             exit 1
           }
+
+          # Согласованность публикации: манифест обязан описывать то, что лежит
+          # на диске. `& $exe` на WinExe не ждёт процесса, поэтому манифест мог
+          # быть собран из недописанного DemoWorld.aqezip (записалась нулевая
+          # длина), и проверка целостности этого не видит — она верит манифесту.
+          powershell -NoProfile -NonInteractive -ExecutionPolicy Bypass `
+            -File .\ci\check_publish_resources.ps1 -PublishDirectory $publish
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
           Write-Host "Single-file публикация CI: $($exeFiles[0].FullName)" -ForegroundColor Green
 
       - name: Финальная проверка CI

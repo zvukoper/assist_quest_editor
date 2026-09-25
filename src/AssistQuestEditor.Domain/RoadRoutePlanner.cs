@@ -1,3 +1,5 @@
+using System.Globalization;
+
 namespace AssistQuestEditor.Domain;
 
 public sealed class RoadRoutePlanner
@@ -137,6 +139,15 @@ public sealed class RoadRoutePlanner
 
         return new RoutePlan(legs, errors);
     }
+
+    /// <summary>
+    /// Числа в сообщениях об ошибках обязаны печататься с точкой как разделителем.
+    /// Текст показывается в панели Симулятора и попадает в журнал, а интерполяция
+    /// по умолчанию берёт текущую локаль: при русской получалось «1000,0», и
+    /// координаты из сообщения нельзя было сверить с данными маршрута.
+    /// </summary>
+    private static string F(double value, int decimals = 1) =>
+        value.ToString("F" + decimals, CultureInfo.InvariantCulture);
 
     public RoadProjection? ProjectToRoad(WorldCoordinate position)
     {
@@ -369,9 +380,10 @@ public sealed class RoadRoutePlanner
             return (
                 null,
                 $"Маршрут от {startLabel} к {endLabel} не построен: " +
-                $"{startLabel} находится в {start.Value.DistanceMeters:F1} м от ближайшей дороги, " +
+                $"{startLabel} ({F(startPosition.X)}, {F(startPosition.Z)}) находится в " +
+                $"{F(start.Value.DistanceMeters)} м от ближайшей дороги, " +
                 $"а допустимое расстояние привязки — {MaxRouteSnapDistanceMeters:F0} м. " +
-                $"Ближайшая привязка: ({start.Value.Position.X:F1}, {start.Value.Position.Z:F1}).");
+                $"Ближайшая привязка: ({F(start.Value.Position.X)}, {F(start.Value.Position.Z)}).");
         }
 
         var end = ProjectToRoad(endPosition);
@@ -388,9 +400,10 @@ public sealed class RoadRoutePlanner
             return (
                 null,
                 $"Маршрут от {startLabel} к {endLabel} не построен: " +
-                $"{endLabel} находится в {end.Value.DistanceMeters:F1} м от ближайшей дороги, " +
+                $"{endLabel} ({F(endPosition.X)}, {F(endPosition.Z)}) находится в " +
+                $"{F(end.Value.DistanceMeters)} м от ближайшей дороги, " +
                 $"а допустимое расстояние привязки — {MaxRouteSnapDistanceMeters:F0} м. " +
-                $"Ближайшая привязка: ({end.Value.Position.X:F1}, {end.Value.Position.Z:F1}).");
+                $"Ближайшая привязка: ({F(end.Value.Position.X)}, {F(end.Value.Position.Z)}).");
         }
 
         const int virtualStart = -1;
@@ -440,8 +453,8 @@ public sealed class RoadRoutePlanner
                 "обе позиции успешно привязаны к дороге, но между их дорожными узлами " +
                 "нет непрерывного пути в графе. Проверьте разрыв дороги, отсутствующий " +
                 "перекрёсток или точку, привязанную к другой изолированной части сети. " +
-                $"Начало привязано в ({start.Value.Position.X:F1}, {start.Value.Position.Z:F1}), " +
-                $"конец — в ({end.Value.Position.X:F1}, {end.Value.Position.Z:F1})."
+                $"Начало привязано в ({F(start.Value.Position.X)}, {F(start.Value.Position.Z)}), " +
+                $"конец — в ({F(end.Value.Position.X)}, {F(end.Value.Position.Z)})."
             );
         }
 

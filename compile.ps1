@@ -33,6 +33,27 @@ function Get-GitValue([string[]] $Arguments) {
     return ($value | Out-String).Trim()
 }
 
+# Приложение собрано как WinExe (подсистема Windows), поэтому PowerShell НЕ ждёт
+# его завершения: `& $exe ...` возвращает управление сразу, а код возврата не
+# выставляется вовсе ($LASTEXITCODE остаётся прежним). Замерено: вызов вернулся
+# за 3 мс, при этом процесс работал ещё ~280 мс. Последствие: всё, что читалось
+# сразу после вызова, читалось из НЕДОПИСАННОГО файла — манифест ресурсов
+# записал DemoWorld.aqezip нулевой длины (упаковщик только успел усечь файл), а
+# проверка `--verify-resources` не выполнялась вообще. Ждать надо явно, как это
+# делает MSBuild: там задача Exec синхронная, и сборка ведёт себя иначе.
+#
+# Каждый аргумент, кроме ключей, обязан быть В КАВЫЧКАХ: Start-Process склеивает
+# список в одну командную строку без экранирования, поэтому путь с пробелом
+# («C:\Мои проекты\...») доехал бы до приложения разрезанным на несколько
+# аргументов. Тот же приём, что в ci\single_instance_probe.ps1.
+function Invoke-ApplicationCommand([string] $Executable, [string[]] $Arguments) {
+    return (Start-Process -FilePath $Executable -ArgumentList $Arguments -PassThru -Wait).ExitCode
+}
+
+function Quote-Argument([string] $Value) {
+    return '"' + $Value + '"'
+}
+
 $repositoryRoot = Get-GitValue @('rev-parse', '--show-toplevel')
 $repositoryUrl = Get-GitValue @('remote', 'get-url', 'origin')
 if (-not [string]::IsNullOrWhiteSpace($repositoryUrl)) {
@@ -170,10 +191,11 @@ if (-not (Test-Path -LiteralPath $publishedManifest)) {
 # single-file EXE сам создаёт свежий canonical archive прямо в publish\data.
 $demoArchive = Join-Path $publishedDataDir 'DemoWorld.aqezip'
 Write-Host "=== Сборка bundled DemoWorld через DemoWorldSeeder ===" -ForegroundColor Cyan
-& $exePath --build-demo-world --output $demoArchive
-if ($LASTEXITCODE -ne 0) {
-    Write-Host "DemoWorldSeeder завершился с кодом $LASTEXITCODE." -ForegroundColor Red
-    exit $LASTEXITCODE
+$seederExitCode = Invoke-ApplicationCommand $exePath @(
+    '--build-demo-world', '--output', (Quote-Argument $demoArchive))
+if ($seederExitCode -ne 0) {
+    Write-Host "DemoWorldSeeder завершился с кодом $seederExitCode." -ForegroundColor Red
+    exit $seederExitCode
 }
 if (-not (Test-Path -LiteralPath $demoArchive) -or (Get-Item -LiteralPath $demoArchive).Length -le 0) {
     Write-Host "DemoWorldSeeder не создал ожидаемый архив: $demoArchive" -ForegroundColor Red
@@ -225,9 +247,10 @@ if (Test-Path -LiteralPath $verifyReport) {
     Remove-Item -LiteralPath $verifyReport -Force
 }
 
-& $exePath --verify-resources
-$verifyExitCode = $LASTEXITCODE
+$verifyExitCode = Invoke-ApplicationCommand $exePath @('--verify-resources')
 
+# Отчёт читается только после ЗАВЕРШЕНИЯ процесса (см. Invoke-ApplicationCommand):
+# до этого его может не быть вовсе, и «отчёта нет» выглядело бы как обрыв сборки.
 if (Test-Path -LiteralPath $verifyReport) {
     foreach ($line in [IO.File]::ReadAllLines($verifyReport)) {
         Write-Host "  $line" -ForegroundColor DarkGray
@@ -237,6 +260,25 @@ if (Test-Path -LiteralPath $verifyReport) {
 if ($verifyExitCode -ne 0) {
     Write-Host "Проверка ресурсов публикации не пройдена (код $verifyExitCode). Отчёт: $verifyReport" -ForegroundColor Red
     exit $verifyExitCode
+}
+
+# Отдельная сверка манифеста с диском. Она закрывает то, с чего проверка
+# целостности начаться не может: `ResourceIntegrityChecker` верит манифесту, а
+# манифест мог быть собран из НЕДОПИСАННОГО файла. Так это и произошло: `& $exe`
+# на WinExe не ждёт процесса, DemoWorld.aqezip записался в манифест нулевой
+# длины, и отчёт проверки честно подтвердил согласованность — при том, что
+# манифест противоречил диску, а приложение отказывалось стартовать.
+$publishCheckScript = Join-Path $PSScriptRoot 'ci\check_publish_resources.ps1'
+if (-not (Test-Path -LiteralPath $publishCheckScript)) {
+    Write-Host "Скрипт проверки публикации не найден: $publishCheckScript" -ForegroundColor Red
+    exit 1
+}
+
+& powershell -NoProfile -NonInteractive -ExecutionPolicy Bypass -File $publishCheckScript `
+    -PublishDirectory $publishDir
+if ($LASTEXITCODE -ne 0) {
+    Write-Host "Проверка согласованности публикации не пройдена (код $LASTEXITCODE)." -ForegroundColor Red
+    exit $LASTEXITCODE
 }
 
 Write-Host "=== Публикация завершена ===" -ForegroundColor Green

@@ -11,10 +11,10 @@
     <Prefer32Bit>false</Prefer32Bit>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
 
-    <Version>1.0.40.185</Version>
-    <AssemblyVersion>1.0.40.185</AssemblyVersion>
-    <FileVersion>1.0.40.185</FileVersion>
-    <AssemblyInformationalVersion>1.0.40.185-READABLE-DIALOGS-R33</AssemblyInformationalVersion>
+    <Version>1.0.40.186</Version>
+    <AssemblyVersion>1.0.40.186</AssemblyVersion>
+    <FileVersion>1.0.40.186</FileVersion>
+    <AssemblyInformationalVersion>1.0.40.186-ROUTE-MOVEMENT-R1</AssemblyInformationalVersion>
     <PublishSingleFile>true</PublishSingleFile>
     <SelfContained>true</SelfContained>
     <RuntimeIdentifier>win-x64</RuntimeIdentifier>
