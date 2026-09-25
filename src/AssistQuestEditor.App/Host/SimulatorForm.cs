@@ -1135,6 +1135,14 @@ public sealed class SimulatorForm : WebViewForm
         _routeMovementLastTick = null;
     }
 
+    private void SetRouteAfterSimulationStateChange()
+    {
+        _routeMovementLastTick = null;
+
+        if (_routeEnabled)
+            SetPlayerMovementIdle();
+    }
+
     private void SetRouteStateAfterLoad(RouteState route)
     {
         _routeState = (route ?? RouteState.Empty).Normalize();
