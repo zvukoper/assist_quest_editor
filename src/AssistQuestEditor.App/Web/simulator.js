@@ -1170,7 +1170,7 @@
 
       // Само lime-полотно маршрута.
       ctx.lineWidth = 2;
-      ctx.strokeStyle = "#b8ff3f";
+      ctx.strokeStyle = "#11fb06";
       ctx.stroke();
     }
 
