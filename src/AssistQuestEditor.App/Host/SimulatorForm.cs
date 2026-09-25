@@ -1250,7 +1250,7 @@ public sealed class SimulatorForm : WebViewForm
                       $"target={(_routeTargetWaypointIndex is int nextTarget ? nextTarget + 1 : 0)}; " +
                       $"resumeAfterStop={result.Cursor.ResumeAfterStop}; " +
                       $"cursorLeg={result.Cursor.LegIndex}; " +
-                      $"cursorTarget={GetTargetWaypointIndex(result.Cursor) is int cursorTarget ? cursorTarget + 1 : 0}; " +
+                      $"cursorTarget={(GetTargetWaypointIndex(result.Cursor) is int cursorTarget ? cursorTarget + 1 : 0)}; " +
                       $"legStart={(result.Cursor.LegIndex >= 0 && result.Cursor.LegIndex < _routePlan.Legs.Count ? _routePlan.Legs[result.Cursor.LegIndex].StartWaypointIndex + 1 : 0)}; " +
                       $"legEnd={(result.Cursor.LegIndex >= 0 && result.Cursor.LegIndex < _routePlan.Legs.Count ? _routePlan.Legs[result.Cursor.LegIndex].EndWaypointIndex + 1 : 0)}"
                     : result.Completed
