@@ -498,6 +498,7 @@
   }
 
   function drawDynamicEventMarkers(ctx, width, height) {
+    dynamicEventHitAreas.length = 0;
     const instances = snapshot?.dynamicEvents?.instances || [];
     if (!instances.length) return;
 
@@ -513,6 +514,12 @@
         0,
         Number(point.triggerRadius || 0)
       );
+      dynamicEventHitAreas.push({
+        instance,
+        cx: q.x,
+        cy: q.y,
+        radius: 14
+      });
       const radiusPx = radiusMeters / Math.max(camera.mpp, 0.0001);
 
       ctx.save();
@@ -1394,6 +1401,15 @@
       ctx.fillText(label, q.x + 14, q.y - 12);
       ctx.restore();
     }
+  }
+
+  function hitDynamicEventMarker(px, py) {
+    for (let index = dynamicEventHitAreas.length - 1; index >= 0; index -= 1) {
+      const area = dynamicEventHitAreas[index];
+      if (Math.hypot(area.cx - px, area.cy - py) <= area.radius)
+        return area.instance;
+    }
+    return null;
   }
 
   function hitPoint(px, py) {
@@ -3493,6 +3509,20 @@
         return;
       }
 
+      // Динамический тайник — самый верхний интерактивный слой. После
+      // обнаружения ЛКМ по ромбу означает явную активацию, а не просто просмотр.
+      const dynamicEvent = hitDynamicEventMarker(pos.x, pos.y);
+      if (dynamicEvent) {
+        if (String(dynamicEvent.status || "") === "Discovered") {
+          send({
+            action: "activate_dynamic_event",
+            instanceId: dynamicEvent.instanceId
+          });
+        }
+        event.preventDefault();
+        return;
+      }
+
       // Квестовая графика рисуется верхним слоем, поэтому первой проверяется
       // именно она: иначе плашка квеста «съедалась» бы точкой СДО под ней.
       const quest = hitQuestMarker(pos.x, pos.y);
@@ -3540,8 +3570,9 @@
       // игроку начинает перетаскивание раньше любых проверок карты, значит и
       // подсветка обязана показывать игрока, а не элемент под ним.
       const overPlayer = hitPlayer(pos.x, pos.y);
-      const overQuest = overPlayer ? null : hitQuestMarker(pos.x, pos.y);
-      const hoveredPoint = (overPlayer || overQuest) ? null : hitPoint(pos.x, pos.y);
+      const overDynamicEvent = overPlayer ? null : hitDynamicEventMarker(pos.x, pos.y);
+      const overQuest = (overPlayer || overDynamicEvent) ? null : hitQuestMarker(pos.x, pos.y);
+      const hoveredPoint = (overPlayer || overDynamicEvent || overQuest) ? null : hitPoint(pos.x, pos.y);
 
       let needsRedraw = false;
       if (overPlayer !== hoveredPlayer) {
@@ -3561,7 +3592,9 @@
       // квест и СДО кликабельны («pointer»). Приоритет тот же, что у подсветки.
       const cursor = overPlayer
         ? "grab"
-        : (overQuest ? "pointer" : (hoveredPoint ? (hoveredPoint.isCity ? "default" : "pointer") : "default"));
+        : ((overDynamicEvent || overQuest)
+          ? "pointer"
+          : (hoveredPoint ? (hoveredPoint.isCity ? "default" : "pointer") : "default"));
       if (map.style.cursor !== cursor) map.style.cursor = cursor;
 
       if (needsRedraw) drawMap();
