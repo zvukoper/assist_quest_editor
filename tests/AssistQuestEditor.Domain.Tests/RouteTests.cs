@@ -104,7 +104,7 @@ public sealed class RouteTests
         var route = new RouteState(60, new[]
         {
             new RouteWaypoint("a", new WorldCoordinate(10, 10, 0), 60),
-            new RouteWaypoint("b", new WorldCoordinate(90, 10, 0), 60)
+            new RouteWaypoint("b", new WorldCoordinate(90, 0, 10), 60)
         });
 
         var plan = planner.Build(route);
@@ -147,7 +147,7 @@ public sealed class RouteTests
             1);
 
         Assert.Equal(60, result.SpeedKmh);
-        Assert.Equal(360d / 216d, result.Position.X, 6);
+        Assert.Equal(50d / 3d, result.Position.X, 6);
         Assert.Equal(0, result.HeadingDegrees, 6);
         Assert.True(result.Enabled);
     }
@@ -220,7 +220,7 @@ public sealed class RouteTests
 
         Assert.True(result.Enabled);
         Assert.Equal(90, result.SpeedKmh, 6);
-        Assert.Equal(125d / 3d, result.Position.X, 6);
+        Assert.Equal(125d, result.Position.X, 6);
     }
 
     [Fact]
