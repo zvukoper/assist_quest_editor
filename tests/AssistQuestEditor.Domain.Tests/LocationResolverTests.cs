@@ -1428,7 +1428,11 @@ public sealed class LocationResolverTests
         var result = new LocationResolver(1).Test(location, world, 2);
 
         Assert.True(result.Supported);
-        Assert.Equal("far-city", result.Candidates.Single().CandidateId);
+        // Раундов больше, чем подходящих кандидатов, поэтому список повторяет
+        // единственную точку, отстоящую от города не менее чем на 1000 м.
+        Assert.Equal(2, result.Candidates.Count);
+        Assert.All(result.Candidates, candidate =>
+            Assert.Equal("far-city", candidate.CandidateId));
     }
 
     private static LocationDefinition DynamicLocation(

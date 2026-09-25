@@ -137,11 +137,18 @@ foreach ($file in $requiredAssetFiles) {
 # и больше ничего. Папка данных появилась сознательно: в single-file ресурсы
 # распаковываются в кэш %TEMP%, который не виден и не заменяется, поэтому рядом
 # с EXE лежит проверенная копия по манифесту.
+#
+# Отчёты (проверки ресурсов и сборки демо-мира) — законные продукты сборки:
+# приложение собрано как WinExe без консоли, поэтому его вердикт и итог сидера
+# доходят до человека и до CI только файлом. Список обязан идти в ногу со всеми
+# отчётами, которые пишутся в этот каталог, иначе проверка состава падает на
+# исправной сборке (так пропускался demo-world-report.txt).
+$allowedPublishExtra = @('data-verify-report.txt', 'demo-world-report.txt')
 $publishedEntries = @(Get-ChildItem -LiteralPath $publishDir -Force)
 $unexpected = @($publishedEntries | Where-Object {
     $_.FullName -ne $exePath -and
     $_.Name -ne 'data' -and
-    $_.Name -ne 'data-verify-report.txt'
+    $allowedPublishExtra -notcontains $_.Name
 })
 if (-not (Test-Path -LiteralPath $exePath) -or $unexpected.Count -gt 0) {
     Write-Host "Проверка состава публикации не пройдена. В каталоге публикации находятся:" -ForegroundColor Red
@@ -182,6 +189,55 @@ try {
 }
 
 $sizeMb = [Math]::Round((Get-Item -LiteralPath $exePath).Length / 1MB, 1)
+
+# Манифест рядом с EXE описывает содержимое папки data на момент publish, а
+# DemoWorld.aqezip собирается ПОЗЖЕ: сборщик архива — сам single-file EXE.
+# Поэтому манифест пересобирается по ФАКТИЧЕСКОМУ содержимому папки, и проверка
+# целостности выполняется ещё раз. Без этого шага размер и SHA-256 архива в
+# манифесте остаются от source-data, и приложение отказывается запускаться с
+# сообщением «ресурсы не совпадают с манифестом сборки» (наблюдалось: 5350 в
+# архиве против 2030 в манифесте).
+$syncScript = Join-Path $PSScriptRoot 'ci\sync_data_resources.ps1'
+if (-not (Test-Path -LiteralPath $syncScript)) {
+    Write-Host "Скрипт синхронизации ресурсов не найден: $syncScript" -ForegroundColor Red
+    exit 1
+}
+
+Write-Host "=== Манифест ресурсов под собранный DemoWorld ===" -ForegroundColor Cyan
+# SourceDirectory = TargetDirectory намеренно: записи берутся из УЖЕ СОБРАННОЙ
+# папки публикации, копировать ничего не нужно — источник истины здесь сам
+# собранный архив. Скрипт такой режим поддерживает (лист каталога обязан быть
+# 'data'), совпадающие файлы пропускает и переписывает манифест по факту.
+& powershell -NoProfile -NonInteractive -ExecutionPolicy Bypass -File $syncScript `
+    -SourceDirectory $publishedDataDir `
+    -TargetDirectory $publishedDataDir `
+    -AppVersion $version `
+    -Commit $repositoryCommit
+if ($LASTEXITCODE -ne 0) {
+    Write-Host "Обновление манифеста ресурсов завершилось с кодом $LASTEXITCODE." -ForegroundColor Red
+    exit $LASTEXITCODE
+}
+
+# Вердикт читается из файла отчёта: приложение собрано как WinExe без консоли,
+# поэтому stdout вызывающего процесса не читается (тот же приём, что в MSBuild).
+$verifyReport = Join-Path $publishDir 'data-verify-report.txt'
+if (Test-Path -LiteralPath $verifyReport) {
+    Remove-Item -LiteralPath $verifyReport -Force
+}
+
+& $exePath --verify-resources
+$verifyExitCode = $LASTEXITCODE
+
+if (Test-Path -LiteralPath $verifyReport) {
+    foreach ($line in [IO.File]::ReadAllLines($verifyReport)) {
+        Write-Host "  $line" -ForegroundColor DarkGray
+    }
+}
+
+if ($verifyExitCode -ne 0) {
+    Write-Host "Проверка ресурсов публикации не пройдена (код $verifyExitCode). Отчёт: $verifyReport" -ForegroundColor Red
+    exit $verifyExitCode
+}
 
 Write-Host "=== Публикация завершена ===" -ForegroundColor Green
 Write-Host "EXE: $exePath"

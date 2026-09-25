@@ -335,9 +335,10 @@ public sealed class DynamicEventDispatcherTests
         dispatcher.Tick();
 
         var spawnedAgain = Assert.Single(
-            dispatcher.State.Instances.Where(item =>
+            dispatcher.State.Instances,
+            item =>
                 item.DefinitionId == "cache" &&
-                item.Status == DynamicEventInstanceStatus.Active));
+                item.Status == DynamicEventInstanceStatus.Active);
         Assert.Equal("cache-2", spawnedAgain.Point.Id);
     }
 
@@ -428,7 +429,13 @@ public sealed class DynamicEventDispatcherTests
         public IReadOnlyCollection<string> EnabledQuestIds => Array.Empty<string>();
         public string? StartedQuestId { get; private set; }
 
-        public event EventHandler<QuestRuntimeEvent>? Published;
+        // Явные аксессоры: тесту не нужна ни подписка, ни рассылка событий, а
+        // поле-событие без использования даёт CS0414 (TreatWarningsAsErrors).
+        public event EventHandler<QuestRuntimeEvent>? Published
+        {
+            add { }
+            remove { }
+        }
 
         public void Start() { }
 
@@ -449,7 +456,6 @@ public sealed class DynamicEventDispatcherTests
 
         public void Dispose()
         {
-            Published = null;
         }
     }
 

@@ -25,6 +25,13 @@ public interface IDynamicEventDispatcher : IDisposable
 
     bool Discover(string instanceId);
     bool Engage(string instanceId);
+
+    /// <summary>
+    /// Ручная активация обнаруженного экземпляра: Discovery лишь показывает
+    /// событие на карте, Quest Runtime запускается только по явному действию.
+    /// </summary>
+    bool Activate(string instanceId);
+
     bool Complete(string instanceId, bool consumed = false);
     bool Cancel(string instanceId, string reason = "Событие отменено.");
     bool Abandon(string instanceId, string reason = "Событие оставлено.");
@@ -532,6 +539,13 @@ public sealed class DynamicEventDispatcher : IDynamicEventDispatcher
             DistanceBudgetMeters = budget,
             NextDistanceThresholdMeters = threshold
         };
+
+        // Накопленный бюджет обязан быть в словаре ДО вызова AttemptSpawn:
+        // AttemptSpawn читает расписание ИЗ СЛОВАРЯ, а не из локальной переменной,
+        // поэтому без этой записи он видел бы прежний бюджет, и при списании
+        // порога терялся бы весь только что пройденный путь (101 м превращались
+        // в 0 сброшенного бюджета вместо 1 м остатка).
+        schedules[definition.Id] = schedule;
 
         // Не допускаем огромного burst после длинного телепорта/загрузки.
         // Одним Tick можно материализовать несколько независимых событий, но не

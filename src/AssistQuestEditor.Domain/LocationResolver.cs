@@ -771,15 +771,15 @@ public sealed class LocationResolver
                     return false;
                 }
 
-                var cities = worldPoints.Where(point => point.IsCity).ToArray();
-                if (cities.Length == 0)
+                var cityPoints = worldPoints.Where(point => point.IsCity).ToArray();
+                if (cityPoints.Length == 0)
                 {
                     result = false;
                     message = $"Критерий {type}: в WorldState нет точек городов.";
                     return false;
                 }
 
-                var nearest = cities.Min(city => Distance(candidate.Position, city.Position));
+                var nearest = cityPoints.Min(city => Distance(candidate.Position, city.Position));
                 result = cityRange.Contains(nearest);
                 message = string.Empty;
                 return true;

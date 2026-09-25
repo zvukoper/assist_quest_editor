@@ -902,13 +902,15 @@ if ($IncludePublish) {
         $dataDir = Join-Path $publish 'data'
         $manifest = Join-Path $dataDir 'data-manifest.json'
 
-        # Рядом с EXE допускаются папка ресурсов и отчёт о её проверке. Папка нужна
+        # Рядом с EXE допускаются папка ресурсов и отчёты сборки. Папка нужна
         # потому, что содержимое single-file распаковывается в невидимый кэш,
-        # а отчёт пишет сама проверка целостности. Любой другой файл — остаток
-        # прошлой сборки, который легко принять за актуальные данные.
+        # а отчёты пишут проверка целостности и сидер демо-мира (приложение —
+        # WinExe без консоли, поэтому его вердикт доходит только файлом). Любой
+        # другой файл — остаток прошлой сборки, который легко принять за данные.
+        $allowedPublishExtra = @('data-verify-report.txt', 'demo-world-report.txt')
         $exeFiles = @($files | Where-Object { $_.Extension -eq '.exe' })
         $unexpected = @($files | Where-Object {
-            $_.Extension -ne '.exe' -and $_.Name -ne 'data-verify-report.txt'
+            $_.Extension -ne '.exe' -and $allowedPublishExtra -notcontains $_.Name
         })
 
         if ($exeFiles.Count -ne 1 -or $unexpected.Count -gt 0) {

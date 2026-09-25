@@ -517,6 +517,10 @@ try {
     "Подпись плашки не должна меняться на паузе: " + pausedState.text);
   check(pausedState.play === "▶️",
     "Иконка play на паузе должна быть ▶️ (следующее действие — продолжить): " + pausedState.play);
+  // Метка «(пауза)» принадлежит ИМЕННО паузе: раньше она висела при
+  // ВЫКЛЮЧЕННОЙ симуляции, из-за чего «ВЫКЛ» и «пауза» было не отличить.
+  check(/\(пауза\)/.test(pausedState.hud),
+    "На паузе метка «(пауза)» должна быть: " + pausedState.hud);
   check(/rgb\(\s*250,\s*176,\s*3\s*\)/.test(pausedComputed.color),
     "Статус паузы должен быть оранжевым (акцент #fab003): " + pausedComputed.color);
   check(pausedComputed.animationName === "simPausePulse" && pausedComputed.duration === "1.5s",
@@ -531,8 +535,8 @@ try {
     color: getComputedStyle(document.getElementById("simStatusPlate")).color,
     animationName: getComputedStyle(document.getElementById("simStatusPlate")).animationName
   }));
-  check(/пауза/.test(stoppedState.hud),
-    "При выключенной симуляции метка «(пауза)» должна быть: " + stoppedState.hud);
+  check(!/\(пауза\)/.test(stoppedState.hud),
+    "У выключенной симуляции метки «(пауза)» быть не должно: " + stoppedState.hud);
   check(stoppedState.state === "stopped",
     "Плашка должна быть в состоянии stopped: " + stoppedState.state);
   check(/Игровое время/.test(stoppedState.text),

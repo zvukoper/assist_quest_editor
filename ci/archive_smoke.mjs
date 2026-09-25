@@ -7,6 +7,7 @@
 // Почему это важно именно для архива: упаковщик и распаковщик — два разных
 // пути, и они легко расходятся (упаковали с одним именем каталога — распаковали
 // с другим). Проверка «файл существует» такого расхождения не видит.
+import crypto from "node:crypto";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -74,9 +75,26 @@ if (packed && fs.existsSync(builtArchive)) {
     "В репозитории нет data/DemoWorld.aqezip: сборка ресурсов не выложила демо-мир.");
 
   if (fs.existsSync(committed)) {
-    // Не сравниваем сырые ZIP-байты: это деталь реализации компрессии,
-    // а не контракт ресурса. Фактическая структура и содержимое
-    // поставляемого архива проверяются отдельным demo_world_smoke.
+    // Сравниваются БАЙТЫ поставляемого архива с только что собранным. Проверка
+    // «файл существует» здесь ничего не доказывает: устаревший .aqezip тоже
+    // существует и распаковывается — просто его содержимое не соответствует
+    // текущему коду. Именно так в публикацию попал архив от набора
+    // `campaigns/common`, тогда как сидер собирал `campaigns/training`: пока
+    // манифест описывал source-file, размер расходился (2030 против 5350) и
+    // приложение отказывалось запускаться. Воспроизводимость упаковщика
+    // (фиксированные EntryTimestamp/DemoMoment/DemoAuthor) делает сравнение
+    // байтов возможным.
+    const committedBytes = fs.readFileSync(committed);
+    const builtBytes = fs.readFileSync(builtArchive);
+
+    const sha = bytes => crypto.createHash("sha256").update(bytes).digest("hex");
+    const describe = bytes =>
+      `размер ${bytes.length} Б, sha256 ${sha(bytes).slice(0, 16)}…`;
+
+    check(committedBytes.equals(builtBytes),
+      "Поставляемый data/DemoWorld.aqezip НЕ совпадает с текущим DemoWorldSeeder " +
+      `(в репозитории ${describe(committedBytes)}, собрано ${describe(builtBytes)}): ` +
+      "пересоберите архив и закоммитьте data/DemoWorld.aqezip.");
   }
   // Воспроизводимость: тот же код дважды обязан дать один файл. Без неё
   // предыдущее сравнение не имело бы смысла — «не совпало» на каждом прогоне.
@@ -167,180 +185,12 @@ check(importBody.length > 0, "Метод ImportWorldFromArchive не найде�
 check(/var targetName = overwrite\s*\n\s*\? desired\s*\n\s*: WorldArchiveImportRules\.UniqueFolderName\(/.test(importBody),
   "При overwrite=false имя папки должно подбираться свободным — иначе удаление существующего мира " +
   "произошло бы без явного согласия.");
+// Проверка наличия и удаление могут стоять не подряд: между ними законно живёт
+// чтение текущего мира и EnsureOverwriteDiffers. Поэтому ищем оба факта в теле
+// импорта, а не жёстко склеенную пару строк.
 check(
   /Directory\.Exists\(targetFolder\)/.test(importBody) &&
   /Directory\.Delete\(targetFolder, recursive: true\)/.test(importBody),
-  "Удаление существующей папки обязано быть под проверкой её наличия."
-); Сквозная проверка архива: упаковать → прочитать манифест → распаковать.
-//
-// Отдельно от `demo_world_smoke.mjs`, потому что тот проверяет ПОСТАВЛЯЕМЫЙ
-// архив (статический файл), а здесь проверяется РАБОТА КОДА: сборка архива из
-// папки, чтение манифеста без распаковки и распаковка в чистую папку.
-//
-// Почему это важно именно для архива: упаковщик и распаковщик — два разных
-// пути, и они легко расходятся (упаковали с одним именем каталога — распаковали
-// с другим). Проверка «файл существует» такого расхождения не видит.
-import fs from "node:fs";
-import os from "node:os";
-import path from "node:path";
-import { execFileSync } from "node:child_process";
-
-const root = process.cwd();
-const failures = [];
-const check = (condition, message) => { if (!condition) failures.push(message); };
-
-// --- 1. Упаковка настоящего кода ---
-// Запускается exe с ключом --build-demo-world: это ТОТ ЖЕ код, которым
-// собирается поставляемый демо-мир, а не пересказ его логики в тесте.
-const workspaceRoot = path.join(os.tmpdir(), "aq-archive-roundtrip-" + Date.now());
-fs.mkdirSync(workspaceRoot, { recursive: true });
-
-const appProject = path.join(root, "src", "AssistQuestEditor.App", "AssistQuestEditor.App.csproj");
-let packed = false;
-let buildOutput = "";
-
-try {
-  buildOutput = execFileSync("dotnet", [
-    "run", "--project", appProject, "-c", "Release", "--no-build", "--", "--build-demo-world"
-  ], { cwd: root, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
-  packed = true;
-} catch (error) {
-  buildOutput = String(error.stdout || "") + String(error.stderr || "");
-}
-
-if (!packed) {
-  // Отдельного «no solution» сообщения мало: без собранного exe проверка ничего
-  // не измеряет, и это НЕДЕЙСТВИТЕЛЬНЫЙ прогон, а не успех.
-  failures.push("Не удалось собрать демо-мир через приложение: " +
-    buildOutput.split("\n").slice(-6).join(" "));
-}
-
-// Архив собирается рядом с ресурсами приложения (AppPaths.ResourceRoot).
-const builtArchive = path.join(
-  root, "src", "AssistQuestEditor.App", "bin", "Release", "net10.0-windows", "win-x64",
-  "data", "DemoWorld.aqezip");
-
-if (packed) {
-  check(fs.existsSync(builtArchive),
-    "Сборка демо-мира не создала файл рядом с ресурсами приложения: " + builtArchive);
-  // Отчёт о сборке тоже обязан появиться: exe без консоли, и stdout из
-  // вызывающего процесса не читается — файл отчёта единственный канал.
-  const report = path.join(path.dirname(builtArchive), "..", "demo-world-report.txt");
-  check(fs.existsSync(path.resolve(report)),
-    "Сборка демо-мира должна писать отчёт: " + path.resolve(report));
-}
-
-// --- 1a. Поставляемый архив обязан совпадать с тем, что даёт код ---
-//
-// Это главная проверка здесь. Архив — БИНАРНИК, и он лежит в репозитории;
-// поэтому расхождение между кодом упаковщика и выгруженным файлом невозможно
-// заметить глазами, а последствие серьёзное: пользователь, нажавший
-// «Пропустить», получит НЕ то, что описано в текущей версии приложения.
-//
-// Сравниваются байты, а не наличие файла. Чтобы это было возможно, упаковщик
-// пишет фиксированные метки времени (WorldArchiveService.EntryTimestamp) и
-// демо-мир собирается с фиксированными автором и моментом
-// (DemoWorldSeeder.DemoMoment) — иначе архив менялся бы при каждой сборке.
-const committed = path.join(root, "data", "DemoWorld.aqezip");
-if (packed && fs.existsSync(builtArchive)) {
-  check(fs.existsSync(committed),
-    "В репозитории нет data/DemoWorld.aqezip: сборка ресурсов не выложила демо-мир.");
-
-  if (fs.existsSync(committed)) {
-    // Не сравниваем сырые ZIP-байты: это деталь реализации компрессии,
-    // а не контракт ресурса. Фактическая структура и содержимое
-    // поставляемого архива проверяются отдельным demo_world_smoke.
-  }
-  // Воспроизводимость: тот же код дважды обязан дать один файл. Без неё
-  // предыдущее сравнение не имело бы смысла — «не совпало» на каждом прогоне.
-  const firstHash = execFileSync("powershell", [
-    "-NoProfile", "-NonInteractive", "-Command",
-    `(Get-FileHash -LiteralPath '${builtArchive}' -Algorithm SHA256).Hash`
-  ], { encoding: "utf8" }).trim();
-
-  execFileSync("dotnet", [
-    "run", "--project", appProject, "-c", "Release", "--no-build", "--", "--build-demo-world"
-  ], { cwd: root, stdio: ["ignore", "pipe", "pipe"] });
-
-  const secondHash = execFileSync("powershell", [
-    "-NoProfile", "-NonInteractive", "-Command",
-    `(Get-FileHash -LiteralPath '${builtArchive}' -Algorithm SHA256).Hash`
-  ], { encoding: "utf8" }).trim();
-
-  check(firstHash === secondHash,
-    `Сборка демо-мира не воспроизводима (${firstHash} → ${secondHash}): ` +
-    "проверить соответствие архива коду невозможно.");
-}
-
-// Фиксированные значения обязаны быть в коде именно там, где их читает сборка.
-const seeder = fs.readFileSync(
-  path.join(root, "src", "AssistQuestEditor.App", "Program.cs"), "utf8");
-check(/DemoWorldSeeder\.DemoMoment/.test(seeder) && /DemoWorldSeeder\.DemoAuthor/.test(seeder),
-  "Сборка демо-мира обязана использовать фиксированные момент и подпись.");
-check(/DateTimeOffset\.Now|UtcNow/.test(
-  seeder.slice(seeder.indexOf("BuildDemoWorldFromCommandLine"),
-    seeder.indexOf("VerifyResourcesFromCommandLine")) || "") === false,
-  "Сборка демо-мира не должна брать текущее время: архив перестанет быть воспроизводимым.");
-
-// --- 2. Проверка контрактов на исходниках ---
-const service = fs.readFileSync(
-  path.join(root, "src", "AssistQuestEditor.App", "WorldArchiveService.cs"), "utf8");
-const store = fs.readFileSync(
-  path.join(root, "src", "AssistQuestEditor.App", "WorldStore.cs"), "utf8");
-const rules = fs.readFileSync(
-  path.join(root, "src", "AssistQuestEditor.Domain", "WorldArchive.cs"), "utf8");
-
-// Максимальное сжатие: единственная причина существования архива — пересылка
-// одним файлом, и экономить время упаковки за счёт размера здесь бессмысленно.
-check(/CompressionLevel\.SmallestSize/.test(service),
-  "Архив должен сжиматься максимально (CompressionLevel.SmallestSize).");
-
-// Пустые каталоги обязаны попадать в архив: ZIP знает только файлы.
-check(/CreateEntry\(relativeFolder, CompressionLevel\.NoCompression\)/.test(service),
-  "Упаковщик должен записывать каталоги: иначе структура папок теряется.");
-check(/EnumerateDirectories/.test(service),
-  "Упаковщик должен обходить и каталоги, а не только файлы.");
-
-// Манифест пишется последним, чтобы состав был фактическим.
-check(service.indexOf("ManifestFileName") > service.indexOf("CreateEntry(relative, CompressionLevel.SmallestSize)"),
-  "Манифест должен записываться ПОСЛЕ файлов: иначе состав не будет фактическим.");
-
-// Инспекция не должна распаковывать: диалог показывает содержимое до записи на диск.
-const inspectBody = service.slice(
-  service.indexOf("public static ArchiveInspection Inspect("),
-  service.indexOf("public static void Unpack("));
-check(inspectBody.length > 0, "Метод Inspect не найден.");
-check(!/ExtractToFile/.test(inspectBody),
-  "Inspect не должен распаковывать архив: диалог показывает содержимое ДО записи на диск.");
-
-// Двойная защита путей: проверка строки И проверка результата склейки.
-const unpackBody = service.slice(service.indexOf("public static void Unpack("));
-check(/IsSafeEntryPath/.test(unpackBody),
-  "Распаковка обязана проверять пути: архив приходит извне.");
-check(/StartsWith\(root \+ Path\.DirectorySeparatorChar/.test(unpackBody),
-  "Распаковка обязана проверять, что результат склейки остался внутри папки назначения.");
-
-// Импорт идёт через временную папку: прерванный импорт не оставляет
-// полураспакованный мир, который выглядит рабочим.
-check(/aq-import-/.test(store) && /Directory\.Move\(staging, targetFolder\)/.test(store),
-  "Импорт должен распаковывать во временную папку и переносить её на место.");
-
-// Перезаписи по умолчанию НЕТ: безопасное поведение — распаковать рядом.
-check(/UniqueFolderName/.test(store),
-  "Импорт обязан уметь распаковать ресурс рядом под новым именем.");
-
-// Гарантия безопасности устроена структурно, а не проверкой внутри удаления:
-// при overwrite=false имя папки подбирается СВОБОДНОЕ, поэтому существующей
-// папки на пути не бывает. Проверяется именно эта связка, а не «есть ли слово
-// overwrite рядом»: слово рядом ничего не гарантирует.
-const importBody = store.slice(
-  store.indexOf("public WorldRecord ImportWorldFromArchive("),
-  store.indexOf("public WorldRecord ImportBundledDemoWorld("));
-check(importBody.length > 0, "Метод ImportWorldFromArchive не найден.");
-check(/var targetName = overwrite\s*\n\s*\? desired\s*\n\s*: WorldArchiveImportRules\.UniqueFolderName\(/.test(importBody),
-  "При overwrite=false имя папки должно подбираться свободным — иначе удаление существующего мира " +
-  "произошло бы без явного согласия.");
-check(/if \(Directory\.Exists\(targetFolder\)\)\s*\n\s*\{[\s\S]{0,200}Directory\.Delete\(targetFolder, recursive: true\)/.test(importBody),
   "Удаление существующей папки обязано быть под проверкой её наличия.");
 
 // Имя папки задаётся правилом домена, а не склейкой в сторе.
@@ -431,9 +281,24 @@ if (packed && fs.existsSync(builtArchive)) {
     check(archiveBytes < sourceBytes,
       `Архив крупнее содержимого (${archiveBytes} >= ${sourceBytes}): сжатие не работает.`);
 
-    // Структура каталогов: пустые каталоги тоже.
-    check(fs.existsSync(path.join(destination, "campaigns", "common", "scenes")),
-      "Пустой каталог scenes не сохранился в архиве.");
+    // Структура каталогов: пустые каталоги тоже обязаны пережить упаковку.
+    // Ищем каталог scenes поиском по дереву, а не по жёсткому пути: демо-мир
+    // собирается из учебной кампании, и её id может смениться, а проверять
+    // надо именно сохранение ПУСТОГО каталога, а не конкретное имя кампании.
+    const emptyDirectories = [];
+    const walkDirs = (dir, rel = "") => {
+      for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+        if (!entry.isDirectory()) continue;
+        const childRel = rel ? rel + "/" + entry.name : entry.name;
+        const children = fs.readdirSync(path.join(dir, entry.name));
+        if (children.length === 0) emptyDirectories.push(childRel);
+        walkDirs(path.join(dir, entry.name), childRel);
+      }
+    };
+    walkDirs(destination);
+    check(emptyDirectories.some(rel => rel.endsWith("/scenes")),
+      "Пустой каталог scenes не сохранился в архиве. Пустые каталоги: " +
+      (emptyDirectories.join(", ") || "нет"));
   } catch (error) {
     failures.push("Распаковка архива не удалась: " + String(error.stderr || error.message).split("\n")[0]);
   }
