@@ -76,10 +76,13 @@ public sealed class SimulationSaveCodecTests
                 new[]
                 {
                     new RouteWaypoint("route:1", new WorldCoordinate(100, 0, 200), 60),
-                    new RouteWaypoint("route:2", new WorldCoordinate(200, 0, 300), 0)
+                    new RouteWaypoint("route:2", new WorldCoordinate(200, 0, 300), 0, true)
                 }),
             RouteRuntime = new RouteRuntimeState(
-                new RouteCursor(true, 1, 0, 42.5, false, null, 12.0)),
+                new RouteCursor(true, 1, 0, 42.5, false, 1, 12.0),
+                1,
+                123.5,
+                246.0),
             DynamicEvents = new DynamicEventRuntimeState(
                 new[]
                 {
@@ -146,6 +149,7 @@ public sealed class SimulationSaveCodecTests
         Assert.Equal(original.State.Player.Position, decoded.State.Player.Position);
         Assert.Equal(original.State.Route.DefaultSpeedKmh, decoded.State.Route.DefaultSpeedKmh);
         Assert.Equal(original.State.Route.Waypoints, decoded.State.Route.Waypoints);
+        Assert.True(decoded.State.Route.Waypoints[1].IsOffRoad);
         Assert.Equal(original.State.RouteRuntime, decoded.State.RouteRuntime);
         Assert.Equal(original.State.Player.Heading, decoded.State.Player.Heading);
         Assert.Equal(original.State.Player.InCab, decoded.State.Player.InCab);
