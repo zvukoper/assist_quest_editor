@@ -32,7 +32,7 @@ public sealed class FirstRunSetupForm : Form
         FormBorderStyle = FormBorderStyle.FixedDialog;
         MaximizeBox = false;
         MinimizeBox = false;
-        Size = new Size(560, 430);
+        Size = new Size(560, 505);
         BackColor = Color.FromArgb(10, 12, 16);
         ForeColor = Color.FromArgb(231, 237, 244);
 
@@ -54,7 +54,8 @@ public sealed class FirstRunSetupForm : Form
             Text =
                 "Псевдоним попадает в каждый созданный ресурс — мир, кампанию и квест —\r\n" +
                 "как подпись автора (created_by / modified_by). По ней видно, кто и когда\r\n" +
-                "правил контент, поэтому без псевдонима работа не начинается.",
+                "правил контент. Имя можно и не указывать — тогда работа идёт анонимно,\r\n" +
+                "и в подписи ресурсов будет слово «анонимно». Настроить имя можно позже.",
             ForeColor = Color.FromArgb(170, 180, 192),
             Font = new Font("Segoe UI", 9f)
         };
@@ -142,7 +143,7 @@ public sealed class FirstRunSetupForm : Form
 
         _save = new DarkFlatButton
         {
-            Location = new Point(18, 348),
+            Location = new Point(18, 408),
             Size = new Size(180, 38),
             Text = "Сохранить и продолжить",
             BackColor = Color.FromArgb(250, 176, 3),
@@ -152,18 +153,42 @@ public sealed class FirstRunSetupForm : Form
         _save.FlatAppearance.BorderColor = Color.FromArgb(250, 176, 3);
         _save.Click += (_, _) => TryAccept();
 
-        // Отмена закрывает диалог с Cancel: приложение не должно продолжать
-        // работу без подписи, поэтому «отмена» = «выйти», а не «пропустить».
+        // Отказ закрывает диалог с Cancel: это не «продолжить без имени», а
+        // «выйти». Продолжить без имени — отдельная кнопка ниже, потому что
+        // исходы разные: один начинает работу, другой её не начинает.
         var cancel = new DarkFlatButton
         {
-            Location = new Point(410, 348),
+            Location = new Point(410, 408),
             Size = new Size(118, 38),
             Text = "Выйти",
             DialogResult = DialogResult.Cancel
         };
 
+        // «Пропустить» — РАВНОПРАВНЫЙ исход, а не отказ: приложение работает
+        // анонимно, и отсутствие имени ничего не блокирует. Отдельная кнопка и
+        // подпись рядом: без неё пропуск читался бы как «выйти без сохранения».
+        var skip = new DarkFlatButton
+        {
+            Location = new Point(206, 408),
+            Size = new Size(180, 38),
+            Text = "Пропустить"
+        };
+        skip.Click += (_, _) => TrySkip();
+
+        var skipHint = new Label
+        {
+            AutoSize = false,
+            Location = new Point(18, 384),
+            Size = new Size(510, 20),
+            Text = "«Пропустить» — работа без имени. Имя можно задать позже в настройках приложения.",
+            ForeColor = Color.FromArgb(150, 160, 172),
+            Font = new Font("Segoe UI", 8.4f)
+        };
+
         Controls.Add(_save);
+        Controls.Add(skip);
         Controls.Add(cancel);
+        Controls.Add(skipHint);
         Controls.Add(_preview);
         Controls.Add(_language);
         Controls.Add(languageHeader);
@@ -183,6 +208,15 @@ public sealed class FirstRunSetupForm : Form
 
     /// <summary>Псевдоним, введённый пользователем. Осмыслен только при OK.</summary>
     public string Author => _author.Text.Trim();
+
+    /// <summary>
+    /// Работает ли пользователь анонимно (нажал «Пропустить»).
+    ///
+    /// Отдельный признак, а не пустой <see cref="Author"/>: при анонимной работе в
+    /// подписи ресурсов идёт слово «анонимно», и хранить его в настройках как имя
+    /// значило бы сделать его неотличимым от настоящего псевдонима.
+    /// </summary>
+    public bool Anonymous { get; private set; }
 
     /// <summary>Код выбранного языка интерфейса.</summary>
     public string Language => "ru";
@@ -254,6 +288,20 @@ public sealed class FirstRunSetupForm : Form
         if (!_save.Enabled)
             return;
 
+        Anonymous = false;
+        DialogResult = DialogResult.OK;
+        Close();
+    }
+
+    /// <summary>
+    /// «Пропустить»: продолжает работу без имени.
+    ///
+    /// Поле имени намеренно НЕ проверяется: пользователь уже сказал, что имени не
+    /// будет, и красная ошибка на пустом поле противоречила бы нажатой кнопке.
+    /// </summary>
+    private void TrySkip()
+    {
+        Anonymous = true;
         DialogResult = DialogResult.OK;
         Close();
     }

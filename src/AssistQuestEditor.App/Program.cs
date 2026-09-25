@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using AssistQuestEditor.Domain;
 
 namespace AssistQuestEditor.App;
@@ -15,6 +16,41 @@ internal static class Program
     /// ввести данные, ни отменить нельзя. Симптом выглядит как зависание.
     /// </summary>
     private static SplashForm? _splash;
+
+    /// <summary>
+    /// Минимальное время показа заставки, мс.
+    ///
+    /// Заставка — не только картинка, но и индикатор того, что приложение живо:
+    /// она держится на экране ровно столько, чтобы её успели прочитать, и только
+    /// после этого создаётся главное окно. Мгновенная заставка не читается: она
+    /// мелькает и воспринимается как вспышка при старте.
+    /// </summary>
+    private const int SplashMinimumDisplayMs = 4000;
+
+    /// <summary>
+    /// Отмеряет показ заставки. Отсчёт ведётся от МОМЕНТА ПОКАЗА, а не от старта
+    /// процесса: на медленной машине часть бюджета уже съедена инициализацией
+    /// WinForms и SingleInstanceGuard, и добавка этих миллисекунд сократила бы
+    /// показ — заставка появлялась бы и тут же исчезала.
+    ///
+    /// Nullable: заставка показывается только в пользовательском режиме, в CI
+    /// прогоне её нет и отмерять нечего.
+    /// </summary>
+    private static Stopwatch? _splashShown;
+
+    /// <summary>
+    /// Запрос от повторного запуска, пришедший РАНЬШЕ, чем окно успело появиться.
+    ///
+    /// Обрабатывается позже, когда окно уже есть. Поле нужно потому, что слушатель
+    /// канала поднимается в самом начале запуска (иначе второй экземпляр не успеет
+    /// передать путь), а главное окно создаётся в конце — между ними четыре
+    /// секунды заставки.
+    ///
+    /// Пустая строка — тоже запрос: она означает «запуск без файла, просто покажи
+    /// окно». Отличить её от «запроса не было» можно только отличием пустой
+    /// строки от null, поэтому поле nullable и читается через Interlocked.
+    /// </summary>
+    private static string? _pendingActivation;
 
     [STAThread]
     private static void Main(string[] args)
@@ -177,9 +213,43 @@ internal static class Program
             if (startupFile is not null)
                 FileActivationRequest.Set(startupFile);
 
+            // Слушать запросы других запусков нужно СРАЗУ после захвата защёлки.
+            //
+            // Второй экземпляр ждёт канал всего 1.5 с, и если начать слушать
+            // только к концу запуска, этот бюджет окажется уже израсходован на
+            // показ заставки. Тогда повторный запуск молча завершился бы, а
+            // пользователь решил бы, что приложение не реагирует на файл.
+            singleInstance.ActivationRequested += (_, path) =>
+            {
+                // Запросы приходят в фоновом потоке канала, а окно живёт в
+                // UI-потоке. Во время показа заставки окна ещё нет: показать
+                // нечего, но и терять запрос нельзя — путь запоминается и
+                // обрабатывается ТЕМ ЖЕ путём, что и обычная внешняя активация,
+                // как только окно появится. Просто «открыть файл» здесь нельзя:
+                // тогда «запуск без файла» и «запуск с файлом» стали бы
+                // неотличимы, и запрос выглядел бы как повторный запуск.
+                var window = mainForm;
+                if (window is null || window.IsDisposed || !window.IsHandleCreated)
+                {
+                    // Interlocked, а не обычное присваивание: пишет фоновый поток
+                    // канала, читает UI-поток, и без барьера запрос мог бы не
+                    // дойти до второго из них.
+                    Interlocked.Exchange(ref _pendingActivation, path);
+                    return;
+                }
+
+                window.BeginInvoke(() =>
+                {
+                    if (!window.IsDisposed)
+                        window.HandleExternalActivation(path);
+                });
+            };
+            singleInstance.StartListening();
+
             var splashPath = Path.Combine(AppContext.BaseDirectory, "Assets", "SplashScreen.png");
             AppLogger.Info("Splash: подготовка.", $"path={splashPath}; exists={File.Exists(splashPath)}");
             _splash = new SplashForm(splashPath);
+            _splashShown = Stopwatch.StartNew();
             _splash.Show();
             _splash.Refresh();
             Application.DoEvents();
@@ -255,6 +325,13 @@ internal static class Program
             AppLogger.Info("Черты городов загружены.",
                 $"count={cityBoundaries.Current.Count}; path={cityBoundaries.FilePath}");
 
+            // Заставка держится свой минимум ДО создания главного окна, а не
+            // после: ожидание здесь уже содержит всю тяжёлую часть запуска
+            // (ресурсы, установочные сценарии, настройка), поэтому ждать
+            // приходится только остаток, а главное окно открывается после
+            // заставки, а не под ней.
+            WaitForSplashMinimum();
+
             var simulatorAdapter = new SimulatorDataSourceAdapter(worldPoints);
             var worldCount = simulatorAdapter.Channels.Get<WorldState>("world").Value.Points.Count;
             AppLogger.Info("Создан SimulatorDataSourceAdapter.",
@@ -278,23 +355,20 @@ internal static class Program
                     mainForm.Opacity = 1;
                     mainForm.Activate();
 
+                    // Запрос, пришедший во время показа заставки, обрабатывается
+                    // только теперь: до этого окна ещё не было, и показать было
+                    // нечего. Обрабатывается он ТЕМ ЖЕ путём, что и внешняя
+                    // активация.
+                    var activation = Interlocked.Exchange(ref _pendingActivation, null);
+                    if (activation is not null)
+                        mainForm.HandleExternalActivation(activation);
+
                     CloseSplash(reason);
                 });
             }
 
             mainForm.BrowserReady += (_, _) => RevealMainWindow("Основной WebView2 готов.");
             mainForm.BrowserFailed += (_, _) => RevealMainWindow("Основной WebView2 не загрузился; показана страница ошибки.");
-
-            // Запросы от последующих запусков приходят в фоновом потоке канала,
-            // поэтому обработка переводится в UI-поток.
-            singleInstance.ActivationRequested += (_, path) =>
-            {
-                if (mainForm.IsDisposed)
-                    return;
-
-                mainForm.BeginInvoke(() => mainForm.HandleExternalActivation(path));
-            };
-            singleInstance.StartListening();
 
             AppLogger.Info("MainForm создан. Запуск Application.Run().");
             Application.Run(mainForm);
@@ -325,6 +399,44 @@ internal static class Program
     }
 
     /// <summary>
+    /// Дожидается, пока заставка провисит свой минимум.
+    ///
+    /// Отсчёт идёт от показа заставки, поэтому на медленном запуске ожидание
+    /// окажется короче четырёх секунд, а на быстром — дольше: важен именно
+    /// ПОКАЗ, а не задержка как таковая. Если заставки нет (CI-прогон,
+    /// невизуализируемый старт), ждать нечего — метод возвращается сразу.
+    ///
+    /// Ожидание добровольное и отзывчивое: `Application.DoEvents()` вместо
+    /// `Thread.Sleep` не даёт окну «не отвечать» и позволяет заставке
+    /// перерисовываться, если система запросит перерисовку.
+    /// </summary>
+    private static void WaitForSplashMinimum()
+    {
+        if (_splashShown is null || _splash is null || _splash.IsDisposed)
+            return;
+
+        _splashShown.Stop();
+        var remaining = SplashMinimumDisplayMs - (int)_splashShown.ElapsedMilliseconds;
+        if (remaining <= 0)
+        {
+            AppLogger.Info("Splash: минимум показа уже выбран тяжёлым стартом.",
+                $"minimum={SplashMinimumDisplayMs}; elapsed={_splashShown.ElapsedMilliseconds}");
+            return;
+        }
+
+        AppLogger.Info("Splash: удержание до минимума показа.", $"wait={remaining}");
+        var deadline = Stopwatch.StartNew();
+        while (deadline.ElapsedMilliseconds < remaining)
+        {
+            Application.DoEvents();
+            Thread.Sleep(15);
+        }
+
+        AppLogger.Info("Splash: минимум показа выбран.",
+            $"minimum={SplashMinimumDisplayMs}; waited={deadline.ElapsedMilliseconds}");
+    }
+
+    /// <summary>
     /// Закрывает заставку, если она ещё жива.
     ///
     /// Идемпотентность здесь обязательна: заставку гасят в нескольких местах —
@@ -347,6 +459,7 @@ internal static class Program
         _splash.Close();
         _splash.Dispose();
         _splash = null;
+        _splashShown = null;
         AppLogger.Info("Splash: завершён.", reason);
     }
 
@@ -371,25 +484,46 @@ internal static class Program
         // отменить, ни выйти было нельзя.
         CloseSplash("Перед первичной настройкой.");
 
-        if (!preferences.SetupCompleted || !ResourceMetadata.IsValidAuthor(preferences.Author))
+        // Диалог имени показывается НЕ только на первом запуске: имя можно не
+        // указывать вовсе, и пока его нет, вопрос задаётся при каждом старте —
+        // иначе анонимная работа стала бы незаметной и «залипшей». Как только
+        // псевдоним задан (в диалоге или в настройках), окно больше не выводится.
+        //
+        // Условие намеренно НЕ включает SetupCompleted: этот флаг говорит лишь о
+        // том, что первый диалог уже показывали. При анонимной работе он истинен,
+        // и вместе с ним диалог не вернулся бы никогда.
+        if (!AuthorIdentity.IsNamed(preferences.Author))
         {
-            using var setup = new FirstRunSetupForm(preferences.Author, preferences.Language);
+            // Подставлять в поле «анонимно» нельзя: это служебная подпись, а не
+            // имя, и пользователь принял бы её за своё. Пустое значение заставляет
+            // диалог предложить имя-заготовку.
+            using var setup = new FirstRunSetupForm(
+                AuthorIdentity.IsNamed(preferences.Author) ? preferences.Author : null,
+                preferences.Language);
             if (setup.ShowDialog() != DialogResult.OK)
                 return false;
 
+            // Пропуск сохраняется как ОТСУТСТВИЕ имени, а не как слово «анонимно»:
+            // подпись подставляется при записи ресурса, и хранить её же в
+            // настройках значило бы сделать служебное слово неотличимым от
+            // настоящего псевдонима.
+            var enteredName = setup.Anonymous ? null : setup.Author;
+
             preferences = preferences with
             {
-                Author = setup.Author,
+                Author = enteredName,
                 Language = setup.Language,
                 SetupCompleted = true
             };
 
             AppUiPreferencesStore.Save(preferences);
             AppLogger.Info("Startup: первичная настройка завершена.",
-                $"author={setup.Author}; language={setup.Language}");
+                $"author={(enteredName is null ? "<анонимно>" : enteredName)}; " +
+                $"language={setup.Language}; skipped={setup.Anonymous}");
         }
 
-        var author = preferences.Author!;
+        // Пустое имя — нормальное состояние: в файл пойдёт «анонимно».
+        var author = AuthorIdentity.Resolve(preferences.Author);
         var store = new WorldStore(AppPaths.UserRoot, author, readOnly: false);
 
         AppLogger.Info("Startup: миров найдено.", $"count={store.Worlds.Count}");
@@ -1545,6 +1679,7 @@ internal static class Program
 
             var measured = 0;
             var unreadable = 0;
+            var overlaps = 0;
 
             foreach (var (name, form) in forms)
             {
@@ -1561,6 +1696,16 @@ internal static class Program
                     Application.DoEvents();
                     form.PerformLayout();
                     Application.DoEvents();
+
+                    // Перекрытие контролов внутри диалога — отдельная проверка,
+                    // а не побочный результат замера контраста: «кнопка под
+                    // кнопкой» и «нечитаемый текст» чинятся по-разному, и замер
+                    // контраста второй дефект не видит вовсе. Симптом был
+                    // конкретный: «Создать мир» стояла ровно на месте
+                    // «Пропустить», и нажать её мышью было нельзя.
+                    var dialogOverlaps = FindDialogOverlaps(form, name).ToList();
+                    overlaps += dialogOverlaps.Count;
+                    lines.AddRange(dialogOverlaps);
 
                     if (onScreen)
                     {
@@ -1601,6 +1746,15 @@ internal static class Program
                         lines.Add($"button: {name} / «{button.Text}»" +
                             (button.Enabled ? "" : " (выключена)") +
                             $": контраст {ratio:0.0}:1, фон {backgroundLuma}, текст {textLuma}");
+
+                        // Акцентная (оранжевая) поверхность — отдельная строка
+                        // отчёта. Причина: цвет текста ЗАВИСИТ от фона, и общий
+                        // замер этого не показывает — он печатает яркости, а не
+                        // цвета. Акцентная кнопка обязана быть в замере ВКЛЮЧЁННОЙ
+                        // хотя бы одна: у выключенной цвет подбирается отдельной
+                        // ветвью `OnPaint`, и проверка включённого состояния ею не
+                        // покрывается.
+                        lines.AddRange(DescribeAccentSurface(name, button, textLuma, ratio));
 
                         // Выключенная кнопка НЕ считается нечитаемой: её приглушённый
                         // вид — намеренный сигнал «сейчас нельзя», и придираться к
@@ -1659,6 +1813,16 @@ internal static class Program
             }
 
             lines.Add("buttons measured: " + measured);
+            // Отдельная строка со счётчиком перекрытий: по ней проверка решает,
+            // есть ли дефект, не разбирая строки `overlap:` вручную, и она же
+            // видна в отчёте, когда перекрытий нет вовсе.
+            lines.Add("overlaps found: " + overlaps);
+            // Счётчик акцентных поверхностей: по нему проверяется, что КАЖДАЯ
+            // оранжевая кнопка попала в замер. Без него удаление акцентного
+            // диалога из пробы просто снижало бы охват, и проверка оставалась бы
+            // зелёной — «нет серого текста» верно и на пустом списке.
+            lines.Add("accent surfaces measured: " + lines.Count(line =>
+                line.StartsWith("accent: ", StringComparison.Ordinal)));
 
             // Обязательное покрытие. Без него удаление диалога из пробы просто
             // СНИЖАЛО бы охват, и проверка оставалась бы зелёной: «нет нечитаемых»
@@ -1677,7 +1841,24 @@ internal static class Program
                 "Свойства ресурса (правка) / «Сохранить»",
                 "Экспорт ресурса / «Экспортировать»",
                 "Создание ресурса / «Создать»",
-                "Настройки / «Зарегистрировать расширения»"
+                "Настройки / «Зарегистрировать расширения»",
+                // Окно первого мира: именно здесь кнопки делили одну точку.
+                // Покрытие обязано включать его, иначе удаление диалога из
+                // пробы просто СНИЖАЛО бы охват, и проверка оставалась бы зелёной.
+                "Создание первого мира / «Создать мир»",
+                "Создание первого мира / «Пропустить (создастся демо-мир для обучения)»",
+                "Создание первого мира / «Выйти»",
+                "Настройки / «Сохранить имя»",
+                "Первичная настройка / «Пропустить»",
+                // Акцентные поверхности — ВКЛЮЧЁННЫЕ. У выключенной кнопки цвет
+                // текста выбирается другой ветвью отрисовки, поэтому требовать
+                // её здесь значило бы проверять не то состояние, в котором
+                // «серое на жёлтом» реально видно.
+                "accent: Свойства ресурса (правка) / «Сохранить»",
+                "accent: Создание ресурса / «Создать»",
+                "accent: Экспорт ресурса / «Экспортировать»",
+                "accent: Настройки / «Зарегистрировать расширения»",
+                "accent: Настройки / «Сброс настроек окон»"
             };
 
             var reportText = string.Join("\n", lines);
@@ -1687,10 +1868,11 @@ internal static class Program
                 ? "coverage: ok (" + required.Length + ")"
                 : "coverage: не проверено — " + string.Join("; ", missing));
 
-            var failed = unreadable > 0 || missing.Count > 0;
-            lines.Add(!failed
-                ? "contrast: ok"
-                : "contrast: fail — нечитаемых " + unreadable + ", не охвачено " + missing.Count);
+            var failed = unreadable > 0 || missing.Count > 0 || overlaps > 0;
+            lines.Add(failed
+                ? "contrast: fail — нечитаемых " + unreadable + ", перекрытий " + overlaps +
+                  ", не охвачено " + missing.Count
+                : "contrast: ok, перекрытий нет");
 
             foreach (var line in lines)
                 Console.WriteLine(line);
@@ -1836,6 +2018,11 @@ internal static class Program
                 (control.Enabled ? "" : " (выключена)") +
                 $": контраст {ratio:0.0}:1, фон {backgroundLuma}, текст {textLuma}");
 
+            // Акцентная поверхность — тем же правилом, что и на внеэкранном
+            // пути: правило замера обязано быть ОДНО на оба пути, иначе один из
+            // них останется слепым (в этом проекте так уже расходились).
+            lines.AddRange(DescribeAccentSurface(name, control, textLuma, ratio));
+
             if (ratio < 4.5)
             {
                 unreadable++;
@@ -1848,10 +2035,118 @@ internal static class Program
         return unreadable;
     }
 
+    /// <summary>
+    /// Описывает акцентную (оранжевую) поверхность контрола.
+    ///
+    /// Акцентные кнопки — особый случай, потому что цвет их текста ЗАВИСИТ от
+    /// фона: на тёмной панели диалога текст приглушённо-серый, на оранжевой
+    /// кнопке он обязан быть тёмным. Общий замер печатает яркости (фон 178,
+    /// текст 19), и по ним не видно, что поверхность оранжевая, а по цвету —
+    /// видно: «серое на жёлтом» и «тёмное на жёлтом» дают разный набор строк,
+    /// но одинаково правдоподобный контраст.
+    ///
+    /// Возвращает пустой список для всего, что не акцент: строка нужна только
+    /// для оранжевых поверхностей, иначе отчёт распухнет одинаковыми записями.
+    /// </summary>
+    private static IEnumerable<string> DescribeAccentSurface(
+        string dialog, Control control, int textLuma, double ratio)
+    {
+        var background = control.BackColor;
+
+        // Признак акцента — сам цвет фона, а не имя диалога: у кнопок одного
+        // диалога фоны разные, и привязка к файлу покрасила бы в «акцентные»
+        // и обычные кнопки настроек.
+        if (!IsAccent(background))
+            return Array.Empty<string>();
+
+        return new[]
+        {
+            "accent: " + dialog + " / «" + control.Text + "»" +
+            (control.Enabled ? "" : " (выключена)") +
+            ": фон " + background.R + "," + background.G + "," + background.B +
+            ", текст " + textLuma + ", контраст " + ratio.ToString("0.0") + ":1"
+        };
+    }
+
+    /// <summary>
+    /// Акцентный ли цвет. Порог по каналам, а не по имени константы: цвет
+    /// задаётся литералами в каждом диалоге, общей константы в проекте нет, и
+    /// проверка «равно 250,176,3» пропустила бы близкий оранжевый (например
+    /// затемнённый при наведении), а именно на нём текст и перестаёт читаться.
+    /// </summary>
+    private static bool IsAccent(Color color) =>
+        color.R >= 200 && color.G is >= 130 and <= 210 && color.B <= 90;
+
+    /// <summary>
+    /// Находит перекрытия между контролами диалога.
+    ///
+    /// Отдельная проверка, а не побочный результат замера контраста: «кнопка под
+    /// кнопкой» и «нечитаемый текст» — разные дефекты, и замер контраста второй
+    /// не видит вовсе. Симптом был конкретный: «Создать мир» и «Пропустить»
+    /// стояли в одной точке, вторая шире и добавлена позже — она полностью
+    /// закрывала первую, и нажать её мышью было нельзя. Клавиатура при этом
+    /// работала (Enter создавал мир), поэтому по журналу дефект был невидим.
+    ///
+    /// Сравниваются только ИНТЕРАКТИВНЫЕ контролы: подписи и заголовки тоже могут
+    /// перекрываться, но это вопрос вёрстки текста, и требовать по нему падения
+    /// значило бы ловить не то, что требовалось.
+    /// </summary>
+    private static IEnumerable<string> FindDialogOverlaps(Form form, string dialog)
+    {
+        var controls = Descendants(form)
+            .Where(control => control.Visible && control is Button or TextBox or ListBox or ComboBox)
+            .Select(control => (
+                Control: control,
+                // Экранные координаты берутся у РОДИТЕЛЯ: у контрола внутри
+                // контейнера Bounds отсчитываются от контейнера, и сравнивать их
+                // с координатами соседа из другой ветки дерева было бы нельзя.
+                Bounds: control.Parent is null
+                    ? control.RectangleToScreen(control.ClientRectangle)
+                    : control.Parent.RectangleToScreen(control.Bounds)))
+            .ToList();
+
+        var found = new List<string>();
+
+        for (var i = 0; i < controls.Count; i++)
+        {
+            for (var j = i + 1; j < controls.Count; j++)
+            {
+                // Вложенность исключается: поле внутри панели перекрывает панель
+                // по определению, и дефектом это не является.
+                if (controls[i].Control.Contains(controls[j].Control) ||
+                    controls[j].Control.Contains(controls[i].Control))
+                    continue;
+
+                var overlap = Rectangle.Intersect(controls[i].Bounds, controls[j].Bounds);
+
+                // Дефектом считается только ЗАМЕТНОЕ перекрытие: соседние кнопки
+                // в одном ряду часто делят строку пикселей из-за округления.
+                // Порог 2 px отсекает касания, а настоящее перекрытие («Создать
+                // мир» под «Пропустить») — это сотни пикселей.
+                if (overlap.Width > 2 && overlap.Height > 2)
+                {
+                    found.Add("overlap: " + dialog + " — «" + DescribeControl(controls[i].Control) +
+                        "» × «" + DescribeControl(controls[j].Control) + "» (" +
+                        overlap.Width + "×" + overlap.Height + " px)");
+                }
+            }
+        }
+
+        return found;
+    }
+
+    /// <summary>
+    /// Подпись контрола для отчёта: его текст, а если текста нет — имя типа.
+    /// Без этого две безымянные кнопки в отчёте неразличимы.
+    /// </summary>
+    private static string DescribeControl(Control control) =>
+        string.IsNullOrEmpty(control.Text)
+            ? control.GetType().Name
+            : control.Text.Replace(Environment.NewLine, " ").Trim();
+
     /// <summary>Имя файла из произвольного текста: только буквы и цифры.</summary>
     private static string SafeName(string text) =>
         new(text.Select(ch => char.IsLetterOrDigit(ch) ? ch : '-').ToArray());
-
     /// <summary>
     /// Контраст текста к фону, замеренный ПО ГОТОВОМУ ИЗОБРАЖЕНИЮ.
     ///
@@ -1939,6 +2234,47 @@ internal static class Program
         yield return ("Создание ресурса", new ResourceCreateForm("мира", folder, "Пробный мир"));
 
         yield return ("Настройки", new SettingsForm());
+
+        // Первичная настройка: у неё теперь ДВА равноправных исхода (имя и
+        // пропуск) плюс выход — три кнопки в одном ряду. Именно такие ряды и
+        // перекрывались, поэтому диалог обязан быть в пробе.
+        yield return ("Первичная настройка", new FirstRunSetupForm());
+
+        // Окно выбора/создания первого мира. Показывается в ОБОИХ состояниях: у
+        // ветки «миров нет» и ветки «есть из чего выбирать» разные наборы кнопок,
+        // и проверить перекрытие нужно в каждой. Именно здесь кнопки делили одну
+        // точку, и «Создать мир» была недоступна мышью.
+        //
+        // Первый каталог — НОВЫЙ на каждый прогон, поэтому он гарантированно пуст:
+        // иначе ветка «миров нет» проверялась бы только на чистой машине.
+        var emptyRoot = Path.Combine(
+            Path.GetTempPath(), "aq-contrast-probe-empty-" + Guid.NewGuid().ToString("N"));
+        yield return ("Создание первого мира",
+            new WorldChooserForm(new WorldStore(emptyRoot, AuthorIdentity.Anonymous, readOnly: false)));
+
+        // Ветка выбора — на отдельном каталоге с одним миром. Заведение мира тут
+        // допустимо: это временная папка, а не пользовательские данные.
+        var populatedRoot = Path.Combine(Path.GetTempPath(), "aq-contrast-probe-worlds");
+        WorldChooserForm? chooserWithWorlds = null;
+        try
+        {
+            var populated = new WorldStore(populatedRoot, AuthorIdentity.Anonymous, readOnly: false);
+            if (populated.Worlds.Count == 0)
+                populated.CreateWorld("Пробный мир");
+
+            chooserWithWorlds = new WorldChooserForm(
+                new WorldStore(populatedRoot, AuthorIdentity.Anonymous, readOnly: false));
+        }
+        catch (Exception ex)
+        {
+            // Ветка выбора — дополнительное покрытие; её отсутствие не должно
+            // валить всю пробу. Но и молчать нельзя: без строки в отчёте видно
+            // будет только по уменьшившемуся охвату.
+            Console.WriteLine("Ветка выбора мира не построена: " + ex.Message);
+        }
+
+        if (chooserWithWorlds is not null)
+            yield return ("Выбор мира", chooserWithWorlds);
 
         // Окно дерева кампаний: оно рисует СВОИ кнопки («ПАПКА», «Ред.») и
         // заголовки строк, и именно в нём автор увидел тёмный текст.

@@ -127,6 +127,106 @@ check(/const string UnnamedLabel/.test(worldModels),
 check(/EffectiveModifiedOn/.test(read("src/AssistQuestEditor.Domain/ResourceMetadata.cs")),
   "Подпись изменения обязана уметь брать момент создания, если правок ещё не было.");
 
+// Анонимная работа: имя можно не указывать, и тогда подписью служит слово
+// «анонимно» — ОТДЕЛЬНОЕ состояние, а не пустое значение и не выдуманное имя.
+const authorIdentity = read("src/AssistQuestEditor.Domain/AuthorIdentity.cs");
+check(/const string Anonymous = "анонимно"/.test(authorIdentity),
+  "Анонимная подпись обязана быть отдельной константой домена, а не литералом по сторам.");
+check(/static string Resolve\(string\? author\)/.test(authorIdentity),
+  "Правило «пусто → анонимно» обязано быть ОДНО: иначе сторы разойдутся.");
+check(/static bool IsNamed\(string\? author\)/.test(authorIdentity),
+  "Нужен признак «имя указано»: по нему решается, спрашивать ли имя при запуске.");
+check(/StringComparison\.OrdinalIgnoreCase/.test(authorIdentity),
+  "Служебная подпись обязана опознаваться без учёта регистра: иначе «Анонимно» " +
+  "пройдёт как настоящее имя.");
+check(/IsValidAuthor/.test(authorIdentity) || /UnicodeCategory/.test(authorIdentity) ||
+      /IsNamed/.test(authorIdentity),
+  "Анонимная подпись обязана проходить правило псевдонима.");
+
+// Диалог первичной настройки обязан уметь пропустить ввод имени — и объяснить,
+// что подпись ресурсов при этом будет анонимной.
+const setupForm = read("src/AssistQuestEditor.App/Host/FirstRunSetupForm.cs");
+check(/Text = "Пропустить"/.test(setupForm),
+  "На экране имени обязана быть кнопка «Пропустить».");
+check(/public bool Anonymous \{ get; private set; \}/.test(setupForm),
+  "Пропуск обязан отличаться от ввода имени отдельным признаком.");
+check(/анонимно/.test(setupForm),
+  "Рядом с пропуском обязано быть пояснение, что подпись будет «анонимно».");
+check(/в настройках приложения/.test(setupForm),
+  "В подсказке пропуска обязано быть сказано, что имя можно задать позже в настройках.");
+
+// Имя спрашивается при КАЖДОМ запуске, пока оно не указано. Условие обязано
+// опираться на «имя указано», а не на SetupCompleted: при анонимной работе флаг
+// уже истинен, и вместе с ним диалог не вернулся бы никогда.
+const setupCondition = program.slice(
+  program.indexOf("private static bool RunSetupPhase"), program.indexOf("private static bool RunSetupPhase") + 3200);
+check(/if \(!AuthorIdentity\.IsNamed\(preferences\.Author\)\)/.test(setupCondition),
+  "Диалог имени обязан показываться при каждом старте, пока имя не указано.");
+check(!/if \(!preferences\.SetupCompleted/.test(setupCondition),
+  "Условие диалога не должно опираться на SetupCompleted: он истинен и при анонимной работе.");
+
+// В шапке — подпись авторства, открывающая настройки.
+const mainHtml = read("src/AssistQuestEditor.App/Web/main.html");
+const mainJs = read("src/AssistQuestEditor.App/Web/main.js");
+const themeCss = read("src/AssistQuestEditor.App/Web/theme.css");
+check(/id="authorChip"/.test(mainHtml),
+  "Возле названия приложения обязана быть подпись авторства.");
+check(/applyAuthor/.test(mainJs),
+  "Подпись авторства обязана рисоваться из состояния Host, а не быть статичным текстом.");
+check(/type === "author"/.test(mainJs),
+  "Host обязан присылать авторство отдельным сообщением.");
+check(/Авторство не указано \(нажмите для настройки\)/.test(mainJs),
+  "При отсутствии имени подпись обязана предлагать настройку, а не показывать прочерк.");
+check(/authorMissing/.test(themeCss) && /var\(--accent\)/.test(themeCss),
+  "Отсутствие имени обязано выделяться акцентом: это единственное состояние, требующее действия.");
+check(/authorChip[\s\S]{0,400}open_settings/.test(mainJs) ||
+      /authorChip\?\.addEventListener\("click", \(\) => send\(\{ action: "open_settings" \}\)\)/.test(mainJs),
+  "Клик по подписи авторства обязан открывать настройки.");
+
+// Та же подпись — в шапке СИМУЛЯТОРА.
+//
+// Симулятор — отдельное окно со своей страницей, поэтому «подпись есть в
+// главном» ничего о нём не говорит: без собственного канала в его шапке
+// оставался бы прочерк. Проверка держит ОБЕ половины связи: Web рисует
+// присланное, а Host обязан это прислать — иначе подпись навсегда пустая.
+const simulatorHtml = read("src/AssistQuestEditor.App/Web/simulator.html");
+const simulatorJs = read("src/AssistQuestEditor.App/Web/simulator.js");
+const simulatorFormForAuthor = read("src/AssistQuestEditor.App/Host/SimulatorForm.cs");
+const mainFormSourceForAuthor = read("src/AssistQuestEditor.App/Host/MainForm.cs");
+check(/id="authorChip"/.test(simulatorHtml),
+  "В шапке Симулятора обязана быть подпись авторства: он отдельное окно, и " +
+  "подписи главного окна в нём не видно.");
+check(/applyAuthor/.test(simulatorJs) && /type === "author"/.test(simulatorJs),
+  "Симулятор обязан рисовать авторство из сообщения Host, а не статичным текстом.");
+check(/authorChip[\s\S]{0,400}open_settings/.test(simulatorJs),
+  "Клик по подписи авторства в Симуляторе обязан открывать настройки.");
+check(/public void SetAuthorJson\(string json\)/.test(simulatorFormForAuthor),
+  "Host обязан уметь передать Симулятору подпись авторства: без этого подпись " +
+  "в его шапке навсегда останется пустой.");
+check(/PostJson\(_authorJson\)/.test(simulatorFormForAuthor),
+  "Симулятор обязан отправлять кэш авторства при готовности страницы: страница " +
+  "перезагружается, и присланное один раз до неё не доживёт.");
+check(/case "open_settings":/.test(simulatorFormForAuthor),
+  "Симулятор обязан обрабатывать запрос настроек от своей шапки.");
+check(/OpenSettingsRequested/.test(simulatorFormForAuthor) &&
+      /_simulator\.OpenSettingsRequested \+= \(_, _\) => OpenSettings\(\)/.test(mainFormSourceForAuthor),
+  "Настройки открывает MainForm: Симулятор только просит, иначе имя менялось бы " +
+  "в двух разных местах.");
+check(/_simulator\?\.SetAuthorJson\(payload\)/.test(mainFormSourceForAuthor),
+  "Смена имени обязана доходить до Симулятора: иначе в его шапке останется " +
+  "старое имя до перезапуска.");
+
+// Раздел имени в настройках: текущее значение, объяснение и правка.
+const settingsForm = read("src/AssistQuestEditor.App/Host/SettingsForm.cs");
+check(/Имя и авторство/.test(settingsForm),
+  "В настройках обязан быть раздел имени.");
+check(/created_by/.test(settingsForm),
+  "Раздел имени обязан объяснять, куда попадает подпись.");
+check(/AuthorChanged/.test(settingsForm),
+  "Сохранение имени обязано сообщать главной форме: иначе подпись в шапке устареет.");
+check(/SetupCompleted = true/.test(settingsForm),
+  "Имя, заданное в настройках, обязано снимать повторный вопрос при запуске.");
+
 // --- 7. Кампании ограничены СВОИМ миром ---
 
 check(/public CampaignStore ScopedTo\(string\? worldFolder\)/.test(campaignStore),
@@ -147,9 +247,16 @@ const mainForm = read("src/AssistQuestEditor.App/Host/MainForm.cs");
 check(/new CampaignStore\(AppPaths\.UserQuestRoot, readOnly: false, author\)[\s\S]{0,80}?\.ScopedTo\(SelectedWorld\?\.FolderPath\)/.test(mainForm),
   "Главная форма обязана ограничивать каталог кампаний выбранным миром и " +
   "передавать автору подпись для правок.");
-check(/var author = string\.IsNullOrWhiteSpace\(_preferences\.Author\)/.test(mainForm),
+check(/var author = AuthorIdentity\.Resolve\(_preferences\.Author\)/.test(mainForm),
   "Подпись пользователя обязана вычисляться один раз и читаться обоими сторами: " +
   "иначе правка кампании подписывалась бы другим автором, чем правка мира.");
+// Имени может не быть — тогда в файл идёт «анонимно», а НЕ выдуманная подпись
+// вида User_ГГММДДЧЧмм. Прежнее умолчание выглядело как настоящее имя, и по
+// файлу нельзя было понять, что автор его не задавал.
+check(!/ResourceMetadata\.DefaultAuthor\(DateTimeOffset\.Now\)/.test(mainForm),
+  "Главная форма не должна подставлять выдуманный псевдоним: пустое имя — это «анонимно».");
+check(/AuthorIdentity\.Resolve/.test(program),
+  "Фаза настройки обязана приводить пустое имя к «анонимно» тем же правилом, что и сторы.");
 check(/private WorldRecord\? SelectedWorld/.test(mainForm),
   "Главная форма обязана хранить текущий мир и восстанавливать его из настроек.");
 // Падение на отсутствующий мир недопустимо: папку могли удалить. Тогда

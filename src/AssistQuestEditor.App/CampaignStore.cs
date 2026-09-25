@@ -48,9 +48,6 @@ public sealed class CampaignStore
         new(StringComparer.OrdinalIgnoreCase);
     private readonly string _root;
     private readonly bool _readOnly;
-    // Автор хранится в сторе, а не передаётся в каждый метод: подпись проставляется
-    // ВСЕМИ правками кампании, и параметр у каждого вызова рано или поздно забыли бы.
-    private readonly string? _author;
 
     public CampaignStore()
         : this(AppPaths.UserQuestRoot, readOnly: false)
@@ -64,9 +61,20 @@ public sealed class CampaignStore
 
         _root = Path.GetFullPath(root);
         _readOnly = readOnly;
-        _author = author;
+        Author = author;
         Reload();
     }
+
+    /// <summary>
+    /// Псевдоним, которым подписываются правки кампаний.
+    ///
+    /// Хранится в сторе, а не передаётся в каждый метод: подпись проставляется
+    /// ВСЕМИ правками кампании, и параметр у каждого вызова рано или поздно
+    /// забыли бы. Свойство, а не только параметр конструктора, потому что имя
+    /// можно поменять в настройках на ходу — пересобирать каталог ради этого
+    /// нельзя, вместе с ним терялось бы дерево кампаний.
+    /// </summary>
+    public string? Author { get; set; }
 
     /// <summary>
     /// Кампании ТОЛЬКО выбранного мира.
@@ -84,7 +92,7 @@ public sealed class CampaignStore
         if (string.IsNullOrWhiteSpace(worldFolder))
             return this;
 
-        var scoped = new CampaignStore(worldFolder, _readOnly, _author);
+        var scoped = new CampaignStore(worldFolder, _readOnly, Author);
         AppLogger.Info("CampaignStore: каталог ограничен миром.",
             $"world={worldFolder}; campaigns={scoped.Records.Count}");
         return scoped;
@@ -327,9 +335,7 @@ public sealed class CampaignStore
             ImageFile = string.IsNullOrWhiteSpace(imageFileName) ? null : imageFileName,
             Metadata = (record.Definition.Metadata ?? new ResourceMetadata())
                 .WithModified(
-                    string.IsNullOrWhiteSpace(_author)
-                        ? ResourceMetadata.DefaultAuthor(moment)
-                        : _author,
+                    AuthorIdentity.Resolve(Author),
                     moment)
         });
 
@@ -388,9 +394,7 @@ public sealed class CampaignStore
             Quests = next,
             Metadata = (record.Definition.Metadata ?? new ResourceMetadata())
                 .WithModified(
-                    string.IsNullOrWhiteSpace(_author)
-                        ? ResourceMetadata.DefaultAuthor(DateTimeOffset.UtcNow)
-                        : _author,
+                    AuthorIdentity.Resolve(Author),
                     DateTimeOffset.UtcNow)
         });
         Save(record);
@@ -482,9 +486,9 @@ public sealed class CampaignStore
         }
 
         var moment = DateTimeOffset.UtcNow;
-        var author = string.IsNullOrWhiteSpace(_author)
+        var author = string.IsNullOrWhiteSpace(Author)
             ? ResourceMetadata.DefaultAuthor(moment)
-            : _author;
+            : Author;
 
         var definition = new CampaignDefinition(
             Id: folderName.Replace(' ', '_').ToLowerInvariant(),
@@ -657,9 +661,7 @@ public sealed class CampaignStore
         Directory.CreateDirectory(record.FolderPath);
 
         var moment = DateTimeOffset.UtcNow;
-        var author = string.IsNullOrWhiteSpace(_author)
-            ? ResourceMetadata.DefaultAuthor(moment)
-            : _author!;
+        var author = AuthorIdentity.Resolve(Author);
         var definition = record.Definition with
         {
             Version = Math.Max(1, record.Definition.Version) + 1,

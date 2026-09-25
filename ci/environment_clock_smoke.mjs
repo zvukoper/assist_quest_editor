@@ -134,17 +134,130 @@ check(/simStatusPlate/.test(simulatorHtml), "Разметка должна со�
 check(/id="simPlay"/.test(simulatorHtml), "Разметка должна содержать кнопку play.");
 check(/id="simStop"/.test(simulatorHtml), "Разметка должна содержать кнопку stop.");
 check(/id="simFastForward"/.test(simulatorHtml), "Разметка должна содержать кнопку ff.");
-// Лейаут: три строки вместо одного ряда — иначе верхние тексты срезались, а
-// межстрочные расстояния задавались полями элементов и были слишком большими.
-check(/class="simTopRow/.test(simulatorHtml),
-  "Верхняя панель Симулятора должна быть разделена на строки (.simTopRow).");
+// Лейаут: СЕТКА 2x2. Левая колонка — только название приложения, правая — всё
+// остальное. Это не украшение: выравнивание рядов держит сетка, а не
+// подобранный отступ. Отступ пришлось бы пересчитывать при каждом изменении
+// ширины названия или псевдонима, и выравнивание разъезжалось бы от правки
+// ДАННЫХ, а не вёрстки.
+//
+// Требование автора дословно: селектор, транспорт и подпись автосохранения
+// прижаты ВПРАВО к названию, а плашки сведений выровнены по ЛЕВОМУ КРАЮ
+// СЕЛЕКТОРА. Оба условия проверяются статически (по колонкам сетки), а
+// фактическое выравнивание — поведенчески в Playwright ниже.
+check(/class="simTopRow simTopMain\b/.test(simulatorHtml),
+  "Первая строка верхней панели Симулятора должна иметь класс simTopMain.");
+check(/class="simTopRow simTopStatus\b/.test(simulatorHtml),
+  "Вторая строка верхней панели Симулятора должна иметь класс simTopStatus.");
+check(!/simTopRow simTopHead|simTopRow simTopControls|simTopRow simTopInfo/.test(simulatorHtml),
+  "Прежние три строки шапки Симулятора (simTopHead/simTopControls/simTopInfo) " +
+  "не должны остаться: требование — РОВНО две строки.");
+// Схема внутреннего устройства («СДО fixture → Data Channels → …») убрана из
+// шапки: её место заняла подпись авторства.
+const simHeader = simulatorHtml.slice(
+  simulatorHtml.indexOf("<header class=\"simTop\""),
+  simulatorHtml.indexOf("</header>"));
+check(simHeader.length > 0, "В разметке Симулятора должна быть шапка simTop.");
+check(!/class="simSub"/.test(simHeader),
+  "Схема внутреннего устройства (simSub) не должна оставаться в шапке Симулятора.");
+
+// Название обязано быть ПРЯМЫМ ребёнком шапки: иначе оно снова попадёт ВНУТРЬ
+// ряда, ряд перестанет быть сеткой, и выравнивание сведений по левому краю
+// селектора отвяжется от названия.
+const headerOpen = simHeader.indexOf(">");
+const titleAfterHeader = simHeader.indexOf('class="simTitleBlock"');
+check(titleAfterHeader > 0, "В шапке Симулятора должен быть блок названия.");
+const rowAfterHeader = simHeader.indexOf('class="simTopRow simTopMain"');
+check(titleAfterHeader > 0 && rowAfterHeader > 0 && titleAfterHeader < rowAfterHeader,
+  "Блок названия обязан стоять ДО первой строки и быть её соседом по сетке: " +
+  "внутри строки он был бы её элементом, и колонка названия исчезла бы.");
+// Между шапкой и названием не должно быть открывающего тега div-строки:
+// название лежит прямо в header.
+const beforeTitle = simHeader.slice(headerOpen, titleAfterHeader);
+check(!/class="simTopRow/.test(beforeTitle),
+  "Блок названия не должен лежать внутри строки: он обязан быть прямым " +
+  "ребёнком шапки, иначе сетка не образует колонку названия.");
+
+// Порядок первой строки слева направо: селектор мира и кампании → транспорт →
+// подпись автосохранения → действия над каталогом. Название с авторством в эту
+// строку не входит — оно занимает левую колонку сетки.
+const orderKeys = [
+  ['селектор мира', 'id="simWorldSelect"'],
+  ['селектор кампании', 'id="simCampaignSelect"'],
+  ['транспорт симуляции', 'class="simTransport"'],
+  ['подпись автосохранения', 'id="simAutoSave"'],
+  ['действия над каталогом', 'id="reloadCatalog"']
+];
+let orderOk = true;
+let orderWhy = "";
+let previous = -1;
+for (const [label, marker] of orderKeys) {
+  const at = simHeader.indexOf(marker);
+  if (at < 0 || at < previous) {
+    orderOk = false;
+    orderWhy = at < 0 ? (label + " отсутствует") : (label + " стоит не после предыдущего блока");
+    break;
+  }
+  previous = at;
+}
+check(orderOk,
+  "Порядок первой строки шапки нарушен (слева направо: селектор мира и кампании, " +
+  "транспорт, подпись автосохранения, действия): " + orderWhy);
+check(simHeader.indexOf('id="reloadCatalog"') < simHeader.indexOf('id="openSaves"') &&
+      simHeader.indexOf('id="openSaves"') < simHeader.indexOf('id="reset"'),
+  "Действия над каталогом должны идти в порядке Обновить → Сохранения → Сбросить.");
+// Транспорт обязан стоять вплотную к селектору, а не в конце ряда: он управляет
+// тем же, что выбирает селектор (мир и кампанию), и «прилипание» к левому краю —
+// прямое требование автора.
+check(simHeader.indexOf('class="simTransport"') < simHeader.indexOf('id="reloadCatalog"'),
+  "Транспорт обязан стоять слева от действий над каталогом: он относится к " +
+  "текущему миру, а не к файлам на диске.");
+
+// Порядок второй строки: плашка времени → подписи HUD.
+const statusRow = simHeader.slice(simHeader.indexOf('class="simTopRow simTopStatus"'));
+check(statusRow.length > 0, "В шапке должна быть вторая строка simTopStatus.");
+check(statusRow.indexOf('id="simStatusPlate"') < statusRow.indexOf('id="hud"'),
+  "Вторая строка должна идти в порядке: плашка времени, HUD.");
+// Подпись автосохранения — в ПЕРВОЙ строке, рядом с транспортом: она объясняет
+// последствия кнопки «стоп», то есть это часть управления, а не показание.
+check(simHeader.indexOf('id="simAutoSave"') <
+      simHeader.indexOf('class="simTopRow simTopStatus"'),
+  "Подпись автосохранения должна стоять в строке управления, а не в строке сведений.");
+check(/id="authorChip"/.test(simulatorHtml),
+  "В шапке Симулятора должна быть подпись авторства: требование автора.");
+
 check(/\.simTopRow\{/.test(themeCss), "theme.css должен стилизовать строки верхней панели.");
-check(/\.simTop\{[\s\S]{0,260}flex-direction:column/.test(themeCss),
-  "Верхняя панель должна быть flex-колонкой: только так три строки раскладываются без среза текста.");
+// Панель — СЕТКА, а не flex-колонка: колонки и держат выравнивание рядов.
+// Срез берётся от объявления в НАЧАЛЕ строки: `.simTop{` встречается ещё и
+// внутри общего правила `.topbar,.simTop{...}` из компактного блока, и поиск
+// без привязки к началу строки вырезал середину чужого правила.
+const simTopStyle = (() => {
+  const start = themeCss.indexOf("\n.simTop{");
+  if (start < 0) return "";
+  const end = themeCss.indexOf("}", start);
+  return end > start ? themeCss.slice(start, end + 1) : "";
+})();
+check(simTopStyle.length > 0, "theme.css должен стилизовать панель Симулятора.");
+check(/display:grid/.test(simTopStyle),
+  "Панель обязана быть СЕТКОЙ: выравнивание рядов держит сетка, а не отступ.");
+check(/grid-template-columns:auto minmax\(0,1fr\)/.test(simTopStyle),
+  "Сетка обязана иметь колонку названия (auto) и колонку содержимого " +
+  "(minmax(0,1fr)): без minmax колонка не сжимается ниже содержимого и " +
+  "переполнение уводит кнопки за правый край.");
+check(!/flex-direction:column/.test(simTopStyle),
+  "Панель всё ещё flex-колонка: ряды снова начнутся от левого края окна, и " +
+  "строки сведений окажутся под названием, а не под селектором.");
+// Строки обязаны стоять во ВТОРОЙ колонке: первая — название.
+check(/\.simTopMain\{[^}]*grid-column:2/.test(themeCss),
+  "Строка управления обязана стоять во второй колонке — справа от названия.");
+check(/\.simTopStatus\{[^}]*grid-column:2/.test(themeCss),
+  "Строка сведений обязана стоять во ВТОРОЙ колонке: только тогда она " +
+  "выравнивается по левому краю селектора, а не по левому краю окна.");
+check(/\.simTitleBlock\{[^}]*grid-column:1/.test(themeCss),
+  "Блок названия обязан занимать первую колонку сетки.");
 check(/\.simTitle\{[^}]*white-space:normal/.test(themeCss),
   "Заголовок Симулятора должен переноситься, а не обрезаться.");
 check(/\.simBody\{flex:1 1 auto/.test(themeCss),
-  "Высота тела не должна быть константой: панель выросла до трёх строк.");
+  "Высота тела не должна быть константой: панель выросла до двух строк.");
 
 // Состояния плашки заданы атрибутом: цвета не дублируются в JS.
 check(/data-sim-state/.test(simulatorJs),
@@ -261,35 +374,253 @@ const backpackStyle = themeCss.slice(
 check(/bottom:calc\(26px/.test(backpackStyle),
   "Кнопка инвентаря должна отступать от полосы состояния карты (26px).");
 
-// Кнопки строки управления НЕ переносятся. Симптом был конкретный: кнопки
-// НАЕЗЖАЛИ друг на друга. Причина — `flex-wrap:wrap` при фиксированной высоте
-// строки: содержимое занимало две строки, а строка имела одну.
+// Строка 1 НЕ сжимает свои блоки: сжатие ломает квадратный транспорт и
+// обрезает подписи по буквам. Тесноту снимают перенос и компактные отступы.
 //
-// Срез берётся от объявления до его ЗАКРЫВАЮЩЕЙ скобки, а не окном в N символов:
-// в правиле есть поясняющий комментарий, и окно в 320 символов не доходило до
-// `flex-wrap`. Проверка падала на СВОЁМ тексте, а не на дефекте.
-const controlsStyle = (() => {
-  const start = themeCss.indexOf(".simTopControls{");
+// Срез берётся от объявления до его ЗАКРЫВАЮЩЕЙ скобки, а не окном в N
+// символов: в правиле есть поясняющий комментарий, и окно в 320 символов не
+// доходило до `flex-wrap`. Проверка падала на СВОЁМ тексте, а не на дефекте.
+const mainRowStyle = (() => {
+  const start = themeCss.indexOf(".simTopMain{");
   if (start < 0) return "";
   const end = themeCss.indexOf("}", start);
   return end > start ? themeCss.slice(start, end + 1) : "";
 })();
-check(controlsStyle.length > 0, "theme.css должен стилизовать строку управления.");
-check(/flex-wrap:nowrap/.test(controlsStyle),
-  "Строка управления не должна переносить содержимое: при wrap кнопки наезжают " +
-  "друг на друга, потому что высота строки фиксированная.");
-check(!/flex-wrap:wrap/.test(controlsStyle),
-  "Строка управления всё ещё разрешает перенос — кнопки будут перекрываться.");
-// Кнопки не сжимаются: сжатие ломает квадратный транспорт и обрезает подписи.
-check(/\.simTopControls \.toolButton\{flex:0 0 auto/.test(themeCss),
-  "Кнопки строки управления не должны сжиматься: подписи обрезались бы по буквам.");
-check(/\.simTopControls \.simTransport\b[^{]*\{[^}]*flex:0 0 auto/.test(themeCss) ||
-      /\.simTopControls \.toolButton\{flex:0 0 auto/.test(themeCss),
-  "Транспорт не должен ужиматься.");
-// Сжимается ПЛАШКА, а не кнопки: у неё короткий текст, и многоточие читается
-// лучше, чем перекрытые кнопки.
-check(/\.simTopControls \.simStatusPlate\{flex:0 1 auto/.test(themeCss),
-  "Плашка статуса должна быть первым кандидатом на сжатие, а не кнопки.");
+check(mainRowStyle.length > 0, "theme.css должен стилизовать первую строку шапки Симулятора.");
+// Перенос РАЗРЕШЁН: он срабатывает только при реальной нехватке места. Прежний
+// запрет был связан с ФИКСИРОВАННОЙ высотой строки — тогда перенесённые кнопки
+// наезжали друг на друга. Здесь высота панели считается от содержимого.
+check(/flex-wrap:wrap/.test(mainRowStyle),
+  "Первая строка обязана переносить содержимое при нехватке места: запрет " +
+  "переноса выдавливает кнопки за правый край окна.");
+check(/\.simTopMain \.toolButton,/.test(themeCss) &&
+      /\.simTopMain \.simAutoSaveBlock\{flex:0 0 auto\}/.test(themeCss),
+  "Блоки первой строки не должны сжиматься: сжатие ломает квадратный транспорт " +
+  "и обрезает подписи по буквам.");
+check(/\.simTopMain \.toolButton\{padding:6px 8px/.test(themeCss),
+  "Кнопки первой строки должны иметь компактные отступы: полноразмерные " +
+  "выдавливают действия за край.");
+// Блок названия НЕ сжимается. Без явного `flex:0 0 auto` он сжимался до нуля, и
+// название переносилось ПО БУКВАМ: «Assist Quest Editor» вытягивался в столбик
+// высотой в десяток строк. Это наблюдалось вживую при 1200 px.
+check(/\.simTitleBlock\{[\s\S]{0,120}?grid-column:1/.test(themeCss),
+  "Блок названия обязан занимать первую колонку сетки и не сжиматься: иначе " +
+  "название переносится по буквам и раздувает шапку в столбик.");
+// Селектор НЕ сжимается: подписи «МИР» и «КАМПАНИЯ» короткие, а место в рабочей
+// ширине окна есть всегда — сжатие контейнера ломало бы ряд, а не спасало.
+check(/\.simTopMain \.simWorldSelector\{flex:0 0 auto\}/.test(themeCss),
+  "Селектор мира не должен сжиматься: сжатие контейнера ломает ряд, а не спасает.");
+const statusRowStyle = (() => {
+  const start = themeCss.indexOf(".simTopStatus{");
+  if (start < 0) return "";
+  const end = themeCss.indexOf("}", start);
+  return end > start ? themeCss.slice(start, end + 1) : "";
+})();
+check(statusRowStyle.length > 0, "theme.css должен стилизовать вторую строку шапки Симулятора.");
+check(/flex-wrap:wrap/.test(statusRowStyle),
+  "Вторая строка должна переноситься: подписей HUD много, и на узком окне они " +
+  "обязаны уходить вниз, а не обрезаться.");
+// Плашка сохраняет размер: текст короткий и смысловой, сжимать его нельзя.
+check(/\.simTopStatus \.simStatusPlate\{flex:0 0 auto\}/.test(themeCss),
+  "Плашка не должна сжиматься: текст короткий, и многоточие сделало бы его " +
+  "бессмысленным.");
+// Подсказка автосохранения переносится, а заголовок — нет: подсказка длинная
+// (два предложения) и в одну строку выдавила бы действия за правый край.
+check(/\.simAutoSave\{[^}]*white-space:nowrap\}/.test(themeCss) &&
+      /\.simAutoSaveHint\{[^}]*white-space:normal\}/.test(themeCss),
+  "Подсказка автосохранения обязана переноситься, а её заголовок — нет.");
+// Ограничение ширины блока автосохранения: без него длинная подсказка
+// растягивает ряд целиком.
+//
+// Срез берётся от объявления в НАЧАЛЕ строки, а не поиском подстроки: то же
+// правило есть ещё и внутри `@media`, и проверка «max-width есть где-то в
+// файле» проходила бы, даже если базовое правило потеряло ограничение
+// (проверено негативным контролем — он не ловился).
+const autoSaveBlockStyle = (() => {
+  const start = themeCss.indexOf("\n.simAutoSaveBlock{");
+  if (start < 0) return "";
+  const end = themeCss.indexOf("}", start);
+  return end > start ? themeCss.slice(start, end + 1) : "";
+})();
+check(autoSaveBlockStyle.length > 0,
+  "theme.css должен стилизовать блок автосохранения.");
+check(/max-width:\d+px/.test(autoSaveBlockStyle),
+  "Блок автосохранения обязан иметь ограничение ширины: иначе подсказка " +
+  "растягивает ряд и выдавливает действия за край.");
+
+// 4б. ВЫРАВНИВАНИЕ шапки — требование автора, замером.
+//
+// Статических проверок тут мало и они слабые: `grid-column:2` есть в CSS и
+// тогда, когда фактического выравнивания нет (например если строки попадут в
+// РАЗНЫЕ сетки — названия в одну, содержимого в другую). Поэтому ширина окна
+// задаётся явно, а левые края рядов сверяются числами.
+//
+// Ширина берётся РЕАЛЬНАЯ, а не «сколько получится»: окно Симулятора открывается
+// в 1440 px и его нельзя сузить меньше 900. Проверка на 500 px мерила бы не
+// интерфейс, а собственную фикстуру, и «скомканность» была бы артефактом замера.
+const alignmentBrowser = await chromium.launch({ headless: true });
+
+try {
+  const alignPage = await alignmentBrowser.newPage({ viewport: { width: 1440, height: 260 } });
+  await alignPage.setContent(`
+    <!doctype html><html lang="ru"><head><meta charset="utf-8">
+    <style>${themeCss.replaceAll("</style", "<\\/style")}</style>
+    <style>html,body{height:100%;margin:0;overflow:hidden}</style></head>
+    <body><div class="app">
+      <header class="simTop">
+        <div class="simTitleBlock">
+          <div class="simTitle">Assist Quest Editor</div>
+          <button class="authorChip" id="authorChip" type="button"><span id="authorChipText">Авторство: Rassol72</span></button>
+        </div>
+        <div class="simTopRow simTopMain">
+          <div class="worldSelector simWorldSelector" id="simWorldSelector">
+            <select class="worldSelectorSelect" id="simWorldSelect"><option>Демо Мир</option></select>
+            <select class="worldSelectorSelect" id="simCampaignSelect"><option>SibirMap</option></select>
+            <button class="worldSelectorButton" id="simOpenCampaigns">Кампании и квесты</button>
+          </div>
+          <div class="simTransport">
+            <button id="simPlay" class="toolButton simTransportButton">▶</button>
+            <button id="simStop" class="toolButton simTransportButton">⏹</button>
+            <button id="simFastForward" class="toolButton simTransportButton">⏩</button>
+          </div>
+          <div class="simAutoSaveBlock">
+            <span class="simAutoSave" id="simAutoSave">Автосохранение: 25.09.2026 09:46:18</span>
+            <span class="simAutoSaveHint" id="simAutoSaveHint">Мир сохраняется при выключении симуляции и загружается при её открытии.</span>
+          </div>
+          <div class="topSpacer"></div>
+          <button class="toolButton" id="reloadCatalog">Обновить квесты</button>
+          <button class="toolButton" id="openSaves">Сохранения</button>
+          <button class="toolButton" id="reset">Сбросить</button>
+        </div>
+        <div class="simTopRow simTopStatus">
+          <div class="simStatusPlate" id="simStatusPlate" data-sim-state="stopped">
+            <span class="simStatusText" id="simStatusText">Игровое время</span>
+          </div>
+          <div class="hud" id="hud"><span class="badge">Симуляция: ВЫКЛ</span><span class="badge">День 1 · 08:00</span></div>
+        </div>
+      </header>
+      <main class="simBody" style="display:block"></main>
+    </div></body></html>
+  `, { waitUntil: "domcontentloaded" });
+
+  const align = await alignPage.evaluate(() => {
+    const header = document.querySelector("header.simTop");
+    const hr = header.getBoundingClientRect();
+    const box = sel => {
+      const el = header.querySelector(sel);
+      if (!el) return null;
+      const r = el.getBoundingClientRect();
+      return { l: Math.round(r.left), r: Math.round(r.right), t: Math.round(r.top), b: Math.round(r.bottom) };
+    };
+    const parts = [".simTitleBlock", "#simWorldSelector", ".simTransport", ".simAutoSaveBlock",
+                   "#reloadCatalog", "#openSaves", "#reset", "#simStatusPlate", "#hud"];
+    const boxes = parts.map(p => [p, box(p)]).filter(([, b]) => b);
+    const overlap = [];
+    for (let i = 0; i < boxes.length; i += 1) {
+      for (let j = i + 1; j < boxes.length; j += 1) {
+        const a = boxes[i][1], b = boxes[j][1];
+        if (a.l < b.r && b.l < a.r && a.t < b.b && b.t < a.b) overlap.push(boxes[i][0] + " × " + boxes[j][0]);
+      }
+    }
+    const title = box(".simTitleBlock"), selector = box("#simWorldSelector");
+    const status = box("#simStatusPlate"), transport = box(".simTransport");
+    return {
+      width: Math.round(hr.width),
+      titleRight: title.r,
+      selectorLeft: selector.l,
+      statusLeft: status.l,
+      transportLeft: transport.l,
+      titleLineHeight: Math.round(document.querySelector(".simTitle").getBoundingClientRect().height),
+      overflow: boxes.filter(([, b]) => b.r > hr.right || b.l < hr.left).map(([p]) => p),
+      overlap
+    };
+  });
+
+  // Требование 1: селектор прижат ВПРАВО к названию. Зазор допускается только
+  // колоночный (10 px по CSS), но не «половина окна».
+  check(align.selectorLeft - align.titleRight <= 16,
+    "Селектор мира уехал от названия на " + (align.selectorLeft - align.titleRight) +
+    " px: он обязан прилипать к названию, а не висеть в середине окна.");
+  check(align.selectorLeft > align.titleRight,
+    "Селектор мира заходит на название: ряды наложились друг на друга.");
+  // Требование 2: транспорт — сразу за селектором (то же управление миром).
+  check(align.transportLeft >= align.selectorLeft,
+    "Транспорт обязан стоять справа от селектора: он управляет тем же миром.");
+  // Требование 3: плашки сведений выровнены по ЛЕВОМУ КРАЮ СЕЛЕКТОРА, а не по
+  // левому краю окна (под названием). Это и есть смысл сетки.
+  check(align.statusLeft === align.selectorLeft,
+    "Плашки сведений начинаются на " + align.statusLeft + " px, а селектор — на " +
+    align.selectorLeft + " px: они обязаны выравниваться по одному левому краю.");
+  check(align.statusLeft > align.titleRight,
+    "Плашки сведений начинаются ЛЕВЕЕ названия: строки снова не связаны между собой.");
+  // Название остаётся в одну строку: перенос по буквам раздувает шапку.
+  check(align.titleLineHeight < 20,
+    "Название приложения занимает " + align.titleLineHeight + " px по высоте: " +
+    "оно переносится, а обязано стоять в одну строку.");
+  check(align.overflow.length === 0,
+    "При ширине окна 1440 px элементы выходят за край: " + align.overflow.join(", ") +
+    ". Ширина окна Симулятора рабочая, тесноты быть не должно.");
+  check(align.overlap.length === 0,
+    "Элементы шапки перекрываются: " + align.overlap.join(", "));
+} finally {
+  await alignmentBrowser.close();
+}
+
+
+// Ускорение времени сбрасывается при остановке. Без этого после «Стоп» часы
+// оставались оранжевыми с кратностью ×20, и мир выглядел всё ещё ускоренным.
+//
+// Проверка идёт по координАТОРУ, а не по кнопке: «стоп» приходит и от кнопки, и
+// от закрытия окна, и от смены мира — сброс в ветке кнопки забыли бы в одной из
+// них. Ускорение к тому же НЕ часть мира, поэтому сбрасывать его обязан домен.
+const runtimeCoordinator = read("src/AssistQuestEditor.Domain/QuestRuntimeCoordinator.cs");
+const stopReset = runtimeCoordinator.slice(
+  runtimeCoordinator.indexOf("public void SetSimulationRunning(bool running)"));
+check(/if \(!running\)[\s\S]{0,120}?SetSimulationSpeed\(1d\);/.test(stopReset),
+  "Остановка симуляции обязана сбрасывать ускорение времени: иначе подсветка и " +
+  "кратность остаются после «Стоп».");
+const coordinatorResetBody = runtimeCoordinator.slice(
+  runtimeCoordinator.indexOf("public void Reset()"));
+check(/SetSimulationSpeed\(1d\);/.test(coordinatorResetBody.slice(0, 1400)),
+  "Сброс прохождения обязан сбрасывать ускорение: это состояние режима, а не мира.");
+
+// Ускорение НЕ сериализуется: ни в мире, ни в ручных сохранениях. Проверяется
+// по кодекам — если поле появится, формат сохранений изменится, и это должно
+// упасть здесь, а не обнаружиться на чужой машине.
+const saveCodec = read("src/AssistQuestEditor.Domain/SimulationSaveCodec.cs");
+const saveMapper = read("src/AssistQuestEditor.Domain/SimulationSaveMapper.cs");
+check(!/SimulationSpeed|simulationSpeed/.test(saveCodec),
+  "Кратность ускорения не должна попадать в формат сохранений.");
+check(!/SimulationSpeed|simulationSpeed/.test(saveMapper),
+  "Кратность ускорения не должна переноситься в сохранение мира.");
+
+// Меню действий в шапке открывается ПОВЕРХ содержимого.
+//
+// Причина дефекта была в контексте наложения: `z-index` работает только среди
+// соседей по контексту, а `.topbar` его не создавал, поэтому z-index меню
+// оставался внутри `.worldSelector`, и карточки (`position:relative`) рисовались
+// сверху — в меню нельзя было ничего нажать.
+const topbarStyle = (() => {
+  const start = themeCss.indexOf(".topbar,.simTop{");
+  if (start < 0) return "";
+  const end = themeCss.indexOf("}", start);
+  return end > start ? themeCss.slice(start, end + 1) : "";
+})();
+check(topbarStyle.length > 0, "theme.css должен стилизовать шапку.");
+check(/z-index:\s*\d+/.test(topbarStyle),
+  "Шапка обязана создавать контекст наложения, иначе меню действий уходит под карточки.");
+const menuStyle = (() => {
+  const start = themeCss.indexOf(".worldMenu{");
+  if (start < 0) return "";
+  const end = themeCss.indexOf("}", start);
+  return end > start ? themeCss.slice(start, end + 1) : "";
+})();
+check(/z-index:\s*\d+/.test(menuStyle) && /position:absolute/.test(menuStyle),
+  "Меню действий обязано быть позиционировано с ненулевым z-index.");
+const topbarZ = Number((/z-index:\s*(\d+)/.exec(topbarStyle) ?? [])[1] ?? 0);
+const menuZ = Number((/z-index:\s*(\d+)/.exec(menuStyle) ?? [])[1] ?? 0);
+check(topbarZ > 0 && menuZ > 0,
+  "Шапка и меню обязаны иметь ненулевой z-index: " + topbarZ + "/" + menuZ);
 
 // Индикатор фазы дня: внутри HUD между восходом и временем года, БЕЗ плашки,
 // высотой с плашку-бейдж.
@@ -299,15 +630,14 @@ check(/\.simTopControls \.simStatusPlate\{flex:0 1 auto/.test(themeCss),
 // наличие в JS, а не в HTML.
 check(/daylightIndicator/.test(simulatorJs),
   "Индикатор светового дня должен рисоваться JS (внутри HUD).");
-// В строке управления его быть НЕ должно: там он был размером с кнопку и
-// выталкивал кнопки на вторую строку.
-const controlsRow = simulatorHtml.slice(
-  simulatorHtml.indexOf('class="simTopRow simTopControls"'),
-  simulatorHtml.indexOf('class="simTopRow simTopInfo"'));
-check(controlsRow.length > 0, "Строка управления должна быть в разметке.");
+// Индикатор фазы дня НЕ должен стоять в первой (управляющей) строке: там он был
+// размером с кнопку и выталкивал кнопки на вторую строку.
+const controlsRow = simHeader.slice(
+  simHeader.indexOf('class="simTopRow simTopMain"'),
+  simHeader.indexOf('class="simTopRow simTopStatus"'));
+check(controlsRow.length > 0, "Первая строка шапки Симулятора должна быть в разметке.");
 check(!/daylightIndicator/.test(controlsRow),
-  "Индикатор фазы дня не должен стоять в строке управления: он её раздувает.");
-// Рисуется внутри HUD, а не отдельным элементом разметки.
+  "Индикатор фазы дня не должен стоять в строке управления: он её раздувает.");// Рисуется внутри HUD, а не отдельным элементом разметки.
 const hudMarkupStart = simulatorJs.indexOf("hud.innerHTML = [");
 check(hudMarkupStart >= 0, "HUD должен собираться из массива частей.");
 const hudMarkup = simulatorJs.slice(hudMarkupStart, simulatorJs.indexOf("renderDaylight()", hudMarkupStart));
@@ -346,29 +676,35 @@ try {
       <style>${themeCss.replaceAll("</style", "<\\/style")}</style></head>
       <body>
         <header class="simTop">
-          <div class="simTopRow simTopHead">
-            <div class="simTitleBlock"><div class="simTitle">Симулятор</div></div>
-            <div class="topSpacer"></div>
-            <div class="hud" id="hud"></div>
+          <div class="simTitleBlock">
+            <div class="simTitle">Assist Quest Editor</div>
+            <button class="authorChip" id="authorChip" type="button"><span id="authorChipText">Авторство: —</span></button>
           </div>
-          <div class="simTopRow simTopControls">
+          <div class="simTopRow simTopMain">
+            <div class="worldSelector simWorldSelector" id="simWorldSelector">
+              <select class="worldSelectorSelect" id="simWorldSelect"></select>
+              <select class="worldSelectorSelect" id="simCampaignSelect"></select>
+              <button class="worldSelectorButton" id="simOpenCampaigns">Кампании и квесты</button>
+            </div>
             <div class="simTransport">
               <button id="simPlay" class="toolButton simTransportButton">▶</button>
               <button id="simStop" class="toolButton simTransportButton">⏹</button>
               <button id="simFastForward" class="toolButton simTransportButton">⏩</button>
             </div>
-            <div class="simStatusPlate" id="simStatusPlate" data-sim-state="stopped">
-              <span class="simStatusText" id="simStatusText">Игровое время</span>
+            <div class="simAutoSaveBlock">
+              <span class="simAutoSave" id="simAutoSave"></span>
+              <span class="simAutoSaveHint" id="simAutoSaveHint"></span>
             </div>
             <div class="topSpacer"></div>
-            <button class="toolButton" id="openCampaigns">Кампании и квесты</button>
             <button class="toolButton" id="reloadCatalog">Обновить квесты</button>
             <button class="toolButton" id="openSaves">Сохранения</button>
             <button class="toolButton" id="reset">Сбросить</button>
           </div>
-          <div class="simTopRow simTopInfo">
-            <span class="simAutoSave" id="simAutoSave"></span>
-            <span class="simAutoSaveHint" id="simAutoSaveHint"></span>
+          <div class="simTopRow simTopStatus">
+            <div class="simStatusPlate" id="simStatusPlate" data-sim-state="stopped">
+              <span class="simStatusText" id="simStatusText">Игровое время</span>
+            </div>
+            <div class="hud" id="hud"></div>
           </div>
         </header>
         <main style="display:flex">

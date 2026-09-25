@@ -3308,6 +3308,15 @@
       return;
     }
 
+    // Псевдоним автора. Как и в главном окне, имя НЕ хранится в Web: его
+    // единственный владелец — Host, а Web только рисует присланное. Поэтому
+    // подпись в шапке Симулятора не может разойтись с именем, которым подписаны
+    // сохранённые ресурсы.
+    if (message.type === "author") {
+      applyAuthor(message);
+      return;
+    }
+
     if (message.type === "snapshot") {
       const hadSnapshot = !!snapshot;
       snapshot = message.snapshot;
@@ -3786,6 +3795,32 @@
   document.getElementById("simOpenCampaigns")?.addEventListener("click", () => {
     send({ action: "open_campaigns" });
   });
+
+  // --- Авторство ---
+  //
+  // Клик открывает НАСТРОЙКИ, а не отдельный диалог имени: имя меняется там же,
+  // где его объясняют. Правило то же, что в главном окне (main.js), — иначе
+  // «Где задать имя?» имело бы два разных ответа в двух окнах.
+  const authorChip = document.getElementById("authorChip");
+  authorChip?.addEventListener("click", () => send({ action: "open_settings" }));
+
+  function applyAuthor(data) {
+    const text = document.getElementById("authorChipText");
+    if (!authorChip || !text) return;
+
+    const name = typeof data?.name === "string" ? data.name.trim() : "";
+    const named = data?.named === true && name.length > 0;
+
+    // «Имени нет» — единственное состояние, которое выделяется акцентом:
+    // только оно требует действия от пользователя.
+    authorChip.classList.toggle("authorMissing", !named);
+    text.textContent = named
+      ? "Авторство: " + name
+      : "Авторство не указано (нажмите для настройки)";
+    authorChip.title = named
+      ? "Имя автора: " + name + ". Нажмите, чтобы изменить в настройках."
+      : "Имя не указано: изменения подписываются как «анонимно». Нажмите, чтобы указать имя.";
+  }
 
   document.getElementById("simPlay")?.addEventListener("click", () => {
     send({ action: simulationRunning ? "simulation_pause" : "simulation_start" });

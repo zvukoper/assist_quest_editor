@@ -33,11 +33,38 @@ button:hover,.toolButton:hover,.navButton:hover{background:var(--hover)}
 button:disabled,.toolButton:disabled,.navButton:disabled{opacity:.45;cursor:not-allowed}
 button.primary,.toolButton.primary{background:var(--accent);color:#1b1b1b;font-weight:700}
 button.primary:hover,.toolButton.primary:hover{background:var(--accent-2);color:#fff}
+/* Выключенная акцентная кнопка. Простое приглушение прозрачностью выше смешивает
+   оранжевый фон с тёмной панелью и превращает его в грязно-оливковый
+   (250,176,3 -> 125,92,15). Тёмный текст на нём даёт 2,7:1 — тот же «серый на
+   жёлтом», что и в WinForms.
+   `opacity:1` обязателен: иначе приглушается и текст, и контраст падает вместе с ним.
+   Приглушает кнопку заливка ПОВЕРХ акцента. Глубина выбрана замером, а не на глаз:
+   у оранжевого яркость у самого порога, и приглушение сильнее 0,3 уводит фон в
+   «мёртвую зону», где тёмный текст перестаёт давать 4,5:1 (при 0,42 — уже 4,1:1).
+   Здесь фон 178,127,7 и контраст 4,9:1 — кнопка заметно приглушена и читается. */
+button.primary:disabled,.toolButton.primary:disabled{
+  opacity:1;
+  background:linear-gradient(rgba(11,13,17,.30),rgba(11,13,17,.30)),var(--accent);
+}
 .app{display:flex;flex-direction:column;width:100%;height:100%;background:radial-gradient(circle at 78% 16%,rgba(250,176,3,.045),transparent 28%),linear-gradient(180deg,#0b0d11 0%,#0a0c10 100%)}
-.topbar,.simTop{height:58px;flex:0 0 58px;display:flex;align-items:center;gap:14px;padding:0 16px;border-bottom:1px solid var(--border);background:rgba(23,24,25,.96);backdrop-filter:blur(5px)}
+.topbar,.simTop{height:58px;flex:0 0 58px;display:flex;align-items:center;gap:14px;padding:0 16px;border-bottom:1px solid var(--border);background:rgba(23,24,25,.96);backdrop-filter:blur(5px);position:relative;z-index:40}
 .brandMark{width:28px;height:28px;border-radius:7px;background:linear-gradient(135deg,var(--accent),#6d500d);box-shadow:0 0 18px rgba(250,176,3,.14);display:grid;place-items:center;color:#171819;font-weight:900;font-size:13px}
 .brand{display:flex;flex-direction:column;line-height:1.05}.brand strong{font-size:15px;letter-spacing:.35px}.brand span{font-size:11px;color:var(--muted);margin-top:3px}
 .topSpacer{flex:1}.chip{padding:6px 9px;border:1px solid var(--border);border-radius:999px;background:rgba(255,255,255,.03);color:var(--muted);font-size:11px}.chip.accent{color:var(--accent);border-color:rgba(250,176,3,.28)}
+/* Подпись авторства рядом с названием приложения. Обычный приглушённый белый
+   текст, а не чип: это не элемент управления, а справка «от чьего имени
+   подписываются ресурсы». Кликабельность при этом есть — по нажатию
+   открываются настройки, где имя и меняется. */
+.authorChip{
+  background:transparent;border:0;border-radius:6px;cursor:pointer;
+  color:rgba(255,255,255,.62);font-size:11px;line-height:1.2;
+  padding:4px 6px;margin-left:2px;white-space:nowrap;text-align:left;
+}
+.authorChip:hover{color:#fff;background:rgba(255,255,255,.05)}
+/* Имя не указано — единственный случай, когда подпись ВЫДЕЛЕНА: оранжевый и
+   жирный. Акцентом помечено не «имя есть», а именно «имени нет», потому что это
+   единственное состояние, требующее действия от пользователя. */
+.authorChip.authorMissing,.authorChip.authorMissing:hover{color:var(--accent);font-weight:800}
 .content{flex:1;min-height:0;padding:18px;overflow:auto}
 .sectionHeader{display:flex;align-items:flex-end;justify-content:space-between;gap:18px;margin-bottom:16px}.sectionHeader h1,.sectionHeader h2{margin:0;font-size:25px;letter-spacing:.1px}.sectionHeader p{margin:5px 0 0;color:var(--muted);font-size:13px;line-height:1.5}
 .miniLabel{color:var(--accent);font-size:11px;font-weight:800;letter-spacing:.8px;text-transform:uppercase}
@@ -215,7 +242,10 @@ input,select,textarea{padding:4px 5px;border-radius:4px;font-size:10px}textarea{
    Ширина ограничена: длинные имена миров не должны выдавливать чипы состояния
    за край окна. ------------------------------------------------------------- */
 
-.simWorldSelector{max-width:min(620px,58vw);}
+/* Ширина селектора ограничена, чтобы длинное имя мира не растягивало ряд: он
+   начинается сразу за названием и стоит перед транспортом, поэтому его рост
+   сдвигал бы ВСЁ управление вправо. Списки и так ужимаются сами. */
+.simWorldSelector{max-width:min(620px,58vw)}
 .simWorldSelector .worldSelectorSelect{max-width:145px;}
 .simWorldSelector #simOpenCampaigns{white-space:nowrap;}
 
@@ -249,9 +279,16 @@ input,select,textarea{padding:4px 5px;border-radius:4px;font-size:10px}textarea{
 }
 .worldSelectorButton:hover{border-color:rgba(250,176,3,.55);color:#fff}
 /* Меню открывается поверх содержимого: это действия, а не часть разметки
-   страницы, поэтому оно не должно сдвигать карточки при раскрытии. */
+   страницы, поэтому оно не должно сдвигать карточки при раскрытии.
+   z-index здесь БОЛЬШЕ, чем у карточек, и это не запас «на всякий случай»:
+   раньше меню уходило ПОД карточки, и нажать в нём было нечего. Причина была в
+   контексте наложения — `z-index` работает только среди соседей по контексту, а
+   `.topbar` его не создавал, поэтому z-index:60 оставался внутри
+   `.worldSelector`, и `.card{position:relative}` из следующего блока разметки
+   рисовался поверх. Теперь `.topbar` сам задаёт контекст с высоким z-index
+   (см. правило выше), и меню честно конкурирует с содержимым. */
 .worldMenu{
-  position:absolute;top:calc(100% + 4px);right:0;z-index:60;
+  position:absolute;top:calc(100% + 4px);right:0;z-index:1000;
   min-width:220px;padding:4px;
   display:flex;flex-direction:column;
   background:var(--panel-deep);border:1px solid var(--border);border-radius:8px;
@@ -268,50 +305,99 @@ input,select,textarea{padding:4px 5px;border-radius:4px;font-size:10px}textarea{
    всего и открывают. */
 .worldMenu button.worldMenuCreate{color:var(--accent);font-weight:700}
 
-/* --- Симулятор: верхняя панель в три строки и транспорт -----------------------
+/* --- Симулятор: верхняя панель — сетка 2x2 -----------------------------------
 
-   Панель была одним рядом: строка заголовка не имела собственной высоты, и при
-   узком окне текст срезался, а вертикальные отступы задавались полями самих
-   элементов — отсюда «слишком большое расстояние между строками». Теперь строки
-   разделены структурно (три .simTopRow), высота панели считается от содержимого,
-   а не задана константой. --------------------------------------------------- */
+   Левая колонка занята только названием приложения, правая — всем остальным:
+
+     [ название и авторство ] [ селектор · транспорт · автосохранение → действия ]
+     [          —          ] [ плашка времени · подписи мира                      ]
+
+   Выравнивание рядов обеспечивает СЕТКА, а не подобранный отступ. Это
+   принципиально: отступ пришлось бы пересчитывать при каждом изменении ширины
+   названия или псевдонима («Авторство: Руслан Шашлык» против «Авторство: —»), и
+   выравнивание разъезжалось бы от правки данных, а не вёрстки. Сетка держит
+   левый край обоих рядов в одной точке при любом содержимом.
+
+   Панель была строкой во всю ширину с распоркой: селектор уезжал от названия
+   вправо, а строка сведений начиналась под названием, и два ряда не читались
+   как связанные. Прежде того — три строки, первая из которых несла схему
+   внутреннего устройства.
+   -------------------------------------------------------------------------- */
 
 .simTop{
-  display:flex;
-  flex-direction:column;
-  align-items:stretch;
-  justify-content:center;
-  gap:6px;
+  display:grid;
+  /* Первая колонка — по содержимому (название и псевдоним), вторая забирает
+     остаток. `minmax(0,1fr)` обязателен: без него колонка не сжимается ниже
+     содержимого, и переполнение уводит кнопки за правый край. */
+  grid-template-columns:auto minmax(0,1fr);
+  grid-template-rows:auto auto;
+  /* Ряд «название ↔ селектор» выравнивается по ЦЕНТРУ, поэтому название стоит
+     на одной линии с селектором, а не над ним. Ряд сведений — по верху второй
+     строки: плашка времени и подписи мира там же, где селектор строкой выше. */
+  align-items:center;
+  column-gap:10px;
+  row-gap:6px;
   height:auto;
   flex:0 0 auto;
   padding:8px 12px;
 }
-.simTopRow{display:flex;align-items:center;gap:8px;min-width:0}
-/* Заголовочная строка не сжимается: это текст, а не орган управления. */
-.simTopHead{flex:0 0 auto}
-.simTitleBlock{display:flex;flex-direction:column;line-height:1.15;min-width:0}
-.simTopControls{
-  /* nowrap + ограниченное сжатие вместо wrap.
-     При переносе кнопки уезжали на вторую строку и наезжали на плашку статуса:
-     строка имела фиксированную высоту, а содержимое — две. Теперь переноса нет,
-     лишнее место отбирается у РАСТЯЖИМЫХ элементов (плашка и распорка), а кнопки
-     не сжимаются и не переносятся: перекрываться им негде. */
-  flex-wrap:nowrap;
-  min-width:0;
+/* Название занимает левую колонку и НЕ сжимается: сжатие (через `min-width:0`
+   у ряда) переносило «Assist Quest Editor» ПО БУКВАМ и раздувало шапку в
+   столбик. Перенос заголовка — крайняя мера, а не ответ на тесноту. */
+.simTitleBlock{
+  grid-column:1;
+  grid-row:1;
+  display:flex;flex-direction:column;line-height:1.15;
+  min-width:0;align-self:center;
 }
-.simTopControls > *{min-width:0}
-/* Кнопки транспорта и действий имеют собственный размер: сжатие ломало бы
-   квадратные кнопки транспорта и обрезало подписи по буквам. */
-.simTopControls .simTransport,
-.simTopControls .toolButton{flex:0 0 auto;white-space:nowrap}
-/* Плашка статуса — первый кандидат на сжатие: её текст короткий, и многоточие
-   здесь читается лучше, чем перекрытые кнопки. */
-.simTopControls .simStatusPlate{flex:0 1 auto;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.simTopControls .topSpacer{flex:0 1 auto}
-.simTopInfo{flex-wrap:wrap}
-/* Подписи заголовка переносятся по словам, а не обрезаются: раньше строка не
-   имела своей высоты, и многоточие/срез выглядели как «текст срезан». */
+.simTopRow{display:flex;align-items:center;gap:8px;min-width:0}
+/* Строка 1 стоит ВТОРОЙ колонкой первой строки — то есть справа от названия.
+   Перенос РАЗРЕШЁН, но срабатывает он только при реальной нехватке места
+   (ниже ~1300 px): при рабочей ширине окна весь ряд помещается, и переноса нет.
+   Прежний запрет переноса был связан с ФИКСИРОВАННОЙ высотой строки — тогда
+   перенесённые кнопки наезжали друг на друга. Здесь высота панели считается от
+   содержимого (grid, `height:auto`), поэтому перенос безопасен и лучше, чем
+   кнопки за правым краем окна. */
+.simTopMain{grid-column:2;grid-row:1;flex-wrap:wrap;gap:6px}
+.simTopMain > *{min-width:0}
+/* Кнопки строки 1 имеют собственный размер: сжатие обрезало бы подписи по
+   буквам и сплющило квадратные кнопки транспорта. */
+.simTopMain .toolButton,
+.simTopMain .simTransport,
+.simTopMain .worldSelectorButton,
+.simTopMain .simAutoSaveBlock{flex:0 0 auto}
+/* Компактные отступы именно в шапке Симулятора: здесь рядом стоят селектор,
+   транспорт, подпись автосохранения и три действия, и полноразмерные отступы
+   выдавливали бы кнопки за край. Общий `.toolButton` не трогается — он
+   используется везде. */
+.simTopMain .toolButton{padding:6px 8px;white-space:nowrap}
+.simTopMain .authorChip{padding:2px 0;margin-left:0}
+/* Селектор НЕ сжимается и не переносится: подписи «МИР» и «КАМПАНИЯ» короткие,
+   а выпадающие списки уже ужимаются сами (см. `.simWorldSelector`). Сжатие
+   контейнера ломало бы ряд, а не спасало: место в 1300+ px есть всегда. */
+.simTopMain .simWorldSelector{flex:0 0 auto}
+/* Подпись автосохранения — две строки в столбик: «Автосохранение: дата» и
+   подсказка под ней. Ширина ограничена, чтобы подсказка переносилась на две
+   строки и блок не растягивал ряд: без ограничения длинная подсказка
+   выталкивала действия за правый край. */
+.simAutoSaveBlock{display:flex;flex-direction:column;line-height:1.25;min-width:0;max-width:270px}
+/* На узком окне подсказку автосохранения сокращаем первой: это пояснение, а
+   не управление, и она единственная здесь, чей смысл не теряется от
+   уменьшения ширины. Порог 1300 px — рабочая ширина окна Симулятора: выше
+   него место есть всегда, и сжатия не происходит. */
+@media(max-width:1300px){
+  .simAutoSaveBlock{max-width:190px}
+  .simWorldSelector{max-width:min(430px,50vw)}
+}
+/* Строка 2 начинается ВТОРОЙ колонкой — ровно под селектором, а не под
+   названием. Перенос по подписям HUD: их много, и на узком окне они обязаны
+   уходить вниз, а не обрезаться. Плашка при этом сохраняет размер. */
+.simTopStatus{grid-column:2;grid-row:2;flex-wrap:wrap;gap:6px}
+.simTopStatus .simStatusPlate{flex:0 0 auto}
+/* Подписи заголовка переносятся по словам, а не обрезаются. */
 .simTitle{font-weight:800;font-size:13px;white-space:normal;word-break:break-word}
+/* `.simSub` больше не используется в разметке: схема внутреннего устройства
+   убрана из шапки. Правило оставлено для страниц, где такая подпись ещё есть. */
 .simSub{color:var(--muted);font-size:10px;white-space:normal;word-break:break-word}
 
 /* Высота строки Симулятора теперь часть самой панели, а не константа: три
@@ -365,9 +451,11 @@ input,select,textarea{padding:4px 5px;border-radius:4px;font-size:10px}textarea{
   50%{background:rgba(250,176,3,.26);border-color:rgba(250,176,3,.85);color:#ffd479}
 }
 
-/* Строка сведений об автосохранении. */
-.simAutoSave{color:#c9d2dc;font-size:10px;font-weight:700}
-.simAutoSaveHint{color:var(--muted);font-size:9px}
+/* Строка сведений об автосохранении. Подсказка ПЕРЕНОСИТСЯ по словам: она
+   длинная (два предложения) и в одну строку выдавила бы действия за правый
+   край окна. Заголовок не переносится — это короткая дата. */
+.simAutoSave{color:#c9d2dc;font-size:10px;font-weight:700;white-space:nowrap}
+.simAutoSaveHint{color:var(--muted);font-size:9px;white-space:normal}
 /* Вспышка «автосохранение произошло»: LIME, ОДИН раз, 2 секунды.
    Конечная анимация `forwards` с прозрачными крайними кадрами: цвет приходит
    к исходному сам и не требует снятия класса из JS. Одноразовость обеспечена
@@ -628,9 +716,16 @@ input,select,textarea{padding:4px 5px;border-radius:4px;font-size:10px}textarea{
   transform:translateY(-1px);
 }
 .interfaceChoice:disabled{
-  opacity:.55;
   cursor:wait;
   transform:none;
+  /* `opacity:1` ОБЯЗАТЕЛЕН, хотя правило выглядит как «ничего не делать».
+     `.interfaceChoice` — это <button>, поэтому его ловит общее правило
+     `button:disabled{opacity:.45}` выше, и вариант с выбранным ответом уходил в
+     2,8:1: прозрачность приглушала и оранжевый кружок с номером, и текст.
+     Здесь прозрачность снята, а приглушает заливка ПОВЕРХ: она затемняет саму
+     кнопку, не трогая контраст содержимого (кружок остаётся 9,2:1). */
+  opacity:1;
+  background:linear-gradient(rgba(11,13,17,.35),rgba(11,13,17,.35)),#1d2024;
 }
 .interfaceChoiceIndex{
   width:22px;

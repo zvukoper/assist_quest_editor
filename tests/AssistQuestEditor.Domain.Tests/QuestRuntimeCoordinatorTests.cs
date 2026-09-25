@@ -110,6 +110,49 @@ public sealed class QuestRuntimeCoordinatorTests
         Assert.Equal(QuestRuntimeStatus.Stopped, coordinator.State.Status);
     }
 
+    /// <summary>
+    /// Ускорение времени — часть РЕЖИМА, а не мира: и «Стоп», и «Сбросить»
+    /// обязаны возвращать его к ×1. Без этого оранжевые часы с кратностью
+    /// оставались после остановки, и мир выглядел всё ещё ускоренным.
+    ///
+    /// Ускорение НЕ входит ни в мир, ни в сохранения: проверяется и это — значение
+    /// живёт только в памяти координатора. Если бы оно попало в
+    /// <c>SimulationSaveState</c>, это сломало бы формат сохранений, и тест на
+    /// сброс не поймал бы такой дефект.
+    /// </summary>
+    [Fact]
+    public void SimulationSpeedResetsOnStopAndResetAndIsNotPartOfSaveState()
+    {
+        var point = new WorldPoint("gosha", "Гоша", "Test", new WorldCoordinate(100, 0, 0));
+        var quest = Definition("main", point.Id, null, null, false, GraphWithEnd("main"));
+
+        var hub = new SimulatorDataSourceAdapter(new[] { point }).Channels;
+        var sceneRuntime = new SceneRuntime(SceneCatalogFactory.CreateStarter(), hub);
+        using var coordinator = new QuestRuntimeCoordinator(hub, sceneRuntime, () => new[] { quest }, "main");
+
+        Assert.Equal(1d, coordinator.SimulationSpeed);
+
+        coordinator.SetSimulationRunning(true);
+        coordinator.SetSimulationSpeed(20d);
+        Assert.Equal(20d, coordinator.SimulationSpeed);
+
+        // Стоп — ускорение сбрасывается, но состояние часов сохраняется как есть:
+        // сброс касается только кратности.
+        coordinator.SetSimulationRunning(false);
+        Assert.Equal(1d, coordinator.SimulationSpeed);
+
+        coordinator.SetSimulationRunning(true);
+        coordinator.SetSimulationSpeed(60d);
+        coordinator.Reset();
+        Assert.Equal(1d, coordinator.SimulationSpeed);
+
+        // Кратность не сериализуется: в состоянии сохранения нет ни одного поля
+        // с подстрокой «Speed», кроме скорости транспорта игрока (SpeedKmh).
+        var savedFields = typeof(SimulationSaveState).GetProperties().Select(item => item.Name).ToArray();
+        Assert.DoesNotContain(savedFields, name =>
+            name.Contains("Speed", StringComparison.OrdinalIgnoreCase));
+    }
+
     private static QuestDefinition Definition(
         string id,
         string pointId,

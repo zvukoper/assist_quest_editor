@@ -35,7 +35,10 @@ public sealed class WorldChooserForm : Form
         FormBorderStyle = FormBorderStyle.FixedDialog;
         MaximizeBox = false;
         MinimizeBox = false;
-        Size = new Size(600, hasWorlds ? 570 : 310);
+        // Высота считается от Нижней строки, а не подобрана: `Size` формы включает
+        // рамку окна, и при прежних 310 px клиентская область обрезала нижний ряд
+        // кнопок — они выглядели отсутствующими, хотя были созданы.
+        Size = new Size(600, hasWorlds ? 570 : 352);
         BackColor = Color.FromArgb(10, 12, 16);
         ForeColor = Color.FromArgb(231, 237, 244);
 
@@ -70,10 +73,13 @@ public sealed class WorldChooserForm : Form
 
         // Строка состояния: кнопка «Пропустить» запускает импорт архива, а это
         // заметное действие — пользователь должен видеть, что происходит.
+        //
+        // Стоит ПОД рядом кнопок, а не рядом с ним: прежде она делила y с
+        // «Открыть»/«Создать», и подпись налезала на кнопки.
         _status = new Label
         {
             AutoSize = false,
-            Location = new Point(18, (hasWorlds ? 448 : 244) + 8),
+            Location = new Point(18, hasWorlds ? 502 : 292),
             Size = new Size(550, 22),
             ForeColor = Color.FromArgb(170, 180, 192),
             Font = new Font("Segoe UI", 8.6f)
@@ -119,7 +125,9 @@ public sealed class WorldChooserForm : Form
         _create.FlatAppearance.BorderColor = Color.FromArgb(250, 176, 3);
         _create.Click += (_, _) => TryCreate();
 
-        Controls.Add(_create);
+        // «Создать» добавляется НЕ здесь, а в каждом из двух вариантов, вместе с
+        // остальными кнопками своего ряда: иначе кнопка попадала в общий список
+        // Controls раньше ветки, и её положение приходилось бы править дважды.
         Controls.Add(_validation);
         Controls.Add(_name);
         Controls.Add(nameHeader);
@@ -150,11 +158,18 @@ public sealed class WorldChooserForm : Form
 
             _existing.SelectedIndex = 0;
 
+            // Кнопка «Открыть» выключена, пока не выбран мир. Проверять её нужно
+            // именно ВЫКЛЮЧЕННОЙ: только в этом состоянии видно, читается ли текст
+            // на её фоне, а в пробе контраста выключенные кнопки — единственный
+            // способ убедиться, что кнопка не стала «серой на жёлтом».
+            var empty = _store.Worlds.Count == 0;
+
             var open = new DarkFlatButton
             {
-                Location = new Point(18, 448),
+                Location = new Point(18, 456),
                 Size = new Size(160, 38),
-                Text = "Открыть"
+                Text = "Открыть",
+                Enabled = !empty
             };
             open.Click += (_, _) => TryOpenExisting();
 
@@ -163,12 +178,16 @@ public sealed class WorldChooserForm : Form
             // «Создать»/«Открыть» он не должен.
             var quit = new DarkFlatButton
             {
-                Location = new Point(450, 448),
+                Location = new Point(450, 456),
                 Size = new Size(118, 38),
                 Text = "Выйти",
                 DialogResult = DialogResult.Cancel
             };
 
+            // Ряд «Создать и открыть» стоит отдельной строкой от «Открыть»: иначе
+            // три кнопки в одном y при ширине 600 делят между собой 550 px, и
+            // «Создать и открыть» с «Открыть» перекрывались бы.
+            Controls.Add(_create);
             Controls.Add(open);
             Controls.Add(quit);
             Controls.Add(_status);
@@ -186,9 +205,14 @@ public sealed class WorldChooserForm : Form
             // «Пропустить» — отдельная кнопка, а не пункт списка: она делает
             // ДРУГОЕ действие (импортирует архив), и смешивать его с «создать
             // пустой мир» нельзя — результат разный.
+            //
+            // Стоит НА СВОЕЙ строке, а не рядом с «Создать мир»: прежде обе
+            // кнопки стояли в одном и том же месте (18,198), «Пропустить» шире и
+            // добавлена позже — она полностью закрывала «Создать мир», и нажать
+            // его мышью было нельзя.
             var skip = new DarkFlatButton
             {
-                Location = new Point(18, 198),
+                Location = new Point(18, 244),
                 Size = new Size(330, 38),
                 Text = "Пропустить (создастся демо-мир для обучения)",
                 Font = new Font("Segoe UI", 9f, FontStyle.Bold)
@@ -198,12 +222,13 @@ public sealed class WorldChooserForm : Form
             // «Выйти» — в правом нижнем углу, в стороне от действий с миром.
             var quit = new DarkFlatButton
             {
-                Location = new Point(450, 198),
+                Location = new Point(450, 244),
                 Size = new Size(118, 38),
                 Text = "Выйти",
                 DialogResult = DialogResult.Cancel
             };
 
+            Controls.Add(_create);
             Controls.Add(skip);
             Controls.Add(quit);
             Controls.Add(_status);

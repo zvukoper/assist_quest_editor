@@ -35,6 +35,9 @@ public sealed class SimulatorForm : WebViewForm
     // прежний корень: там мир не выбран, и терять нечего.
     private readonly SimulationSaveStore _saveStore;
     private string _worldSelectionJson = "{\\\"type\\\":\\\"world_selection\\\",\\\"worlds\\\":[],\\\"campaigns\\\":[],\\\"worldId\\\":\\\"\\\",\\\"campaignId\\\":\\\"\\\"}";
+    // Подпись авторства кэшируется так же, как выбор мира: она состояние Host,
+    // и после перезагрузки страницы web-сторона обязана получить её заново.
+    private string _authorJson = "{\\\"type\\\":\\\"author\\\",\\\"named\\\":false,\\\"name\\\":\\\"\\\"}";
     private readonly Action<string> _openQuestEditor;
     private readonly System.Windows.Forms.Timer _runtimeTimer;
     private static readonly JsonSerializerOptions SnapshotJsonOptions = new()
@@ -193,6 +196,7 @@ public sealed class SimulatorForm : WebViewForm
         PushRoads();
         PushSnapshot();
         PostJson(_worldSelectionJson);
+        PostJson(_authorJson);
         if (_journalDetached)
         {
             BeginInvoke((Action)OpenJournalWindow);
@@ -260,6 +264,23 @@ public sealed class SimulatorForm : WebViewForm
             return;
 
         _worldSelectionJson = json;
+        if (Browser.CoreWebView2 is not null)
+            PostJson(json);
+    }
+
+    /// <summary>
+    /// Передаёт Симулятору подпись авторства для его шапки.
+    ///
+    /// Отдельный канал нужен потому, что авторство — состояние Host, а не Web:
+    /// псевдоним меняется в настройках, и подпись обязана обновиться в обоих
+    /// окнах, не дожидаясь перезапуска Симулятора.
+    /// </summary>
+    public void SetAuthorJson(string json)
+    {
+        if (string.IsNullOrWhiteSpace(json))
+            return;
+
+        _authorJson = json;
         if (Browser.CoreWebView2 is not null)
             PostJson(json);
     }
@@ -531,6 +552,14 @@ public sealed class SimulatorForm : WebViewForm
 
                 case "open_journal":
                     OpenJournalWindow();
+                    break;
+
+                // Подпись авторства в шапке — это вход в настройки, а не отдельный
+                // диалог имени: имя меняется там же, где его объясняют. Сам
+                // Симулятор настроек не открывает — он просит об этом MainForm,
+                // который владеет и настройками, и псевдонимом.
+                case "open_settings":
+                    OpenSettingsRequested?.Invoke(this, EventArgs.Empty);
                     break;
 
                 case "open_campaigns":
@@ -877,6 +906,12 @@ public sealed class SimulatorForm : WebViewForm
     /// </summary>
     public event EventHandler? WorldPropertiesRequested;
     public event EventHandler? WorldExportRequested;
+    /// <summary>
+    /// Просьба открыть настройки приложения. Их владеет MainForm, поэтому
+    /// Симулятор только просит — иначе настройки пришлось бы открывать из двух
+    /// окон, и «где менять имя» имело бы два разных ответа.
+    /// </summary>
+    public event EventHandler? OpenSettingsRequested;
     public event EventHandler<CampaignExportRequestedEventArgs>? CampaignExportRequested;
     public event EventHandler<QuestExportRequestedEventArgs>? QuestExportRequested;
     public event EventHandler? ImportArchiveRequested;

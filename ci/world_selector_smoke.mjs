@@ -49,6 +49,32 @@ check(/\.worldMenu\[hidden\]\{display:none\}/.test(theme),
 check(/\.worldSelectorSelect\{[\s\S]{0,200}max-width/.test(theme),
   "Ширина списков должна быть ограничена: длинное имя мира выдавит чипы за край.");
 
+// Контекст наложения шапки. Симптом был конкретный: меню действий уходило ПОД
+// плашки редакторов, и нажать в нём было нечего. Причина — z-index работает
+// только среди соседей по контексту, а `.topbar` контекст не создавал, поэтому
+// z-index меню оставался внутри `.worldSelector`, и карточки в следующем блоке
+// разметки рисовались сверху.
+const topbarRule = (() => {
+  const start = theme.indexOf(".topbar,.simTop{");
+  if (start < 0) return "";
+  const end = theme.indexOf("}", start);
+  return end > start ? theme.slice(start, end + 1) : "";
+})();
+check(topbarRule.length > 0, "theme.css должен стилизовать шапку.");
+check(/position:relative/.test(topbarRule) && /z-index:\s*\d+/.test(topbarRule),
+  "Шапка обязана создавать контекст наложения — иначе меню действий уходит под карточки.");
+const menuRule = (() => {
+  const start = theme.indexOf(".worldMenu{");
+  if (start < 0) return "";
+  const end = theme.indexOf("}", start);
+  return end > start ? theme.slice(start, end + 1) : "";
+})();
+const menuZIndex = Number((/z-index:\s*(\d+)/.exec(menuRule) ?? [])[1] ?? 0);
+const topbarZIndex = Number((/z-index:\s*(\d+)/.exec(topbarRule) ?? [])[1] ?? 0);
+check(menuZIndex > topbarZIndex,
+  "Меню должно быть выше содержимого внутри шапки: z-index меню " + menuZIndex +
+  " против z-index шапки " + topbarZIndex + ".");
+
 // --- 3. Host отправляет состояние селектора ---
 check(/type = "world_selection"/.test(mainForm),
   "Host обязан отправлять состояние селектора (world_selection).");
@@ -220,6 +246,58 @@ try {
   }
   check(opened.items.includes("world_info") && opened.items.includes("campaign_info"),
     "В меню нет пунктов сведений (ℹ️): " + opened.items.join(", "));
+
+  // --- Меню ДОЛЖНО быть поверх плашек редакторов ---
+  //
+  // Симптом был конкретный: меню «уходило под плашки редакторов, и нельзя было
+  // ничего нажать». Поэтому проверяется не z-index в CSS (он уже проверен
+  // статически), а ФАКТИЧЕСКИЙ верхний элемент в точке, где меню лежит поверх
+  // карточки: там обязан оказаться пункт меню, а не карточка.
+  //
+  // Замер без пересечения ничего не доказывает: если карточка в этой версии
+  // верстки не достаёт до меню, `elementFromPoint` вернёт пункт меню при ЛЮБОМ
+  // z-index. Поэтому проверка сначала убеждается, что пересечение ЕСТЬ, и только
+  // тогда требует, чтобы верхним был пункт меню.
+  const layering = await page.evaluate(() => {
+    const menu = document.getElementById("worldMenuList");
+    const menuRect = menu.getBoundingClientRect();
+
+    // Карточка, реально попавшая под меню.
+    const cards = [...document.querySelectorAll(".card")].map(card => card.getBoundingClientRect());
+    const under = cards.filter(rect =>
+      rect.left < menuRect.right && rect.right > menuRect.left &&
+      rect.top < menuRect.bottom && rect.bottom > menuRect.top);
+
+    if (under.length === 0) return { overlapping: false };
+
+    const rect = under[0];
+    const x = Math.round(Math.max(rect.left, menuRect.left) + 20);
+    const y = Math.round(Math.max(rect.top, menuRect.top) + 20);
+    const hit = document.elementFromPoint(x, y);
+
+    return {
+      overlapping: true,
+      x, y,
+      insideMenu: hit?.closest(".worldMenu") !== null,
+      hitText: (hit?.textContent || "").trim().slice(0, 40),
+      // Контекст наложения обязателен: без явного z-index у шапки пункт меню и
+      // карточка лежат в одном слое, и верхним оказывается карточка из
+      // следующего блока разметки.
+      topbarPosition: getComputedStyle(document.querySelector(".topbar")).position,
+      topbarZIndex: getComputedStyle(document.querySelector(".topbar")).zIndex
+    };
+  });
+
+  check(layering.overlapping,
+    "Меню не пересекается с плашками: проверка наложения ничего не измеряет.");
+  if (layering.overlapping) {
+    check(layering.insideMenu,
+      `Меню уходит под плашку редактора: в точке (${layering.x},${layering.y}) верхним ` +
+      `оказался «${layering.hitText}» вместо пункта меню — нажать него нельзя.`);
+    check(layering.topbarPosition === "relative" && layering.topbarZIndex !== "auto",
+      "Шапка обязана создавать контекст наложения с явным приоритетом: " +
+      layering.topbarPosition + "/" + layering.topbarZIndex + ".");
+  }
 
   await page.keyboard.press("Escape");
   await page.waitForTimeout(80);

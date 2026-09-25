@@ -81,6 +81,14 @@ public sealed class MainForm : WebViewForm
     private readonly WorldStore _worldStore;
 
     /// <summary>
+    /// Псевдоним, которым подписываются изменения. «Анонимно» — если имя не
+    /// задано. Хранится потому, что его показывает шапка («Авторство: …»), и
+    /// вычислять его повторно значило бы допустить расхождение с тем, чем
+    /// подписаны уже созданные ресурсы.
+    /// </summary>
+    private string _author;
+
+    /// <summary>
     /// Режим CI test. Запоминается потому, что от него зависит ЗАПИСЬ настроек:
     /// прогон обязан быть неинтерактивным и не должен менять файлы пользователя.
     /// </summary>
@@ -116,15 +124,16 @@ public sealed class MainForm : WebViewForm
         // ограничивается папкой выбранного мира, а «какой мир выбран» известно
         // только из настроек.
         _preferences = AppUiPreferencesStore.Load();
-        // Псевдоним обязателен: им подписываются импортированные ресурсы. В CI
-        // настройка не спрашивается, поэтому подставляется системная подпись —
-        // иначе импорт в прогоне падал бы на пустом авторе.
-        // Подпись пользователя вычисляется один раз: её читают и мир, и кампании,
-        // и разойтись эти два значения не должны — иначе правка кампании
+        // Псевдоним вычисляется один раз: его читают и мир, и кампании, и
+        // разойтись эти два значения не должны — иначе правка кампании
         // подписывалась бы другим автором, чем правка мира.
-        var author = string.IsNullOrWhiteSpace(_preferences.Author)
-            ? ResourceMetadata.DefaultAuthor(DateTimeOffset.Now)
-            : _preferences.Author!;
+        //
+        // Пустой псевдоним — это НЕ ошибка и НЕ повод подставить выдуманное имя:
+        // работа без имени разрешена, и в файл уходит слово «анонимно». Прежняя
+        // подстановка User_ГГММДДЧЧмм выглядела как настоящая подпись, хотя
+        // человека с таким именем не существует.
+        var author = AuthorIdentity.Resolve(_preferences.Author);
+        _author = author;
 
         _worldStore = new WorldStore(AppPaths.UserRoot, author, readOnly: ciTest);
 
@@ -284,6 +293,8 @@ public sealed class MainForm : WebViewForm
         // Селектор [МИР][КАМПАНИЯ] тоже рисуется из состояния Host: web-сторона
         // списков миров не знает, и без этого сообщения селектор был бы пустым.
         PostWorldSelection();
+        // Подпись авторства в шапке: тоже состояние Host, а не Web.
+        PostAuthor();
         OpenSimulator();
 
         var startupPath = FileActivationRequest.Consume();
@@ -624,9 +635,8 @@ public sealed class MainForm : WebViewForm
             _simulator?.Close();
             _simulator = null;
 
-            var author = string.IsNullOrWhiteSpace(_preferences.Author)
-                ? ResourceMetadata.DefaultAuthor(DateTimeOffset.Now)
-                : _preferences.Author!;
+            var author = AuthorIdentity.Resolve(_preferences.Author);
+            _author = author;
             _campaignStore = new CampaignStore(AppPaths.UserQuestRoot, readOnly: _ciTest, author)
                 .ScopedTo(target.FolderPath);
 
@@ -1739,6 +1749,42 @@ public sealed class MainForm : WebViewForm
         catch (InvalidOperationException)
         {
         }
+
+        // Авторство едет вместе с выбором мира: смена мира — это смена проекта, и
+        // подпись в шапке должна быть актуальной в тот же момент. Отдельный вызов
+        // у каждого из десятка мест, где меняется мир, рано или поздно забыли бы.
+        PostAuthor();
+    }
+
+    /// <summary>
+    /// Отправляет в шапку текущее авторство.
+    ///
+    /// Владелец имени — Host: только он знает и настройки, и то, чем подписаны
+    /// уже созданные ресурсы. Web рисует присланное, поэтому подпись в шапке не
+    /// может разойтись с фактической подписью файлов.
+    /// </summary>
+    private void PostAuthor()
+    {
+        if (IsDisposed || !IsHandleCreated)
+            return;
+
+        try
+        {
+            var payload = JsonSerializer.Serialize(new
+            {
+                type = "author",
+                named = AuthorIdentity.IsNamed(_author),
+                name = _author
+            });
+            PostJson(payload);
+            // Симулятор — ОТДЕЛЬНОЕ окно со своей страницей, поэтому подпись
+            // нужна и ему: без этого в его шапке авторство осталось бы пустым,
+            // хотя в главном окне оно есть.
+            _simulator?.SetAuthorJson(payload);
+        }
+        catch (InvalidOperationException)
+        {
+        }
     }
 
     private void SceneCatalog_Changed(object? sender, EventArgs e)
@@ -1854,6 +1900,7 @@ public sealed class MainForm : WebViewForm
 
         _settings = new SettingsForm();
         _settings.ResetWindowSettingsRequested += Settings_ResetWindowSettingsRequested;
+        _settings.AuthorChanged += Settings_AuthorChanged;
         _settings.FormClosed += (_, _) => _settings = null;
         _settings.Show(this);
     }
@@ -1861,6 +1908,30 @@ public sealed class MainForm : WebViewForm
     private void Settings_ResetWindowSettingsRequested(object? sender, EventArgs e)
     {
         WindowGeometryStore.ClearSavedGeometry();
+    }
+
+    /// <summary>
+    /// Имя изменили в настройках.
+    ///
+    /// Сторы получают новое имя СРАЗУ: они держат его в поле, и без обновления
+    /// следующие правки мира и кампаний подписывались бы прежним именем, пока
+    /// приложение не перезапустят. Каталог при этом не перечитывается — он не
+    /// зависит от псевдонима, и лишний проход по диску ничего бы не дал.
+    /// </summary>
+    private void Settings_AuthorChanged(object? sender, EventArgs e)
+    {
+        var author = AuthorIdentity.Resolve(AppUiPreferencesStore.Load().Author);
+        if (string.Equals(author, _author, StringComparison.Ordinal))
+            return;
+
+        _author = author;
+        _worldStore.Author = author;
+        _campaignStore.Author = author;
+        _preferences = _preferences with { Author = author };
+
+        AppLogger.Info("MainForm: псевдоним автора изменён в настройках.",
+            $"author={author}; named={AuthorIdentity.IsNamed(author)}");
+        PostAuthor();
     }
 
     private string? ResolveScenePath(string sceneId)
@@ -2221,6 +2292,9 @@ public sealed class MainForm : WebViewForm
             ShowResourceProperties(kind: "world", edit: false);
         _simulator.CampaignPropertiesRequested += (_, e) =>
             ShowResourceProperties(kind: "campaign", edit: false, campaignId: e.CampaignId);
+        // Клик по подписи авторства в шапке Симулятора открывает ТЕ ЖЕ настройки,
+        // что и в главном окне.
+        _simulator.OpenSettingsRequested += (_, _) => OpenSettings();
         PlaceOnSecondaryScreen(_simulator);
         _simulator.Show(this);
         PostWorldSelection();

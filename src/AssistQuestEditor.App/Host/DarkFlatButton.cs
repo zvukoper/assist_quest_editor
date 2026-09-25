@@ -21,6 +21,26 @@ public class DarkFlatButton : Button
 {
     private Color _disabledTextColor = Color.FromArgb(170, 178, 190);
 
+    /// <summary>
+    /// Цвет выключенного текста на СВЕТНОМ фоне.
+    ///
+    /// Отдельная константа нужна потому, что приглушённый серый читается только
+    /// на тёмной кнопке. Акцентная кнопка оранжевая (250,176,3), и тот же серый
+    /// давал на ней контраст около 1:1 — «серый на жёлтом», тот самый нечитаемый
+    /// вид, ради которого класс и появился. Тёмный текст на оранжевом даёт
+    /// контраст выше 8:1.
+    /// </summary>
+    private static readonly Color DarkDisabledTextColor = Color.FromArgb(20, 20, 20);
+
+    /// <summary>
+    /// Порог яркости фона, выше которого текст считается «на светлом».
+    ///
+    /// 140 — между тёмной кнопкой диалога (яркость 23) и акцентом (178): запас в
+    /// обе стороны почти двукратный, поэтому промежуточные оттенки тёмной темы
+    /// (панели, поля ввода) не переключат цвет случайно.
+    /// </summary>
+    private const int LightBackgroundLuma = 140;
+
     public DarkFlatButton()
     {
         FlatStyle = FlatStyle.Flat;
@@ -31,9 +51,9 @@ public class DarkFlatButton : Button
     }
 
     /// <summary>
-    /// Цвет текста выключенной кнопки. Значение по умолчанию даёт контраст
-    /// 5,2:1 на фоне 23,24,25 — с запасом выше минимума 4,5:1, но заметно
-    /// приглушённее рабочего состояния, чтобы «сейчас нельзя» было видно.
+    /// Цвет текста выключенной кнопки на ТЁМНОМ фоне. Значение по умолчанию даёт
+    /// контраст 5,2:1 на фоне 23,24,25 — с запасом выше минимума 4,5:1, но
+    /// заметно приглушённее рабочего состояния, чтобы «сейчас нельзя» было видно.
     ///
     /// Атрибут скрывает свойство от конструктора форм: без него анализатор
     /// WinForms выдаёт WFO1000 («свойство не настраивает сериализацию кода»), а
@@ -49,6 +69,21 @@ public class DarkFlatButton : Button
             Invalidate();
         }
     }
+
+    /// <summary>
+    /// Цвет выключенного текста, подобранный ПО ФОНУ кнопки.
+    ///
+    /// Цвет задаётся не свойством, а этим выбором, потому что одну и ту же кнопку
+    /// используют и с тёмным фоном диалога, и с оранжевым акцентом. Один
+    /// приглушённый серый на обоих не читается: на тёмном он верен, на оранжевом
+    /// превращается в «серый на жёлтом».
+    /// </summary>
+    internal Color DisabledTextFor(Color background) =>
+        Luma(background) > LightBackgroundLuma ? DarkDisabledTextColor : DisabledTextColor;
+
+    /// <summary>Яркость по BT.601 — та же формула, что у пробы контраста.</summary>
+    private static int Luma(Color color) =>
+        (299 * color.R + 587 * color.G + 114 * color.B) / 1000;
 
     protected override void OnPaint(PaintEventArgs e)
     {
@@ -78,7 +113,7 @@ public class DarkFlatButton : Button
             Text,
             Font,
             ClientRectangle,
-            DisabledTextColor,
+            DisabledTextFor(BackColor),
             TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter |
             TextFormatFlags.EndEllipsis | TextFormatFlags.NoPrefix);
     }

@@ -34,7 +34,6 @@ public sealed class WorldStore
 
     private readonly string _userRoot;
     private readonly bool _readOnly;
-    private readonly string _author;
     private readonly List<WorldRecord> _worlds = new();
 
     public WorldStore(string userRoot, string author, bool readOnly = false)
@@ -43,10 +42,20 @@ public sealed class WorldStore
             throw new ArgumentException("Корень пользовательских данных не задан.", nameof(userRoot));
 
         _userRoot = Path.GetFullPath(userRoot);
-        _author = author;
+        Author = author;
         _readOnly = readOnly;
         Reload();
     }
+
+    /// <summary>
+    /// Псевдоним, которым подписываются созданные и изменённые ресурсы.
+    ///
+    /// Свойство, а не только параметр конструктора: имя можно поменять в
+    /// настройках приложения на ходу. Пересоздавать стор ради этого нельзя —
+    /// вместе с ним терялось бы прочитанное состояние каталога, а каталог миров
+    /// главная форма держит именно здесь.
+    /// </summary>
+    public string Author { get; set; }
 
     public string UserRoot => _userRoot;
 
@@ -101,7 +110,7 @@ public sealed class WorldStore
             FullName: fullName,
             Description: description,
             Version: 1,
-            Metadata: new ResourceMetadata().WithCreated(_author, now),
+            Metadata: new ResourceMetadata().WithCreated(Author, now),
             LastCampaignId: WorldDefinitionRules.CommonCampaignIdValue);
 
         Directory.CreateDirectory(folder);
@@ -118,7 +127,7 @@ public sealed class WorldStore
             folder,
             ResourceNaming.ToFolderName(WorldDefinitionRules.CommonCampaignIdValue));
 
-        WorldContentSeeder.SeedCommonCampaign(campaignFolder, world.Id, _author, now);
+        WorldContentSeeder.SeedCommonCampaign(campaignFolder, world.Id, Author, now);
 
         AppLogger.Info("WorldStore: мир создан.",
             $"worldId={world.Id}; folder={folder}; commonCampaign={campaignFolder}");
@@ -373,7 +382,7 @@ public sealed class WorldStore
         var next = record.Definition with
         {
             Version = Math.Max(1, record.Definition.Version) + 1,
-            Metadata = (previous ?? new ResourceMetadata()).WithModified(_author, moment)
+            Metadata = (previous ?? new ResourceMetadata()).WithModified(Author, moment)
         };
 
         WriteWorld(record with { Definition = next });
@@ -418,7 +427,7 @@ public sealed class WorldStore
             ImageFile = string.IsNullOrWhiteSpace(imageFileName) ? null : imageFileName,
             Version = Math.Max(1, record.Definition.Version) + 1,
             Metadata = (record.Definition.Metadata ?? new ResourceMetadata())
-                .WithModified(_author, moment)
+                .WithModified(Author, moment)
         };
 
         // Файл мира лежит по имени ПАПКИ, поэтому переименование мира не двигает

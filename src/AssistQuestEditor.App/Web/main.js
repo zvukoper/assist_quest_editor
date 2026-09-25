@@ -19,6 +19,35 @@
   const settings = document.getElementById("settings");
   settings?.addEventListener("click", () => send({ action: "open_settings" }));
 
+  // --- Авторство ---
+  //
+  // Имя НЕ хранится в Web: псевдоним — часть настроек пользователя, и его
+  // единственный владелец — Host. Web только рисует присланное, поэтому шапка не
+  // может разойтись с тем именем, которым подписаны сохранённые ресурсы.
+  //
+  // Клик открывает НАСТРОЙКИ, а не отдельный диалог имени: имя меняется там же,
+  // где его объясняют, и настраивать его в двух местах было бы двумя правилами.
+  const authorChip = document.getElementById("authorChip");
+  authorChip?.addEventListener("click", () => send({ action: "open_settings" }));
+
+  function applyAuthor(data) {
+    const text = document.getElementById("authorChipText");
+    if (!authorChip || !text) return;
+
+    const name = typeof data?.name === "string" ? data.name.trim() : "";
+    const named = data?.named === true && name.length > 0;
+
+    // «Имени нет» — единственное состояние, которое выделяется акцентом:
+    // только оно требует действия от пользователя.
+    authorChip.classList.toggle("authorMissing", !named);
+    text.textContent = named
+      ? "Авторство: " + name
+      : "Авторство не указано (нажмите для настройки)";
+    authorChip.title = named
+      ? "Имя автора: " + name + ". Нажмите, чтобы изменить в настройках."
+      : "Имя не указано: изменения подписываются как «анонимно». Нажмите, чтобы указать имя.";
+  }
+
   const version = document.getElementById("version");
   const icon = version?.querySelector(".versionPushIcon");
 
@@ -50,6 +79,9 @@
     }
     if (data?.type === "world_selection") {
       applyWorldSelection(data);
+    }
+    if (data?.type === "author") {
+      applyAuthor(data);
     }
   };
 
@@ -217,6 +249,8 @@
 
   renderMenu();
   renderSelector();
+  // До первого сообщения Host подпись не должна выглядеть так, будто имя есть.
+  applyAuthor({ named: false });
 
   // Чип показывает не «открыто ли окно симулятора», а «идёт ли симуляция»:
   // окно живёт отдельно и может быть закрыто или свёрнуто.
