@@ -33,6 +33,7 @@ public sealed class SimulatorForm : WebViewForm
     private RouteCursor _routeCursor = RouteCursor.Initial;
     private string? _selectedRouteWaypointId;
     private bool _routeEnabled;
+    private bool _routeEditingEnabled;
     private DateTimeOffset? _routeMovementLastTick;
     private double _routeLastHeading;
     private int? _routeStoppedWaypointIndex;
@@ -144,6 +145,7 @@ public sealed class SimulatorForm : WebViewForm
         _routePlanner = new RoadRoutePlanner(_roads.Segments, junctions?.ToPoints() ?? Array.Empty<JunctionPoint>());
         _journalDetached = AppUiPreferencesStore.Load().JournalDetached;
         Opacity = 0;
+        GlobalHotKeyPressed += SimulatorForm_GlobalHotKeyPressed;
         _questGraph.Changed += QuestGraph_Changed;
         _runtime.Published += Runtime_Published;
         _runtimeTimer = new System.Windows.Forms.Timer { Interval = 250 };
@@ -192,6 +194,7 @@ public sealed class SimulatorForm : WebViewForm
 
             _runtimeTimer.Stop();
             _runtimeTimer.Dispose();
+            GlobalHotKeyPressed -= SimulatorForm_GlobalHotKeyPressed;
             _runtime.Published -= Runtime_Published;
             _questGraph.Changed -= QuestGraph_Changed;
             if (_hub.Events is EventChannel<SimulatorEvent> events)
@@ -392,6 +395,7 @@ public sealed class SimulatorForm : WebViewForm
         }
 
         _inventoryForm = new InventoryForm();
+        _inventoryForm.GlobalHotKeyPressed += SimulatorForm_GlobalHotKeyPressed;
         _inventoryForm.InventoryItemSeenRequested += InventoryForm_ItemSeenRequested;
         // Клавиша I и Escape внутри окна закрывают его: страница шлёт просьбу, а
         // закрывает Симулятор — он владеет ссылкой и после закрытия отвечает
@@ -399,6 +403,7 @@ public sealed class SimulatorForm : WebViewForm
         _inventoryForm.CloseRequested += (_, _) => CloseInventoryWindow();
         _inventoryForm.FormClosed += (_, _) =>
         {
+            _inventoryForm.GlobalHotKeyPressed -= SimulatorForm_GlobalHotKeyPressed;
             var resumeSimulation = _inventoryPausedSimulation;
             _inventoryPausedSimulation = false;
             _inventoryForm = null;
@@ -425,6 +430,37 @@ public sealed class SimulatorForm : WebViewForm
             return;
 
         _inventoryForm.Close();
+    }
+
+    private void SimulatorForm_GlobalHotKeyPressed(object? sender, WebViewHotKeyEventArgs e)
+    {
+        if (e.Key == Keys.I)
+        {
+            if (_inventoryForm is not null && !_inventoryForm.IsDisposed)
+                CloseInventoryWindow();
+            else
+                OpenInventoryWindow();
+
+            return;
+        }
+
+        if (e.Key != Keys.Escape)
+            return;
+
+        if (_inventoryForm is not null &&
+            !_inventoryForm.IsDisposed &&
+            ReferenceEquals(sender, _inventoryForm))
+        {
+            CloseInventoryWindow();
+            return;
+        }
+
+        if (sender is Form child &&
+            !ReferenceEquals(child, this) &&
+            !child.IsDisposed)
+        {
+            child.Close();
+        }
     }
 
     /// <summary>
@@ -497,6 +533,10 @@ public sealed class SimulatorForm : WebViewForm
 
                 case "route_toggle":
                     SetRouteEnabled(root.GetProperty("enabled").GetBoolean());
+                    break;
+
+                case "route_edit_toggle":
+                    SetRouteEditingEnabled(root.GetProperty("enabled").GetBoolean());
                     break;
 
                 case "route_clear":
@@ -798,6 +838,12 @@ public sealed class SimulatorForm : WebViewForm
             throw new InvalidOperationException(
                 "Координаты игрока нельзя менять во время движения по маршруту.");
 
+        var hadRouteProgress = _routeCursor.Initialized ||
+            _routeTargetWaypointIndex.HasValue ||
+            _routeStoppedWaypointIndex.HasValue;
+        var previousTravelRealSeconds = _routeTravelRealSeconds;
+        var previousTravelGameSeconds = _routeTravelGameSeconds;
+
         var old = _hub.Get<PlayerState>("player").Value;
         var position = new WorldCoordinate(
             Number(root, "x", old.Position.X),
@@ -809,7 +855,25 @@ public sealed class SimulatorForm : WebViewForm
             "Редактор игрока");
 
         if (_routeState.Waypoints.Count > 0)
+        {
             RebuildRoute("player position changed");
+
+            if (hadRouteProgress && _routePlan.IsUsable && _routeState.Waypoints.Count > 1)
+            {
+                _routeCursor = RouteMovementEngine.ProjectForwardCursor(
+                    _routePlan,
+                    position,
+                    _routeCursor);
+
+                _routeTargetWaypointIndex = GetTargetWaypointIndex(_routeCursor);
+                _routeStoppedWaypointIndex = null;
+                _resumeRouteAfterStop = false;
+                _routeLastHeading = _routeCursor.LastHeadingDegrees;
+            }
+
+            _routeTravelRealSeconds = previousTravelRealSeconds;
+            _routeTravelGameSeconds = previousTravelGameSeconds;
+        }
 
         if (_runtime.State.Status == QuestRuntimeStatus.Waiting)
         {
@@ -842,9 +906,6 @@ public sealed class SimulatorForm : WebViewForm
 
     private void AddRouteWaypoint(JsonElement root)
     {
-        if (!_routeEnabled)
-            return;
-
         EnsureRouteEditingAllowed();
 
         var position = new WorldCoordinate(
@@ -1011,9 +1072,25 @@ public sealed class SimulatorForm : WebViewForm
 
     private void SetRouteDefaultSpeed(double speed)
     {
+        EnsureRouteEditingAllowed();
         _routeState = _routeState.WithDefaultSpeed(speed);
         PersistSession("автосохранение: route default speed changed", force: true);
         PushRouteSnapshot();
+    }
+
+    private void SetRouteEditingEnabled(bool enabled)
+    {
+        if (enabled && (_runtime.SimulationRunning || _runtime.IsPaused))
+        {
+            throw new InvalidOperationException(
+                "Для редактирования маршрута нужно выключить симуляцию.");
+        }
+
+        _routeEditingEnabled = enabled;
+        AppLogger.Info(
+            "SimulatorForm: режим редактирования маршрута изменён.",
+            $"enabled={enabled}");
+        RequestSnapshot("route editing " + (enabled ? "enabled" : "disabled"));
     }
 
     private void SetRouteEnabled(bool enabled)
@@ -1103,10 +1180,16 @@ public sealed class SimulatorForm : WebViewForm
 
     private void EnsureRouteEditingAllowed()
     {
-        if (_runtime.SimulationRunning)
+        if (_runtime.SimulationRunning || _runtime.IsPaused)
         {
             throw new InvalidOperationException(
-                "Маршрут можно изменять только при остановленной или приостановленной симуляции.");
+                "Для редактирования маршрута нужно выключить симуляцию.");
+        }
+
+        if (!_routeEditingEnabled)
+        {
+            throw new InvalidOperationException(
+                "Включите «Редактирование» в разделе «Движение по маршруту».");
         }
     }
 
@@ -1338,7 +1421,8 @@ public sealed class SimulatorForm : WebViewForm
             ? runtime.TravelGameSeconds
             : 0d;
 
-        _routeEnabled = false;
+        _routeEnabled = runtime?.Enabled ?? false;
+        _routeEditingEnabled = false;
         _routeMovementLastTick = null;
     }
 
@@ -1468,6 +1552,7 @@ public sealed class SimulatorForm : WebViewForm
         }
 
         _campaignsForm = new CampaignsForm();
+        _campaignsForm.GlobalHotKeyPressed += SimulatorForm_GlobalHotKeyPressed;
         // Мир ставится ДО каталога: окно строит раздел мира первым, и без него
         // заголовок и кнопка «ПАПКА» ссылались бы в никуда.
         _campaignsForm.SetWorld(_world);
@@ -1493,6 +1578,7 @@ public sealed class SimulatorForm : WebViewForm
         _campaignsForm.ImportArchiveRequested += (_, _) => ImportArchiveRequested?.Invoke(this, EventArgs.Empty);
         _campaignsForm.FormClosed += (_, _) =>
         {
+            _campaignsForm.GlobalHotKeyPressed -= SimulatorForm_GlobalHotKeyPressed;
             _campaignsForm = null;
             // Окно закрыли: выделение остаётся, но подсвечивать больше нечего.
             RequestSnapshot("campaign window closed");
@@ -2222,9 +2308,14 @@ public sealed class SimulatorForm : WebViewForm
         }
 
         _journalForm = new JournalForm();
+        _journalForm.GlobalHotKeyPressed += SimulatorForm_GlobalHotKeyPressed;
         _journalForm.SetEntries(_journalEntries);
         _journalForm.ReturnToSidebarRequested += JournalForm_ReturnToSidebarRequested;
-        _journalForm.FormClosed += (_, _) => _journalForm = null;
+        _journalForm.FormClosed += (_, _) =>
+        {
+            _journalForm!.GlobalHotKeyPressed -= SimulatorForm_GlobalHotKeyPressed;
+            _journalForm = null;
+        };
         _journalForm.Show(this);
         QuestLogger.Info("Journal: native окно показано.", QuestLogger.Json(new { entryCount = _journalEntries.Count }));
     }
@@ -2901,6 +2992,8 @@ public sealed class SimulatorForm : WebViewForm
                 cumulative.Length == 0 ? 0d : cumulative[^1],
             distanceFromFirstWaypointMeters =
                 Math.Max(0d, currentDistance),
+            editing = _routeEditingEnabled,
+            editingAllowed = !_runtime.SimulationRunning && !_runtime.IsPaused,
             waypoints,
             legs = _routePlan.Legs.Select(leg => new
             {
@@ -3041,7 +3134,8 @@ public sealed class SimulatorForm : WebViewForm
                 _routeCursor,
                 _routeTargetWaypointIndex,
                 _routeTravelRealSeconds,
-                _routeTravelGameSeconds));
+                _routeTravelGameSeconds,
+                Enabled: _routeEnabled));
 
     /// <summary>
     /// Запускает режим прохождения.
