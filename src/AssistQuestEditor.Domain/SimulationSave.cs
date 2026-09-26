@@ -43,7 +43,7 @@ public sealed record SimulationSaveState(
     public DynamicEventRuntimeState DynamicEvents { get; init; } = DynamicEventRuntimeState.Empty;
 
     /// <summary>Текущая версия формата.</summary>
-    public const int CurrentFormatVersion = 5;
+    public const int CurrentFormatVersion = 6;
 
     /// <summary>Пользовательский маршрут Симулятора.</summary>
     public RouteState Route { get; init; } = RouteState.Empty;
@@ -57,7 +57,8 @@ public sealed record RouteRuntimeState(
     RouteCursor Cursor,
     int? CurrentTargetWaypointIndex = null,
     double TravelRealSeconds = 0d,
-    double TravelGameSeconds = 0d)
+    double TravelGameSeconds = 0d,
+    bool Enabled = false)
 {
     public static RouteRuntimeState Empty => new(RouteCursor.Initial);
 }
