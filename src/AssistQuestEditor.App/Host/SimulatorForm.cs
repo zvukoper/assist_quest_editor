@@ -1736,6 +1736,7 @@ public sealed class SimulatorForm : WebViewForm
 
         var current = _hub.Get<PlayerState>("player").Value;
         var previousTarget = _routeTargetWaypointIndex;
+        var previousCursor = _routeCursor;
         var cursor = _resumeRouteAfterStop
             ? _routeCursor with { ResumeAfterStop = true }
             : _routeCursor;
@@ -1777,7 +1778,7 @@ public sealed class SimulatorForm : WebViewForm
         }
 
         if (result.Cursor.Initialized &&
-            (!_routeCursor.Initialized || result.Cursor.LegIndex != _routeCursor.LegIndex) &&
+            result.Cursor.LegIndex != previousCursor.LegIndex &&
             IsRouteLegOffRoad(result.Cursor.LegIndex))
         {
             AppendJournal(
