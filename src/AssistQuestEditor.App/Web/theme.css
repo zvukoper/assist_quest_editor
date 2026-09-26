@@ -418,6 +418,13 @@ input,select,textarea{padding:4px 5px;border-radius:4px;font-size:10px}textarea{
   display:inline-flex;align-items:center;justify-content:center;
   font-size:15px;line-height:1;
 }
+.simTransportButton.paused{
+  animation:simPlayPausePulse 1000ms ease-in-out infinite;
+}
+@keyframes simPlayPausePulse{
+  0%,100%{box-shadow:0 0 0 rgba(250,176,3,0);border-color:var(--border)}
+  50%{box-shadow:0 0 0 2px rgba(250,176,3,.55),0 0 18px rgba(250,176,3,.34);border-color:var(--accent)}
+}
 
 /* Плашка статуса симуляции. Цвет задаётся атрибутом data-sim-state, поэтому
    ни одно из трёх состояний не «забывается» при правке JS.
@@ -1302,7 +1309,7 @@ input,select,textarea{padding:4px 5px;border-radius:4px;font-size:10px}textarea{
 /* Simulator route mode */
 .routeControls{
   display:grid;
-  grid-template-columns:minmax(0,1fr) 88px 28px;
+  grid-template-columns:minmax(0,1fr) minmax(0,1fr) 58px;
   gap:6px;
   align-items:center;
   margin-top:7px;
@@ -1321,7 +1328,7 @@ input,select,textarea{padding:4px 5px;border-radius:4px;font-size:10px}textarea{
   background:var(--accent);
   border-color:var(--accent);
   color:#1b1b1b;
-  font-weight:800;
+  font-weight:400;
 }
 .routeToggleButton.active:hover{background:var(--accent-2);color:#fff}
 .routeToggleButton.plannedStopPulse{
@@ -1342,7 +1349,7 @@ input,select,textarea{padding:4px 5px;border-radius:4px;font-size:10px}textarea{
   min-width:0;
   color:var(--text);
   font-size:10px;
-  font-weight:800;
+  font-weight:400;
   white-space:nowrap;
   overflow:hidden;
   text-overflow:ellipsis;
@@ -1373,12 +1380,20 @@ input,select,textarea{padding:4px 5px;border-radius:4px;font-size:10px}textarea{
   font-variant-numeric:tabular-nums;
 }
 .routeClearButton{
-  width:28px;
-  height:28px;
+  min-width:58px;
+  height:30px;
   padding:0;
   border-color:var(--border);
   font-size:15px;
   line-height:1;
+}
+.routeEditToggleWrap{
+  min-width:0;
+  display:block;
+}
+.routeEditToggleWrap .routeToggleButton{
+  width:100%;
+  text-align:center;
 }
 .routeSelectionHint{
   color:var(--muted);
@@ -1407,6 +1422,13 @@ input,select,textarea{padding:4px 5px;border-radius:4px;font-size:10px}textarea{
   pointer-events:none;
 }
 .routeSpeedometer[hidden]{display:none!important}
+.routeSpeedometer.pausedPulse{
+  animation:routePausedSpeedometerPulse 1000ms ease-in-out infinite;
+}
+@keyframes routePausedSpeedometerPulse{
+  0%,100%{box-shadow:0 4px 18px rgba(0,0,0,.42),0 0 0 rgba(250,176,3,0);border-color:rgba(255,255,255,.18)}
+  50%{box-shadow:0 4px 18px rgba(0,0,0,.42),0 0 22px rgba(250,176,3,.42);border-color:rgba(250,176,3,.82)}
+}
 
 /* Unified player window */
 .playerInfoPanel{background:var(--panel-deep)}
