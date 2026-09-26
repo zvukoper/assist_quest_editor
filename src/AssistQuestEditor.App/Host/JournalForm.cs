@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.Json;
 using System.Text.Encodings.Web;
 
@@ -7,7 +8,8 @@ public sealed record SimulatorJournalEntry(
     string EventType,
     DateTimeOffset Timestamp,
     string Source,
-    string Message);
+    string Message,
+    WorldCoordinate? Coordinate = null);
 
 public sealed class JournalForm : Form
 {
@@ -18,6 +20,7 @@ public sealed class JournalForm : Form
 
     private readonly RichTextBox _log;
     private readonly Button _returnButton;
+    private readonly List<(int Start, int Length, WorldCoordinate Coordinate)> _coordinateLinks = new();
 
     public JournalForm()
     {
@@ -83,12 +86,15 @@ public sealed class JournalForm : Form
             ScrollBars = RichTextBoxScrollBars.Vertical,
             Padding = new Padding(6)
         };
+        _log.MouseMove += JournalLog_MouseMove;
+        _log.MouseClick += JournalLog_MouseClick;
 
         Controls.Add(_log);
         Controls.Add(toolbar);
     }
 
     public event EventHandler? ReturnToSidebarRequested;
+    public event Action<WorldCoordinate>? CoordinateClicked;
 
     /// <summary>
     /// Нажатие общей клавиши симулятора.
@@ -114,6 +120,7 @@ public sealed class JournalForm : Form
     {
         _log.SuspendLayout();
         _log.Clear();
+        _coordinateLinks.Clear();
 
         foreach (var entry in entries)
         {
@@ -129,13 +136,29 @@ public sealed class JournalForm : Form
 
             _log.SelectionStart = _log.TextLength;
             _log.SelectionLength = 0;
-            _log.SelectionColor = EventColor(entry.EventType);
+            _log.SelectionColor = EventColor(entry);
             _log.AppendText(entry.EventType);
 
             _log.SelectionStart = _log.TextLength;
             _log.SelectionLength = 0;
             _log.SelectionColor = Color.FromArgb(205, 215, 225);
-            _log.AppendText("  [" + source + "]" + detail + Environment.NewLine);
+            _log.AppendText("  [" + source + "]" + detail);
+
+            if (entry.Coordinate is { } coordinate)
+            {
+                _log.AppendText("  · ");
+                var start = _log.TextLength;
+                _log.SelectionStart = start;
+                _log.SelectionLength = 0;
+                _log.SelectionColor = Color.FromArgb(110, 170, 255);
+                _log.SelectionFont = new Font(_log.Font, FontStyle.Underline);
+                var coordinateText = FormatCoordinate(coordinate);
+                _log.AppendText(coordinateText);
+                _coordinateLinks.Add((start, coordinateText.Length, coordinate));
+                _log.SelectionFont = _log.Font;
+            }
+
+            _log.AppendText(Environment.NewLine);
         }
 
         _log.SelectionStart = 0;
@@ -143,9 +166,12 @@ public sealed class JournalForm : Form
         _log.ResumeLayout();
     }
 
-    private static Color EventColor(string eventType)
+    private static Color EventColor(SimulatorJournalEntry entry)
     {
-        return eventType.ToLowerInvariant() switch
+        if (entry.Source.Equals("Движение по маршруту", StringComparison.OrdinalIgnoreCase))
+            return Color.FromArgb(110, 165, 245);
+
+        return entry.EventType.ToLowerInvariant() switch
         {
             "runtimestarted" or "questcompleted" => Color.FromArgb(110, 230, 150),
             "runtimewaiting" => Color.FromArgb(250, 176, 3),
@@ -157,6 +183,33 @@ public sealed class JournalForm : Form
             _ => Color.FromArgb(205, 215, 225)
         };
     }
+
+    private void JournalLog_MouseMove(object? sender, MouseEventArgs e)
+    {
+        var index = _log.GetCharIndexFromPosition(e.Location);
+        _log.Cursor = _coordinateLinks.Any(link =>
+            index >= link.Start && index < link.Start + link.Length)
+            ? Cursors.Hand
+            : Cursors.Default;
+    }
+
+    private void JournalLog_MouseClick(object? sender, MouseEventArgs e)
+    {
+        if (e.Button != MouseButtons.Left)
+            return;
+
+        var index = _log.GetCharIndexFromPosition(e.Location);
+        var link = _coordinateLinks.FirstOrDefault(item =>
+            index >= item.Start && index < item.Start + item.Length);
+
+        if (link.Length > 0)
+            CoordinateClicked?.Invoke(link.Coordinate);
+    }
+
+    private static string FormatCoordinate(WorldCoordinate coordinate) =>
+        string.Create(
+            CultureInfo.InvariantCulture,
+            $"X {coordinate.X:0.###} · Y {coordinate.Y:0.###} · Z {coordinate.Z:0.###}");
 
     private static string FormatMessage(string message)
     {
