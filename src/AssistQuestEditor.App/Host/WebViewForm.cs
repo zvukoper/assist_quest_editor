@@ -102,6 +102,25 @@ public abstract class WebViewForm : Form
     {
     }
 
+    public event EventHandler<WebViewHotKeyEventArgs>? GlobalHotKeyPressed;
+
+    /// <summary>
+    /// Общие клавиши Simulator обрабатываются до DOM WebView2. Поэтому I и Escape
+    /// одинаково работают в карте и во всех дочерних WebView-окнах.
+    /// </summary>
+    protected override bool ProcessCmdKey(ref Message msg, Keys keyData)
+    {
+        var key = keyData & Keys.KeyCode;
+
+        if (key == Keys.I || key == Keys.Escape)
+        {
+            GlobalHotKeyPressed?.Invoke(this, new WebViewHotKeyEventArgs(key));
+            return true;
+        }
+
+        return base.ProcessCmdKey(ref msg, keyData);
+    }
+
     protected virtual void OnWebMessage(string json)
     {
     }
@@ -236,4 +255,10 @@ public abstract class WebViewForm : Form
         Controls.Add(panel);
         panel.BringToFront();
     }
+}
+
+public sealed class WebViewHotKeyEventArgs : EventArgs
+{
+    public WebViewHotKeyEventArgs(Keys key) => Key = key;
+    public Keys Key { get; }
 }
