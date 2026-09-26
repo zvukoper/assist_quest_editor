@@ -102,6 +102,96 @@ public sealed class RouteTests
     }
 
     [Fact]
+    public void ManualProjectionChoosesNextWaypointOnCurrentSegment()
+    {
+        var plan = new RoutePlan(
+            new[]
+            {
+                new RouteLeg(-1, 0,
+                    new[]
+                    {
+                        new WorldCoordinate(0, 0, 0),
+                        new WorldCoordinate(10, 0, 0)
+                    }, 10),
+                new RouteLeg(0, 1,
+                    new[]
+                    {
+                        new WorldCoordinate(10, 0, 0),
+                        new WorldCoordinate(100, 0, 0)
+                    }, 90),
+                new RouteLeg(1, 2,
+                    new[]
+                    {
+                        new WorldCoordinate(100, 0, 0),
+                        new WorldCoordinate(200, 0, 0)
+                    }, 90),
+                new RouteLeg(2, 3,
+                    new[]
+                    {
+                        new WorldCoordinate(200, 0, 0),
+                        new WorldCoordinate(300, 0, 0)
+                    }, 90)
+            },
+            Array.Empty<string>());
+
+        var cursor = RouteMovementEngine.ProjectForwardCursor(
+            plan,
+            new WorldCoordinate(145, 0, 0),
+            new RouteCursor(true, 2, 0, 15, false, null, 0));
+
+        Assert.Equal(2, cursor.LegIndex);
+        Assert.Equal(45, cursor.SegmentProgressMeters, 6);
+
+        var route = new RouteState(90, new[]
+        {
+            new RouteWaypoint("1", new WorldCoordinate(10, 0, 0), 90),
+            new RouteWaypoint("2", new WorldCoordinate(100, 0, 0), 90),
+            new RouteWaypoint("3", new WorldCoordinate(200, 0, 0), 90),
+            new RouteWaypoint("4", new WorldCoordinate(300, 0, 0), 90)
+        });
+
+        var result = RouteMovementEngine.Advance(
+            route,
+            plan,
+            cursor,
+            new WorldCoordinate(145, 0, 0),
+            1);
+
+        Assert.Equal(170, result.Position.X, 6);
+        Assert.Equal(90, result.SpeedKmh, 6);
+    }
+
+    [Fact]
+    public void ManualProjectionPrefersFollowingLegAtSharedWaypoint()
+    {
+        var plan = new RoutePlan(
+            new[]
+            {
+                new RouteLeg(0, 1,
+                    new[]
+                    {
+                        new WorldCoordinate(0, 0, 0),
+                        new WorldCoordinate(100, 0, 0)
+                    }, 100),
+                new RouteLeg(1, 2,
+                    new[]
+                    {
+                        new WorldCoordinate(100, 0, 0),
+                        new WorldCoordinate(200, 0, 0)
+                    }, 100)
+            },
+            Array.Empty<string>());
+
+        var cursor = RouteMovementEngine.ProjectForwardCursor(
+            plan,
+            new WorldCoordinate(100, 0, 0),
+            RouteCursor.Initial);
+
+        Assert.Equal(1, cursor.LegIndex);
+        Assert.Equal(0, cursor.SegmentProgressMeters, 6);
+    }
+
+    [Fact]
     public void RoutePlannerExplainsWhenWaypointIsTooFarFromRoad()
     {
         var planner = new RoadRoutePlanner(new[]
