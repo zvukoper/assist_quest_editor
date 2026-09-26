@@ -41,6 +41,9 @@ public sealed class SimulatorForm : WebViewForm
     private int? _routeTargetWaypointIndex;
     private double _routeTravelRealSeconds;
     private double _routeTravelGameSeconds;
+    private bool _routePlanNeedsRebuildFromCurrentPlayer;
+    private DateTimeOffset? _conditionsLastRealTick;
+    private TimeSpan? _conditionsLastGameElapsed;
     private bool _inventoryPausedSimulation;
 
     /// <summary>
@@ -161,6 +164,7 @@ public sealed class SimulatorForm : WebViewForm
             UpdateRouteMovement();
             _runtime.Tick();
             _dynamicEventDispatcher.Tick();
+            UpdatePlayerConditions();
         };
         _runtimeTimer.Start();
 
@@ -333,6 +337,7 @@ public sealed class SimulatorForm : WebViewForm
             type = "snapshot",
             version = VersionInfo.InformationalVersion,
             snapshot,
+            journal = _journalEntries.ToArray(),
             itemCatalog = ItemCatalogFactory.CreateStarter(),
             // Каталог НПЦ нужен UI, чтобы показать имя и портрет рядом с числом
             // репутации: сама репутация хранится только по стабильному Id.
@@ -556,6 +561,14 @@ public sealed class SimulatorForm : WebViewForm
                     ClearRoute();
                     break;
 
+                case "route_save_file":
+                    SaveRouteToFile();
+                    break;
+
+                case "route_load_file":
+                    LoadRouteFromFileDialog();
+                    break;
+
                 case "select_point":
                     SelectPoint(root);
                     break;
@@ -572,6 +585,10 @@ public sealed class SimulatorForm : WebViewForm
 
                 case "create_temporary_point":
                     CreateTemporaryPoint(root);
+                    break;
+
+                case "focus_journal_coordinate":
+                    FocusJournalCoordinate(root);
                     break;
 
                 case "set_fact":
@@ -1194,6 +1211,12 @@ public sealed class SimulatorForm : WebViewForm
             return;
         }
 
+        if (_routePlanNeedsRebuildFromCurrentPlayer)
+        {
+            RebuildRoute("route movement started after route file load", publishSnapshot: false);
+            _routePlanNeedsRebuildFromCurrentPlayer = false;
+        }
+
         var resumed = false;
         if (_routeStoppedWaypointIndex is int stopped &&
             stopped < _routeState.Waypoints.Count - 1)
@@ -1203,6 +1226,7 @@ public sealed class SimulatorForm : WebViewForm
                 stopped,
                 _routeLastHeading);
             _routeTargetWaypointIndex = stopped + 1;
+            _routeStoppedWaypointIndex = null;
             _resumeRouteAfterStop = true;
             resumed = true;
         }
@@ -1509,6 +1533,30 @@ public sealed class SimulatorForm : WebViewForm
 
         _routeTargetWaypointIndex = GetTargetWaypointIndex(result.Cursor);
 
+        if (current.SpeedKmh > 0.001d &&
+            result.SpeedKmh > 0.001d &&
+            Math.Abs(current.SpeedKmh - result.SpeedKmh) > 0.001d)
+        {
+            AppendJournal(
+                "RouteSpeedChanged",
+                DateTimeOffset.UtcNow,
+                "Движение по маршруту",
+                $"Изменение скорости: {current.SpeedKmh:0.#} → {result.SpeedKmh:0.#} км/ч.",
+                result.Position);
+        }
+
+        if (result.Cursor.Initialized &&
+            (!_routeCursor.Initialized || result.Cursor.LegIndex != _routeCursor.LegIndex) &&
+            IsRouteLegOffRoad(result.Cursor.LegIndex))
+        {
+            AppendJournal(
+                "RouteOffRoadStarted",
+                DateTimeOffset.UtcNow,
+                "Движение по маршруту",
+                "Начато движение по бездорожью.",
+                result.Position);
+        }
+
         if (_routeTargetWaypointIndex is int target &&
             previousTarget is int previous &&
             target > previous)
@@ -1519,7 +1567,8 @@ public sealed class SimulatorForm : WebViewForm
                     "RouteWaypointPassed",
                     DateTimeOffset.UtcNow,
                     "Движение по маршруту",
-                    $"Пройдена точка №{passed + 1}. Направляемся к следующей точке №{passed + 2}.");
+                    $"Пройдена точка №{passed + 1}. Направляемся к следующей точке №{passed + 2}.",
+                    result.Position);
             }
         }
 
@@ -1548,18 +1597,32 @@ public sealed class SimulatorForm : WebViewForm
             if (result.StoppedAtWaypoint)
             {
                 _routeStoppedWaypointIndex = result.Cursor.StoppedAtWaypointIndex;
-                _resumeRouteAfterStop = true;
-                _routeTargetWaypointIndex =
-                    _routeStoppedWaypointIndex is int stopped &&
-                    stopped < _routeState.Waypoints.Count - 1
-                        ? stopped + 1
-                        : GetTargetWaypointIndex(result.Cursor);
+                _resumeRouteAfterStop = false;
+                _routeTargetWaypointIndex = _routeStoppedWaypointIndex;
+
+                var stoppedIndex = _routeStoppedWaypointIndex.GetValueOrDefault();
+                AppendJournal(
+                    "RouteMovementStopped",
+                    DateTimeOffset.UtcNow,
+                    "Движение по маршруту",
+                    $"Остановка на точке №{stoppedIndex + 1}. Движение по маршруту выключено.",
+                    result.Position);
+
+                _routeEnabled = false;
+                SetPlayerMovementIdle();
             }
             else if (result.Completed)
             {
                 _routeStoppedWaypointIndex = _routeState.Waypoints.Count - 1;
                 _resumeRouteAfterStop = false;
                 _routeTargetWaypointIndex = null;
+
+                AppendJournal(
+                    "RouteMovementCompleted",
+                    DateTimeOffset.UtcNow,
+                    "Движение по маршруту",
+                    "Завершение маршрута.",
+                    result.Position);
 
                 PostJson(JsonSerializer.Serialize(new
                 {
@@ -1588,6 +1651,17 @@ public sealed class SimulatorForm : WebViewForm
         }
     }
 
+    private bool IsRouteLegOffRoad(int legIndex)
+    {
+        if (legIndex < 0 || legIndex >= _routePlan.Legs.Count)
+            return false;
+
+        var end = _routePlan.Legs[legIndex].EndWaypointIndex;
+        return end >= 0 &&
+               end < _routeState.Waypoints.Count &&
+               _routeState.Waypoints[end].IsOffRoad;
+    }
+
     private void SetPlayerMovementIdle()
     {
         var current = _hub.Get<PlayerState>("player").Value;
@@ -1606,6 +1680,8 @@ public sealed class SimulatorForm : WebViewForm
         }
 
         _routeMovementLastTick = null;
+        _conditionsLastRealTick = null;
+        _conditionsLastGameElapsed = null;
     }
 
     private void SetRouteAfterSimulationStateChange()
@@ -1749,6 +1825,65 @@ public sealed class SimulatorForm : WebViewForm
         }
 
         _routeMovementLastTick = null;
+    }
+
+    private void UpdatePlayerConditions()
+    {
+        if (!_runtime.SimulationRunning || _runtime.IsPaused)
+        {
+            _conditionsLastRealTick = null;
+            _conditionsLastGameElapsed = null;
+            return;
+        }
+
+        var now = DateTimeOffset.UtcNow;
+        var clock = _hub.Get<WorldClockState>("sim-time").Value;
+
+        if (_conditionsLastRealTick is null || _conditionsLastGameElapsed is null)
+        {
+            _conditionsLastRealTick = now;
+            _conditionsLastGameElapsed = clock.Elapsed;
+            return;
+        }
+
+        var realSeconds = Math.Max(0d, (now - _conditionsLastRealTick.Value).TotalSeconds);
+        var gameSeconds = Math.Max(0d, (clock.Elapsed - _conditionsLastGameElapsed.Value).TotalSeconds);
+
+        _conditionsLastRealTick = now;
+        _conditionsLastGameElapsed = clock.Elapsed;
+
+        if (realSeconds <= 0d && gameSeconds <= 0d)
+            return;
+
+        var moving = _hub.Get<PlayerState>("player").Value.SpeedKmh > 0.001d;
+        var currentVitals = _hub.Get<PlayerVitalsState>("player-vitals").Value;
+        var currentConditions = _hub.Get<PlayerConditionState>("player-conditions").Value;
+
+        var update = PlayerConditionEngine.Advance(
+            currentVitals,
+            currentConditions,
+            gameSeconds,
+            realSeconds,
+            moving,
+            sleeping: false);
+
+        if (Equals(update.Vitals, currentVitals) && Equals(update.Conditions, currentConditions))
+            return;
+
+        _hub.Get<PlayerVitalsState>("player-vitals").Set(update.Vitals, "Состояние игрока");
+        _hub.Get<PlayerConditionState>("player-conditions").Set(update.Conditions, "Состояние игрока");
+
+        if (update.Events.Any(item => item.Kind.Equals("BurnoutApplied", StringComparison.OrdinalIgnoreCase)))
+        {
+            AppendJournal(
+                "BurnoutApplied",
+                DateTimeOffset.UtcNow,
+                "Состояние игрока",
+                "Получен дебафф «Выгорание».",
+                _hub.Get<PlayerState>("player").Value.Position);
+        }
+
+        RequestSnapshot("player conditions updated");
     }
 
     private bool IsRouteCursorUsable(RouteCursor cursor)
@@ -2656,9 +2791,17 @@ public sealed class SimulatorForm : WebViewForm
         ReturnJournalToSidebar();
     }
 
-    private void AppendJournal(string eventType, DateTimeOffset timestamp, string source, string message)
+    private void AppendJournal(
+        string eventType,
+        DateTimeOffset timestamp,
+        string source,
+        string message,
+        WorldCoordinate? coordinate = null)
     {
-        _journalEntries.Insert(0, new SimulatorJournalEntry(eventType, timestamp, source, message));
+        coordinate ??= _hub.Get<PlayerState>("player").Value.Position;
+        _journalEntries.Insert(
+            0,
+            new SimulatorJournalEntry(eventType, timestamp, source, message, coordinate));
         if (_journalEntries.Count > 250)
         {
             _journalEntries.RemoveRange(250, _journalEntries.Count - 250);
@@ -2670,9 +2813,19 @@ public sealed class SimulatorForm : WebViewForm
             timestamp,
             source,
             message,
+            coordinate,
             entryCount = _journalEntries.Count,
             detached = _journalDetached
         }));
+
+        if (Browser.CoreWebView2 is not null && IsHandleCreated && !IsDisposed)
+        {
+            PostJson(JsonSerializer.Serialize(new
+            {
+                type = "journal_entry",
+                entry = _journalEntries[0]
+            }, SnapshotJsonOptions));
+        }
 
         RequestJournalRefresh();
     }
@@ -2768,14 +2921,17 @@ public sealed class SimulatorForm : WebViewForm
                 e.Payload.Count == 0 ? string.Empty : QuestLogger.Json(e.Payload));
         }
 
-        QuestLogger.Info("Simulator: событие опубликовано.", QuestLogger.Json(new
+        if (!routePlayerChannelChange)
         {
-            eventType = e.EventType,
-            timestamp = e.Timestamp,
-            source = e.Source,
-            payload = e.Payload,
-            runtimeState = _runtime.State
-        }));
+            QuestLogger.Info("Simulator: событие опубликовано.", QuestLogger.Json(new
+            {
+                eventType = e.EventType,
+                timestamp = e.Timestamp,
+                source = e.Source,
+                payload = e.Payload,
+                runtimeState = _runtime.State
+            }));
+        }
 
         AppLogger.Info(
             "Simulator: событие опубликовано.",
@@ -3235,7 +3391,8 @@ public sealed class SimulatorForm : WebViewForm
             $"{GetTotalRouteDistanceMeters():0.#} м; скорость по умолчанию: " +
             $"{_routeState.DefaultSpeedKmh:0.#} км/ч; осталось {remainingDistance:0.#} м; " +
             $"время до конца: {FormatRouteDuration(remainingGame)} игрового / " +
-            $"{FormatRouteDuration(remainingReal)} реального; текущая цель — {target}.");
+            $"{FormatRouteDuration(remainingReal)} реального; текущая цель — {target}.",
+            _hub.Get<PlayerState>("player").Value.Position);
     }
 
     private void PushRouteSnapshot()
