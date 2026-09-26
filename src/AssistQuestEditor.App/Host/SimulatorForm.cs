@@ -591,6 +591,14 @@ public sealed class SimulatorForm : WebViewForm
                     FocusJournalCoordinate(root);
                     break;
 
+                case "sleep_field":
+                    SleepPlayer(fullSleep: false);
+                    break;
+
+                case "sleep_full":
+                    SleepPlayer(fullSleep: true);
+                    break;
+
                 case "set_fact":
                     SetFact(root);
                     break;
@@ -2667,6 +2675,53 @@ public sealed class SimulatorForm : WebViewForm
                 HornPressed = root.TryGetProperty("horn", out var horn) ? horn.GetBoolean() : old.HornPressed
             },
             "Редактор телеметрии");
+    }
+
+    private void SleepPlayer(bool fullSleep)
+    {
+        if (_routeEnabled)
+        {
+            PostSaveError("Перед сном выключите «Движение по маршруту».");
+            return;
+        }
+
+        var hours = fullSleep ? 4 : 6;
+        var currentVitals = _hub.Get<PlayerVitalsState>("player-vitals").Value;
+        var currentConditions = _hub.Get<PlayerConditionState>("player-conditions").Value;
+
+        var update = PlayerConditionEngine.Sleep(
+            currentVitals,
+            currentConditions,
+            hours,
+            fullSleep);
+
+        _hub.Get<PlayerVitalsState>("player-vitals").Set(
+            update.Vitals,
+            fullSleep ? "Полноценный сон" : "Полевой сон");
+        _hub.Get<PlayerConditionState>("player-conditions").Set(
+            update.Conditions,
+            fullSleep ? "Полноценный сон" : "Полевой сон");
+
+        var clockChannel = _hub.Get<WorldClockState>("sim-time");
+        var clock = clockChannel.Value;
+        var nextElapsed = clock.Elapsed + TimeSpan.FromHours(hours);
+        clockChannel.Set(
+            clock with { Elapsed = nextElapsed },
+            fullSleep ? "Полноценный сон" : "Полевой сон");
+
+        AppendJournal(
+            fullSleep ? "FullSleep" : "FieldSleep",
+            DateTimeOffset.UtcNow,
+            "Состояние игрока",
+            fullSleep
+                ? "Полноценный сон: 4 игровых часа."
+                : "Полевой сон: 6 игровых часов.");
+
+        _conditionsLastRealTick = DateTimeOffset.UtcNow;
+        _conditionsLastGameElapsed = nextElapsed;
+
+        PersistSession("автосохранение: сон", force: true);
+        RequestSnapshot("player sleep");
     }
 
     private void SetEnvironment(JsonElement root)

@@ -201,7 +201,7 @@ public static class PlayerConditionEngine
             state = update.Conditions;
             events.AddRange(update.Events);
 
-            if (!fullSleep && hour == 0)
+            if (hour == 0)
             {
                 state = AddOrReplaceEffect(
                     state,
