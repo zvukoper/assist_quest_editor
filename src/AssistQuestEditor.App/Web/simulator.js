@@ -4669,7 +4669,36 @@
         }
       }
 
-      panning = true;
+      if (route.enabled && simulationRunning) {
+        hideMapContextMenu();
+        event.preventDefault();
+        return;
+      }
+
+      routeRightClickCandidate = {
+        ...screenToWorld(pos.x, pos.y),
+        y: snapshot?.player?.position?.y ?? 0
+      };
+
+      const menu = document.getElementById("mapContextMenu");
+      if (menu) {
+        menu.hidden = false;
+        const parent = map.parentElement;
+        const menuWidth = menu.offsetWidth || 190;
+        const menuHeight = menu.offsetHeight || 32;
+        const parentWidth = parent?.clientWidth || map.clientWidth;
+        const parentHeight = parent?.clientHeight || map.clientHeight;
+        menu.style.left = Math.max(4, Math.min(
+          parentWidth - menuWidth - 4,
+          pos.x)) + "px";
+        menu.style.top = Math.max(4, Math.min(
+          parentHeight - menuHeight - 4,
+          pos.y)) + "px";
+      }
+
+      event.preventDefault();
+      return;
+    }
       panStart = {
         x: pos.x,
         y: pos.y,
@@ -4864,6 +4893,27 @@
       draggingPlayer = false;
       dragPlayerPosition = null;
     }
+  });
+
+  function hideMapContextMenu() {
+    const menu = document.getElementById("mapContextMenu");
+    if (menu)
+      menu.hidden = true;
+    routeRightClickCandidate = null;
+  }
+
+  document.getElementById("movePlayerHere")?.addEventListener("click", () => {
+    const target = routeRightClickCandidate;
+    hideMapContextMenu();
+    if (!target)
+      return;
+
+    send({
+      action: "set_player_position",
+      x: target.x,
+      y: target.y,
+      z: target.z
+    });
   });
 
   map.addEventListener("wheel", event => {
