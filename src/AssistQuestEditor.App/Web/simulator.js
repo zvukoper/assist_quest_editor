@@ -343,6 +343,29 @@
     return { x: event.clientX - rect.left, y: event.clientY - rect.top };
   }
 
+  function fitRoute() {
+    const points = (route?.waypoints || [])
+      .map(point => [Number(point.x), Number(point.z)])
+      .filter(point => Number.isFinite(point[0]) && Number.isFinite(point[1]));
+
+    if (!points.length)
+      return;
+
+    const xs = points.map(point => point[0]);
+    const zs = points.map(point => point[1]);
+    const minX = Math.min(...xs), maxX = Math.max(...xs);
+    const minZ = Math.min(...zs), maxZ = Math.max(...zs);
+    const size = visibleSize();
+
+    camera.cx = (minX + maxX) / 2;
+    camera.cz = (minZ + maxZ) / 2;
+    camera.mpp = Math.max(
+      1,
+      Math.max(maxX - minX, 100) / Math.max(1, size.width - 80),
+      Math.max(maxZ - minZ, 100) / Math.max(1, size.height - 80)
+    );
+  }
+
   function fitWorld() {
     const points = snapshot?.world?.points || [];
     const player = snapshot?.player?.position;
@@ -1324,12 +1347,13 @@
     };
   }
 
-  function drawRouteText(ctx, text, x, y, align = "center") {
+  function drawRouteText(ctx, text, x, y, align = "center", color = "#ffffff", alpha = 1) {
     ctx.save();
     ctx.font = "400 9px Open Sans, Arial, sans-serif";
     ctx.textAlign = align;
     ctx.textBaseline = "bottom";
-    ctx.fillStyle = "#ffffff";
+    ctx.globalAlpha = alpha;
+    ctx.fillStyle = color;
     ctx.lineWidth = 4;
     ctx.strokeStyle = "rgba(0,0,0,.96)";
     ctx.lineJoin = "round";
@@ -1427,11 +1451,26 @@
       ? Math.round(distance) + " м"
       : (distance / 1000).toFixed(2) + " км";
 
-    drawRouteText(
-      ctx,
-      speed + " км/ч · " + distanceLabel,
-      q.x,
-      q.y - radius - 7);
+    const stopped = Number.isInteger(route.stoppedWaypointIndex) &&
+      route.stoppedWaypointIndex === Number(waypoint.index) - 1;
+
+    if (stopped) {
+      const pulse = 0.55 + 0.45 * ((Math.sin(performance.now() / 220) + 1) / 2);
+      drawRouteText(
+        ctx,
+        "Остановка",
+        q.x,
+        q.y - radius - 7,
+        "center",
+        "#ff9f1a",
+        pulse);
+    } else {
+      drawRouteText(
+        ctx,
+        speed + " км/ч · " + distanceLabel,
+        q.x,
+        q.y - radius - 7);
+    }
 
     const eta = String(waypoint.estimatedArrivalGameTime || "—");
     const seconds = Number(waypoint.countdownRealSeconds);
@@ -1858,7 +1897,9 @@
   }
 
   function ensureRouteAnimation() {
-    if (routeAnimationFrame || !route?.enabled || !simulationRunning)
+    const stoppedRoute = Number.isInteger(route?.stoppedWaypointIndex);
+    if (routeAnimationFrame || !simulationRunning ||
+        (!route?.enabled && !stoppedRoute))
       return;
 
     routeAnimationFrame = requestAnimationFrame(paintRouteAnimation);
@@ -1867,7 +1908,8 @@
   function paintRouteAnimation(timestamp) {
     routeAnimationFrame = 0;
 
-    if (!route?.enabled || !simulationRunning || !snapshot)
+    const stoppedRoute = Number.isInteger(route?.stoppedWaypointIndex);
+    if ((!route?.enabled && !stoppedRoute) || !simulationRunning || !snapshot)
       return;
 
     if (timestamp - lastRouteAnimationPaintAt < 33) {
@@ -1940,7 +1982,7 @@
     ctx.stroke();
     ctx.restore();
 
-    drawPointLabel(ctx, { name: "Временная точка", isPlayer: false, color: ACCENT_COLOR }, q, selected, false);
+    drawPointLabel(ctx, { name: point.name || "Временная точка", isPlayer: false, color: ACCENT_COLOR }, q, selected, false);
   }
 
   /**
@@ -4214,6 +4256,8 @@
 
     if (message.type === "route_snapshot") {
       route = normalizeRoute(message.route);
+      if (message.fitToRoute)
+        fitRoute();
       drawMap();
       ensureRouteAnimation();
       // Do not rebuild the sidebar here: speed is emitted on every input event
@@ -4254,6 +4298,8 @@
       // Подпись автосохранения: null означает «слота ещё нет», и интерфейс
       // обязан это сказать именно так, а не показывать пустую дату.
       autoSaveLabel = message.autoSaveLabel || null;
+      if (Array.isArray(message.journal))
+        journalHistory = message.journal.slice(0, 250);
       questCatalog = normalizeQuestCatalog(message.questCatalog);
       selectedQuest = {
         campaignId: message.selectedQuest?.campaignId || "",
@@ -4380,6 +4426,26 @@
     if (message.type === "save_error") {
       saveBusy = false;
       setSavesNotice(message.message || "Не удалось выполнить действие.");
+      return;
+    }
+
+    if (message.type === "journal_entry") {
+      if (message.entry) {
+        journalHistory.unshift(message.entry);
+        journalHistory.splice(250);
+      }
+      renderSide();
+      return;
+    }
+
+    if (message.type === "focus_point") {
+      const p = message.position;
+      if (p && Number.isFinite(Number(p.x)) && Number.isFinite(Number(p.z))) {
+        camera.cx = Number(p.x);
+        camera.cz = Number(p.z);
+        drawMap();
+        sendMapView();
+      }
       return;
     }
 
