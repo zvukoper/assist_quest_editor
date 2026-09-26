@@ -373,6 +373,99 @@ public static class RouteMovementEngine
             lastHeadingDegrees);
     }
 
+    /// <summary>
+    /// Проецирует ручную позицию игрока на текущий физический сегмент маршрута.
+    ///
+    /// Если игрок находится между точками N и N+1, целевой всегда остаётся N+1,
+    /// даже если до точки N физически ближе. При совпадении на общей вершине
+    /// выбирается следующий leg с большим номером конечной точки.
+    /// </summary>
+    public static RouteCursor ProjectForwardCursor(
+        RoutePlan plan,
+        WorldCoordinate position,
+        RouteCursor previous)
+    {
+        if (plan.Legs.Count == 0)
+        {
+            return previous with
+            {
+                Initialized = false,
+                ResumeAfterStop = false,
+                StoppedAtWaypointIndex = null
+            };
+        }
+
+        var bestDistance = double.PositiveInfinity;
+        var bestEndWaypointIndex = -1;
+        var bestLeg = -1;
+        var bestSegment = 0;
+        var bestProgress = 0d;
+        var bestHeading = previous.LastHeadingDegrees;
+
+        for (var legIndex = 0; legIndex < plan.Legs.Count; legIndex++)
+        {
+            var leg = plan.Legs[legIndex];
+            if (leg.StartWaypointIndex < 0)
+                continue;
+
+            var points = leg.Polyline;
+            for (var segmentIndex = 0; segmentIndex < points.Count - 1; segmentIndex++)
+            {
+                var a = points[segmentIndex];
+                var b = points[segmentIndex + 1];
+                var dx = b.X - a.X;
+                var dz = b.Z - a.Z;
+                var lengthSquared = dx * dx + dz * dz;
+
+                if (lengthSquared <= 0.000001d)
+                    continue;
+
+                var length = Math.Sqrt(lengthSquared);
+                var t = ((position.X - a.X) * dx + (position.Z - a.Z) * dz) / lengthSquared;
+                t = Math.Clamp(t, 0d, 1d);
+
+                var px = a.X + dx * t;
+                var pz = a.Z + dz * t;
+                var distance = Math.Sqrt(
+                    (position.X - px) * (position.X - px) +
+                    (position.Z - pz) * (position.Z - pz));
+
+                if (distance >= bestDistance - 0.000001d &&
+                    !(Math.Abs(distance - bestDistance) <= 0.000001d &&
+                      leg.EndWaypointIndex > bestEndWaypointIndex))
+                {
+                    continue;
+                }
+
+                bestDistance = distance;
+                bestEndWaypointIndex = leg.EndWaypointIndex;
+                bestLeg = legIndex;
+                bestSegment = segmentIndex;
+                bestProgress = length * t;
+                bestHeading = HeadingDegrees(dx / length, dz / length);
+            }
+        }
+
+        if (bestLeg < 0)
+        {
+            return previous with
+            {
+                Initialized = false,
+                ResumeAfterStop = false,
+                StoppedAtWaypointIndex = null
+            };
+        }
+
+        return new RouteCursor(
+            true,
+            bestLeg,
+            bestSegment,
+            bestProgress,
+            false,
+            null,
+            bestHeading);
+    }
+
     private static RouteCursor ProjectCursor(
         RoutePlan plan,
         WorldCoordinate position,
