@@ -82,7 +82,8 @@ public sealed class SimulationSaveCodecTests
                 new RouteCursor(true, 1, 0, 42.5, false, 1, 12.0),
                 1,
                 123.5,
-                246.0),
+                246.0,
+                Enabled: true),
             DynamicEvents = new DynamicEventRuntimeState(
                 new[]
                 {
@@ -151,6 +152,7 @@ public sealed class SimulationSaveCodecTests
         Assert.Equal(original.State.Route.Waypoints, decoded.State.Route.Waypoints);
         Assert.True(decoded.State.Route.Waypoints[1].IsOffRoad);
         Assert.Equal(original.State.RouteRuntime, decoded.State.RouteRuntime);
+        Assert.True(decoded.State.RouteRuntime.Enabled);
         Assert.Equal(original.State.Player.Heading, decoded.State.Player.Heading);
         Assert.Equal(original.State.Player.InCab, decoded.State.Player.InCab);
 
@@ -187,6 +189,24 @@ public sealed class SimulationSaveCodecTests
         {
             Assert.Equal(original.State.QuestStatuses[index], decoded.State.QuestStatuses[index]);
         }
+    }
+
+    [Fact]
+    public void VersionFiveRuntimeRemainsCompatibleAndDefaultsMovementOff()
+    {
+        var original = CreateSave();
+        var legacy = original with
+        {
+            Header = original.Header with { FormatVersion = 5 }
+        };
+
+        var decoded = SimulationSaveCodec.Decode(SimulationSaveCodec.Encode(legacy));
+
+        Assert.False(decoded.State.RouteRuntime.Enabled);
+        Assert.Equal(legacy.State.RouteRuntime.Cursor, decoded.State.RouteRuntime.Cursor);
+        Assert.Equal(
+            legacy.State.RouteRuntime.CurrentTargetWaypointIndex,
+            decoded.State.RouteRuntime.CurrentTargetWaypointIndex);
     }
 
     [Fact]
