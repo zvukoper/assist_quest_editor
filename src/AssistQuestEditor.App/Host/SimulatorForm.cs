@@ -936,6 +936,194 @@ public sealed class SimulatorForm : WebViewForm
     }
 
 
+    private sealed record RouteFileCoordinate(double X, double Y, double Z);
+
+    private sealed record RouteFileWaypoint(
+        string Id,
+        double X,
+        double Y,
+        double Z,
+        double SpeedKmh,
+        bool IsOffRoad);
+
+    private sealed record RouteFileLeg(
+        int StartWaypointIndex,
+        int EndWaypointIndex,
+        double LengthMeters,
+        IReadOnlyList<RouteFileCoordinate> Polyline);
+
+    private sealed record RouteFile(
+        int Version,
+        double DefaultSpeedKmh,
+        IReadOnlyList<RouteFileWaypoint> Waypoints,
+        IReadOnlyList<RouteFileLeg> Legs);
+
+    private static readonly JsonSerializerOptions RouteFileJsonOptions = new(SnapshotJsonOptions)
+    {
+        WriteIndented = true
+    };
+
+    private void SaveRouteToFile()
+    {
+        if (_routeState.Waypoints.Count == 0)
+            throw new InvalidOperationException("Маршрут пуст — сохранять нечего.");
+
+        using var dialog = new SaveFileDialog
+        {
+            Filter = "Assist Quest Route (*.aqewaypoints)|*.aqewaypoints|Все файлы (*.*)|*.*",
+            DefaultExt = "aqewaypoints",
+            AddExtension = true,
+            FileName = "route.aqewaypoints",
+            Title = "Сохранить маршрут"
+        };
+
+        if (dialog.ShowDialog(this) != DialogResult.OK)
+            return;
+
+        var file = new RouteFile(
+            1,
+            _routeState.DefaultSpeedKmh,
+            _routeState.Waypoints.Select(waypoint => new RouteFileWaypoint(
+                waypoint.Id,
+                waypoint.Position.X,
+                waypoint.Position.Y,
+                waypoint.Position.Z,
+                waypoint.SpeedKmh,
+                waypoint.IsOffRoad)).ToArray(),
+            _routePlan.Legs.Select(leg => new RouteFileLeg(
+                leg.StartWaypointIndex,
+                leg.EndWaypointIndex,
+                leg.LengthMeters,
+                leg.Polyline.Select(point =>
+                    new RouteFileCoordinate(point.X, point.Y, point.Z)).ToArray())).ToArray());
+
+        var json = JsonSerializer.Serialize(file, RouteFileJsonOptions);
+        File.WriteAllText(dialog.FileName, json, Encoding.UTF8);
+        AppLogger.Info("SimulatorForm: маршрут сохранён.", $"path={dialog.FileName}; waypoints={file.Waypoints.Count}");
+    }
+
+    private void LoadRouteFromFileDialog()
+    {
+        using var dialog = new OpenFileDialog
+        {
+            Filter = "Assist Quest Route (*.aqewaypoints)|*.aqewaypoints|Все файлы (*.*)|*.*",
+            DefaultExt = "aqewaypoints",
+            CheckFileExists = true,
+            Title = "Загрузить маршрут"
+        };
+
+        if (dialog.ShowDialog(this) == DialogResult.OK)
+            OpenRouteFileFromAssociation(dialog.FileName);
+    }
+
+    public void OpenRouteFileFromAssociation(string path)
+    {
+        if (string.IsNullOrWhiteSpace(path))
+            return;
+
+        if (InvokeRequired)
+        {
+            BeginInvoke((Action)(() => OpenRouteFileFromAssociation(path)));
+            return;
+        }
+
+        Show();
+        WindowState = FormWindowState.Normal;
+        BringToFront();
+        Activate();
+
+        RouteFile file;
+        try
+        {
+            var json = File.ReadAllText(path, Encoding.UTF8);
+            file = JsonSerializer.Deserialize<RouteFile>(json, RouteFileJsonOptions)
+                ?? throw new InvalidDataException("Файл маршрута пуст.");
+        }
+        catch (Exception ex)
+        {
+            AppLogger.Error("SimulatorForm: маршрут не загружен.", ex, "path=" + path);
+            MessageBox.Show(this, "Не удалось прочитать маршрут: " + ex.Message,
+                "Загрузка маршрута", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            return;
+        }
+
+        if (file.Waypoints is null || file.Waypoints.Count == 0)
+        {
+            MessageBox.Show(this, "Файл не содержит путевых точек.",
+                "Загрузка маршрута", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            return;
+        }
+
+        var name = Path.GetFileName(path);
+        if (MessageBox.Show(
+                this,
+                $"Загрузить маршрут "{name}"?",
+                "Загрузка маршрута",
+                MessageBoxButtons.OKCancel,
+                MessageBoxIcon.Question) != DialogResult.OK)
+            return;
+
+        try
+        {
+            var waypoints = file.Waypoints.Select(item => new RouteWaypoint(
+                string.IsNullOrWhiteSpace(item.Id)
+                    ? Guid.NewGuid().ToString("N")
+                    : item.Id,
+                new WorldCoordinate(item.X, item.Y, item.Z),
+                Math.Clamp(
+                    double.IsFinite(item.SpeedKmh)
+                        ? item.SpeedKmh
+                        : RouteState.DefaultSpeedKmhValue,
+                    RouteState.MinSpeedKmh,
+                    RouteState.MaxSpeedKmh),
+                item.IsOffRoad)).ToArray();
+
+            _routeState = new RouteState(
+                Math.Clamp(
+                    double.IsFinite(file.DefaultSpeedKmh)
+                        ? file.DefaultSpeedKmh
+                        : RouteState.DefaultSpeedKmhValue,
+                    RouteState.MinSpeedKmh,
+                    RouteState.MaxSpeedKmh),
+                waypoints).Normalize();
+
+            var legs = file.Legs ?? Array.Empty<RouteFileLeg>();
+            _routePlan = new RoutePlan(
+                legs.Select(leg => new RouteLeg(
+                    leg.StartWaypointIndex,
+                    leg.EndWaypointIndex,
+                    (leg.Polyline ?? Array.Empty<RouteFileCoordinate>())
+                        .Select(point => new WorldCoordinate(point.X, point.Y, point.Z))
+                        .ToArray(),
+                    Math.Max(0d, leg.LengthMeters))).ToArray(),
+                Array.Empty<string>());
+
+            _selectedRouteWaypointId = null;
+            _routeStoppedWaypointIndex = null;
+            _routeTargetWaypointIndex = _routeState.Waypoints.Count > 0 ? 0 : null;
+            _routeCursor = RouteCursor.Initial;
+            _routeLastHeading = 0d;
+            _resumeRouteAfterStop = false;
+            _routeTravelRealSeconds = 0d;
+            _routeTravelGameSeconds = 0d;
+            _routeEnabled = false;
+            _routeEditingEnabled = false;
+            _routePlanNeedsRebuildFromCurrentPlayer = true;
+            _routeMovementLastTick = null;
+
+            PushRouteSnapshot(fitToRoute: true);
+            PersistSession("автосохранение: маршрут загружен", force: true);
+            AppLogger.Info("SimulatorForm: маршрут загружен.",
+                $"path={path}; waypoints={waypoints.Length}; legs={legs.Count}");
+        }
+        catch (Exception ex)
+        {
+            AppLogger.Error("SimulatorForm: ошибка применения маршрута.", ex, "path=" + path);
+            MessageBox.Show(this, "Не удалось загрузить маршрут: " + ex.Message,
+                "Загрузка маршрута", MessageBoxButtons.OK, MessageBoxIcon.Error);
+        }
+    }
+
     private sealed record RouteRebuildContext(
         RouteCursor Cursor,
         int? TargetWaypointIndex,
@@ -3395,7 +3583,7 @@ public sealed class SimulatorForm : WebViewForm
             _hub.Get<PlayerState>("player").Value.Position);
     }
 
-    private void PushRouteSnapshot()
+    private void PushRouteSnapshot(bool fitToRoute = false)
     {
         if (Browser.CoreWebView2 is null || IsDisposed || !IsHandleCreated)
             return;
@@ -3403,7 +3591,8 @@ public sealed class SimulatorForm : WebViewForm
         PostJson(JsonSerializer.Serialize(new
         {
             type = "route_snapshot",
-            route = BuildRouteSnapshot()
+            route = BuildRouteSnapshot(),
+            fitToRoute
         }, SnapshotJsonOptions));
     }
 

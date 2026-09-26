@@ -386,6 +386,13 @@ public sealed class MainForm : WebViewForm
             return;
         }
 
+        if (resource.Kind.Equals("Route", StringComparison.OrdinalIgnoreCase))
+        {
+            OpenSimulator();
+            _simulator?.OpenRouteFileFromAssociation(path);
+            return;
+        }
+
         var pane = resource.Kind switch
         {
             "Quest" => "graph",
