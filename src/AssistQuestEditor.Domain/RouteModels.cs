@@ -374,6 +374,98 @@ public static class RouteMovementEngine
     }
 
     /// <summary>
+    /// Проецирует позицию игрока только на leg, ведущий к указанной точке.
+    ///
+    /// Используется при перестроении уже начатого маршрута: геометрия leg могла
+    /// измениться после редактирования, но логическая цель должна остаться той же.
+    /// В отличие от общего поиска ближайшего сегмента метод не перепрыгивает на
+    /// более ранний или более поздний leg.
+    /// </summary>
+    public static RouteCursor ProjectCursorToWaypoint(
+        RoutePlan plan,
+        int targetWaypointIndex,
+        WorldCoordinate position,
+        RouteCursor previous)
+    {
+        var legIndex = -1;
+
+        for (var index = 0; index < plan.Legs.Count; index++)
+        {
+            if (plan.Legs[index].EndWaypointIndex == targetWaypointIndex)
+            {
+                legIndex = index;
+                break;
+            }
+        }
+
+        if (legIndex < 0)
+        {
+            return previous with
+            {
+                Initialized = false,
+                ResumeAfterStop = false,
+                StoppedAtWaypointIndex = null
+            };
+        }
+
+        var leg = plan.Legs[legIndex];
+        var points = leg.Polyline;
+        var bestDistance = double.PositiveInfinity;
+        var bestSegment = 0;
+        var bestProgress = 0d;
+        var bestHeading = previous.LastHeadingDegrees;
+
+        for (var segmentIndex = 0; segmentIndex < points.Count - 1; segmentIndex++)
+        {
+            var a = points[segmentIndex];
+            var b = points[segmentIndex + 1];
+            var dx = b.X - a.X;
+            var dz = b.Z - a.Z;
+            var lengthSquared = dx * dx + dz * dz;
+
+            if (lengthSquared <= 0.000001d)
+                continue;
+
+            var length = Math.Sqrt(lengthSquared);
+            var t = ((position.X - a.X) * dx + (position.Z - a.Z) * dz) / lengthSquared;
+            t = Math.Clamp(t, 0d, 1d);
+
+            var px = a.X + dx * t;
+            var pz = a.Z + dz * t;
+            var distance = Math.Sqrt(
+                (position.X - px) * (position.X - px) +
+                (position.Z - pz) * (position.Z - pz));
+
+            if (distance >= bestDistance - 0.000001d)
+                continue;
+
+            bestDistance = distance;
+            bestSegment = segmentIndex;
+            bestProgress = length * t;
+            bestHeading = HeadingDegrees(dx / length, dz / length);
+        }
+
+        if (!double.IsFinite(bestDistance))
+        {
+            return previous with
+            {
+                Initialized = false,
+                ResumeAfterStop = false,
+                StoppedAtWaypointIndex = null
+            };
+        }
+
+        return new RouteCursor(
+            true,
+            legIndex,
+            bestSegment,
+            bestProgress,
+            false,
+            null,
+            bestHeading);
+    }
+
+    /// <summary>
     /// Проецирует ручную позицию игрока на текущий физический сегмент маршрута.
     ///
     /// Если игрок находится между точками N и N+1, целевой всегда остаётся N+1,

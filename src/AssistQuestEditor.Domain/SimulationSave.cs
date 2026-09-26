@@ -43,13 +43,46 @@ public sealed record SimulationSaveState(
     public DynamicEventRuntimeState DynamicEvents { get; init; } = DynamicEventRuntimeState.Empty;
 
     /// <summary>Текущая версия формата.</summary>
-    public const int CurrentFormatVersion = 6;
+    public const int CurrentFormatVersion = 7;
 
     /// <summary>Пользовательский маршрут Симулятора.</summary>
     public RouteState Route { get; init; } = RouteState.Empty;
 
     /// <summary>Runtime-прогресс движения по маршруту.</summary>
     public RouteRuntimeState RouteRuntime { get; init; } = RouteRuntimeState.Empty;
+
+    /// <summary>
+    /// Положение и масштаб карты Симулятора на момент сохранения.
+    ///
+    /// Nullable для обратной совместимости: старые снимки не содержат камеры и
+    /// при загрузке используют обычное первоначальное позиционирование карты.
+    /// </summary>
+    public SimulatorMapViewState? MapView { get; init; }
+}
+
+public sealed record SimulatorMapViewState(
+    double CenterX,
+    double CenterZ,
+    double MetersPerPixel)
+{
+    public const double MinMetersPerPixel = 0.1d;
+    public const double MaxMetersPerPixel = 50000d;
+    public const double DefaultMetersPerPixel = 50d;
+
+    public static SimulatorMapViewState Default =>
+        new(0d, 0d, DefaultMetersPerPixel);
+
+    public SimulatorMapViewState Normalize()
+    {
+        var centerX = double.IsFinite(CenterX) ? CenterX : 0d;
+        var centerZ = double.IsFinite(CenterZ) ? CenterZ : 0d;
+        var mpp = Math.Clamp(
+            double.IsFinite(MetersPerPixel) ? MetersPerPixel : DefaultMetersPerPixel,
+            MinMetersPerPixel,
+            MaxMetersPerPixel);
+
+        return new SimulatorMapViewState(centerX, centerZ, mpp);
+    }
 }
 
 /// <summary>Восстанавливаемая runtime-позиция движения по маршруту.</summary>

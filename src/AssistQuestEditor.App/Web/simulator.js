@@ -78,6 +78,7 @@
   // и плашка мигала бы бесконечно вместо одного раза на новое автосохранение.
   let autoSavePulseSlot = null;
   let camera = { cx: 0, cz: 0, mpp: 50 };
+  let lastAppliedMapViewRestoreToken = null;
   let eventHistory = [];
   let runtimeTargetKey = "";
   let dragPlayerPosition = null;
@@ -291,6 +292,46 @@
       x: camera.cx + (x - s.width / 2) * camera.mpp,
       z: camera.cz + (y - s.height / 2) * camera.mpp
     };
+  }
+
+  function normalizeMapView(raw) {
+    if (!raw || typeof raw !== "object") return null;
+
+    const cx = Number(raw.centerX);
+    const cz = Number(raw.centerZ);
+    const mpp = Number(raw.metersPerPixel);
+
+    if (!Number.isFinite(cx) || !Number.isFinite(cz) || !Number.isFinite(mpp))
+      return null;
+
+    return {
+      cx,
+      cz,
+      mpp: Math.max(0.1, Math.min(50000, mpp))
+    };
+  }
+
+  function applyMapView(raw) {
+    const normalized = normalizeMapView(raw);
+    if (!normalized) return false;
+
+    camera = normalized;
+    return true;
+  }
+
+  function sendMapView() {
+    if (!Number.isFinite(camera.cx) ||
+        !Number.isFinite(camera.cz) ||
+        !Number.isFinite(camera.mpp)) {
+      return;
+    }
+
+    send({
+      action: "set_map_view",
+      cx: camera.cx,
+      cz: camera.cz,
+      mpp: camera.mpp
+    });
   }
 
   function pointerPosition(event) {
@@ -2264,17 +2305,17 @@
   function focusRuntimeTarget() {
     if (runtimeStatusName(runtime?.status) !== "Waiting") {
       runtimeTargetKey = "";
-      return;
+      return false;
     }
 
     const info = runtimeTargetInfo();
     if (info.kind !== "point" || !info.point) {
       runtimeTargetKey = "";
-      return;
+      return false;
     }
 
     const key = String(runtime.currentNodeId || "") + "|" + String(info.point.id || "");
-    if (key === runtimeTargetKey) return;
+    if (key === runtimeTargetKey) return false;
 
     runtimeTargetKey = key;
     camera.cx = Number(info.point.position.x);
@@ -2282,6 +2323,7 @@
 
     const radius = Number.isFinite(info.radius) && info.radius > 0 ? info.radius : 100;
     camera.mpp = Math.max(0.25, Math.min(25, Math.max(radius / 90, 0.5)));
+    return true;
   }
 
   function formatEventTimestamp(timestamp) {
@@ -4119,7 +4161,25 @@
       });
 
       const targetInfo = logQuestTargetResolution("snapshot");
-      focusRuntimeTarget();
+      const focusChanged = focusRuntimeTarget();
+      const mapViewToken = Number.isFinite(Number(message.mapViewRestoreToken))
+        ? Number(message.mapViewRestoreToken)
+        : 0;
+      const shouldRestoreMapView =
+        !hadSnapshot || mapViewToken !== lastAppliedMapViewRestoreToken;
+
+      if (shouldRestoreMapView) {
+        if (!applyMapView(message.mapView))
+          fitWorld();
+
+        lastAppliedMapViewRestoreToken = mapViewToken;
+        sendMapView();
+      } else if (focusChanged) {
+        // Автофокус по новой runtime-цели меняет реальный вид карты, поэтому Host
+        // должен получить новый центр и масштаб до следующего сохранения.
+        sendMapView();
+      }
+
       window.assistQuestLog?.("INFO", "Quest UI: камера и ожидаемая цель обработаны.", {
         currentNodeId: runtime?.currentNodeId || null,
         targetPointId: targetInfo.point?.id || null,
@@ -4133,7 +4193,6 @@
         player: snapshot.player?.position,
         version: message.version
       });
-      if (!hadSnapshot) fitWorld();
       // Точка отсчёта локальных часов: снимок приходит редко, а время должно идти.
       syncClockAnchor();
       scheduleUiRender();
@@ -4573,6 +4632,7 @@
     if (panning) {
       panning = false;
       panStart = null;
+      sendMapView();
       map.releasePointerCapture?.(event.pointerId);
       map.style.cursor = "default";
     }
@@ -4617,6 +4677,7 @@
     camera.cx += before.x - after.x;
     camera.cz += before.z - after.z;
     drawMap();
+    sendMapView();
     event.preventDefault();
   }, { passive: false });
 

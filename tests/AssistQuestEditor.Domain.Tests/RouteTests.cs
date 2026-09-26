@@ -102,6 +102,43 @@ public sealed class RouteTests
     }
 
     [Fact]
+    public void ProjectCursorToWaypointStaysOnLogicalTargetAfterRouteEdit()
+    {
+        var plan = new RoutePlan(
+            new[]
+            {
+                new RouteLeg(0, 1,
+                    new[]
+                    {
+                        new WorldCoordinate(0, 0, 0),
+                        new WorldCoordinate(100, 0, 0)
+                    },
+                    100),
+                new RouteLeg(1, 2,
+                    new[]
+                    {
+                        new WorldCoordinate(100, 0, 0),
+                        new WorldCoordinate(200, 0, 0)
+                    },
+                    100)
+            },
+            Array.Empty<string>());
+
+        var previous = new RouteCursor(true, 1, 0, 40, false, null, 0);
+
+        var cursor = RouteMovementEngine.ProjectCursorToWaypoint(
+            plan,
+            2,
+            new WorldCoordinate(145, 0, 0),
+            previous);
+
+        Assert.True(cursor.Initialized);
+        Assert.Equal(1, cursor.LegIndex);
+        Assert.Equal(45, cursor.SegmentProgressMeters, 6);
+        Assert.Equal(2, plan.Legs[cursor.LegIndex].EndWaypointIndex);
+    }
+
+    [Fact]
     public void ManualProjectionChoosesNextWaypointOnCurrentSegment()
     {
         var plan = new RoutePlan(

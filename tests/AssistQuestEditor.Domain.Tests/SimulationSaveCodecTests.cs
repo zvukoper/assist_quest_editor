@@ -84,6 +84,7 @@ public sealed class SimulationSaveCodecTests
                 123.5,
                 246.0,
                 Enabled: true),
+            MapView = new SimulatorMapViewState(1234.5, -6789.25, 2.75),
             DynamicEvents = new DynamicEventRuntimeState(
                 new[]
                 {
@@ -153,6 +154,7 @@ public sealed class SimulationSaveCodecTests
         Assert.True(decoded.State.Route.Waypoints[1].IsOffRoad);
         Assert.Equal(original.State.RouteRuntime, decoded.State.RouteRuntime);
         Assert.True(decoded.State.RouteRuntime.Enabled);
+        Assert.Equal(original.State.MapView, decoded.State.MapView);
         Assert.Equal(original.State.Player.Heading, decoded.State.Player.Heading);
         Assert.Equal(original.State.Player.InCab, decoded.State.Player.InCab);
 
@@ -207,6 +209,19 @@ public sealed class SimulationSaveCodecTests
         Assert.Equal(
             legacy.State.RouteRuntime.CurrentTargetWaypointIndex,
             decoded.State.RouteRuntime.CurrentTargetWaypointIndex);
+    }
+
+    [Fact]
+    public void VersionSixSaveDoesNotContainMapView()
+    {
+        var original = CreateSave() with
+        {
+            Header = CreateSave().Header with { FormatVersion = 6 }
+        };
+
+        var decoded = SimulationSaveCodec.Decode(SimulationSaveCodec.Encode(original));
+
+        Assert.Null(decoded.State.MapView);
     }
 
     [Fact]

@@ -42,6 +42,13 @@ public sealed class SimulatorForm : WebViewForm
     private double _routeTravelRealSeconds;
     private double _routeTravelGameSeconds;
     private bool _inventoryPausedSimulation;
+
+    /// <summary>
+    /// Состояние камеры карты. Host — владелец сохраняемого состояния, WebView
+    /// только сообщает изменения положения и масштаба.
+    /// </summary>
+    private SimulatorMapViewState? _mapView;
+    private long _mapViewRestoreToken;
     // Сохранения принадлежат МИРУ: снимок одного мира нельзя загрузить в
     // другой, где другие квесты и точки. Раньше стор брал общий каталог
     // `Документы\Assist Quest Editor\saves`, лежащий ВНЕ дерева миров — его
@@ -360,6 +367,8 @@ public sealed class SimulatorForm : WebViewForm
             // через доли секунды после нажатия «Показать в симуляторе».
             locationVisualisation = _locationVisualisation,
             route = BuildRouteSnapshot(),
+            mapView = _mapView,
+            mapViewRestoreToken = _mapViewRestoreToken,
             // Индикатор светового дня: астрономию считает домен, UI только рисует.
             daylight = BuildDaylight(snapshot),
             // Свойства мира из кампании: блок «Окружение» показывает их и умеет
@@ -493,6 +502,10 @@ public sealed class SimulatorForm : WebViewForm
                 case "set_player_position":
                     SetPlayerPosition(root);
                     break;
+
+                case "set_map_view":
+                    SetMapView(root);
+                    return;
 
                 case "route_add_waypoint":
                     AddRouteWaypoint(root);
@@ -756,6 +769,8 @@ public sealed class SimulatorForm : WebViewForm
                     // кампании.
                     _saveStore.ClearSession();
                     _autoSaveAt = null;
+                    _mapView = null;
+                    _mapViewRestoreToken++;
                     SetRouteStateAfterLoad(RouteState.Empty);
 
                     // Свойства мира берутся из КАМПАНИИ, а не остаются какими были:
@@ -904,9 +919,60 @@ public sealed class SimulatorForm : WebViewForm
     }
 
 
+    private sealed record RouteRebuildContext(
+        RouteCursor Cursor,
+        int? TargetWaypointIndex,
+        string? TargetWaypointId,
+        int? StoppedWaypointIndex,
+        string? StoppedWaypointId,
+        double TravelRealSeconds,
+        double TravelGameSeconds);
+
+    private RouteRebuildContext CaptureRouteRebuildContext()
+    {
+        var targetIndex = _routeTargetWaypointIndex ?? GetTargetWaypointIndex(_routeCursor);
+
+        static string? WaypointId(RouteState route, int? index) =>
+            index is int value &&
+            value >= 0 &&
+            value < route.Waypoints.Count
+                ? route.Waypoints[value].Id
+                : null;
+
+        return new RouteRebuildContext(
+            _routeCursor,
+            targetIndex,
+            WaypointId(_routeState, targetIndex),
+            _routeStoppedWaypointIndex,
+            WaypointId(_routeState, _routeStoppedWaypointIndex),
+            _routeTravelRealSeconds,
+            _routeTravelGameSeconds);
+    }
+
+    private static int? MapWaypointIndex(
+        RouteState route,
+        string? id,
+        int? fallbackIndex)
+    {
+        if (!string.IsNullOrWhiteSpace(id))
+        {
+            for (var index = 0; index < route.Waypoints.Count; index++)
+            {
+                if (route.Waypoints[index].Id.Equals(id, StringComparison.OrdinalIgnoreCase))
+                    return index;
+            }
+        }
+
+        if (fallbackIndex is not int fallback || route.Waypoints.Count == 0)
+            return null;
+
+        return Math.Clamp(fallback, 0, route.Waypoints.Count - 1);
+    }
+
     private void AddRouteWaypoint(JsonElement root)
     {
         EnsureRouteEditingAllowed();
+        var rebuildContext = CaptureRouteRebuildContext();
 
         var position = new WorldCoordinate(
             Number(root, "x", _hub.Get<PlayerState>("player").Value.Position.X),
@@ -924,13 +990,14 @@ public sealed class SimulatorForm : WebViewForm
         _selectedRouteWaypointId = id;
         _routeStoppedWaypointIndex = null;
         _resumeRouteAfterStop = false;
-        RebuildRoute("waypoint added");
+        RebuildRoute("waypoint added", routeRebuildContext: rebuildContext);
         PersistSession("автосохранение: waypoint added", force: true);
     }
 
     private void InsertRouteWaypoint(JsonElement root)
     {
         EnsureRouteEditingAllowed();
+        var rebuildContext = CaptureRouteRebuildContext();
 
         var player = _hub.Get<PlayerState>("player").Value;
         var position = new WorldCoordinate(
@@ -959,13 +1026,14 @@ public sealed class SimulatorForm : WebViewForm
         _routeStoppedWaypointIndex = null;
         _resumeRouteAfterStop = false;
 
-        RebuildRoute("waypoint inserted on route line");
+        RebuildRoute("waypoint inserted on route line", routeRebuildContext: rebuildContext);
         PersistSession("автосохранение: waypoint inserted", force: true);
     }
 
     private void MoveRouteWaypoint(JsonElement root)
     {
         EnsureRouteEditingAllowed();
+        var rebuildContext = CaptureRouteRebuildContext();
 
         var id = Required(root, "id");
         var found = false;
@@ -993,13 +1061,14 @@ public sealed class SimulatorForm : WebViewForm
         _routeStoppedWaypointIndex = null;
         _resumeRouteAfterStop = false;
 
-        RebuildRoute("route waypoint moved");
+        RebuildRoute("route waypoint moved", routeRebuildContext: rebuildContext);
         PersistSession("автосохранение: waypoint moved", force: true);
     }
 
     private void DeleteRouteWaypoint(string id)
     {
         EnsureRouteEditingAllowed();
+        var rebuildContext = CaptureRouteRebuildContext();
 
         var remaining = _routeState.Waypoints
             .Where(item => !item.Id.Equals(id, StringComparison.OrdinalIgnoreCase))
@@ -1012,7 +1081,7 @@ public sealed class SimulatorForm : WebViewForm
         _selectedRouteWaypointId = null;
         _routeStoppedWaypointIndex = null;
         _resumeRouteAfterStop = false;
-        RebuildRoute("waypoint deleted");
+        RebuildRoute("waypoint deleted", routeRebuildContext: rebuildContext);
         PersistSession("автосохранение: waypoint deleted", force: true);
     }
 
@@ -1031,6 +1100,7 @@ public sealed class SimulatorForm : WebViewForm
     private void SetRouteWaypointSpeed(string id, double speed)
     {
         EnsureRouteEditingAllowed();
+        var rebuildContext = CaptureRouteRebuildContext();
 
         speed = Math.Clamp(
             double.IsFinite(speed) ? speed : RouteState.DefaultSpeedKmhValue,
@@ -1051,7 +1121,10 @@ public sealed class SimulatorForm : WebViewForm
             return;
 
         _routeState = _routeState with { Waypoints = waypoints };
-        RebuildRoute("waypoint speed changed", publishSnapshot: false);
+        RebuildRoute(
+            "waypoint speed changed",
+            publishSnapshot: false,
+            routeRebuildContext: rebuildContext);
         PersistSession("автосохранение: waypoint speed changed", force: true);
         PushRouteSnapshot();
     }
@@ -1059,6 +1132,7 @@ public sealed class SimulatorForm : WebViewForm
     private void SetRouteWaypointOffRoad(string id, bool offRoad)
     {
         EnsureRouteEditingAllowed();
+        var rebuildContext = CaptureRouteRebuildContext();
 
         var waypoints = _routeState.Waypoints.Select(item =>
             item.Id.Equals(id, StringComparison.OrdinalIgnoreCase)
@@ -1066,7 +1140,7 @@ public sealed class SimulatorForm : WebViewForm
                 : item).ToArray();
 
         _routeState = _routeState with { Waypoints = waypoints };
-        RebuildRoute("waypoint off-road changed");
+        RebuildRoute("waypoint off-road changed", routeRebuildContext: rebuildContext);
         PersistSession("автосохранение: waypoint off-road changed", force: true);
     }
 
@@ -1193,18 +1267,101 @@ public sealed class SimulatorForm : WebViewForm
         }
     }
 
-    private void RebuildRoute(string reason, bool publishSnapshot = true)
+    private void RebuildRoute(
+        string reason,
+        bool publishSnapshot = true,
+        RouteRebuildContext? routeRebuildContext = null)
     {
         _routeState = _routeState.Normalize();
         var playerPosition = _hub.Get<PlayerState>("player").Value.Position;
         _routePlan = _routePlanner.Build(_routeState, playerPosition);
-        _routeCursor = RouteCursor.Initial;
-        _routeMovementLastTick = null;
-        _routeStoppedWaypointIndex = null;
-        _resumeRouteAfterStop = false;
-        _routeTargetWaypointIndex = _routeState.Waypoints.Count > 0 ? 0 : null;
-        _routeTravelRealSeconds = 0d;
-        _routeTravelGameSeconds = 0d;
+
+        if (routeRebuildContext is null)
+        {
+            _routeCursor = RouteCursor.Initial;
+            _routeMovementLastTick = null;
+            _routeStoppedWaypointIndex = null;
+            _resumeRouteAfterStop = false;
+            _routeTargetWaypointIndex = _routeState.Waypoints.Count > 0 ? 0 : null;
+            _routeTravelRealSeconds = 0d;
+            _routeTravelGameSeconds = 0d;
+        }
+        else
+        {
+            var context = routeRebuildContext;
+            var targetIndex = MapWaypointIndex(
+                _routeState,
+                context.TargetWaypointId,
+                context.TargetWaypointIndex);
+            var stoppedIndex = MapWaypointIndex(
+                _routeState,
+                context.StoppedWaypointId,
+                context.StoppedWaypointIndex);
+
+            _routeTravelRealSeconds = context.TravelRealSeconds;
+            _routeTravelGameSeconds = context.TravelGameSeconds;
+            _routeStoppedWaypointIndex = stoppedIndex;
+            _resumeRouteAfterStop = context.Cursor.ResumeAfterStop;
+
+            if (_routePlan.IsUsable &&
+                context.Cursor.Initialized &&
+                targetIndex is int preservedTarget)
+            {
+                var projected = RouteMovementEngine.ProjectCursorToWaypoint(
+                    _routePlan,
+                    preservedTarget,
+                    playerPosition,
+                    context.Cursor);
+
+                if (projected.Initialized)
+                {
+                    _routeCursor = projected with
+                    {
+                        ResumeAfterStop = context.Cursor.ResumeAfterStop,
+                        StoppedAtWaypointIndex = stoppedIndex
+                    };
+                    _routeLastHeading = projected.LastHeadingDegrees;
+                    _routeTargetWaypointIndex = preservedTarget;
+                }
+                else
+                {
+                    _routeCursor = context.Cursor with
+                    {
+                        Initialized = false,
+                        ResumeAfterStop = false,
+                        StoppedAtWaypointIndex = null
+                    };
+                    _routeTargetWaypointIndex =
+                        _routeState.Waypoints.Count > 0 ? preservedTarget : null;
+                    _routeStoppedWaypointIndex = null;
+                    _resumeRouteAfterStop = false;
+                }
+            }
+            else
+            {
+                _routeCursor = context.Cursor with
+                {
+                    StoppedAtWaypointIndex = stoppedIndex
+                };
+                _routeTargetWaypointIndex = targetIndex ??
+                    (_routeState.Waypoints.Count > 0 ? 0 : null);
+
+                if (!_routeCursor.Initialized)
+                {
+                    _routeCursor = RouteCursor.Initial;
+                    _routeStoppedWaypointIndex = null;
+                    _resumeRouteAfterStop = false;
+                }
+            }
+
+            _routeMovementLastTick = null;
+
+            AppLogger.Info(
+                "SimulatorForm: состояние маршрута сохранено при перестроении.",
+                $"reason={reason}; target={(_routeTargetWaypointIndex is int target ? target + 1 : 0)}; " +
+                $"leg={_routeCursor.LegIndex}; segment={_routeCursor.SegmentIndex}; " +
+                $"progress={_routeCursor.SegmentProgressMeters:0.###}");
+        }
 
         AppLogger.Info(
             "SimulatorForm: маршрут перестроен.",
@@ -2713,6 +2870,15 @@ public sealed class SimulatorForm : WebViewForm
     /// запрещать их «потому что симуляция не идёт» значит отнимать у него
     /// возможность зафиксировать подготовленную вручную сцену.
     /// </summary>
+    private void SetMapView(JsonElement root)
+    {
+        var current = _mapView ?? SimulatorMapViewState.Default;
+        _mapView = new SimulatorMapViewState(
+            Number(root, "cx", current.CenterX),
+            Number(root, "cz", current.CenterZ),
+            Number(root, "mpp", current.MetersPerPixel)).Normalize();
+    }
+
     private void CreateSave(JsonElement root)
     {
         var requested = root.TryGetProperty("name", out var nameNode) ? nameNode.GetString() : null;
@@ -2761,6 +2927,8 @@ public sealed class SimulatorForm : WebViewForm
         _dynamicEventDispatcher.SetSimulationRunning(false);
         SimulationSaveMapper.Apply(_hub, save.State);
         SetRouteStateAfterLoad(save.State.Route, save.State.RouteRuntime);
+        _mapView = save.State.MapView?.Normalize();
+        _mapViewRestoreToken++;
         _inventoryPausedSimulation = false;
         // Пауза вместо полной остановки: мир сохранён, продолжить можно одним
         // нажатием. Автосохранение при этом НЕ делается — загрузка не является
@@ -3176,7 +3344,10 @@ public sealed class SimulatorForm : WebViewForm
                 _routeTargetWaypointIndex,
                 _routeTravelRealSeconds,
                 _routeTravelGameSeconds,
-                Enabled: _routeEnabled));
+                Enabled: _routeEnabled)) with
+        {
+            MapView = _mapView?.Normalize()
+        };
 
     /// <summary>
     /// Запускает режим прохождения.
@@ -3295,6 +3466,8 @@ public sealed class SimulatorForm : WebViewForm
 
         SimulationSaveMapper.Apply(_hub, session.State);
         SetRouteStateAfterLoad(session.State.Route, session.State.RouteRuntime);
+        _mapView = session.State.MapView?.Normalize();
+        _mapViewRestoreToken++;
         _inventoryPausedSimulation = false;
         SyncRuntimeQuestEnabled();
         _autoSaveAt = session.Header.CreatedAt;

@@ -277,11 +277,12 @@ public static class SimulationSaveCodec
             WriteRoute(writer, strings, state.Route, header.FormatVersion >= 5);
         if (header.FormatVersion >= 4)
             WriteRouteRuntime(writer, state.RouteRuntime, header.FormatVersion);
+        if (header.FormatVersion >= 7)
+            WriteMapView(writer, state.MapView);
     }
 
     private static SimulationSaveState ReadInner(BinaryReader reader, int formatVersion)
     {
-        _ = formatVersion;
 
         var player = new PlayerState(
             new WorldCoordinate(ReadDouble(reader), ReadDouble(reader), ReadDouble(reader)),
@@ -356,6 +357,9 @@ public static class SimulationSaveCodec
         var routeRuntime = formatVersion >= 4
             ? ReadRouteRuntime(reader, formatVersion)
             : RouteRuntimeState.Empty;
+        var mapView = formatVersion >= 7
+            ? ReadMapView(reader)
+            : null;
 
         return new SimulationSaveState(
             player, clock, facts, variables, flags, questStatuses,
@@ -364,8 +368,34 @@ public static class SimulationSaveCodec
         {
             DynamicEvents = dynamicEvents,
             Route = route,
-            RouteRuntime = routeRuntime
+            RouteRuntime = routeRuntime,
+            MapView = mapView
         };
+    }
+
+    private static void WriteMapView(
+        BinaryWriter writer,
+        SimulatorMapViewState? mapView)
+    {
+        writer.Write(mapView is not null);
+        if (mapView is null)
+            return;
+
+        var normalized = mapView.Normalize();
+        WriteDouble(writer, normalized.CenterX);
+        WriteDouble(writer, normalized.CenterZ);
+        WriteDouble(writer, normalized.MetersPerPixel);
+    }
+
+    private static SimulatorMapViewState? ReadMapView(BinaryReader reader)
+    {
+        if (!reader.ReadBoolean())
+            return null;
+
+        return new SimulatorMapViewState(
+            ReadDouble(reader),
+            ReadDouble(reader),
+            ReadDouble(reader)).Normalize();
     }
 
     private static void WriteRouteRuntime(
