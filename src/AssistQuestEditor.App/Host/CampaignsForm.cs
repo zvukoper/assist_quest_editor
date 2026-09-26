@@ -244,6 +244,26 @@ public sealed class CampaignsForm : Form
     public event EventHandler<CampaignPropertiesRequestedEventArgs>? CampaignPropertiesRequested;
 
     /// <summary>
+    /// Нажатие общей клавиши симулятора.
+    ///
+    /// Окно обычное, а не <see cref="WebViewForm"/>, поэтому повторяет его роль
+    /// явно: без этого «I» и Escape в каталоге кампаний не работали бы, хотя
+    /// Симулятор на них подписан.
+    /// </summary>
+    public event EventHandler<WebViewHotKeyEventArgs>? GlobalHotKeyPressed;
+
+    /// <inheritdoc cref="WebViewForm.ProcessCmdKey"/>
+    protected override bool ProcessCmdKey(ref Message msg, Keys keyData)
+    {
+        if (SimulatorHotKey.TryHandle(this, keyData, GlobalHotKeyPressed))
+        {
+            return true;
+        }
+
+        return base.ProcessCmdKey(ref msg, keyData);
+    }
+
+    /// <summary>
     /// Текущее выделение квеста. Нужно Simulator: он подсвечивает на карте тот
     /// же квест, что выбран в этом окне, и наоборот.
     /// </summary>

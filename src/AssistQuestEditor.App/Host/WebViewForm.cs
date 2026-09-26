@@ -107,14 +107,15 @@ public abstract class WebViewForm : Form
     /// <summary>
     /// Общие клавиши Simulator обрабатываются до DOM WebView2. Поэтому I и Escape
     /// одинаково работают в карте и во всех дочерних WebView-окнах.
+    ///
+    /// Само правило — в <see cref="SimulatorHotKey.TryHandle"/>: обычные дочерние
+    /// окна обязаны обрабатывать те же клавиши, и своя копия условия здесь
+    /// означала бы, что клавиша работает в WebView-окнах, но не в них.
     /// </summary>
     protected override bool ProcessCmdKey(ref Message msg, Keys keyData)
     {
-        var key = keyData & Keys.KeyCode;
-
-        if (key == Keys.I || key == Keys.Escape)
+        if (SimulatorHotKey.TryHandle(this, keyData, GlobalHotKeyPressed))
         {
-            GlobalHotKeyPressed?.Invoke(this, new WebViewHotKeyEventArgs(key));
             return true;
         }
 
@@ -255,10 +256,4 @@ public abstract class WebViewForm : Form
         Controls.Add(panel);
         panel.BringToFront();
     }
-}
-
-public sealed class WebViewHotKeyEventArgs : EventArgs
-{
-    public WebViewHotKeyEventArgs(Keys key) => Key = key;
-    public Keys Key { get; }
 }

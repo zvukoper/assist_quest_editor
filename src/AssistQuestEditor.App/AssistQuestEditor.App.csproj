@@ -11,10 +11,10 @@
     <Prefer32Bit>false</Prefer32Bit>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
 
-    <Version>1.0.40.189</Version>
-    <AssemblyVersion>1.0.40.189</AssemblyVersion>
-    <FileVersion>1.0.40.189</FileVersion>
-    <AssemblyInformationalVersion>1.0.40.189-ROUTE-R5</AssemblyInformationalVersion>
+    <Version>1.0.40.190</Version>
+    <AssemblyVersion>1.0.40.190</AssemblyVersion>
+    <FileVersion>1.0.40.190</FileVersion>
+    <AssemblyInformationalVersion>1.0.40.190-SIMULATOR-CHILD-HOTKEYS-R1</AssemblyInformationalVersion>
     <PublishSingleFile>true</PublishSingleFile>
     <SelfContained>true</SelfContained>
     <RuntimeIdentifier>win-x64</RuntimeIdentifier>

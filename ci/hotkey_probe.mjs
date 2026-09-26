@@ -7,6 +7,12 @@ const simulatorJs = fs.readFileSync(
   path.join(root, "src", "AssistQuestEditor.App", "Web", "simulator.js"),
   "utf8"
 );
+// Симулятор владеет подписками на общие клавиши: по ним выводится список окон,
+// которые обязаны несть событие (см. конец проверки).
+const simulatorForm = fs.readFileSync(
+  path.join(root, "src", "AssistQuestEditor.App", "Host", "SimulatorForm.cs"),
+  "utf8"
+);
 
 const { browser } = await openBrowser();
 const failures = [];
@@ -141,6 +147,64 @@ try {
   if (pageErrors.length) failures.push("pageerror: " + pageErrors.join(" | "));
 } finally {
   await closeBrowser(browser);
+}
+
+if (failures.length) {
+  console.error("Hotkey probe: FAIL");
+  for (const failure of failures) console.error("- " + failure);
+  process.exit(1);
+}
+
+// --- 5. Событие общих клавиш объявлено у КАЖДОГО окна, на которое подписан Симулятор ---
+//
+// Урок этой проверки: коммит «общие горячие клавиши» подписал JournalForm и
+// CampaignsForm на GlobalHotKeyPressed, а само событие добавил только в
+// WebViewForm, от которого эти окна НЕ наследуются. Компиляция упала только на
+// публикации, то есть в main лежала нерабочая сборка.
+//
+// Проверка читает текст исходников, а не собирает проект: цель — поймать ошибку
+// ДО сборки и с сообщением, по которому сразу видно виновное окно. Список окон
+// выводится из вызовов `_…Form.GlobalHotKeyPressed += …` в SimulatorForm, то есть
+// новая подписка автоматически попадает под проверку.
+const hostDir = path.join(root, "src", "AssistQuestEditor.App", "Host");
+
+const subscribedForms = new Set();
+const subscriptionPattern = /_(\w+)\.GlobalHotKeyPressed\s*\+?=/g;
+for (const match of simulatorForm.matchAll(subscriptionPattern)) {
+  // Имя поля уже содержит тип окна: `_campaignsForm` → `CampaignsForm`. Это
+  // соглашение проекта, и проверка на него опирается: у форм поле называется
+  // по типу, а не `_window`.
+  const field = match[1];
+  const formName = field.charAt(0).toUpperCase() + field.slice(1);
+  if (!formName.endsWith("Form")) {
+    failures.push(`Поле _${field} подписано на GlobalHotKeyPressed, но не названо по типу окна.`);
+    continue;
+  }
+
+  subscribedForms.add(formName);
+}
+
+if (subscribedForms.size < 2) {
+  failures.push("В SimulatorForm не найдено подписок на GlobalHotKeyPressed: проверка окон бессмысленна.");
+}
+
+for (const formName of subscribedForms) {
+  const formPath = path.join(hostDir, formName + ".cs");
+  if (!fs.existsSync(formPath)) {
+    failures.push(`Окно ${formName} не найдено, хотя Симулятор на него подписан.`);
+    continue;
+  }
+
+  const formText = fs.readFileSync(formPath, "utf8");
+  // Своё событие есть — подписчик его получает.
+  if (/GlobalHotKeyPressed/.test(formText)) continue;
+
+  // Иначе событие обязано приходить по наследству: только WebViewForm его несёт.
+  if (/class\s+\w+\s*:\s*WebViewForm\b/.test(formText)) continue;
+
+  failures.push(
+    `${formName} не объявляет GlobalHotKeyPressed и не наследует WebViewForm: ` +
+    "подписка Симулятора не скомпилируется, общая клавиша в этом окне молчит.");
 }
 
 if (failures.length) {

@@ -3142,10 +3142,6 @@
       play.classList.toggle("paused", simulationPaused);
     }
 
-    const statusText = document.getElementById("simStatusText");
-    if (statusText)
-      statusText.textContent = simulationPaused ? "Пауза" : "Игровое время";
-
     // Стоп доступен всегда: он же создаёт автосохранение, и игрок вправе
     // зафиксировать мир, даже если симуляция ещё не запускалась.
     if (stop) {

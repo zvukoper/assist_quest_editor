@@ -90,6 +90,26 @@ public sealed class JournalForm : Form
 
     public event EventHandler? ReturnToSidebarRequested;
 
+    /// <summary>
+    /// Нажатие общей клавиши симулятора.
+    ///
+    /// Окно обычное, а не <see cref="WebViewForm"/>, поэтому повторяет его роль
+    /// явно: без этого «I» и Escape в журнале не работали бы, хотя Симулятор на
+    /// них подписан.
+    /// </summary>
+    public event EventHandler<WebViewHotKeyEventArgs>? GlobalHotKeyPressed;
+
+    /// <inheritdoc cref="WebViewForm.ProcessCmdKey"/>
+    protected override bool ProcessCmdKey(ref Message msg, Keys keyData)
+    {
+        if (SimulatorHotKey.TryHandle(this, keyData, GlobalHotKeyPressed))
+        {
+            return true;
+        }
+
+        return base.ProcessCmdKey(ref msg, keyData);
+    }
+
     public void SetEntries(IEnumerable<SimulatorJournalEntry> entries)
     {
         _log.SuspendLayout();
