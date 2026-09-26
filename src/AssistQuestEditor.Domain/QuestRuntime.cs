@@ -1047,10 +1047,16 @@ public sealed class QuestRuntime : IQuestRuntimeController
     {
         var amount = ParseInt(GetParameter(node, "amount"), 0) * sign;
         var current = _hub.Get<PlayerProgressState>("player-progress").Value;
+        var conditions = _hub.Get<PlayerConditionState>("player-conditions").Value;
+        var experienceAmount = amount > 0
+            ? (int)Math.Round(
+                amount * PlayerConditionEngine.GetExperienceMultiplier(conditions),
+                MidpointRounding.AwayFromZero)
+            : amount;
         var next = property switch
         {
             "money" => current with { Money = Math.Max(0, current.Money + amount) },
-            "experience" => current with { Experience = Math.Max(0, current.Experience + amount) },
+            "experience" => current with { Experience = Math.Max(0, current.Experience + experienceAmount) },
             _ => current
         };
 
