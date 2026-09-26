@@ -34,6 +34,7 @@ public static class SimulationSaveMapper
         var progress = hub.Get<PlayerProgressState>("player-progress").Value;
         var vitals = hub.Get<PlayerVitalsState>("player-vitals").Value;
         var clock = hub.Get<WorldClockState>("sim-time").Value;
+        var conditions = hub.Get<PlayerConditionState>("player-conditions").Value;
 
         return new SimulationSaveState(
             hub.Get<PlayerState>("player").Value,
@@ -66,7 +67,8 @@ public static class SimulationSaveMapper
         {
             DynamicEvents = hub.Get<DynamicEventRuntimeState>("dynamic-events").Value,
             Route = (route ?? RouteState.Empty).Normalize(),
-            RouteRuntime = routeRuntime ?? RouteRuntimeState.Empty
+            RouteRuntime = routeRuntime ?? RouteRuntimeState.Empty,
+            Conditions = conditions.Normalize()
         };
     }
 
@@ -112,6 +114,9 @@ public static class SimulationSaveMapper
 
         hub.Get<PlayerVitalsState>("player-vitals").Set(state.PlayerVitals, LoadSource);
         hub.Get<PlayerProgressState>("player-progress").Set(state.PlayerProgress, LoadSource);
+        hub.Get<PlayerConditionState>("player-conditions").Set(
+            (state.Conditions ?? PlayerConditionState.Empty).Normalize(),
+            LoadSource);
 
         hub.Get<CharacterState>("character").Set(
             BuildCharacter(hub, state),

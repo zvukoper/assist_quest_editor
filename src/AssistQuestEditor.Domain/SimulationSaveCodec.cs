@@ -279,6 +279,8 @@ public static class SimulationSaveCodec
             WriteRouteRuntime(writer, state.RouteRuntime, header.FormatVersion);
         if (header.FormatVersion >= 7)
             WriteMapView(writer, state.MapView);
+        if (header.FormatVersion >= 8)
+            WriteConditions(writer, state.Conditions);
     }
 
     private static SimulationSaveState ReadInner(BinaryReader reader, int formatVersion)
@@ -360,6 +362,9 @@ public static class SimulationSaveCodec
         var mapView = formatVersion >= 7
             ? ReadMapView(reader)
             : null;
+        var conditions = formatVersion >= 8
+            ? ReadConditions(reader)
+            : PlayerConditionState.Empty;
 
         return new SimulationSaveState(
             player, clock, facts, variables, flags, questStatuses,
@@ -369,7 +374,8 @@ public static class SimulationSaveCodec
             DynamicEvents = dynamicEvents,
             Route = route,
             RouteRuntime = routeRuntime,
-            MapView = mapView
+            MapView = mapView,
+            Conditions = conditions
         };
     }
 
@@ -396,6 +402,62 @@ public static class SimulationSaveCodec
             ReadDouble(reader),
             ReadDouble(reader),
             ReadDouble(reader)).Normalize();
+    }
+
+
+    private static void WriteConditions(
+        BinaryWriter writer,
+        PlayerConditionState conditions)
+    {
+        conditions = (conditions ?? PlayerConditionState.Empty).Normalize();
+        WriteDouble(writer, conditions.CumulativeHealth);
+        WriteDouble(writer, conditions.CumulativeEnergy);
+        WriteDouble(writer, conditions.CumulativeHydration);
+        WriteDouble(writer, conditions.Stress);
+        WriteDouble(writer, conditions.CumulativeStress);
+        WriteDouble(writer, conditions.CumulativeFatigue);
+        WriteDouble(writer, conditions.CriticalFatigueGameSeconds);
+        WriteDouble(writer, conditions.CriticalStressGameSeconds);
+
+        writer.Write(conditions.Effects.Count);
+        foreach (var effect in conditions.Effects)
+        {
+            WriteString(writer, effect.Id);
+            WriteString(writer, effect.Name);
+            WriteDouble(writer, effect.RemainingRealSeconds);
+            writer.Write(effect.IsDebuff);
+            WriteDouble(writer, effect.ExperienceMultiplier);
+            WriteDouble(writer, effect.StressAccumulationSlowdownPercent);
+        }
+    }
+
+    private static PlayerConditionState ReadConditions(BinaryReader reader)
+    {
+        var state = new PlayerConditionState(
+            ReadDouble(reader),
+            ReadDouble(reader),
+            ReadDouble(reader),
+            ReadDouble(reader),
+            ReadDouble(reader),
+            ReadDouble(reader),
+            ReadDouble(reader),
+            ReadDouble(reader),
+            Array.Empty<ActivePlayerEffectState>());
+
+        var effectCount = reader.ReadInt32();
+        var effects = new List<ActivePlayerEffectState>(effectCount);
+        for (var index = 0; index < effectCount; index++)
+        {
+            effects.Add(new ActivePlayerEffectState(
+                ReadString(reader),
+                ReadString(reader),
+                ReadDouble(reader),
+                reader.ReadBoolean(),
+                ReadDouble(reader),
+                ReadDouble(reader)));
+        }
+
+        return state with { Effects = effects }.Normalize();
     }
 
     private static void WriteRouteRuntime(

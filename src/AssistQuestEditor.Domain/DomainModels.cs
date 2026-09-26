@@ -167,6 +167,66 @@ public sealed record CharacterState(
     IReadOnlyList<string> Buffs,
     IReadOnlyList<string> Debuffs);
 
+public sealed record ActivePlayerEffectState(
+    string Id,
+    string Name,
+    double RemainingRealSeconds,
+    bool IsDebuff,
+    double ExperienceMultiplier = 1d,
+    double StressAccumulationSlowdownPercent = 0d)
+{
+    public ActivePlayerEffectState Normalize() => this with
+    {
+        RemainingRealSeconds = Math.Max(
+            0d,
+            double.IsFinite(RemainingRealSeconds) ? RemainingRealSeconds : 0d),
+        ExperienceMultiplier = Math.Max(
+            1d,
+            double.IsFinite(ExperienceMultiplier) ? ExperienceMultiplier : 1d),
+        StressAccumulationSlowdownPercent = Math.Clamp(
+            double.IsFinite(StressAccumulationSlowdownPercent)
+                ? StressAccumulationSlowdownPercent
+                : 0d,
+            0d,
+            100d)
+    };
+}
+
+public sealed record PlayerConditionState(
+    double CumulativeHealth,
+    double CumulativeEnergy,
+    double CumulativeHydration,
+    double Stress,
+    double CumulativeStress,
+    double CumulativeFatigue,
+    double CriticalFatigueGameSeconds,
+    double CriticalStressGameSeconds,
+    IReadOnlyList<ActivePlayerEffectState> Effects)
+{
+    public static PlayerConditionState Empty =>
+        new(0d, 0d, 0d, 0d, 0d, 0d, 0d, 0d, Array.Empty<ActivePlayerEffectState>());
+
+    public PlayerConditionState Normalize() => this with
+    {
+        CumulativeHealth = Math.Clamp(CumulativeHealth, 0d, 100d),
+        CumulativeEnergy = Math.Clamp(CumulativeEnergy, 0d, 100d),
+        CumulativeHydration = Math.Clamp(CumulativeHydration, 0d, 100d),
+        Stress = Math.Clamp(Stress, 0d, 100d - Math.Clamp(CumulativeStress, 0d, 100d)),
+        CumulativeStress = Math.Clamp(CumulativeStress, 0d, 100d),
+        CumulativeFatigue = Math.Clamp(CumulativeFatigue, 0d, 100d),
+        CriticalFatigueGameSeconds = Math.Max(
+            0d,
+            double.IsFinite(CriticalFatigueGameSeconds) ? CriticalFatigueGameSeconds : 0d),
+        CriticalStressGameSeconds = Math.Max(
+            0d,
+            double.IsFinite(CriticalStressGameSeconds) ? CriticalStressGameSeconds : 0d),
+        Effects = (Effects ?? Array.Empty<ActivePlayerEffectState>())
+            .Select(effect => effect.Normalize())
+            .Where(effect => effect.RemainingRealSeconds > 0d)
+            .ToArray()
+    };
+}
+
 // ReputationState живёт в NpcReputation.cs: репутация ведётся по НПЦ, а не по
 // фракциям, поэтому модель и шкала диапазонов лежат рядом.
 
@@ -286,4 +346,6 @@ public sealed record SimulatorSnapshot(
     /// </summary>
     public DynamicEventRuntimeState DynamicEvents { get; init; } =
         DynamicEventRuntimeState.Empty;
+
+    public PlayerConditionState Conditions { get; init; } = PlayerConditionState.Empty;
 }

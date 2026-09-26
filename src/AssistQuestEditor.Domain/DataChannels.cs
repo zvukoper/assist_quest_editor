@@ -180,6 +180,11 @@ public sealed class SimulatorDataChannelHub : IDataChannelHub
             "Деньги и опыт",
             new PlayerProgressState(1500, 0, 0));
 
+        PlayerConditions = new DataChannel<PlayerConditionState>(
+            "player-conditions",
+            "Условия и эффекты персонажа",
+            PlayerConditionState.Empty);
+
         Character = new DataChannel<CharacterState>(
             "character",
             "Персонаж",
@@ -254,6 +259,7 @@ public sealed class SimulatorDataChannelHub : IDataChannelHub
             [Player.Key] = Player,
             [PlayerVitals.Key] = PlayerVitals,
             [PlayerProgress.Key] = PlayerProgress,
+            [PlayerConditions.Key] = PlayerConditions,
             [Character.Key] = Character,
             [World.Key] = World,
             [Selection.Key] = Selection,
@@ -280,6 +286,7 @@ public sealed class SimulatorDataChannelHub : IDataChannelHub
     public DataChannel<PlayerVitalsState> PlayerVitals { get; }
     public DataChannel<PlayerProgressState> PlayerProgress { get; }
     public DataChannel<CharacterState> Character { get; }
+    public DataChannel<PlayerConditionState> PlayerConditions { get; }
     public DataChannel<WorldState> World { get; }
     public DataChannel<WorldSelectionState> Selection { get; }
     public DataChannel<FactState> Facts { get; }
@@ -339,6 +346,7 @@ public sealed class SimulatorDataChannelHub : IDataChannelHub
             null), "Сброс симулятора");
         PlayerVitals.Set(new PlayerVitalsState(100, 100, 100, 100, 100, 100, 0, 100), "Сброс симулятора");
         PlayerProgress.Set(new PlayerProgressState(1500, 0, 0), "Сброс симулятора");
+        PlayerConditions.Set(PlayerConditionState.Empty, "Сброс симулятора");
         Character.Set(
             new CharacterState(
                 new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase)
@@ -403,7 +411,8 @@ public sealed class SimulatorDataChannelHub : IDataChannelHub
             System.Value,
             Interfaces.Value)
         {
-            DynamicEvents = DynamicEvents.Value
+            DynamicEvents = DynamicEvents.Value,
+            Conditions = PlayerConditions.Value
         };
 
     private void Subscribe(IDataChannel channel)
