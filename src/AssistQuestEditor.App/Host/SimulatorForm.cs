@@ -1267,14 +1267,78 @@ public sealed class SimulatorForm : WebViewForm
         }
     }
 
+    /// <summary>
+    /// Индекс точки полного маршрута, ОТ которой продолжается движение.
+    ///
+    /// Возвращает 0 (прежнее поведение), если продолжение неочевидно:
+    /// цель неизвестна или это точка №1, цель не помещается в список, цель
+    /// помечена бездорожьем или лежит дальше допустимого расстояния привязки к
+    /// дороге. Во всех этих случаях отбрасывать ведущие точки нельзя: путь может
+    /// начинаться не там, где ожидается, и планировщик обязан построить его от
+    /// позиции игрока.
+    ///
+    /// Иначе возвращает индекс текущей цели: она — первая точка, которую игрок
+    /// ещё не прошёл.
+    /// </summary>
+    private int ResolveRouteStartWaypoint(int? target)
+    {
+        if (target is not int targetIndex ||
+            targetIndex <= 0 ||
+            targetIndex >= _routeState.Waypoints.Count)
+        {
+            return 0;
+        }
+
+        var targetWaypoint = _routeState.Waypoints[targetIndex];
+        if (targetWaypoint.IsOffRoad)
+            return 0;
+
+        var projection = _routePlanner.ProjectToRoad(targetWaypoint.Position);
+        if (projection is null ||
+            projection.Value.DistanceMeters > RoadRoutePlanner.MaxRouteSnapDistanceMeters)
+        {
+            return 0;
+        }
+
+        return targetIndex;
+    }
+
     private void RebuildRoute(
         string reason,
         bool publishSnapshot = true,
         RouteRebuildContext? routeRebuildContext = null)
-    {
-        _routeState = _routeState.Normalize();
+    {        _routeState = _routeState.Normalize();
         var playerPosition = _hub.Get<PlayerState>("player").Value.Position;
-        _routePlan = _routePlanner.Build(_routeState, playerPosition);
+
+        // Маршрут строится от ТОЙ точки, к которой движение реально продолжается.
+        //
+        // Без этого он всегда начинался от точки №1, и после автозагрузки
+        // сохранения (точки 1–7 уже пройдены) первая часть пути вела НАЗАД по тем
+        // же дорогам, которыми игрок только что приехал. На карте это выглядело как
+        // «маршрут идёт по дороге», а пройденная дважды дорога давала лишнюю линию
+        // рядом с бездорожным участком.
+        //
+        // Ведущие пройденные точки отбрасываются только там, где продолжение
+        // очевидно: цель известна и лежит впереди. Любая неопределённость (нет цели,
+        // цель №1, точка бездорожья или недостижимая привязка у самой цели) оставляет
+        // прежнее поведение — планировщик обязан строить путь от игрока.
+        var startWaypointIndex = ResolveRouteStartWaypoint(_routeTargetWaypointIndex);
+        var routeSource = startWaypointIndex == 0
+            ? _routeState
+            : _routeState with
+            {
+                Waypoints = _routeState.Waypoints.Skip(startWaypointIndex).ToArray()
+            };
+
+        _routePlan = _routePlanner.Build(routeSource, playerPosition)
+            .ShiftWaypointIndices(startWaypointIndex);
+
+        if (startWaypointIndex > 0)
+        {
+            AppLogger.Info(
+                "SimulatorForm: маршрут продолжен от первой точки впереди игрока.",
+                $"skipped={startWaypointIndex}; target={(startWaypointIndex + 1)}; legs={_routePlan.Legs.Count}");
+        }
 
         if (routeRebuildContext is null)
         {
@@ -1556,7 +1620,29 @@ public sealed class SimulatorForm : WebViewForm
     {
         _routeState = (route ?? RouteState.Empty).Normalize();
         var playerPosition = _hub.Get<PlayerState>("player").Value.Position;
-        _routePlan = _routePlanner.Build(_routeState, playerPosition);
+
+        // Как и при перестроении, план строится от ПЕРВОЙ НЕПРОЙДЕННОЙ точки.
+        // Сохранённая цель известна ДО построения, поэтому её можно передать сюда
+        // явно: иначе загруженный маршрут начинался бы от точки №1 и вёл игрока
+        // назад по уже пройденным дорогам (см. ResolveRouteStartWaypoint).
+        var startWaypointIndex = ResolveRouteStartWaypoint(
+            runtime?.CurrentTargetWaypointIndex);
+        var routeSource = startWaypointIndex == 0
+            ? _routeState
+            : _routeState with
+            {
+                Waypoints = _routeState.Waypoints.Skip(startWaypointIndex).ToArray()
+            };
+
+        _routePlan = _routePlanner.Build(routeSource, playerPosition)
+            .ShiftWaypointIndices(startWaypointIndex);
+
+        if (startWaypointIndex > 0)
+        {
+            AppLogger.Info(
+                "SimulatorForm: загруженный маршрут продолжен от первой точки впереди игрока.",
+                $"skipped={startWaypointIndex}; target={(startWaypointIndex + 1)}; legs={_routePlan.Legs.Count}");
+        }
 
         var savedCursor = runtime?.Cursor ?? RouteCursor.Initial;
 

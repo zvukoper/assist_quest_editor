@@ -11,10 +11,10 @@
     <Prefer32Bit>false</Prefer32Bit>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
 
-    <Version>1.0.40.191</Version>
-    <AssemblyVersion>1.0.40.191</AssemblyVersion>
-    <FileVersion>1.0.40.191</FileVersion>
-    <AssemblyInformationalVersion>1.0.40.191-SIMULATOR-MAPVIEW-ROUTE-R1</AssemblyInformationalVersion>
+    <Version>1.0.40.192</Version>
+    <AssemblyVersion>1.0.40.192</AssemblyVersion>
+    <FileVersion>1.0.40.192</FileVersion>
+    <AssemblyInformationalVersion>1.0.40.192-ROUTE-RESUME-AND-INVENTORY-HOTKEY-R1</AssemblyInformationalVersion>
     <PublishSingleFile>true</PublishSingleFile>
     <SelfContained>true</SelfContained>
     <RuntimeIdentifier>win-x64</RuntimeIdentifier>

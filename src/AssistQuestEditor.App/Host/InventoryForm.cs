@@ -127,7 +127,7 @@ public sealed class InventoryForm : WebViewForm
         try
         {
             using var document = JsonDocument.Parse(json);
-            var root = document.RootElement;
+            var root = UnwrapMessage(document.RootElement);
             var action = root.GetProperty("action").GetString() ?? string.Empty;
 
             // Окно инвентаря только СООБЩАЕТ о своих действиях: состояние мира
@@ -162,6 +162,36 @@ public sealed class InventoryForm : WebViewForm
         {
             AppLogger.Error("InventoryForm: не удалось разобрать сообщение.", ex, json);
         }
+    }
+
+    /// <summary>
+    /// Приводит сообщение страницы к объекту с полями действия.
+    ///
+    /// Страница инвентаря передаёт полезную нагрузку СТРОКОЙ
+    /// (<c>postMessage(JSON.stringify(payload))</c>), поэтому
+    /// <see cref="CoreWebView2WebMessageReceivedEventArgs.WebMessageAsJson"/>
+    /// содержит JSON-строку, а не объект: разбор давал
+    /// <c>The requested operation requires an element of type 'Object', but the
+    /// target element has type 'String'</c> на КАЖДОМ сообщении. Из-за этого
+    /// клавиша I внутри окна «Игрок» не закрывала его: страница присылала
+    /// <c>close_inventory</c>, а форма не могла её прочитать.
+    ///
+    /// Возвращённый элемент обязан пережить вызывающий код, поэтому он берётся
+    /// копией (<see cref="JsonElement.Clone"/>): документ вложенной строки
+    /// освобождается сразу, и без копии обращение к полям было бы обращением к
+    /// освобождённой памяти.
+    /// </summary>
+    private static JsonElement UnwrapMessage(JsonElement root)
+    {
+        if (root.ValueKind != JsonValueKind.String)
+            return root;
+
+        var text = root.GetString();
+        if (string.IsNullOrWhiteSpace(text))
+            return root;
+
+        using var inner = JsonDocument.Parse(text);
+        return inner.RootElement.Clone();
     }
 
     /// <summary>Игрок увидел предмет: значок «новый» надо снять.</summary>

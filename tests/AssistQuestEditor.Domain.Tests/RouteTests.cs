@@ -531,10 +531,83 @@ public sealed class RouteTests
         Assert.Equal(new WorldCoordinate(100, 0, 100), direct.Polyline[^1]);
     }
 
+    /// <summary>
+    /// Сдвиг нумерации точек сохраняет геометрию и перенумеровывает оба конца.
+    /// Нужен, когда ведущие пройденные точки отброшены, а индексы обязаны
+    /// остаться согласованными с полным списком маршрута.
+    /// </summary>
     [Fact]
-    public void OffRoadWaypointCanStartNextRoadLeg()
+    public void ShiftWaypointIndicesRenumbersLegsWithoutChangingGeometry()
     {
         var planner = new RoadRoutePlanner(new[]
+        {
+            new RoadSegment(0, 0, 100, 0),
+            new RoadSegment(100, 0, 200, 0)
+        });
+
+        var route = new RouteState(60, new[]
+        {
+            new RouteWaypoint("a", new WorldCoordinate(0, 0, 0), 60),
+            new RouteWaypoint("b", new WorldCoordinate(100, 0, 0), 60),
+            new RouteWaypoint("c", new WorldCoordinate(200, 0, 0), 60)
+        });
+
+        var plan = planner.Build(route);
+        var shifted = plan.ShiftWaypointIndices(4);
+
+        Assert.Equal(plan.Legs.Count, shifted.Legs.Count);
+        Assert.Equal(4, shifted.Legs[0].StartWaypointIndex);
+        Assert.Equal(5, shifted.Legs[0].EndWaypointIndex);
+        Assert.Equal(5, shifted.Legs[1].StartWaypointIndex);
+        Assert.Equal(6, shifted.Legs[1].EndWaypointIndex);
+        Assert.Equal(
+            plan.Legs[0].Polyline.ToArray(),
+            shifted.Legs[0].Polyline.ToArray());
+        Assert.Equal(plan.Legs[0].LengthMeters, shifted.Legs[0].LengthMeters);
+    }
+
+    [Fact]
+    public void ShiftWaypointIndicesKeepsVirtualPlayerLegAtMinusOne()
+    {
+        var planner = new RoadRoutePlanner(new[]
+        {
+            new RoadSegment(0, 0, 100, 0)
+        });
+
+        var route = new RouteState(60, new[]
+        {
+            new RouteWaypoint("a", new WorldCoordinate(100, 0, 0), 60)
+        });
+
+        var plan = planner.Build(route, new WorldCoordinate(0, 0, 0));
+        var shifted = plan.ShiftWaypointIndices(3);
+
+        // Первый leg начинается от ИГРОКА и не является путевой точкой: его
+        // начало обязано остаться -1, иначе движение стартовало бы не с игрока.
+        Assert.Equal(-1, shifted.Legs[0].StartWaypointIndex);
+        Assert.Equal(3, shifted.Legs[0].EndWaypointIndex);
+    }
+
+    [Fact]
+    public void ShiftWaypointIndicesWithZeroReturnsSamePlan()
+    {
+        var planner = new RoadRoutePlanner(new[]
+        {
+            new RoadSegment(0, 0, 100, 0)
+        });
+
+        var route = new RouteState(60, new[]
+        {
+            new RouteWaypoint("a", new WorldCoordinate(100, 0, 0), 60)
+        });
+
+        var plan = planner.Build(route, new WorldCoordinate(0, 0, 0));
+        Assert.Same(plan, plan.ShiftWaypointIndices(0));
+    }
+
+    [Fact]
+    public void OffRoadWaypointCanStartNextRoadLeg()
+    {        var planner = new RoadRoutePlanner(new[]
         {
             new RoadSegment(0, 0, 25, 0),
             new RoadSegment(100, 100, 150, 100)

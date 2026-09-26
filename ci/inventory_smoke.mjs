@@ -105,6 +105,20 @@ check(/_inventoryForm\.Close\(\)[\s\S]{0,60}?_inventoryForm = null/.test(simulat
 check(/case "close_inventory":/.test(inventoryForm) &&
       /CloseRequested\?\.Invoke/.test(inventoryForm),
   "Окно инвентаря не обрабатывает запрос close_inventory: клавиша I внутри окна не закроет его.");
+// Страница передаёт нагрузку СТРОКОЙ: `postMessage(JSON.stringify(payload))`.
+// Значит в Host приходит JSON-строка, а НЕ объект, и разбор обязан её развернуть.
+// Прежде разбор падал с «requires an element of type 'Object'», поэтому клавиша I
+// внутри окна «Игрок» ничего не закрывала — сообщение просто не читалось.
+check(/JsonValueKind\.String/.test(inventoryForm),
+  "Окно инвентаря не разворачивает строковую нагрузку страницы: сообщения " +
+  "postMessage(JSON.stringify(...)) не будут разобраны, и клавиша I внутри окна не сработает.");
+check(/UnwrapMessage\(/.test(inventoryForm),
+  "Разбор сообщений окна инвентаря должен прогоняться через UnwrapMessage.");
+// Копия обязательна: документ вложенной строки освобождается сразу, и обращение
+// к его полям было бы обращением к освобождённой памяти.
+check(/inner\.RootElement\.Clone\(\)/.test(inventoryForm),
+  "Развёрнутый элемент обязан быть копией (Clone): освобождённый JsonDocument " +
+  "сделал бы обращение к полям небезопасным.");
 check(/CloseRequested \+=/.test(simulatorForm) && /CloseInventoryWindow\(\)/.test(simulatorForm),
   "Симулятор не подписан на закрытие окна инвентаря: Escape внутри окна не сработает.");
 check(/KeyI/.test(inventoryHtml) && /close_inventory/.test(inventoryHtml),

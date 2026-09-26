@@ -137,6 +137,48 @@ check(
   /ClearSession\(\)/.test(simulatorForm),
   "«Сбросить» должен очищать сохранённое прохождение."
 );
+
+// 4.1. После автозагрузки маршрут обязан ПРОДОЛЖАТЬСЯ от первой непройденной
+// точки, а не начинаться заново от точки №1.
+//
+// Это не косметика: точки 1..N уже пройдены, и построение от точки №1 вело игрока
+// НАЗАД по тем же дорогам. Пройденная дважды дорога давала на карте лишнюю линию
+// рядом с бездорожным участком, и он выглядел как «маршрут идёт и по дороге, и по
+// бездорожью». Проверялось замером: у такого маршрута 24 дорожных отрезка
+// проходились повторно, после исправления — 0.
+const rebuildBody = simulatorForm.slice(
+  simulatorForm.indexOf("private void RebuildRoute("),
+  simulatorForm.indexOf("private void SetRouteStateAfterLoad(")
+);
+check(
+  /ResolveRouteStartWaypoint\(_routeTargetWaypointIndex\)/.test(rebuildBody),
+  "Построение маршрута обязано определять начальную точку продолжения: " +
+  "иначе после загрузки маршрут пойдёт назад по уже пройденным дорогам."
+);
+check(
+  /SetRouteStateAfterLoad[\s\S]{0,900}?ResolveRouteStartWaypoint\(/.test(simulatorForm),
+  "Загрузка сохранения обязана продолжать маршрут от первой непройденной точки: " +
+  "иначе карта после перезапуска покажет путь назад по пройденным дорогам."
+);
+check(
+  /ShiftWaypointIndices\(startWaypointIndex\)/.test(rebuildBody),
+  "Номера точек урезанного плана обязаны сдвигаться к полному списку маршрута: " +
+  "иначе текущая цель и состояние курсора укажут на чужую точку."
+);
+check(
+  /targetWaypoint\.IsOffRoad[\s\S]{0,40}?return 0;/.test(simulatorForm),
+  "Бездорожная текущая цель обязана оставлять прежнее построение: " +
+  "её достижимость через дорожный граф не гарантирована."
+);
+check(
+  /projection\.Value\.DistanceMeters > RoadRoutePlanner\.MaxRouteSnapDistanceMeters/.test(simulatorForm),
+  "Точка вне допустимого расстояния привязки обязана оставлять прежнее построение."
+);
+check(
+  /public RoutePlan ShiftWaypointIndices\(int offset\)/.test(
+    read("src/AssistQuestEditor.Domain/RouteModels.cs")),
+  "RoutePlan обязан уметь перенумеровывать точки плана."
+);
 const resetBody = simulatorForm.slice(
   simulatorForm.indexOf('case "reset"'),
   simulatorForm.indexOf('case "reload_catalog"')

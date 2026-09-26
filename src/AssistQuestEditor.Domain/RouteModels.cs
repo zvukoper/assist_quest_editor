@@ -75,6 +75,35 @@ public sealed record RoutePlan(
         Legs.Count > 0 &&
         Errors.Count == 0 &&
         Legs.All(item => item.Polyline.Count >= 2);
+
+    /// <summary>
+    /// Сдвигает номера путевых точек всех leg на <paramref name="offset"/>.
+    ///
+    /// Нужно, когда план строится по УРЕЗАННОМУ списку точек (ведущие уже
+    /// пройденные точки отброшены), а индексы обязаны остаться согласованными с
+    /// ПОЛНЫМ списком: по ним ищется текущая цель, состояние курсора и подписи
+    /// точек. Без сдвига «точка 1» плана указывала бы на пятую точку маршрута.
+    /// </summary>
+    public RoutePlan ShiftWaypointIndices(int offset)
+    {
+        if (offset == 0 || Legs.Count == 0)
+            return this;
+
+        // Виртуальный leg «игрок → точка» начинается НЕ путевой точкой, а
+        // позицией игрока (-1). Сдвигать этот номер нельзя: движение стартовало
+        // бы не от игрока, а от несуществующей точки.
+        static int ShiftStart(int value, int delta) => value < 0 ? value : value + delta;
+
+        return new RoutePlan(
+            Legs
+                .Select(leg => leg with
+                {
+                    StartWaypointIndex = ShiftStart(leg.StartWaypointIndex, offset),
+                    EndWaypointIndex = leg.EndWaypointIndex + offset
+                })
+                .ToArray(),
+            Errors);
+    }
 }
 
 public readonly record struct RouteCursor(
