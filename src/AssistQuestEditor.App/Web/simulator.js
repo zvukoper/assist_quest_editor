@@ -3613,6 +3613,10 @@
           "<button class='routeClearButton' id='routeClear' type='button' title='Сбросить маршрут'" +
             (canEdit && route.waypoints.length ? "" : " disabled") + ">Сброс</button>",
         "</div>",
+        "<div class='routeFileButtons'>",
+          "<button class='smallButton' id='routeSaveFile' type='button'>Сохранить</button>",
+          "<button class='smallButton' id='routeLoadFile' type='button'>Загрузить</button>",
+        "</div>",
         "<div class='routeSpeedRow'>",
           "<span class='routeSpeedOwner'>" +
             escapeHtml(selectedRoute ? "Точка №" + selectedRoute.index : "Новая точка") +
@@ -4256,8 +4260,10 @@
 
     if (message.type === "route_snapshot") {
       route = normalizeRoute(message.route);
-      if (message.fitToRoute)
+      if (message.fitToRoute) {
         fitRoute();
+        sendMapView();
+      }
       drawMap();
       ensureRouteAnimation();
       // Do not rebuild the sidebar here: speed is emitted on every input event
