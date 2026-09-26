@@ -1233,6 +1233,17 @@ public sealed class SimulatorForm : WebViewForm
         }
 
         var now = DateTimeOffset.UtcNow;
+
+        // Достигнутая точка со скоростью 0 — это остановка маршрута, а НЕ
+        // выключение пользовательского режима «Двигаться по маршруту».
+        // Пока игрок явно не выключил/включил toggle заново, повторно применять
+        // ту же остановку и создавать одинаковые события не нужно.
+        if (_routeStoppedWaypointIndex.HasValue && !_resumeRouteAfterStop)
+        {
+            _routeMovementLastTick = now;
+            return;
+        }
+
         if (_routeMovementLastTick is null)
         {
             _routeMovementLastTick = now;
@@ -1311,14 +1322,24 @@ public sealed class SimulatorForm : WebViewForm
 
         if (!result.Enabled)
         {
-            _routeEnabled = false;
             _routeMovementLastTick = null;
 
-            if (result.Completed)
-                _routeStoppedWaypointIndex = _routeState.Waypoints.Count - 1;
-
-            if (result.Completed)
+            if (result.StoppedAtWaypoint)
             {
+                _routeStoppedWaypointIndex = result.Cursor.StoppedAtWaypointIndex;
+                _resumeRouteAfterStop = true;
+                _routeTargetWaypointIndex =
+                    _routeStoppedWaypointIndex is int stopped &&
+                    stopped < _routeState.Waypoints.Count - 1
+                        ? stopped + 1
+                        : GetTargetWaypointIndex(result.Cursor);
+            }
+            else if (result.Completed)
+            {
+                _routeStoppedWaypointIndex = _routeState.Waypoints.Count - 1;
+                _resumeRouteAfterStop = false;
+                _routeTargetWaypointIndex = null;
+
                 PostJson(JsonSerializer.Serialize(new
                 {
                     type = "route_completed",
@@ -1326,6 +1347,8 @@ public sealed class SimulatorForm : WebViewForm
                 }, SnapshotJsonOptions));
             }
 
+            // ВАЖНО: _routeEnabled здесь НЕ меняется. Это пользовательский
+            // toggle и его состояние изменяется только action=route_toggle.
             AppLogger.Info(
                 "SimulatorForm: движение по маршруту остановлено.",
                 result.StoppedAtWaypoint
