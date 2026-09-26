@@ -80,6 +80,9 @@
   let camera = { cx: 0, cz: 0, mpp: 50 };
   let lastAppliedMapViewRestoreToken = null;
   let eventHistory = [];
+  let journalHistory = [];
+  let persistedOpenSections = null;
+  const SIDEBAR_OPEN_STORAGE_KEY = "aqe.simulator.rightSidebar.openSections";
   let runtimeTargetKey = "";
   let dragPlayerPosition = null;
   let journalDetached = false;
@@ -265,6 +268,7 @@
     ["states", "Состояния"],
     ["vitals", "Потребности"],
     ["progress", "Деньги / опыт"],
+    ["effects", "Баффы и дебаффы"],
     ["character", "Персонаж"],
     ["inventory", "Инвентарь"],
     ["reputation", "Репутация"],
@@ -3439,13 +3443,40 @@
       "</svg>";
   }
 
-    function renderSide() {
+    function loadPersistedOpenSections() {
+    if (persistedOpenSections !== null) return persistedOpenSections;
+    try {
+      const raw = localStorage.getItem(SIDEBAR_OPEN_STORAGE_KEY);
+      const parsed = raw ? JSON.parse(raw) : null;
+      persistedOpenSections = Array.isArray(parsed)
+        ? new Set(parsed.map(String))
+        : null;
+    } catch {
+      persistedOpenSections = null;
+    }
+    return persistedOpenSections;
+  }
+
+  function saveOpenSections() {
+    const open = [...side.querySelectorAll(".acc.open")]
+      .map(section => section.dataset.section);
+    persistedOpenSections = new Set(open);
+    try {
+      localStorage.setItem(SIDEBAR_OPEN_STORAGE_KEY, JSON.stringify(open));
+    } catch {}
+  }
+
+  function renderSide() {
     const previouslyOpen = new Set(
       [...side.querySelectorAll(".acc.open")].map(section => section.dataset.section));
+    const stored = loadPersistedOpenSections();
+    const openSections = stored ?? previouslyOpen;
+    const hasExplicitState = stored !== null || previouslyOpen.size > 0;
+
     side.innerHTML = sections.map((entry, index) => {
       const id = entry[0];
       const label = entry[1];
-      const open = previouslyOpen.size === 0 ? index === 0 : previouslyOpen.has(id);
+      const open = hasExplicitState ? openSections.has(id) : index === 0;
       return "<section class='acc " + (open ? "open" : "") + "' data-section='" + id + "'>" +
         "<div class='accHead'><strong>" + label + "</strong><span>⌄</span></div>" +
         "<div class='accBody'>" + sectionBody(id) + "</div>" +
@@ -3453,12 +3484,18 @@
     }).join("");
 
     side.querySelectorAll(".accHead").forEach(head => {
-      head.addEventListener("click", () => head.parentElement.classList.toggle("open"));
+      head.addEventListener("click", () => {
+        head.parentElement.classList.toggle("open");
+        saveOpenSections();
+      });
     });
 
     bindInputs();
     const eventList = side.querySelector("#eventList");
-    if (eventList) eventList.innerHTML = eventHistory.map(event => renderEvent(event)).join("");
+    if (eventList) {
+      const entries = journalHistory.length ? journalHistory : eventHistory;
+      eventList.innerHTML = entries.map(entry => renderJournalEntry(entry)).join("");
+    }
   }
 
   function sectionBody(id) {
@@ -3602,14 +3639,26 @@
 
     if (id === "vitals") {
       const v = snapshot.playerVitals || {};
+      const c = snapshot.conditions || {};
+      const max = key => Math.max(1, Number(v[key]) || 100);
+      const pct = (value, maximum) => Math.max(0, Math.min(100, Number(value || 0) / maximum * 100));
       return [
-        "<div class='fieldGrid'>",
+        dualConditionBar("Здоровье", pct(v.health, max("maxHealth")), c.cumulativeHealth, "health", false),
+        dualConditionBar("Энергия", pct(v.energy, max("maxEnergy")), c.cumulativeEnergy, "energy", false),
+        dualConditionBar("Жидкость", pct(v.hydration, max("maxHydration")), c.cumulativeHydration, "hydration", false),
+        dualConditionBar("Усталость", pct(v.fatigue, max("maxFatigue")), c.cumulativeFatigue, "fatigue", true),
+        dualConditionBar("Стресс", c.stress, c.cumulativeStress, "stress", true),
+        "<div class='fieldGrid' style='margin-top:8px'>",
           field("health", "Здоровье", v.health),
           field("energy", "Энергия", v.energy),
           field("hydration", "Жидкость", v.hydration),
           field("fatigue", "Усталость", v.fatigue),
         "</div>",
-        "<button class='smallButton primary' id='applyVitals' style='margin-top:8px'>Применить</button>"
+        "<button class='smallButton primary' id='applyVitals' style='margin-top:8px'>Применить</button>",
+        "<div class='sleepActions'>" +
+          "<button class='smallButton' id='fieldSleep'>Полевой сон · 6 ч</button>" +
+          "<button class='smallButton' id='fullSleep'>Полноценный сон · 4 ч</button>" +
+        "</div>"
       ].join("");
     }
 
@@ -3625,11 +3674,38 @@
       ].join("");
     }
 
+    if (id === "effects") {
+      const effects = Array.isArray(snapshot.conditions?.effects) ? snapshot.conditions.effects : [];
+      const rows = (items, emptyText, cls) => items.length
+        ? items.map(effect =>
+            "<div class='effectRow " + cls + "'><span>" +
+            escapeHtml(effect.name || effect.id || "Эффект") +
+            "</span><span>" + formatEffectTimer(effect.remainingRealSeconds) + "</span></div>"
+          ).join("")
+        : "<div class='miniLabel'>" + emptyText + "</div>";
+      return [
+        rows(effects.filter(effect => !effect.isDebuff), "Нет активных баффов", "buff"),
+        rows(effects.filter(effect => effect.isDebuff), "Нет активных дебаффов", "debuff")
+      ].join("<div style='height:6px'></div>");
+    }
+
     if (id === "character") {
-      return Object.entries(snapshot.character?.stats || {}).map(([key, value]) =>
-        "<div class='field' style='margin-top:6px'><label>" + escapeHtml(CHARACTER_STAT_LABELS[key] || key) + "</label><input type='number' data-stat='" + escapeHtml(key) + "' value='" + Number(value) + "'></div>"
-      ).join("") +
-      "<button class='smallButton primary' id='applyCharacter' style='margin-top:8px'>Применить</button>";
+      return [
+        Object.entries(snapshot.character?.stats || {}).map(([key, value]) =>
+          "<div class='field' style='margin-top:6px'><label>" +
+          escapeHtml(CHARACTER_STAT_LABELS[key] || key) +
+          "</label><input type='number' data-stat='" + escapeHtml(key) +
+          "' value='" + Number(value) + "'></div>"
+        ).join(""),
+        "<div class='miniLabel' style='margin-top:10px'>Скиллы</div>",
+        Array.isArray(snapshot.character?.skills) && snapshot.character.skills.length
+          ? snapshot.character.skills.map(skill =>
+              "<div class='kv'><span>" + escapeHtml(skill.name || skill.id || "Скилл") +
+              "</span><span>" + escapeHtml(skill.label || skill.description || "—") +
+              "</span></div>").join("")
+          : "<div class='miniLabel'>Нет полученных скиллов</div>",
+        "<button class='smallButton primary' id='applyCharacter' style='margin-top:8px'>Применить</button>"
+      ].join("");
     }
 
     if (id === "inventory") {
@@ -3767,6 +3843,26 @@
     return "";
   }
 
+  function formatEffectTimer(seconds) {
+    const total = Math.max(0, Math.ceil(Number(seconds) || 0));
+    const minutes = Math.floor(total / 60);
+    const rest = total % 60;
+    return String(minutes).padStart(2, "0") + ":" + String(rest).padStart(2, "0");
+  }
+
+  function dualConditionBar(label, soft, cumulative, className, fillUp) {
+    const softValue = Math.max(0, Math.min(100, Number(soft) || 0));
+    const cumulativeValue = Math.max(0, Math.min(100, Number(cumulative) || 0));
+    return "<div class='dualStat'>" +
+      "<div class='dualStatHead'><span>" + label + "</span><span>" +
+        Math.round(fillUp ? softValue + cumulativeValue : softValue) + "%</span></div>" +
+      "<div class='dualBar " + className + "'>" +
+        "<div class='dualBarSoft' style='width:" + softValue + "%'></div>" +
+        "<div class='dualBarCumulative " + (fillUp ? "fromStart" : "fromEnd") +
+          "' style='width:" + cumulativeValue + "%'></div>" +
+      "</div></div>";
+  }
+
   function field(key, label, value) {
     return "<div class='field'><label>" + label + "</label><input data-t='" + key + "' value='" + value + "'></div>";
   }
@@ -3842,6 +3938,22 @@
 
     side.querySelector("#routeClear")?.addEventListener("click", () => {
       send({ action: "route_clear" });
+    });
+
+    side.querySelector("#routeSaveFile")?.addEventListener("click", () => {
+      send({ action: "route_save_file" });
+    });
+
+    side.querySelector("#routeLoadFile")?.addEventListener("click", () => {
+      send({ action: "route_load_file" });
+    });
+
+    side.querySelector("#fieldSleep")?.addEventListener("click", () => {
+      send({ action: "sleep_field" });
+    });
+
+    side.querySelector("#fullSleep")?.addEventListener("click", () => {
+      send({ action: "sleep_full" });
     });
 
     side.querySelectorAll("[data-fact]").forEach(input => {
@@ -4017,10 +4129,29 @@
     });
   }
 
+  function renderJournalEntry(entry) {
+    if (!entry) return "";
+    const routeEntry = String(entry.source || "").toLowerCase() === "движение по маршруту";
+    const coordinate = entry.coordinate;
+    const coordinateMarkup = coordinate
+      ? "<span class='journalCoord' data-journal-coordinate='1'" +
+          " data-x='" + Number(coordinate.x) +
+          "' data-y='" + Number(coordinate.y) +
+          "' data-z='" + Number(coordinate.z) + "'>" +
+          escapeHtml(formatPosition(coordinate)) +
+        "</span>"
+      : "";
+    return "<div class='eventRow " + (routeEntry ? "routeJournalEntry" : "") + "'>" +
+      "<strong>" + escapeHtml(entry.eventType || "Событие") + "</strong> " +
+      formatEventTimestamp(entry.timestamp) +
+      " · [" + escapeHtml(entry.source || "Источник неизвестен") + "] " +
+      escapeHtml(entry.message || "") +
+      (coordinateMarkup ? " · " + coordinateMarkup : "") +
+      "</div>";
+  }
+
   function renderEvent(event) {
-    if (!event) return "";
-    return "<div class='eventRow'><strong>" + escapeHtml(event.eventType || "Событие") + "</strong>" +
-      formatEventTimestamp(event.timestamp) + " · " + escapeHtml(event.source || "Источник неизвестен") + "</div>";
+    return renderJournalEntry(event);
   }
 
   /**
