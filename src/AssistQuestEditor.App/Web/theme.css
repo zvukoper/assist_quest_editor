@@ -1465,3 +1465,6 @@ input,select,textarea{padding:4px 5px;border-radius:4px;font-size:10px}textarea{
 .effectRow.debuff{background:rgba(210,215,220,.07);color:#d9dde2}
 .sleepActions{display:flex;gap:6px;margin-top:7px}
 .sleepActions>*{flex:1}
+
+.conditionTopGrid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+@media(max-width:720px){.conditionTopGrid{grid-template-columns:1fr}}
