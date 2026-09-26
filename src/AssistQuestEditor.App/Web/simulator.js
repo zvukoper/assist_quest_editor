@@ -113,6 +113,8 @@
   let route = {
     enabled: false,
     defaultSpeedKmh: 60,
+    editing: false,
+    editingAllowed: true,
     selectedWaypointId: null,
     stoppedWaypointIndex: null,
     currentTargetWaypointIndex: null,
@@ -129,10 +131,6 @@
   let draggingRouteWaypointId = null;
   let dragRouteWaypointPosition = null;
   let lastPlayerSnapshotAt = 0;
-  let visualPlayerFrom = null;
-  let visualPlayerTo = null;
-  let visualPlayerAnimationStartedAt = 0;
-  let visualPlayerAnimationDurationMs = 0;
   let routeAnimationFrame = 0;
   let lastRouteAnimationPaintAt = 0;
 
@@ -260,6 +258,7 @@
 
   const sections = [
     ["player", "Игрок и мир"],
+    ["route", "Движение по маршруту"],
     ["facts", "Факты"],
     ["statuses", "Статусы"],
     ["states", "Состояния"],
@@ -1282,7 +1281,7 @@
 
   function drawRouteText(ctx, text, x, y, align = "center") {
     ctx.save();
-    ctx.font = "800 9px Open Sans, Arial, sans-serif";
+    ctx.font = "400 9px Open Sans, Arial, sans-serif";
     ctx.textAlign = align;
     ctx.textBaseline = "bottom";
     ctx.fillStyle = "#ffffff";
@@ -1355,7 +1354,7 @@
     ctx.beginPath();
     ctx.arc(q.x, q.y, radius, 0, Math.PI * 2);
     ctx.lineWidth = 3;
-    ctx.strokeStyle = "#d83a3a";
+    ctx.strokeStyle = "#11fb06";
     ctx.stroke();
 
     ctx.beginPath();
@@ -1366,10 +1365,10 @@
 
     ctx.beginPath();
     ctx.arc(q.x, q.y, radius - 3.2, 0, Math.PI * 2);
-    ctx.fillStyle = ACCENT_COLOR;
+    ctx.fillStyle = "#12abe5";
     ctx.fill();
 
-    ctx.font = "800 9px Open Sans, Arial, sans-serif";
+    ctx.font = "400 9px Open Sans, Arial, sans-serif";
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
     ctx.fillStyle = "#111419";
@@ -1451,7 +1450,8 @@
   }
 
   function hitRouteLine(px, py) {
-    if (!route?.legs?.length || simulationRunning)
+    if (!route?.editing || !route?.editingAllowed ||
+        !route?.legs?.length || simulationRunning || simulationPaused)
       return null;
 
     let best = null;
@@ -1531,6 +1531,8 @@
 
     return {
       enabled: !!value.enabled,
+      editing: !!value.editing,
+      editingAllowed: value.editingAllowed !== false,
       defaultSpeedKmh,
       selectedWaypointId: value.selectedWaypointId || null,
       stoppedWaypointIndex: Number.isInteger(value.stoppedWaypointIndex)
@@ -1549,6 +1551,9 @@
     };
   }
 
+  let speedometerWasVisibleBeforePause = false;
+  let lastPositiveSpeedKmh = 0;
+
   function renderRouteSpeedometer() {
     const element = document.getElementById("routeSpeedometer");
     const value = document.getElementById("routeSpeedValue");
@@ -1556,12 +1561,31 @@
       return;
 
     const speed = Math.max(0, Number(snapshot.player.speedKmh) || 0);
-    const visible = Array.isArray(route?.waypoints) && route.waypoints.length > 0;
-    element.hidden = !visible;
-    element.setAttribute("aria-hidden", visible ? "false" : "true");
 
-    if (visible)
-      value.textContent = Math.round(speed);
+    if (!simulationPaused) {
+      const visible = speed > 0.001;
+      speedometerWasVisibleBeforePause = visible;
+
+      if (visible)
+        lastPositiveSpeedKmh = speed;
+
+      element.hidden = !visible;
+      element.classList.remove("pausedPulse");
+      element.setAttribute("aria-hidden", visible ? "false" : "true");
+
+      if (visible)
+        value.textContent = Math.round(speed);
+
+      return;
+    }
+
+    const visibleDuringPause = speedometerWasVisibleBeforePause;
+    element.hidden = !visibleDuringPause;
+    element.classList.toggle("pausedPulse", visibleDuringPause);
+    element.setAttribute("aria-hidden", visibleDuringPause ? "false" : "true");
+
+    if (visibleDuringPause)
+      value.textContent = Math.round(lastPositiveSpeedKmh);
   }
 
   function drawPlayer(ctx, player) {
@@ -1718,76 +1742,33 @@
     );
   }
 
-  function clonePlayerForAnimation(player) {
-    if (!player?.position)
-      return null;
+  function animatedPlayerForDraw() {
+    if (!snapshot?.player?.position)
+      return snapshot?.player || null;
+
+    const player = snapshot.player;
+
+    if (!simulationRunning || simulationPaused || !lastPlayerSnapshotAt)
+      return player;
+
+    const elapsedSeconds = Math.max(
+      0,
+      Math.min(0.35, (performance.now() - lastPlayerSnapshotAt) / 1000));
+
+    const speedKmh = Math.max(0, Number(player.speedKmh) || 0);
+    if (speedKmh <= 0.001 || elapsedSeconds <= 0)
+      return player;
+
+    const heading = Number(player.heading || 0) * Math.PI / 180;
+    const distance = speedKmh / 3.6 * elapsedSeconds;
 
     return {
       ...player,
       position: {
         ...player.position,
-        x: Number(player.position.x),
-        y: Number(player.position.y),
-        z: Number(player.position.z)
+        x: player.position.x + Math.cos(heading) * distance,
+        z: player.position.z + Math.sin(heading) * distance
       }
-    };
-  }
-
-  function beginVisualPlayerTransition(previousPlayer, nextPlayer, now) {
-    const from = clonePlayerForAnimation(previousPlayer);
-    const to = clonePlayerForAnimation(nextPlayer);
-
-    if (!to) {
-      visualPlayerFrom = null;
-      visualPlayerTo = null;
-      visualPlayerAnimationDurationMs = 0;
-      return;
-    }
-
-    if (!from || !route?.enabled || !simulationRunning) {
-      visualPlayerFrom = to;
-      visualPlayerTo = to;
-      visualPlayerAnimationStartedAt = now;
-      visualPlayerAnimationDurationMs = 0;
-      return;
-    }
-
-    const previousTimestamp = lastPlayerSnapshotAt;
-    const intervalMs = previousTimestamp > 0
-      ? now - previousTimestamp
-      : 250;
-
-    visualPlayerFrom = from;
-    visualPlayerTo = to;
-    visualPlayerAnimationStartedAt = now;
-    visualPlayerAnimationDurationMs = Math.max(120, Math.min(420, intervalMs));
-  }
-
-  function animatedPlayerForDraw() {
-    if (!visualPlayerTo)
-      return snapshot?.player || null;
-
-    if (!visualPlayerFrom || visualPlayerAnimationDurationMs <= 0)
-      return visualPlayerTo;
-
-    const elapsed = Math.max(0, performance.now() - visualPlayerAnimationStartedAt);
-    const t = Math.max(0, Math.min(1, elapsed / visualPlayerAnimationDurationMs));
-    const eased = t * t * (3 - 2 * t);
-
-    return {
-      ...visualPlayerTo,
-      position: {
-        ...visualPlayerTo.position,
-        x: visualPlayerFrom.position.x +
-          (visualPlayerTo.position.x - visualPlayerFrom.position.x) * eased,
-        y: visualPlayerFrom.position.y +
-          (visualPlayerTo.position.y - visualPlayerFrom.position.y) * eased,
-        z: visualPlayerFrom.position.z +
-          (visualPlayerTo.position.z - visualPlayerFrom.position.z) * eased
-      },
-      speedKmh: Number(visualPlayerFrom.speedKmh || 0) +
-        (Number(visualPlayerTo.speedKmh || 0) - Number(visualPlayerFrom.speedKmh || 0)) * eased,
-      heading: visualPlayerTo.heading
     };
   }
 
@@ -3159,7 +3140,12 @@
       play.textContent = simulationRunning ? "⏸️" : "▶️";
       play.title = simulationRunning ? "Пауза" : simulationPaused ? "Продолжить" : "Запустить симуляцию";
       play.setAttribute("aria-label", play.title);
+      play.classList.toggle("paused", simulationPaused);
     }
+
+    const statusText = document.getElementById("simStatusText");
+    if (statusText)
+      statusText.textContent = simulationPaused ? "Пауза" : "Игровое время";
 
     // Стоп доступен всегда: он же создаёт автосохранение, и игрок вправе
     // зафиксировать мир, даже если симуляция ещё не запускалась.
@@ -3442,39 +3428,6 @@
     if (id === "player") {
       const p = snapshot.player.position;
       const selected = snapshot.selection?.point;
-      const selectedRoute = (route.waypoints || []).find(item =>
-        String(item.id) === String(route.selectedWaypointId));
-      const routeSpeed = selectedRoute
-        ? selectedRoute.speedKmh
-        : route.defaultSpeedKmh;
-      const routeEditable = !simulationRunning;
-      const plannedStop = !route.enabled &&
-        Number.isInteger(route.stoppedWaypointIndex) &&
-        route.stoppedWaypointIndex >= 0 &&
-        route.stoppedWaypointIndex < route.waypoints.length - 1;
-
-      const routeButtonLabel = route.enabled
-        ? "Движение по маршруту: ВКЛ"
-        : (plannedStop
-          ? "Движение по маршруту: продолжить"
-          : "Движение по маршруту");
-      const routeStatus =
-        route.errors?.length
-          ? "<div class='notice routeError' style='margin-top:6px'>" +
-              "<strong>Ошибка построения маршрута</strong>" +
-              "<div style='margin-top:4px'>" +
-                route.errors.map(error => "• " + escapeHtml(error)).join("<br>") +
-              "</div>" +
-            "</div>"
-          : selectedRoute
-            ? "<div class='routeSelectionHint'>Выбрана путевая точка " +
-                escapeHtml(selectedRoute.index) +
-                ". Поле задаёт её скорость.</div>"
-            : "<div class='routeSelectionHint'>" +
-                (route.waypoints?.length
-                  ? "ЛКМ по пустому месту добавляет точку, ПКМ по точке удаляет её."
-                  : "Включите режим и поставьте первую точку ЛКМ на карте.") +
-              "</div>";
 
       return [
         "<div class='fieldGrid'>",
@@ -3482,49 +3435,6 @@
           "<div class='field'><label>Y</label><input data-player='y' value='" + p.y + "'></div>",
           "<div class='field'><label>Z</label><input data-player='z' value='" + p.z + "'></div>",
           "<div class='field'><label>Факт. скорость</label><input value='" + Math.round(snapshot.player.speedKmh) + "' disabled></div>",
-        "</div>",
-        "<div class='routeControls'>",
-          "<button class='routeToggleButton" +
-            (route.enabled ? " active" : "") +
-            (plannedStop ? " plannedStopPulse" : "") +
-            "' id='routeToggle' type='button' " +
-            "aria-pressed='" + (route.enabled ? "true" : "false") + "' " +
-            "title='Включить или выключить движение по маршруту'>" +
-            escapeHtml(routeButtonLabel) +
-          "</button>",
-          "<button class='routeClearButton' id='routeClear' type='button' title='Очистить маршрут'" +
-            (routeEditable && route.waypoints.length ? "" : " disabled") + ">✕</button>",
-        "</div>",
-        "<div class='routeSpeedRow'>" +
-          "<span class='routeSpeedOwner'>" +
-            escapeHtml(selectedRoute ? "Точка №" + selectedRoute.index : "Новая точка") +
-          "</span>" +
-          "<label class='routeSpeedField' title='" +
-            (selectedRoute
-              ? "Скорость выбранной путевой точки"
-              : "Скорость по умолчанию для новых путевых точек") +
-            "'><span>Скорость</span><input id='routeSpeedInput' type='number' min='0' max='150' step='1' value='" +
-              Math.round(routeSpeed) + "'" + (routeEditable ? "" : " disabled") + "><span>км/ч</span></label>" +
-        "</div>",
-        routeStatus,
-        selectedRoute
-          ? "<label class='routeOffroadField'>" +
-              "<input id='routeOffroad' type='checkbox'" +
-                (selectedRoute.isOffRoad ? " checked" : "") +
-                (routeEditable ? "" : " disabled") +
-              "> Бездорожье</label>"
-          : "",
-        "<div class='card routeSelectedCard' style='margin-top:6px;padding:7px'>",
-          "<div class='miniLabel'>Путевые точки</div>",
-          "<div class='kv'><span>Точек</span><span>" + route.waypoints.length + "</span></div>",
-          selectedRoute
-            ? "<div class='kv'><span>Выбрана</span><span>№ " + selectedRoute.index + " · " +
-                Math.round(selectedRoute.speedKmh) + " км/ч</span></div>"
-            : "",
-          Number.isInteger(route.currentTargetWaypointIndex)
-            ? "<div class='kv'><span>Цель</span><span>№ " +
-                (route.currentTargetWaypointIndex + 1) + "</span></div>"
-            : "",
         "</div>",
         "<div class='card' style='margin-top:8px;padding:8px'>",
           "<div class='miniLabel'>Выбранная СДО</div>",
@@ -3535,6 +3445,89 @@
         "<div class='kv'><span>Направление</span><span>" + Math.round(snapshot.player.heading) + "°</span></div>",
         "<div class='kv'><span>Пауза</span><span>" + (snapshot.player.paused ? "да" : "нет") + "</span></div>",
         "<div class='kv'><span>В кабине</span><span>" + (snapshot.player.inCab ? "да" : "нет") + "</span></div>"
+      ].join("");
+    }
+
+    if (id === "route") {
+      const selectedRoute = (route.waypoints || []).find(item =>
+        String(item.id) === String(route.selectedWaypointId));
+      const routeSpeed = selectedRoute ? selectedRoute.speedKmh : route.defaultSpeedKmh;
+      const plannedStop = !route.enabled &&
+        Number.isInteger(route.stoppedWaypointIndex) &&
+        route.stoppedWaypointIndex >= 0 &&
+        route.stoppedWaypointIndex < route.waypoints.length - 1;
+      const simulationLocked = simulationRunning || simulationPaused;
+      const canEdit = route.editing && !simulationLocked;
+      const editTitle = simulationLocked
+        ? "Для редактирования маршрута нужно выключить симуляцию."
+        : (route.editing
+          ? "Редактирование маршрута включено."
+          : "Включите «Редактирование», чтобы менять точки.");
+
+      const routeStatus =
+        route.errors?.length
+          ? "<div class='notice routeError' style='margin-top:6px'>" +
+              "Ошибка построения маршрута" +
+              "<div style='margin-top:4px'>" +
+                route.errors.map(error => "• " + escapeHtml(error)).join("<br>") +
+              "</div>" +
+            "</div>"
+          : selectedRoute
+            ? "<div class='routeSelectionHint'>Выбрана путевая точка " +
+                escapeHtml(selectedRoute.index) +
+                ". Поле задаёт её скорость.</div>"
+            : (route.editing
+              ? "<div class='routeSelectionHint'>ЛКМ по пустому месту добавляет точку, ЛКМ по точке позволяет перемещать её, ПКМ по точке удаляет.</div>"
+              : "<div class='routeSelectionHint'>Включите «Редактирование», чтобы добавлять, изменять и удалять точки.</div>");
+
+      return [
+        "<div class='routeControls'>",
+          "<button class='routeToggleButton" +
+            (route.enabled ? " active" : "") +
+            (plannedStop ? " plannedStopPulse" : "") +
+            "' id='routeToggle' type='button' aria-pressed='" + (route.enabled ? "true" : "false") +
+            "' title='Включить или выключить движение по маршруту'>Двигаться по маршруту</button>",
+          "<span class='routeEditToggleWrap' data-game-tooltip='" + escapeHtml(editTitle) + "'>",
+            "<button class='routeToggleButton" +
+              (route.editing ? " active" : "") +
+              "' id='routeEditToggle' type='button' aria-pressed='" + (route.editing ? "true" : "false") +
+              "'" + (simulationLocked ? " disabled" : "") +
+              " title='" + escapeHtml(editTitle) + "'>Редактирование</button>",
+          "</span>",
+          "<button class='routeClearButton' id='routeClear' type='button' title='Сбросить маршрут'" +
+            (canEdit && route.waypoints.length ? "" : " disabled") + ">Сброс</button>",
+        "</div>",
+        "<div class='routeSpeedRow'>",
+          "<span class='routeSpeedOwner'>" +
+            escapeHtml(selectedRoute ? "Точка №" + selectedRoute.index : "Новая точка") +
+          "</span>",
+          "<label class='routeSpeedField' title='" +
+            (selectedRoute ? "Скорость выбранной путевой точки" : "Скорость по умолчанию для новых путевых точек") +
+            "'><span>Скорость</span><input id='routeSpeedInput' type='number' min='0' max='150' step='1' value='" +
+            Math.round(routeSpeed) + "'" + (canEdit ? "" : " disabled") + "><span>км/ч</span></label>",
+        "</div>",
+        routeStatus,
+        selectedRoute
+          ? "<label class='routeOffroadField'><input id='routeOffroad' type='checkbox'" +
+              (selectedRoute.isOffRoad ? " checked" : "") + (canEdit ? "" : " disabled") +
+              "> Бездорожье</label>"
+          : "",
+        "<div class='card routeSelectedCard' style='margin-top:8px;padding:7px'>",
+          "<div class='miniLabel'>Путевые точки</div>",
+          "<div class='kv'><span>Точек</span><span>" + route.waypoints.length + "</span></div>",
+          selectedRoute
+            ? "<div class='kv'><span>Выбрана</span><span>№ " + selectedRoute.index + " · " + Math.round(selectedRoute.speedKmh) + " км/ч</span></div>"
+            : "",
+          Number.isInteger(route.currentTargetWaypointIndex)
+            ? "<div class='kv'><span>Цель</span><span>№ " + (route.currentTargetWaypointIndex + 1) + "</span></div>"
+            : "",
+          "<div class='kv'><span>Дистанция</span><span>" +
+            (Number(route.distanceFromFirstWaypointMeters) / 1000).toFixed(1) + " км</span></div>",
+          "<div class='kv'><span>Время</span><span>" +
+            formatTravelTime(Number(route.travelTimeGameSeconds) || 0) + " / " +
+            formatTravelTime(Number(route.travelTimeRealSeconds) || 0) + "</span></div>",
+        "</div>",
+        "<div class='routeSelectionHint' style='margin-top:6px'>Редактирование доступно только при полностью выключенной симуляции.</div>"
       ].join("");
     }
 
@@ -3757,6 +3750,16 @@
       send({
         action: "route_toggle",
         enabled: !route.enabled
+      });
+    });
+
+    side.querySelector("#routeEditToggle")?.addEventListener("click", () => {
+      if (!route.editingAllowed && !route.editing)
+        return;
+
+      send({
+        action: "route_edit_toggle",
+        enabled: !route.editing
       });
     });
 
@@ -4072,11 +4075,9 @@
 
     if (message.type === "snapshot") {
       const hadSnapshot = !!snapshot;
-      const previousPlayer = snapshot?.player || null;
       const now = performance.now();
 
       snapshot = message.snapshot;
-      beginVisualPlayerTransition(previousPlayer, snapshot?.player || null, now);
       window.__assistItemCatalog = Array.isArray(message.itemCatalog) ? message.itemCatalog : [];
       runtime = message.runtime || null;
       simulationRunning = !!message.simulationRunning;
@@ -4282,7 +4283,8 @@
     if (event.button === 0) {
       const routeWaypointId = hitRouteWaypoint(pos.x, pos.y);
 
-      if (routeWaypointId && !simulationRunning) {
+      if (routeWaypointId && route.editing && route.editingAllowed &&
+          !simulationRunning && !simulationPaused) {
         const waypoint = (route.waypoints || []).find(item =>
           String(item.id) === String(routeWaypointId));
 
@@ -4347,9 +4349,10 @@
 
         send({ action: "select_point", id: point.id });
       } else {
-        const lineHit = !simulationRunning
-          ? hitRouteLine(pos.x, pos.y)
-          : null;
+        const lineHit = route.editing && route.editingAllowed &&
+          !simulationRunning && !simulationPaused
+            ? hitRouteLine(pos.x, pos.y)
+            : null;
 
         if (lineHit) {
           send({
@@ -4359,7 +4362,8 @@
             y: lineHit.world.y,
             z: lineHit.world.z
           });
-        } else if (route.enabled && !simulationRunning) {
+        } else if (route.editing && route.editingAllowed &&
+                   !simulationRunning && !simulationPaused) {
           const world = screenToWorld(pos.x, pos.y);
           send({
             action: "route_add_waypoint",
@@ -4398,7 +4402,8 @@
     }
 
     if (event.button === 2) {
-      if (route.waypoints?.length && !simulationRunning) {
+      if (route.waypoints?.length && route.editing && route.editingAllowed &&
+          !simulationRunning && !simulationPaused) {
         const routeWaypointId = hitRouteWaypoint(pos.x, pos.y);
 
         if (routeWaypointId) {
@@ -4491,7 +4496,7 @@
       }
 
       const cursor = overRouteWaypoint
-        ? (!simulationRunning ? "grab" : "pointer")
+        ? (route.editing && route.editingAllowed && !simulationRunning && !simulationPaused ? "grab" : "pointer")
         : (overPlayer
           ? "grab"
           : ((overDynamicEvent || overQuest)
