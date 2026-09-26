@@ -3176,26 +3176,17 @@ public sealed class SimulatorForm : WebViewForm
             _runtime.ResumeSimulation();
             _dynamicEventDispatcher.SetSimulationRunning(true);
 
-            if (_routeEnabled && _routePlan.IsUsable && _routeState.Waypoints.Count > 1)
-            {
-                var playerPosition = _hub.Get<PlayerState>("player").Value.Position;
-                _routeCursor = RouteMovementEngine.ProjectForwardCursor(
-                    _routePlan,
-                    playerPosition,
-                    _routeCursor);
-                _routeStoppedWaypointIndex = null;
-                _resumeRouteAfterStop = false;
-                _routeTargetWaypointIndex = GetTargetWaypointIndex(_routeCursor);
-
-                AppLogger.Info(
-                    "SimulatorForm: курсор маршрута перепривязан после паузы.",
-                    $"target={(_routeTargetWaypointIndex is int target ? target + 1 : 0)}; " +
-                    $"leg={_routeCursor.LegIndex}; segment={_routeCursor.SegmentIndex}; " +
-                    $"progress={_routeCursor.SegmentProgressMeters:0.###}");
-            }
-
+            // Пауза не меняет положение игрока. Курсор маршрута поэтому НИКОГДА
+            // не перепроецируется на весь маршрут: это могло выбрать физически
+            // ближайший старый leg (например, при пересечении дорог) и отправить
+            // игрока обратно. Перепроекция выполняется только после ЯВНОГО ручного
+            // перемещения игрока в SetPlayerPosition().
             _routeMovementLastTick = null;
-            AppLogger.Info("SimulatorForm: симуляция продолжена после паузы.");
+            AppLogger.Info(
+                "SimulatorForm: симуляция продолжена после паузы.",
+                $"target={(_routeTargetWaypointIndex is int target ? target + 1 : 0)}; " +
+                $"leg={_routeCursor.LegIndex}; segment={_routeCursor.SegmentIndex}; " +
+                $"progress={_routeCursor.SegmentProgressMeters:0.###}");
         }
         else
         {
@@ -3251,26 +3242,14 @@ public sealed class SimulatorForm : WebViewForm
         _runtime.ResumeSimulation();
         _dynamicEventDispatcher.SetSimulationRunning(true);
 
-        if (_routeEnabled && _routePlan.IsUsable && _routeState.Waypoints.Count > 1)
-        {
-            var playerPosition = _hub.Get<PlayerState>("player").Value.Position;
-            _routeCursor = RouteMovementEngine.ProjectForwardCursor(
-                _routePlan,
-                playerPosition,
-                _routeCursor);
-            _routeStoppedWaypointIndex = null;
-            _resumeRouteAfterStop = false;
-            _routeTargetWaypointIndex = GetTargetWaypointIndex(_routeCursor);
-
-            AppLogger.Info(
-                "SimulatorForm: курсор маршрута перепривязан после возобновления.",
-                $"target={(_routeTargetWaypointIndex is int target ? target + 1 : 0)}; " +
-                $"leg={_routeCursor.LegIndex}; segment={_routeCursor.SegmentIndex}; " +
-                $"progress={_routeCursor.SegmentProgressMeters:0.###}");
-        }
-
+        // Resume продолжает сохранённый курсор. Смена режима «пауза → игра» не
+        // является ручным перемещением и не должна искать ближайший leg заново.
         _routeMovementLastTick = null;
-        AppLogger.Info("SimulatorForm: симуляция продолжена.");
+        AppLogger.Info(
+            "SimulatorForm: симуляция продолжена.",
+            $"target={(_routeTargetWaypointIndex is int target ? target + 1 : 0)}; " +
+            $"leg={_routeCursor.LegIndex}; segment={_routeCursor.SegmentIndex}; " +
+            $"progress={_routeCursor.SegmentProgressMeters:0.###}");
         RequestSnapshot("simulation resumed");
     }
 
