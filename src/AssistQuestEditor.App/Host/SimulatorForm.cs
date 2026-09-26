@@ -1423,6 +1423,24 @@ public sealed class SimulatorForm : WebViewForm
 
         _routeEnabled = runtime?.Enabled ?? false;
         _routeEditingEnabled = false;
+
+        // Если сохранение произошло на остановочной точке speed=0 и движение
+        // по маршруту было включено, первый play должен продолжить со следующей
+        // точки, а не повторно применять остановку предыдущей.
+        if (_routeEnabled &&
+            _routePlan.IsUsable &&
+            _routeStoppedWaypointIndex is int stopped &&
+            stopped >= 0 &&
+            stopped < _routeState.Waypoints.Count - 1)
+        {
+            _routeCursor = RouteMovementEngine.CreateResumeCursor(
+                _routePlan,
+                stopped,
+                _routeLastHeading);
+            _routeTargetWaypointIndex = stopped + 1;
+            _resumeRouteAfterStop = true;
+        }
+
         _routeMovementLastTick = null;
     }
 
