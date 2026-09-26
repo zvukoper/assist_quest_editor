@@ -1454,7 +1454,11 @@
     const stopped = Number.isInteger(route.stoppedWaypointIndex) &&
       route.stoppedWaypointIndex === Number(waypoint.index) - 1;
 
-    if (stopped) {
+    // «Остановка» показывается на КАЖДОЙ точке со скоростью 0, а не только на
+    // той, где игрок стоит сейчас: нулевая скорость и есть смысл этой точки, а
+    // «0 км/ч» читалось как «медленно». Точка, на которой игрок уже стоит,
+    // пульсирует тем же словом — состояние то же самое.
+    if (stopped || speed <= 0) {
       const pulse = 0.55 + 0.45 * ((Math.sin(performance.now() / 220) + 1) / 2);
       drawRouteText(
         ctx,
@@ -1645,6 +1649,22 @@
       return;
 
     const speed = Math.max(0, Number(snapshot.player.speedKmh) || 0);
+
+    // Остановка на точке со скоростью 0 — это состояние, а не показание
+    // скорости. Спидометр показывает слово, потому что «0» читался бы как
+    // «едешь медленно», и игрок не понял бы, что маршрут выключен и ждёт
+    // повторного включения.
+    if (Number.isInteger(route?.stoppedWaypointIndex) && route.stoppedWaypointIndex >= 0) {
+      speedometerWasVisibleBeforePause = false;
+      element.hidden = false;
+      element.classList.remove("pausedPulse");
+      element.classList.add("stopped");
+      element.setAttribute("aria-hidden", "false");
+      value.textContent = "Остановка";
+      return;
+    }
+
+    element.classList.remove("stopped");
 
     if (!simulationPaused) {
       const visible = speed > 0.001;
@@ -3320,6 +3340,23 @@
     return SIMULATION_SPEEDS[(current + 1) % SIMULATION_SPEEDS.length];
   }
 
+  /**
+   * Плашка «Остановка» для состояния «маршрут стоит на точке со скоростью 0».
+   *
+   * Ноль км/ч в этом состоянии не показывается нигде: вместо него и над
+   * путевой точкой (см. drawRouteWaypoint), и здесь идёт пульсирующая оранжевая
+   * надпись. Скорость 0 при паузе симуляции — другое состояние, у него своя
+   * плашка спидометра, поэтому проверяется именно остановка на точке.
+   */
+  function routeStoppedBadge() {
+    if (!Number.isInteger(route?.stoppedWaypointIndex) || route.stoppedWaypointIndex < 0)
+      return "";
+
+    return "<span class='badge stopPulse' id='routeStoppedBadge' " +
+      "title='Игрок достиг точки со скоростью 0. Движение по маршруту выключено — " +
+      "включите его снова, чтобы продолжить.'>Остановка</span>";
+  }
+
   function drawHud() {
     const p = snapshot.player.position;
     const selected = snapshot.selection?.point;
@@ -3363,6 +3400,11 @@
       "<span class='badge blue'>СДО " + sdoCount.toLocaleString("ru-RU") + "</span>",
       "<span class='badge blue'>Города " + cityCount.toLocaleString("ru-RU") + "</span>",
       "<span class='badge accent'>Квесты " + questCount.toLocaleString("ru-RU") + "</span>",
+      // Остановка на точке со скоростью 0: показываем состояние словами, а не
+      // нулём. Ноль над маркером читался бы как «так и надо», а остановка —
+      // событие, которое игрок должен заметить и на которое он реагирует
+      // повторным включением «Движение по маршруту».
+      routeStoppedBadge(),
       "<span class='badge blue'>X " + Math.round(p.x) + "</span>",
       "<span class='badge blue'>Y " + Math.round(p.y) + "</span>",
       "<span class='badge blue'>Z " + Math.round(p.z) + "</span>",
@@ -3684,25 +3726,39 @@
     }
 
     if (id === "vitals") {
+      // Разметка шкал общая с окном «Игрок» (AssistVitals): цвета, порядок,
+      // кумулятивная часть и расшифровка обязаны совпадать, иначе одно и то же
+      // состояние выглядит по-разному в зависимости от того, куда смотреть.
       const v = snapshot.playerVitals || {};
       const c = snapshot.conditions || {};
-      const max = key => Math.max(1, Number(v[key]) || 100);
-      const pct = (value, maximum) => Math.max(0, Math.min(100, Number(value || 0) / maximum * 100));
+
+      const bars = window.AssistVitals
+        ? window.AssistVitals.markup(snapshot)
+        : "";
+
+      const fields = window.AssistVitals
+        ? window.AssistVitals.fieldsMarkup(snapshot)
+        : "<div class='fieldGrid' style='margin-top:8px'>" +
+            field("health", "Здоровье", v.health) +
+            field("energy", "Энергия", v.energy) +
+            field("hydration", "Жидкость", v.hydration) +
+            field("fatigue", "Усталость", v.fatigue) +
+          "</div>";
+
       return [
-        "<div class='conditionTopGrid'>" +
-          dualConditionBar("Здоровье", pct(v.health, max("maxHealth")), c.cumulativeHealth, "health", false) +
-          dualConditionBar("Стресс", c.stress, c.cumulativeStress, "stress", true) +
+        bars,
+        "<div class='conditionLegend'>" +
+          "<span class='conditionLegendCumulative'>■ кумулятивное значение</span>" +
         "</div>",
-        dualConditionBar("Энергия", pct(v.energy, max("maxEnergy")), c.cumulativeEnergy, "energy", false),
-        dualConditionBar("Жидкость", pct(v.hydration, max("maxHydration")), c.cumulativeHydration, "hydration", false),
-        dualConditionBar("Усталость", pct(v.fatigue, max("maxFatigue")), c.cumulativeFatigue, "fatigue", true),
-        "<div class='fieldGrid' style='margin-top:8px'>",
-          field("health", "Здоровье", v.health),
-          field("energy", "Энергия", v.energy),
-          field("hydration", "Жидкость", v.hydration),
-          field("fatigue", "Усталость", v.fatigue),
+        fields,
+        "<div class='field notice' style='font-size:9px;margin-top:6px'>" +
+          "Кумулятивное значение правится только механиками (недостаток сна, стресс); " +
+          "в поле вводится обычное значение шкалы." +
         "</div>",
-        "<button class='smallButton primary' id='applyVitals' style='margin-top:8px'>Применить</button>",
+        "<div class='conditionEditActions'>" +
+          "<button class='smallButton primary' id='applyVitals'>Применить</button>" +
+          "<button class='smallButton' id='resetStress'>Снять стресс</button>" +
+        "</div>",
         "<div class='sleepActions'>" +
           "<button class='smallButton' id='fieldSleep'>Полевой сон · 6 ч</button>" +
           "<button class='smallButton' id='fullSleep'>Полноценный сон · 4 ч</button>" +
@@ -3898,19 +3954,6 @@
     return String(minutes).padStart(2, "0") + ":" + String(rest).padStart(2, "0");
   }
 
-  function dualConditionBar(label, soft, cumulative, className, fillUp) {
-    const softValue = Math.max(0, Math.min(100, Number(soft) || 0));
-    const cumulativeValue = Math.max(0, Math.min(100, Number(cumulative) || 0));
-    return "<div class='dualStat'>" +
-      "<div class='dualStatHead'><span>" + label + "</span><span>" +
-        Math.round(fillUp ? softValue + cumulativeValue : softValue) + "%</span></div>" +
-      "<div class='dualBar " + className + "'>" +
-        "<div class='dualBarSoft' style='width:" + softValue + "%'></div>" +
-        "<div class='dualBarCumulative " + (fillUp ? "fromStart" : "fromEnd") +
-          "' style='width:" + cumulativeValue + "%'></div>" +
-      "</div></div>";
-  }
-
   function field(key, label, value) {
     return "<div class='field'><label>" + label + "</label><input data-t='" + key + "' value='" + value + "'></div>";
   }
@@ -4032,13 +4075,25 @@
     });
 
     side.querySelector("#applyVitals")?.addEventListener("click", () => {
+      const stressField = side.querySelector("[data-t='stress']");
+
       send({
         action: "set_vitals",
         health: Number(side.querySelector("[data-t='health']").value),
         energy: Number(side.querySelector("[data-t='energy']").value),
         hydration: Number(side.querySelector("[data-t='hydration']").value),
-        fatigue: Number(side.querySelector("[data-t='fatigue']").value)
+        fatigue: Number(side.querySelector("[data-t='fatigue']").value),
+        // Стресс живёт в условиях, а не в потребностях, но правится из того же
+        // блока: пустое поле означает «не трогать», иначе каждое применение
+        // потребностей сбрасывало бы накопленный стресс вводом по умолчанию.
+        stress: stressField && stressField.value.trim() !== ""
+          ? Number(stressField.value)
+          : null
       });
+    });
+
+    side.querySelector("#resetStress")?.addEventListener("click", () => {
+      send({ action: "set_stress", stress: 0 });
     });
 
     side.querySelector("#applyProgress")?.addEventListener("click", () => {
@@ -4718,6 +4773,9 @@
       event.preventDefault();
       return;
     }
+
+    if (event.button === 1) {
+      panning = true;
       panStart = {
         x: pos.x,
         y: pos.y,
@@ -4884,7 +4942,13 @@
   });
 
   map.addEventListener("pointerleave", event => {
-    routeRightClickCandidate = null;
+    // Меню карты лежит ПОВЕРХ канваса, поэтому переход курсора на его пункт
+    // формально покидает канвас. Сбрасывать цель ПКМ здесь нельзя: иначе к
+    // моменту клика по пункту «Переместить игрока сюда» координата уже
+    // потеряна, и пункт молча ничего не делал — со стороны это выглядело как
+    // неработающая кнопка.
+    if (!isMapContextMenuOpen())
+      routeRightClickCandidate = null;
     routeWaypointDragCandidate = null;
     draggingRouteWaypointId = null;
     dragRouteWaypointPosition = null;
@@ -4914,6 +4978,11 @@
     }
   });
 
+  function isMapContextMenuOpen() {
+    const menu = document.getElementById("mapContextMenu");
+    return !!menu && !menu.hidden;
+  }
+
   function hideMapContextMenu() {
     const menu = document.getElementById("mapContextMenu");
     if (menu)
@@ -4933,6 +5002,24 @@
       y: target.y,
       z: target.z
     });
+  });
+
+  // Закрытие меню карты. ПКМ открывает его, поэтому закрывают только другие
+  // действия: ЛКМ мимо меню, Esc и прокрутка/панорама. Без этого меню оставалось
+  // висеть поверх карты и перекрывало точки до следующего ПКМ.
+  document.addEventListener("pointerdown", event => {
+    if (event.button !== 0 || !isMapContextMenuOpen())
+      return;
+
+    if (event.target?.closest?.("#mapContextMenu"))
+      return;
+
+    hideMapContextMenu();
+  });
+
+  document.addEventListener("keydown", event => {
+    if (event.key === "Escape" && isMapContextMenuOpen())
+      hideMapContextMenu();
   });
 
   map.addEventListener("wheel", event => {
@@ -4973,34 +5060,11 @@
     }
   });
 
-  let activeTooltip = null;
-  document.addEventListener("mouseover", event => {
-    const target = event.target?.closest?.("[data-game-tooltip]");
-    if (!target) return;
-
-    const textValue = target.getAttribute("data-game-tooltip");
-    if (!textValue) return;
-
-    if (!activeTooltip) {
-      activeTooltip = document.createElement("div");
-      activeTooltip.id = "assistGameTooltip";
-      activeTooltip.className = "gameTooltip";
-      document.body.appendChild(activeTooltip);
-    }
-
-    activeTooltip.textContent = textValue;
-    activeTooltip.style.display = "block";
-    const rect = target.getBoundingClientRect();
-    activeTooltip.style.left = Math.max(8, Math.min(window.innerWidth - 310, rect.left)) + "px";
-    activeTooltip.style.top = Math.max(8, rect.top - activeTooltip.offsetHeight - 7) + "px";
-  });
-
-  document.addEventListener("mouseout", event => {
-    const target = event.target?.closest?.("[data-game-tooltip]");
-    const related = event.relatedTarget;
-    if (target && related && target.contains(related)) return;
-    if (activeTooltip) activeTooltip.style.display = "none";
-  });
+  // Подсказки для `data-game-tooltip` навешивает AssistVitals (vitals.js): там
+  // же описаны шкалы, которым эти подсказки и нужны. Своя копия обработчика
+  // здесь означала бы ДВЕ всплывающие подсказки одновременно — обе на mouseover,
+  // обе создают свой элемент.
+  window.AssistVitals?.attachTooltips?.(document);
 
   document.getElementById("openCampaigns")?.addEventListener("click", () => {
     send({

@@ -335,6 +335,110 @@ public sealed class RouteTests
         Assert.Equal(100, result.Position.X, 6);
     }
 
+    /// <summary>
+    /// Последняя точка со скоростью 0 — это ОСТАНОВКА, а не завершение маршрута.
+    ///
+    /// Регрессия: завершение проверялось раньше остановки, поэтому финальная
+    /// точка со скоростью 0 возвращала Completed. Пользовательский toggle
+    /// оставался включённым, надпись «Остановка» не появлялась, и игрок
+    /// «проезжал» точку без события.
+    /// </summary>
+    [Fact]
+    public void LastWaypointWithZeroSpeedStopsInsteadOfCompleting()
+    {
+        var planner = new RoadRoutePlanner(new[]
+        {
+            new RoadSegment(0, 0, 200, 0)
+        });
+
+        var route = new RouteState(60, new[]
+        {
+            new RouteWaypoint("a", new WorldCoordinate(50, 0, 0), 60),
+            new RouteWaypoint("b", new WorldCoordinate(100, 0, 0), 0)
+        });
+
+        var plan = planner.Build(route, new WorldCoordinate(0, 0, 0));
+        var result = RouteMovementEngine.Advance(
+            route,
+            plan,
+            RouteCursor.Initial,
+            new WorldCoordinate(0, 0, 0),
+            10);
+
+        Assert.False(result.Enabled);
+        Assert.True(result.StoppedAtWaypoint);
+        Assert.False(result.Completed);
+        Assert.Equal(1, result.Cursor.StoppedAtWaypointIndex);
+        Assert.Equal(100, result.Position.X, 6);
+        Assert.Equal(0, result.SpeedKmh, 6);
+    }
+
+    /// <summary>Последняя точка со скоростью &gt; 0 завершает маршрут, как и раньше.</summary>
+    [Fact]
+    public void LastWaypointWithPositiveSpeedCompletes()
+    {
+        var planner = new RoadRoutePlanner(new[]
+        {
+            new RoadSegment(0, 0, 200, 0)
+        });
+
+        var route = new RouteState(60, new[]
+        {
+            new RouteWaypoint("a", new WorldCoordinate(50, 0, 0), 60),
+            new RouteWaypoint("b", new WorldCoordinate(100, 0, 0), 90)
+        });
+
+        var plan = planner.Build(route, new WorldCoordinate(0, 0, 0));
+        var result = RouteMovementEngine.Advance(
+            route,
+            plan,
+            RouteCursor.Initial,
+            new WorldCoordinate(0, 0, 0),
+            10);
+
+        Assert.False(result.Enabled);
+        Assert.False(result.StoppedAtWaypoint);
+        Assert.True(result.Completed);
+        Assert.Equal(100, result.Position.X, 6);
+    }
+
+    /// <summary>
+    /// Единственная точка со скоростью 0 — это остановка, а не завершение.
+    ///
+    /// Игрок при этом НЕ трогается с места: скорость первого leg берётся у
+    /// самой точки, и нулевая скорость означает «не ехать». Так устроен движок
+    /// (см. SingleWaypointWithZeroSpeedStopsAtWaypoint), важно здесь другое —
+    /// результат обязан быть остановкой, чтобы toggle выключился и появилась
+    /// надпись, а не «маршрут пройден».
+    /// </summary>
+    [Fact]
+    public void FirstAndOnlyWaypointWithZeroSpeedStopsInsteadOfCompleting()
+    {
+        var planner = new RoadRoutePlanner(new[]
+        {
+            new RoadSegment(0, 0, 200, 0)
+        });
+
+        var route = new RouteState(60, new[]
+        {
+            new RouteWaypoint("a", new WorldCoordinate(100, 0, 0), 0)
+        });
+
+        var plan = planner.Build(route, new WorldCoordinate(0, 0, 0));
+        var result = RouteMovementEngine.Advance(
+            route,
+            plan,
+            RouteCursor.Initial,
+            new WorldCoordinate(0, 0, 0),
+            10);
+
+        Assert.False(result.Enabled);
+        Assert.True(result.StoppedAtWaypoint);
+        Assert.False(result.Completed);
+        Assert.Equal(0, result.Cursor.StoppedAtWaypointIndex);
+        Assert.Equal(0, result.Position.X, 6);
+    }
+
     [Fact]
     public void ResumeAfterZeroSpeedKeepsUsingNextWaypointSpeedOnFollowingTick()
     {

@@ -13,6 +13,9 @@
         "ci/simulation_saves_smoke.mjs",
         "ci/environment_clock_smoke.mjs",
         "ci/player_marker_smoke.mjs",
+        "ci/map_context_menu_smoke.mjs",
+        "ci/vitals_parity_smoke.mjs",
+        "ci/route_stop_label_smoke.mjs",
         "ci/world_selector_smoke.mjs"
       ]
     },

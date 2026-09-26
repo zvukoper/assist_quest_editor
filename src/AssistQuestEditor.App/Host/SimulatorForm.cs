@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Globalization;
+using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using AssistQuestEditor.Domain;
@@ -552,7 +553,6 @@ public sealed class SimulatorForm : WebViewForm
                 case "route_toggle":
                     SetRouteEnabled(root.GetProperty("enabled").GetBoolean());
                     break;
-
                 case "route_edit_toggle":
                     SetRouteEditingEnabled(root.GetProperty("enabled").GetBoolean());
                     break;
@@ -635,6 +635,10 @@ public sealed class SimulatorForm : WebViewForm
 
                 case "set_vitals":
                     SetPlayerVitals(root);
+                    break;
+
+                case "set_stress":
+                    SetStress(root);
                     break;
 
                 case "set_progress":
@@ -2619,7 +2623,45 @@ public sealed class SimulatorForm : WebViewForm
             Hydration = Math.Clamp(Number(root, "hydration", current.Hydration), 0, current.MaxHydration),
             Fatigue = Math.Clamp(Number(root, "fatigue", current.Fatigue), 0, current.MaxFatigue)
         };
+
+        // Стресс — часть условий, а не потребностей, но правится из того же блока
+        // «Потребности». Поле необязательное: отсутствие ключа означает
+        // «оставить как есть», иначе применение здоровья сбрасывало бы стресс.
+        var conditions = _hub.Get<PlayerConditionState>("player-conditions").Value;
+
+        if (root.TryGetProperty("stress", out var stressElement) &&
+            stressElement.ValueKind == JsonValueKind.Number &&
+            stressElement.TryGetDouble(out var stress) &&
+            double.IsFinite(stress))
+        {
+            conditions = conditions with
+            {
+                Stress = Math.Clamp(stress, 0d, Math.Max(0d, 100d - conditions.CumulativeStress))
+            };
+        }
+
         _hub.Get<PlayerVitalsState>("player-vitals").Set(next, "Редактор потребностей");
+        _hub.Get<PlayerConditionState>("player-conditions").Set(conditions, "Редактор потребностей");
+    }
+
+    /// <summary>
+    /// Правка стресса из блока «Потребности».
+    ///
+    /// Кумулятивный стресс НЕ трогается: по правилам он снимается только
+    /// отпуском, и кнопка «Снять стресс» не должна его обнулять — иначе
+    /// редактор обходил бы единственный задуманный способ избавления.
+    /// </summary>
+    private void SetStress(JsonElement root)
+    {
+        var conditions = _hub.Get<PlayerConditionState>("player-conditions").Value;
+        var stress = Number(root, "stress", conditions.Stress);
+
+        _hub.Get<PlayerConditionState>("player-conditions").Set(
+            conditions with
+            {
+                Stress = Math.Clamp(stress, 0d, Math.Max(0d, 100d - conditions.CumulativeStress))
+            },
+            "Редактор потребностей");
     }
 
     private void SetPlayerProgress(JsonElement root)
@@ -3200,21 +3242,22 @@ public sealed class SimulatorForm : WebViewForm
 
     private void Events_Published(SimulatorEvent e)
     {
-        var routePlayerChannelChange =
-            e.EventType.Equals("ChannelChanged", StringComparison.OrdinalIgnoreCase) &&
-            e.Source.Equals("Движение по маршруту", StringComparison.OrdinalIgnoreCase);
+        // Журнал получает только настоящие события мира. Фильтр лежит в домене
+        // (SimulatorJournalPolicy) и отсекает транспортные ChannelChanged по
+        // каналам, которые меняются десятки раз в секунду: позиция игрока,
+        // усталость/стресс, телеметрия, игровое время. Раньше здесь стояла
+        // частная проверка одного источника, и внутренние процессы всё равно
+        // забивали журнал тысячами строк.
+        var shouldJournal = SimulatorJournalPolicy.ShouldJournal(e.EventType, e.Payload);
 
-        if (!routePlayerChannelChange)
+        if (shouldJournal)
         {
             AppendJournal(
                 e.EventType,
                 e.Timestamp,
                 e.Source,
                 e.Payload.Count == 0 ? string.Empty : QuestLogger.Json(e.Payload));
-        }
 
-        if (!routePlayerChannelChange)
-        {
             QuestLogger.Info("Simulator: событие опубликовано.", QuestLogger.Json(new
             {
                 eventType = e.EventType,

@@ -241,7 +241,7 @@ public static class PlayerConditionEngine
         }
 
         return new PlayerConditionUpdate(
-            currentVitals.Normalize(),
+            NormalizeVitals(currentVitals),
             state.Normalize(),
             events);
     }

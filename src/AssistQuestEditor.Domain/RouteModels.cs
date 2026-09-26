@@ -300,25 +300,12 @@ public static class RouteMovementEngine
             var destinationIndex = leg.EndWaypointIndex;
             legIndex++;
 
-            if (destinationIndex >= route.Waypoints.Count - 1)
-            {
-                return new RouteMovementResult(
-                    position,
-                    0d,
-                    heading,
-                    new RouteCursor(
-                        true,
-                        Math.Max(0, plan.Legs.Count - 1),
-                        Math.Max(0, points.Count - 2),
-                        0d,
-                        false,
-                        destinationIndex,
-                        heading),
-                    false,
-                    true,
-                    false);
-            }
-
+            // Остановка проверяется ПЕРВОЙ, и это принципиально. Точка со
+            // скоростью 0 останавливает маршрут даже когда она последняя:
+            // раньше завершение проверялось раньше остановки, последняя точка
+            // со скоростью 0 возвращала Completed вместо StoppedAtWaypoint,
+            // пользовательский toggle оставался включённым, а игрок «проезжал»
+            // остановку без события и без надписи.
             var destinationSpeed = route.Waypoints[destinationIndex].SpeedKmh;
             if (destinationSpeed <= 0d)
             {
@@ -337,6 +324,25 @@ public static class RouteMovementEngine
                     false,
                     false,
                     true);
+            }
+
+            if (destinationIndex >= route.Waypoints.Count - 1)
+            {
+                return new RouteMovementResult(
+                    position,
+                    0d,
+                    heading,
+                    new RouteCursor(
+                        true,
+                        Math.Max(0, plan.Legs.Count - 1),
+                        Math.Max(0, points.Count - 2),
+                        0d,
+                        false,
+                        destinationIndex,
+                        heading),
+                    false,
+                    true,
+                    false);
             }
 
             speed = destinationSpeed;

@@ -1007,6 +1007,9 @@ input,select,textarea{padding:4px 5px;border-radius:4px;font-size:10px}textarea{
   position:fixed;z-index:10000;max-width:290px;padding:7px 9px;border-radius:6px;
   border:1px solid rgba(255,255,255,.14);background:rgba(9,12,16,.97);color:#e7edf4;
   box-shadow:0 12px 28px rgba(0,0,0,.48);font-size:9px;line-height:1.4;pointer-events:none;
+  /* Расшифровка шкал приходит многострочной: имя, реальное значение,
+     кумулятивное, пояснение. Без pre-line четыре строки склеились бы в одну. */
+  white-space:pre-line;
 }
 @keyframes inventoryBeaconPulse{0%,100%{transform:scale(.85);opacity:.55}50%{transform:scale(1.25);opacity:1}}
 @keyframes inventoryBackpackPulse{0%,100%{box-shadow:0 12px 28px rgba(0,0,0,.45),0 0 0 rgba(250,176,3,0)}50%{box-shadow:0 12px 28px rgba(0,0,0,.45),0 0 18px rgba(250,176,3,.32)}}
@@ -1421,8 +1424,26 @@ input,select,textarea{padding:4px 5px;border-radius:4px;font-size:10px}textarea{
   pointer-events:none;
 }
 .routeSpeedometer[hidden]{display:none!important}
+/* «Остановка» вместо нуля: слово длиннее цифры, поэтому кегль меньше, а ширина
+   не скачет между значениями. */
+.routeSpeedometer.stopped{
+  font-size:20px;
+  color:#ff9f1a;
+  border-color:rgba(255,159,26,.65);
+  animation:routePausedSpeedometerPulse 1000ms ease-in-out infinite;
+}
 .routeSpeedometer.pausedPulse{
   animation:routePausedSpeedometerPulse 1000ms ease-in-out infinite;
+}
+/* «Остановка» в HUD: то же оранжевое пульсирование, что и у спидометра на
+   паузе, — ноль км/ч заменяется словом, а не другим цветом. */
+.badge.stopPulse{
+  color:#ff9f1a;border-color:rgba(255,159,26,.65);
+  animation:routeStoppedBadgePulse 1000ms ease-in-out infinite;
+}
+@keyframes routeStoppedBadgePulse{
+  0%,100%{opacity:.55;box-shadow:0 0 0 rgba(255,159,26,0)}
+  50%{opacity:1;box-shadow:0 0 14px rgba(255,159,26,.55)}
 }
 @keyframes routePausedSpeedometerPulse{
   0%,100%{box-shadow:0 4px 18px rgba(0,0,0,.42),0 0 0 rgba(250,176,3,0);border-color:rgba(255,255,255,.18)}
@@ -1453,13 +1474,21 @@ input,select,textarea{padding:4px 5px;border-radius:4px;font-size:10px}textarea{
 .dualStat{margin-top:7px}
 .dualStatHead{display:flex;justify-content:space-between;gap:8px;margin-bottom:3px;font-size:9px;color:var(--muted)}
 .dualBar{position:relative;height:8px;overflow:hidden;background:#272b31;border:1px solid rgba(255,255,255,.08);border-radius:999px}
-.dualBarSoft{position:absolute;inset:0 auto 0 0;background:#6f879d;opacity:.82}
-.dualBarCumulative{position:absolute;top:0;bottom:0;background:#f5c542}
+.dualBarSoft{position:absolute;inset:0 auto 0 0;opacity:.85}
+/* Кумулятивная часть — ВСЕГДА ярко-жёлтая и одна и та же на всех шкалах: её
+   смысл в том, что это «закреплённая» часть, а не ещё одно значение.
+   Конкретный цвет задаёт AssistVitals, здесь только роль и геометрия.
+   У расходуемых шкал она растёт с конца (fromEnd), у наполняемых — с начала
+   (fromStart), как и задано правилом двойной шкалы. */
+.dualBarCumulative{position:absolute;top:0;bottom:0;background:#ffd400}
 .dualBarCumulative.fromEnd{right:0}
 .dualBarCumulative.fromStart{left:0}
-.dualBar.energy .dualBarSoft{background:#f5d447}
-.dualBar.stress .dualBarSoft{background:#8c63d9}
-.dualBar.fatigue .dualBarSoft{background:#7f8aa0}
+.conditionBars{display:flex;flex-direction:column;gap:2px}
+.conditionRow{display:block}
+.conditionLegend{display:flex;justify-content:flex-end;margin-top:6px;font-size:8px;color:var(--muted)}
+.conditionLegendCumulative{color:#ffd400}
+.conditionEditActions{display:flex;gap:6px;margin-top:7px}
+.conditionEditActions>*{flex:1}
 .effectRow{display:flex;justify-content:space-between;gap:8px;padding:5px 6px;margin-top:4px;border-radius:5px;font-size:9px}
 .effectRow.buff{background:rgba(144,238,144,.08);color:#b9f7a8}
 .effectRow.debuff{background:rgba(210,215,220,.07);color:#d9dde2}

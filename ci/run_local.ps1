@@ -622,6 +622,29 @@ New-Check -Id 'webSyntax' -Name 'Синтаксис web JavaScript' -Suites @('f
     }
 }
 
+# Версии web-ресурсов в ссылках страниц (?v=). Проверка статическая, но ловит
+# поломку, невидимую больше нигде: правка simulator.js/theme.css без смены
+# токена не доезжает до пользователя, потому что WebView2 отдаёт под-ресурс из
+# своего кеша (хост версионирует только адрес самой страницы). В CI это не
+# проявляется — проверки читают файлы напрямую, а `compile.ps1` чистит профиль.
+New-Check -Id 'webAssetVersions' -Name 'Версии web-ресурсов' -Suites @('fast') -Body {
+    node ci/web_asset_version_smoke.mjs
+    if ($LASTEXITCODE -ne 0) {
+        throw 'node ci/web_asset_version_smoke.mjs не прошёл'
+    }
+}
+
+# Профиль WebView2 привязан к отпечатку сборки. Проверка статическая, но следит
+# за связкой, распад которой незаметен всем остальным: если форма снова начнёт
+# открывать профиль по постоянному пути, дисковый кеш подресурсов переживёт
+# пересборку, и правки в simulator.js перестанут доезжать до пользователя.
+New-Check -Id 'webViewProfileStamp' -Name 'Профиль WebView2 по отпечатку' -Suites @('fast') -Body {
+    node ci/webview_profile_smoke.mjs
+    if ($LASTEXITCODE -ne 0) {
+        throw 'node ci/webview_profile_smoke.mjs не прошёл'
+    }
+}
+
 # Сборка всех исходных проектов. Отдельной проверки «.NET SDK» больше нет: если
 # dotnet отсутствует, эта проверка падает с внятной ошибкой, а `dotnet --version`
 # дублировал её и добавлял лишний шаг в замер времени набора.

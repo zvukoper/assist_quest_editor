@@ -196,6 +196,15 @@ internal static class Program
                 return;
             }
 
+            // Отпечаток сборки для профиля WebView2. Пишется сборкой, поэтому
+            // обязан быть доступен БЕЗ окна: здесь нет GUI, а режим завершает
+            // работу сразу после записи файла.
+            if (args.Any(arg => string.Equals(arg, "--write-web-stamp", StringComparison.OrdinalIgnoreCase)))
+            {
+                Environment.ExitCode = WriteWebStampFromCommandLine();
+                return;
+            }
+
             var startupFile = args.FirstOrDefault(arg =>
                 !StartupOptions.IsApplicationSwitch(arg) &&
                 File.Exists(arg));
@@ -209,6 +218,13 @@ internal static class Program
             }
 
             singleInstance = acquired;
+
+            // Профиль WebView2 готовится после всех режимов командной строки и
+            // ДО создания окон: каталог профиля зависит от отпечатка сборки, и
+            // окно, созданное раньше, открыло бы профиль по старому пути.
+            // Уборка отработавших профилей тоже здесь: она должна случиться один
+            // раз за запуск, а не на каждом окне.
+            WebViewProfile.Prepare();
 
             if (startupFile is not null)
                 FileActivationRequest.Set(startupFile);
@@ -623,6 +639,59 @@ internal static class Program
     /// Аргументы: --build-demo-world [--output <path>].
     /// Код возврата: 0 — архив собран, 1 — не удалось.
     /// </summary>
+    /// <summary>
+    /// Считает отпечаток сборки по Web-ресурсам и записывает его рядом с EXE.
+    /// Вызывается из <c>compile.ps1</c>.
+    ///
+    /// Почему отдельный режим приложения, а не вычисление в PowerShell. Отпечаток
+    /// — это хеш от списка «путь=хеш», и обе стороны обязаны считать его
+    /// ОДИНАКОВО: расхождение формул дало бы путь к профилю, который приложение
+    /// никогда не откроет, и кеш подресурсов снова стал бы общим для всех сборок.
+    /// Одна реализация (WebBuildStamp) этого не допускает.
+    ///
+    /// Отпечаток считается по РАСПАКОВАННЫМ ресурсам (AppContext.BaseDirectory), а
+    /// не по папке рядом с EXE: приложение собрано как single-file, поэтому
+    /// каталога Web рядом с EXE нет вовсе — содержимое извлекается в кэш %TEMP%
+    /// при запуске. Именно эти файлы и будут отданы WebView2, поэтому отпечаток по
+    /// ним описывает ровно то, что получит пользователь. Для отладочного запуска
+    /// и неоднофайловой сборки папка рядом с EXE используется как запасной путь.
+    /// </summary>
+    private static int WriteWebStampFromCommandLine()
+    {
+        var appDirectory = ResourceRootResolver.ExecutableDirectory(Environment.ProcessPath)
+            ?? AppContext.BaseDirectory;
+
+        var extractedWeb = Path.Combine(AppContext.BaseDirectory, "Web");
+        var besideExeWeb = Path.Combine(appDirectory, "Web");
+        var webDirectory = Directory.Exists(extractedWeb)
+            ? extractedWeb
+            : besideExeWeb;
+
+        if (!Directory.Exists(webDirectory))
+        {
+            Console.WriteLine("Папка Web не найдена: " + webDirectory);
+            return 1;
+        }
+
+        var stamp = WebBuildStamp.ComputeForDirectory(webDirectory, VersionInfo.NumericVersion);
+        var target = Path.Combine(appDirectory, WebBuildStamp.FileName);
+
+        try
+        {
+            File.WriteAllText(target, stamp);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            Console.WriteLine("Записать отпечаток сборки не удалось: " + ex.Message);
+            return 1;
+        }
+
+        Console.WriteLine("Отпечаток сборки: " + stamp);
+        Console.WriteLine("Источник: " + webDirectory);
+        Console.WriteLine("Файл: " + target);
+        return 0;
+    }
+
     private static int BuildDemoWorldFromCommandLine()
     {
         var appDirectory = ResourceRootResolver.ExecutableDirectory(Environment.ProcessPath)

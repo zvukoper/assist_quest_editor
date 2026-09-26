@@ -9,11 +9,25 @@ $binDir = Join-Path $PSScriptRoot 'bin'
 $objDir = Join-Path $PSScriptRoot 'obj'
 $publishDir = Join-Path $PSScriptRoot 'bin\Release\net10.0-windows\win-x64\publish'
 $exePath = Join-Path $publishDir 'AssistQuestEditor.exe'
-$webViewUserDataDir = if ($env:LOCALAPPDATA) {
+$webStampFile = Join-Path $publishDir 'web-build.stamp'
+
+# WebView2 держит дисковый кеш подресурсов в профиле. Раньше профиль был один на
+# все сборки, и compile.ps1 пытался его УДАЛИТЬ — но каталог, который держит
+# живой процесс WebView2, Windows удалить не даёт, поэтому шаг молча не работал
+# даже здесь. Теперь лишние профили не удаляются, а остаются без дела: приложение
+# открывает профиль по пути с отпечатком сборки (WebBuildStamp), поэтому кеш
+# прошлой сборки физически не может быть использован.
+#
+# Каталог профилей нужен только для уборки: под отпечаток каждого запуска
+# остаётся свой каталог, и старые надо убирать, чтобы они не накапливались.
+$webViewRoot = if ($env:LOCALAPPDATA) {
     Join-Path $env:LOCALAPPDATA 'AssistQuestEditor\WebView2'
 } else {
     Join-Path $PSScriptRoot 'WebView2'
 }
+
+# Кэш распаковки single-file. Имя каталога — AssemblyName приложения.
+$extractionCacheDir = Join-Path ([IO.Path]::GetTempPath()) (Join-Path '.net' 'AssistQuestEditor')
 
 Write-Host "=== Assist Quest Editor: подготовка публикации ===" -ForegroundColor Cyan
 
@@ -83,12 +97,24 @@ if ($running.Count -gt 0) {
     Start-Sleep -Milliseconds 700
 }
 
-# Полностью удаляем старые build/output данные и профиль WebView2.
-# Это исключает старый publish, старые Web-ресурсы и браузерный cache из повторного запуска.
-foreach ($directory in @($publishDir, $binDir, $objDir, $webViewUserDataDir)) {
+# Полностью удаляем старые build/output данные и КЭШ РАСПАКОВКИ single-file.
+#
+# Кэш распаковки (%TEMP%\.net\<приложение>) обязателен в этом списке. Каталог
+# выбирается по хешу самого EXE, поэтому он переживает пересборку, если байты
+# EXE не изменились, — а они не меняются при пересборке того же коммита. В итоге
+# WebView2 получал СТАРЫЕ Web-файлы из кэша распаковки прошлого запуска, и правка
+# скрипта не доезжала до пользователя даже после «полной» пересборки. Здесь же
+# копится по каталогу на каждый запуск: наблюдалось 18 каталогов.
+#
+# Профиль WebView2 СОЗНАТЕЛЬНО не удаляется в этом списке. Каталог, который держит
+# живой процесс WebView2, Windows удалить не даёт, поэтому раньше этот шаг молча
+# не срабатывал — и кеш прошлой сборки переживал «чистую» пересборку. Профиль
+# больше не нужно чистить: приложение открывает его по пути с отпечатком сборки
+# (web-build.stamp), и пересборка сама по себе даёт другой путь.
+foreach ($directory in @($publishDir, $binDir, $objDir, $extractionCacheDir)) {
     if (Test-Path -LiteralPath $directory) {
         Write-Host "Удаляю старые данные: $directory" -ForegroundColor Yellow
-        Remove-Item -LiteralPath $directory -Recurse -Force
+        Remove-Item -LiteralPath $directory -Recurse -Force -ErrorAction SilentlyContinue
     }
 }
 
@@ -96,8 +122,23 @@ if (Test-Path -LiteralPath $publishDir) {
     throw "Не удалось удалить старую папку publish: $publishDir"
 }
 
-if (Test-Path -LiteralPath $webViewUserDataDir) {
-    throw "Не удалось удалить кэш WebView2: $webViewUserDataDir"
+# Отработавшие профили убираются ДО сборки: WebView2 в этот момент уже завершён
+# (шаг выше), поэтому каталоги не заняты и удаление действительно выполняется.
+# Если каталог всё же занят — это не ошибка сборки, и уборка просто пропускает его.
+if (Test-Path -LiteralPath $webViewRoot) {
+    Write-Host "Убираю отработавшие профили WebView2: $webViewRoot" -ForegroundColor Yellow
+
+    $removedProfiles = 0
+    foreach ($profile in @(Get-ChildItem -LiteralPath $webViewRoot -Directory -Force -ErrorAction SilentlyContinue)) {
+        try {
+            Remove-Item -LiteralPath $profile.FullName -Recurse -Force -ErrorAction Stop
+            $removedProfiles++
+        } catch {
+            Write-Host "  профиль занят, оставлен: $($profile.Name)" -ForegroundColor DarkGray
+        }
+    }
+
+    Write-Host "  удалено профилей: $removedProfiles" -ForegroundColor DarkGray
 }
 
 Write-Host "=== Восстановление пакетов ===" -ForegroundColor Cyan
@@ -159,12 +200,16 @@ foreach ($file in $requiredAssetFiles) {
 # распаковываются в кэш %TEMP%, который не виден и не заменяется, поэтому рядом
 # с EXE лежит проверенная копия по манифесту.
 #
-# Отчёты (проверки ресурсов и сборки демо-мира) — законные продукты сборки:
-# приложение собрано как WinExe без консоли, поэтому его вердикт и итог сидера
-# доходят до человека и до CI только файлом. Список обязан идти в ногу со всеми
-# отчётами, которые пишутся в этот каталог, иначе проверка состава падает на
-# исправной сборке (так пропускался demo-world-report.txt).
-$allowedPublishExtra = @('data-verify-report.txt', 'demo-world-report.txt')
+# Отчёты (проверки ресурсов и сборки демо-мира) и файл отпечатка сборки —
+# законные продукты сборки: приложение собрано как WinExe без консоли, поэтому
+# его вердикт и итог сидера доходят до человека и до CI только файлом. Список
+# обязан идти в ногу со всеми файлами, которые пишутся в этот каталог, иначе
+# проверка состава падает на исправной сборке.
+$allowedPublishExtra = @(
+    'data-verify-report.txt',
+    'demo-world-report.txt',
+    'web-build.stamp'
+)
 $publishedEntries = @(Get-ChildItem -LiteralPath $publishDir -Force)
 $unexpected = @($publishedEntries | Where-Object {
     $_.FullName -ne $exePath -and
@@ -281,11 +326,43 @@ if ($LASTEXITCODE -ne 0) {
     exit $LASTEXITCODE
 }
 
+# Отпечаток сборки, к которому привязан профиль WebView2.
+#
+# Без него приложение открыло бы профиль по одному и тому же пути, и дисковый
+# кеш подресурсов переживал бы пересборку: `?v=` у страницы версионирует только
+# саму страницу, а ссылки на `simulator.js` и `theme.css` версионируются в
+# разметке — и если токен там устарел, WebView2 возвращает старый файл.
+#
+# Считает отпечаток САМО приложение (режим --write-web-stamp). Своя формула в
+# PowerShell была бы второй реализацией, и её расхождение с приложением дало бы
+# путь к профилю, который никогда не открывается, — то есть ровно тот дефект,
+# который отпечаток и устраняет. Одна реализация (WebBuildStamp) не расходится.
+Write-Host "=== Отпечаток сборки для профиля WebView2 ===" -ForegroundColor Cyan
+
+$stampExitCode = Invoke-ApplicationCommand $exePath @('--write-web-stamp')
+if ($stampExitCode -ne 0) {
+    Write-Host "Вычисление отпечатка сборки завершилось с кодом $stampExitCode." -ForegroundColor Red
+    exit $stampExitCode
+}
+
+if (-not (Test-Path -LiteralPath $webStampFile)) {
+    Write-Host "Приложение не записало отпечаток сборки: $webStampFile" -ForegroundColor Red
+    exit 1
+}
+
+$webStamp = (Get-Content -LiteralPath $webStampFile -Raw).Trim()
+if ($webStamp -notmatch '^[0-9a-f]{16}$') {
+    Write-Host "Отпечаток сборки имеет неожиданный вид: '$webStamp'" -ForegroundColor Red
+    exit 1
+}
+
+Write-Host "Отпечаток: $webStamp" -ForegroundColor Green
+Write-Host "Профиль WebView2: $webViewRoot\$webStamp" -ForegroundColor Green
+
 Write-Host "=== Публикация завершена ===" -ForegroundColor Green
 Write-Host "EXE: $exePath"
 Write-Host "Версия: $version"
 Write-Host "Размер: $sizeMb MB"
-Write-Host "WebView2 cache очищен: $webViewUserDataDir"
 Write-Host "Web-ресурсы включены в single-file через IncludeAllContentForSelfExtract." -ForegroundColor Green
 Write-Host "Ресурсы опубликованы рядом с EXE: $publishedDataDir" -ForegroundColor Green
 Write-Host "Манифест ресурсов: $publishedManifest" -ForegroundColor Green

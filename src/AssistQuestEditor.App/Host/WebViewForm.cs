@@ -224,9 +224,17 @@ public abstract class WebViewForm : Form
 
     private static string GetWebViewUserDataFolder()
     {
-        // Профиль WebView2 остаётся в AppData (см. AppPaths): это технические
-        // данные, привязанные к машине, и переносить их в Документы нельзя.
-        return AppPaths.WebViewUserDataRoot;
+        // Профиль привязан к отпечатку сборки (см. WebViewProfile): каталог
+        // включает хеш содержимого Web-ресурсов и версию. Изменился хотя бы один
+        // скрипт — приложение открывает ДРУГОЙ пустой профиль, поэтому старый
+        // дисковой кеш подресурсов физически не может быть использован.
+        //
+        // Раньше путь был постоянным, и параметр `?v=` у страницы не спасал:
+        // ссылки на `simulator.js` и `theme.css` версионируются в разметке, а
+        // WebView2 отдаёт подресурс по полному URL, не сверяя содержимое с
+        // диском. Правки в скриптах не доезжали до пользователя при обычной
+        // отладке, потому что профиль чистил только compile.ps1.
+        return WebViewProfile.CurrentProfilePath;
     }
 
     private void ShowWebViewError(Exception ex)

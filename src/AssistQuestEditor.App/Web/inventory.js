@@ -132,33 +132,31 @@
 
   /**
    * Потребности игрока: здоровье, энергия, жидкость, усталость.
+   *
+   * Разметка, цвета и расшифровка живут в AssistVitals — том же модуле, что
+   * рисует раздел «Потребности» в правом сайдбаре Симулятора. Две копии
+   * расходились: в окне «Игрок» не было шкалы «Стресс», цвета отличались, и
+   * подсказок не было вовсе.
    */
   function vitalsMarkup(snapshot) {
+    if (global.AssistVitals) {
+      return "<div class='gameVitals'>" +
+        global.AssistVitals.markup(snapshot) +
+      "</div>";
+    }
+
+    // Осторожная деградация: если модуль не подключён (старая страница в кеше
+    // WebView2), окно остаётся с прежней разметкой, а не пустует целиком.
     var v = (snapshot && snapshot.playerVitals) || {};
     var n = function (value) { return Math.round(Number(value || 0)); };
 
     return [
       "<div class='gameVitals'>",
-        "<div class='vitalRow' data-game-tooltip='Здоровье: текущее значение от 0 до максимума.'>" +
+        "<div class='vitalRow'>" +
           "<span class='vitalLabel'>Здоровье</span>" +
           "<div class='vitalTrack'><div class='vitalFill health' style='width:" +
             percent(v.health, v.maxHealth) + "%'></div></div>" +
           "<span class='vitalValue'>" + n(v.health) + "%</span></div>",
-        "<div class='vitalDual'>",
-          "<div class='vitalDualCell' data-game-tooltip='Энергия: запас сил игрока.'>" +
-            "<span class='vitalLabel'>Энергия</span>" +
-            "<div class='vitalTrack'><div class='vitalFill energy' style='width:" +
-              percent(v.energy, v.maxEnergy) + "%'></div></div></div>",
-          "<div class='vitalDualCell' data-game-tooltip='Жидкость: уровень гидратации игрока.'>" +
-            "<span class='vitalLabel'>Жидкость</span>" +
-            "<div class='vitalTrack'><div class='vitalFill hydration' style='width:" +
-              percent(v.hydration, v.maxHydration) + "%'></div></div></div>",
-        "</div>",
-        "<div class='vitalRow' data-game-tooltip='Усталость: 0 — полностью отдохнул, 100 — максимальная усталость.'>" +
-          "<span class='vitalLabel'>Усталость</span>" +
-          "<div class='vitalTrack'><div class='vitalFill fatigue' style='width:" +
-            percent(v.fatigue, v.maxFatigue) + "%'></div></div>" +
-          "<span class='vitalValue'>" + n(v.fatigue) + "%</span></div>",
       "</div>"
     ].join("");
   }

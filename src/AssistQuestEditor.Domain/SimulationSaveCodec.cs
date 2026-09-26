@@ -457,7 +457,7 @@ public static class SimulationSaveCodec
                 ReadDouble(reader)));
         }
 
-        return state with { Effects = effects }.Normalize();
+        return (state with { Effects = effects }).Normalize();
     }
 
     private static void WriteRouteRuntime(
