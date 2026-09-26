@@ -354,7 +354,7 @@ public static class SimulationSaveCodec
             ? ReadRoute(reader, strings, formatVersion >= 5)
             : RouteState.Empty;
         var routeRuntime = formatVersion >= 4
-            ? ReadRouteRuntime(reader, formatVersion >= 5)
+            ? ReadRouteRuntime(reader, formatVersion)
             : RouteRuntimeState.Empty;
 
         return new SimulationSaveState(
@@ -391,12 +391,14 @@ public static class SimulationSaveCodec
                 writer.Write(runtime.CurrentTargetWaypointIndex.Value);
             WriteDouble(writer, runtime.TravelRealSeconds);
             WriteDouble(writer, runtime.TravelGameSeconds);
+            if (formatVersion >= 6)
+                writer.Write(runtime.Enabled);
         }
     }
 
     private static RouteRuntimeState ReadRouteRuntime(
         BinaryReader reader,
-        bool hasExtendedRuntime)
+        int formatVersion)
     {
         var cursor = new RouteCursor(
             reader.ReadBoolean(),
@@ -407,7 +409,7 @@ public static class SimulationSaveCodec
             reader.ReadBoolean() ? reader.ReadInt32() : null,
             ReadDouble(reader));
 
-        if (!hasExtendedRuntime)
+        if (formatVersion < 5)
             return new RouteRuntimeState(cursor);
 
         // Явный целевой тип обязателен: у `var` нет цели для условного выражения,
@@ -419,7 +421,8 @@ public static class SimulationSaveCodec
             cursor,
             target,
             ReadDouble(reader),
-            ReadDouble(reader));
+            ReadDouble(reader),
+            formatVersion >= 6 && reader.ReadBoolean());
     }
 
     private static void WriteRoute(
