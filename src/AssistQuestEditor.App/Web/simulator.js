@@ -3689,11 +3689,13 @@
       const max = key => Math.max(1, Number(v[key]) || 100);
       const pct = (value, maximum) => Math.max(0, Math.min(100, Number(value || 0) / maximum * 100));
       return [
-        dualConditionBar("Здоровье", pct(v.health, max("maxHealth")), c.cumulativeHealth, "health", false),
+        "<div class='conditionTopGrid'>" +
+          dualConditionBar("Здоровье", pct(v.health, max("maxHealth")), c.cumulativeHealth, "health", false) +
+          dualConditionBar("Стресс", c.stress, c.cumulativeStress, "stress", true) +
+        "</div>",
         dualConditionBar("Энергия", pct(v.energy, max("maxEnergy")), c.cumulativeEnergy, "energy", false),
         dualConditionBar("Жидкость", pct(v.hydration, max("maxHydration")), c.cumulativeHydration, "hydration", false),
         dualConditionBar("Усталость", pct(v.fatigue, max("maxFatigue")), c.cumulativeFatigue, "fatigue", true),
-        dualConditionBar("Стресс", c.stress, c.cumulativeStress, "stress", true),
         "<div class='fieldGrid' style='margin-top:8px'>",
           field("health", "Здоровье", v.health),
           field("energy", "Энергия", v.energy),
@@ -4000,6 +4002,17 @@
 
     side.querySelector("#fullSleep")?.addEventListener("click", () => {
       send({ action: "sleep_full" });
+    });
+
+    side.querySelectorAll(".journalCoord").forEach(element => {
+      element.addEventListener("click", () => {
+        send({
+          action: "focus_journal_coordinate",
+          x: Number(element.dataset.x),
+          y: Number(element.dataset.y),
+          z: Number(element.dataset.z)
+        });
+      });
     });
 
     side.querySelectorAll("[data-fact]").forEach(input => {
