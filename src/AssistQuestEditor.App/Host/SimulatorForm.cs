@@ -1590,6 +1590,47 @@ public sealed class SimulatorForm : WebViewForm
         if (_routeTargetWaypointIndex is null && _routeState.Waypoints.Count > 0)
             _routeTargetWaypointIndex = 0;
 
+        // Cursor из сохранения относится к геометрии маршрута, существовавшей в
+        // момент записи. После перезапуска актуальный RoutePlan строится заново,
+        // поэтому нельзя безусловно использовать сохранённые SegmentIndex/Progress.
+        // Перепривязываем курсор только к сохранённой логической цели. Это намеренно
+        // НЕ ProjectForwardCursor(): ближайший участок всего маршрута на перекрёстке
+        // может оказаться старой точкой и отправить движение назад.
+        if (_routeCursor.Initialized &&
+            _routeTargetWaypointIndex is int savedLogicalTarget &&
+            _routePlan.IsUsable)
+        {
+            var projected = RouteMovementEngine.ProjectCursorToWaypoint(
+                _routePlan,
+                savedLogicalTarget,
+                playerPosition,
+                _routeCursor);
+
+            if (projected.Initialized)
+            {
+                _routeCursor = projected with
+                {
+                    ResumeAfterStop = savedCursor.ResumeAfterStop,
+                    StoppedAtWaypointIndex = _routeStoppedWaypointIndex
+                };
+                _routeLastHeading = projected.LastHeadingDegrees;
+
+                AppLogger.Info(
+                    "SimulatorForm: сохранённый курсор перепривязан к текущей цели.",
+                    $"target={savedLogicalTarget + 1}; leg={projected.LegIndex}; " +
+                    $"segment={projected.SegmentIndex}; progress={projected.SegmentProgressMeters:0.###}");
+            }
+            else
+            {
+                AppLogger.Warn(
+                    "SimulatorForm: не удалось перепривязать сохранённый курсор к текущей цели.",
+                    $"target={savedLogicalTarget + 1}");
+                _routeCursor = RouteCursor.Initial;
+                _routeStoppedWaypointIndex = null;
+                _resumeRouteAfterStop = false;
+            }
+        }
+
         _routeTravelRealSeconds = runtime is not null &&
             double.IsFinite(runtime.TravelRealSeconds) &&
             runtime.TravelRealSeconds >= 0d
