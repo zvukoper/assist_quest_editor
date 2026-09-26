@@ -849,20 +849,55 @@ public sealed class SimulatorForm : WebViewForm
         var x = root.TryGetProperty("x", out var xNode) && xNode.TryGetDouble(out var xValue) ? xValue : 0;
         var y = root.TryGetProperty("y", out var yNode) && yNode.TryGetDouble(out var yValue) ? yValue : 0;
         var z = root.TryGetProperty("z", out var zNode) && zNode.TryGetDouble(out var zValue) ? zValue : 0;
+        var name = root.TryGetProperty("name", out var nameNode)
+            ? nameNode.GetString()
+            : null;
+        var position = new WorldCoordinate(x, y, z);
         var point = new WorldPoint(
             "temporary:" + Guid.NewGuid().ToString("N"),
-            "Временная точка",
+            string.IsNullOrWhiteSpace(name) ? "Временная точка" : name,
             "Temporary",
-            new WorldCoordinate(x, y, z))
+            position)
         {
             Color = "#fab003"
         };
 
         _hub.Get<WorldSelectionState>("world-selection").Set(
-            new WorldSelectionState(point, "Временная точка Simulator"),
+            new WorldSelectionState(point, point.Name),
             "Simulator: создана временная точка");
-        AppLogger.Info("Simulator: создана временная точка.", $"position={point.Position}; id={point.Id}");
+        PostJson(JsonSerializer.Serialize(new
+        {
+            type = "focus_point",
+            position,
+            name = point.Name
+        }, SnapshotJsonOptions));
+        AppLogger.Info("Simulator: создана временная точка.", $"position={point.Position}; id={point.Id}; name={point.Name}");
     }
+
+    private void FocusJournalCoordinate(JsonElement root)
+    {
+        var position = new WorldCoordinate(
+            Number(root, "x", 0),
+            Number(root, "y", 0),
+            Number(root, "z", 0));
+
+        CreateTemporaryPoint(JsonSerializer.SerializeToElement(new
+        {
+            x = position.X,
+            y = position.Y,
+            z = position.Z,
+            name = "Координата из журнала"
+        }));
+    }
+
+    private void FocusJournalCoordinate(WorldCoordinate position) =>
+        CreateTemporaryPoint(JsonSerializer.SerializeToElement(new
+        {
+            x = position.X,
+            y = position.Y,
+            z = position.Z,
+            name = "Координата из журнала"
+        }));
 
     private void SetPlayerPosition(JsonElement root)
     {
@@ -1057,7 +1092,7 @@ public sealed class SimulatorForm : WebViewForm
         var name = Path.GetFileName(path);
         if (MessageBox.Show(
                 this,
-                $"Загрузить маршрут "{name}"?",
+                $"Загрузить маршрут \"{name}\"?",
                 "Загрузка маршрута",
                 MessageBoxButtons.OKCancel,
                 MessageBoxIcon.Question) != DialogResult.OK)
@@ -2957,15 +2992,28 @@ public sealed class SimulatorForm : WebViewForm
 
         _journalForm = new JournalForm();
         _journalForm.GlobalHotKeyPressed += SimulatorForm_GlobalHotKeyPressed;
+        _journalForm.CoordinateClicked += JournalForm_CoordinateClicked;
         _journalForm.SetEntries(_journalEntries);
         _journalForm.ReturnToSidebarRequested += JournalForm_ReturnToSidebarRequested;
         _journalForm.FormClosed += (_, _) =>
         {
             _journalForm!.GlobalHotKeyPressed -= SimulatorForm_GlobalHotKeyPressed;
+            _journalForm.CoordinateClicked -= JournalForm_CoordinateClicked;
             _journalForm = null;
         };
         _journalForm.Show(this);
         QuestLogger.Info("Journal: native окно показано.", QuestLogger.Json(new { entryCount = _journalEntries.Count }));
+    }
+
+    private void JournalForm_CoordinateClicked(WorldCoordinate position)
+    {
+        if (InvokeRequired)
+        {
+            BeginInvoke((Action)(() => FocusJournalCoordinate(position)));
+            return;
+        }
+
+        FocusJournalCoordinate(position);
     }
 
     private void JournalForm_ReturnToSidebarRequested(object? sender, EventArgs e)
