@@ -1433,3 +1433,35 @@ input,select,textarea{padding:4px 5px;border-radius:4px;font-size:10px}textarea{
 .playerInfoPanel{background:var(--panel-deep)}
 .playerWindowTabs .gamePanelTab{font-size:11px}
 .playerWindowTabBody{scrollbar-gutter:stable}
+
+/* Симулятор: маршрутные файлы, состояние и контекст карты. */
+.routeFileButtons{display:flex;gap:6px;margin-top:6px}
+.routeFileButtons .smallButton{flex:1}
+.mapContextMenu{
+  position:absolute;z-index:40;min-width:190px;padding:4px;
+  border:1px solid var(--border);border-radius:6px;
+  background:rgba(29,32,36,.98);box-shadow:0 10px 26px rgba(0,0,0,.45)
+}
+.mapContextMenu[hidden]{display:none}
+.mapContextMenu button{
+  width:100%;border:0;background:transparent;color:var(--text);
+  text-align:left;padding:7px 9px;border-radius:4px;font-size:10px;cursor:pointer
+}
+.mapContextMenu button:hover{background:var(--hover);color:#fff}
+.journalCoord{color:#6eaaff;text-decoration:underline;cursor:pointer}
+.routeJournalEntry strong{color:#6ea5f5}
+.dualStat{margin-top:7px}
+.dualStatHead{display:flex;justify-content:space-between;gap:8px;margin-bottom:3px;font-size:9px;color:var(--muted)}
+.dualBar{position:relative;height:8px;overflow:hidden;background:#272b31;border:1px solid rgba(255,255,255,.08);border-radius:999px}
+.dualBarSoft{position:absolute;inset:0 auto 0 0;background:#6f879d;opacity:.82}
+.dualBarCumulative{position:absolute;top:0;bottom:0;background:#f5c542}
+.dualBarCumulative.fromEnd{right:0}
+.dualBarCumulative.fromStart{left:0}
+.dualBar.energy .dualBarSoft{background:#f5d447}
+.dualBar.stress .dualBarSoft{background:#8c63d9}
+.dualBar.fatigue .dualBarSoft{background:#7f8aa0}
+.effectRow{display:flex;justify-content:space-between;gap:8px;padding:5px 6px;margin-top:4px;border-radius:5px;font-size:9px}
+.effectRow.buff{background:rgba(144,238,144,.08);color:#b9f7a8}
+.effectRow.debuff{background:rgba(210,215,220,.07);color:#d9dde2}
+.sleepActions{display:flex;gap:6px;margin-top:7px}
+.sleepActions>*{flex:1}
