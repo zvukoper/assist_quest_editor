@@ -1,5 +1,6 @@
 (() => {
   const map = document.getElementById("mapCanvas");
+  const staticMap = document.getElementById("mapStaticCanvas");
   const side = document.getElementById("side");
   const hud = document.getElementById("hud");
   const runtimeSide = document.getElementById("runtimeSide");
@@ -51,6 +52,23 @@
   // Плоский массив [x1,z1,x2,z2, ...]: раскладка та же, что в data/world/roads.json.
   let roadSegments = [];
   let roadDebugNodes = [];
+  const MAP_INDEX_CELL_METERS = 500;
+  let roadSpatialIndex = new Map();
+  let roadDebugSpatialIndex = new Map();
+  let roadLongSegments = [];
+  let roadSegmentStamps = new Uint32Array(0);
+  let roadDrawStamp = 0;
+  let roadRevision = 0;
+  let mapPointSpatialIndex = new Map();
+  let mapPointSpatialSource = null;
+  let questPointLookup = new Map();
+  let questLayerCache = [];
+  let staticMapState = null;
+  let cachedMapWidth = 1;
+  let cachedMapHeight = 1;
+  let mapRenderScheduled = false;
+  let sidebarRenderScheduled = false;
+  let sidebarRenderTimer = 0;
   let questHitAreas = [];
   // Зоны попадания маркеров динамических событий. Живут рядом с questHitAreas
   // и перезаписываются на каждой перерисовке: они зависят от камеры, поэтому
@@ -278,8 +296,13 @@
     ["system", "Система"]
   ];
 
+  function updateMapSizeCache() {
+    cachedMapWidth = map.clientWidth || 1;
+    cachedMapHeight = map.clientHeight || 1;
+  }
+
   function visibleSize() {
-    return { width: map.clientWidth || 1, height: map.clientHeight || 1 };
+    return { width: cachedMapWidth, height: cachedMapHeight };
   }
 
   function worldToScreen(x, z) {
@@ -339,6 +362,7 @@
   }
 
   function pointerPosition(event) {
+    updateMapSizeCache();
     const rect = map.getBoundingClientRect();
     return { x: event.clientX - rect.left, y: event.clientY - rect.top };
   }
@@ -391,30 +415,77 @@
     );
   }
 
-  function drawMap() {
-    if (!snapshot) return;
-    const dpr = window.devicePixelRatio || 1;
-    const width = map.clientWidth || 1;
-    const height = map.clientHeight || 1;
+  function scheduleMapDraw() {
+    if (mapRenderScheduled) return;
+    mapRenderScheduled = true;
+    window.requestAnimationFrame(() => {
+      mapRenderScheduled = false;
+      drawMap();
+    });
+  }
+
+  function drawStaticMap(dpr, width, height) {
+    if (!staticMap) return;
     const targetWidth = Math.max(1, Math.round(width * dpr));
     const targetHeight = Math.max(1, Math.round(height * dpr));
+    if (staticMap.width !== targetWidth || staticMap.height !== targetHeight) {
+      staticMap.width = targetWidth;
+      staticMap.height = targetHeight;
+      staticMapState = null;
+    }
+
+    const nextState = {
+      cx: camera.cx, cz: camera.cz, mpp: camera.mpp,
+      roadsFilter, width, height, dpr, roadRevision
+    };
+
+    if (staticMapState &&
+        staticMapState.cx === nextState.cx &&
+        staticMapState.cz === nextState.cz &&
+        staticMapState.mpp === nextState.mpp &&
+        staticMapState.roadsFilter === nextState.roadsFilter &&
+        staticMapState.width === nextState.width &&
+        staticMapState.height === nextState.height &&
+        staticMapState.dpr === nextState.dpr &&
+        staticMapState.roadRevision === nextState.roadRevision) {
+      return;
+    }
+
+    const staticCtx = staticMap.getContext("2d");
+    staticCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    staticCtx.clearRect(0, 0, width, height);
+    staticCtx.fillStyle = "#0d1014";
+    staticCtx.fillRect(0, 0, width, height);
+    drawGrid(staticCtx, width, height);
+    drawRoads(staticCtx, width, height);
+    staticMapState = nextState;
+  }
+
+  function drawMap() {
+    if (!snapshot) return;
+    updateMapSizeCache();
+
+    const dpr = window.devicePixelRatio || 1;
+    const width = cachedMapWidth;
+    const height = cachedMapHeight;
+    const targetWidth = Math.max(1, Math.round(width * dpr));
+    const targetHeight = Math.max(1, Math.round(height * dpr));
+
     if (map.width !== targetWidth || map.height !== targetHeight) {
       map.width = targetWidth;
       map.height = targetHeight;
     }
 
+    if (staticMap) {
+      drawStaticMap(dpr, width, height);
+    }
+
     const ctx = map.getContext("2d");
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.clearRect(0, 0, width, height);
-    ctx.fillStyle = "#0d1014";
-    ctx.fillRect(0, 0, width, height);
-    drawGrid(ctx, width, height);
 
-    // Дороги рисуются между сеткой и точками: они фон, а не объект выбора.
-    drawRoads(ctx, width, height);
-
-    // Маршрут лежит поверх дорог: чёрная обводка отделяет lime-линию от
-    // дорожной геометрии, а сами точки маршрута рисуются отдельным верхним слоем.
+    // Сетка и дороги живут в статическом canvas и не перерисовываются
+    // на каждом runtime-кадре.
     drawRouteLines(ctx, width, height);
 
     const points = snapshot.world?.points || [];
@@ -427,19 +498,14 @@
     //     ориентирами, иначе карта превратилась бы в пустое поле);
     //   «города» — отдельно гасит города, не трогая СДО.
     // Скрытая точка не попадает ни в отрисовку, ни в зоны попадания.
-    const drawnPoints = points.filter(point => {
-      const isCity = point.isCity === true;
-      if (isCity && !citiesFilter) return false;
-      if (!isCity && onlyQuestsFilter) return false;
-      return true;
-    });
+    const drawnPoints = getVisibleWorldPoints(points, width, height);
     visiblePoints = [];
 
     // Порядок слоёв задаётся требованием «вся квестовая графика — самый верхний
     // слой». Внутри квестового слоя сначала рисуются неактивные квесты, затем
     // активные: активные визуально перекрывают неактивные. Сортировка идёт по
     // порядковому номеру из файла кампании, затем по имени файла.
-    const questLayer = buildQuestLayer(points);
+    const questLayer = questLayerCache;
     const activeQuests = questLayer.filter(entry => entry.active);
     const inactiveQuests = questLayer.filter(entry => !entry.active);
 
@@ -564,15 +630,68 @@
    * квеста); при совпадении номеров сортирует имя файла, чтобы порядок не
    * зависел от порядка строк в JSON.
    */
-  function buildQuestLayer(points) {
+  function rebuildWorldPointSpatialIndex(points) {
+    mapPointSpatialIndex = new Map();
+    mapPointSpatialSource = points;
+    questPointLookup = new Map();
+
+    for (const point of points) {
+      if (!point?.position) continue;
+      const id = String(point.id || "").toLowerCase();
+      if (id) questPointLookup.set(id, point);
+      addSpatialEntry(mapPointSpatialIndex, Number(point.position.x) || 0, Number(point.position.z) || 0, point);
+    }
+
+    questLayerCache = buildQuestLayer(points, questPointLookup);
+  }
+
+  function getVisibleWorldPoints(points, width, height) {
+    if (mapPointSpatialSource !== points)
+      rebuildWorldPointSpatialIndex(points);
+
+    const marginMeters = 24 * camera.mpp;
+    const left = camera.cx - width * camera.mpp / 2 - marginMeters;
+    const right = camera.cx + width * camera.mpp / 2 + marginMeters;
+    const top = camera.cz - height * camera.mpp / 2 - marginMeters;
+    const bottom = camera.cz + height * camera.mpp / 2 + marginMeters;
+    const minCellX = Math.floor(left / MAP_INDEX_CELL_METERS);
+    const maxCellX = Math.floor(right / MAP_INDEX_CELL_METERS);
+    const minCellZ = Math.floor(top / MAP_INDEX_CELL_METERS);
+    const maxCellZ = Math.floor(bottom / MAP_INDEX_CELL_METERS);
+    const cellCount = (maxCellX - minCellX + 1) * (maxCellZ - minCellZ + 1);
+    const result = [];
+
+    const acceptPoint = point => {
+      const isCity = point.isCity === true;
+      if (isCity && !citiesFilter) return;
+      if (!isCity && onlyQuestsFilter) return;
+      result.push(point);
+    };
+
+    if (cellCount > 4096) {
+      for (const point of points) acceptPoint(point);
+      return result;
+    }
+
+    for (let cx = minCellX; cx <= maxCellX; cx++) {
+      for (let cz = minCellZ; cz <= maxCellZ; cz++) {
+        const bucket = mapPointSpatialIndex.get(cx + ":" + cz);
+        if (!bucket) continue;
+        for (const point of bucket) acceptPoint(point);
+      }
+    }
+
+    return result;
+  }
+
+  function buildQuestLayer(points, pointLookup = questPointLookup) {
     const entries = [];
 
     for (const campaign of questCatalog) {
       for (const quest of campaign.quests || []) {
         if (!quest.worldPointId) continue;
 
-        const point = points.find(item =>
-          String(item.id || "").toLowerCase() === String(quest.worldPointId).toLowerCase());
+        const point = pointLookup.get(String(quest.worldPointId || "").toLowerCase()) || null;
 
         entries.push({
           campaignId: campaign.campaignId,
@@ -1003,51 +1122,140 @@
    * Отсечение по экрану обязательно: в кадре могут быть видны доли процента от
    * 98 000 отрезков, и рисовать остальные — это тысячи лишних вызовов на кадр.
    */
+  function spatialCellKey(x, z) {
+    return Math.floor(x / MAP_INDEX_CELL_METERS) + ":" + Math.floor(z / MAP_INDEX_CELL_METERS);
+  }
+
+  function addSpatialEntry(index, x, z, value) {
+    const key = spatialCellKey(x, z);
+    let bucket = index.get(key);
+    if (!bucket) {
+      bucket = [];
+      index.set(key, bucket);
+    }
+    bucket.push(value);
+  }
+
+  function rebuildRoadSpatialIndex() {
+    roadSpatialIndex = new Map();
+    roadDebugSpatialIndex = new Map();
+    roadLongSegments = [];
+    const segmentCount = Math.floor(roadSegments.length / 4);
+    roadSegmentStamps = new Uint32Array(segmentCount);
+    roadDrawStamp = 0;
+
+    for (let i = 0; i + 3 < roadSegments.length; i += 4) {
+      const x1 = Number(roadSegments[i]) || 0;
+      const z1 = Number(roadSegments[i + 1]) || 0;
+      const x2 = Number(roadSegments[i + 2]) || 0;
+      const z2 = Number(roadSegments[i + 3]) || 0;
+      const minCellX = Math.floor(Math.min(x1, x2) / MAP_INDEX_CELL_METERS);
+      const maxCellX = Math.floor(Math.max(x1, x2) / MAP_INDEX_CELL_METERS);
+      const minCellZ = Math.floor(Math.min(z1, z2) / MAP_INDEX_CELL_METERS);
+      const maxCellZ = Math.floor(Math.max(z1, z2) / MAP_INDEX_CELL_METERS);
+      const cellSpan = (maxCellX - minCellX + 1) * (maxCellZ - minCellZ + 1);
+
+      if (cellSpan > 64) {
+        roadLongSegments.push(i);
+        continue;
+      }
+
+      for (let cx = minCellX; cx <= maxCellX; cx++) {
+        for (let cz = minCellZ; cz <= maxCellZ; cz++) {
+          addSpatialEntry(roadSpatialIndex, cx * MAP_INDEX_CELL_METERS, cz * MAP_INDEX_CELL_METERS, i);
+        }
+      }
+    }
+
+    for (let index = 0; index + 1 < roadDebugNodes.length; index += 2) {
+      addSpatialEntry(roadDebugSpatialIndex, roadDebugNodes[index], roadDebugNodes[index + 1], index);
+    }
+  }
+
   function drawRoads(ctx, width, height) {
     if (!roadsFilter || !roadSegments.length) return;
-    const lineWidth = 3;
-    // Запас в пикселях: отрезок может быть виден, даже если оба его конца за
-    // кадром (длинная прямая дорога через весь экран).
+
     const margin = 40;
+    const worldMargin = margin * camera.mpp;
+    const left = camera.cx - width * camera.mpp / 2 - worldMargin;
+    const right = camera.cx + width * camera.mpp / 2 + worldMargin;
+    const top = camera.cz - height * camera.mpp / 2 - worldMargin;
+    const bottom = camera.cz + height * camera.mpp / 2 + worldMargin;
+    const minCellX = Math.floor(left / MAP_INDEX_CELL_METERS);
+    const maxCellX = Math.floor(right / MAP_INDEX_CELL_METERS);
+    const minCellZ = Math.floor(top / MAP_INDEX_CELL_METERS);
+    const maxCellZ = Math.floor(bottom / MAP_INDEX_CELL_METERS);
+    const cellCount = (maxCellX - minCellX + 1) * (maxCellZ - minCellZ + 1);
 
     ctx.save();
     ctx.lineCap = "round";
     ctx.lineJoin = "round";
-    ctx.lineWidth = lineWidth;
+    ctx.lineWidth = 3;
     ctx.strokeStyle = "rgba(118,130,146,.85)";
     ctx.beginPath();
 
-    for (let i = 0; i + 3 < roadSegments.length; i += 4) {
-      const a = worldToScreen(roadSegments[i], roadSegments[i + 1]);
-      const b = worldToScreen(roadSegments[i + 2], roadSegments[i + 3]);
-
-      if (Math.max(a.x, b.x) < -margin || Math.min(a.x, b.x) > width + margin) continue;
-      if (Math.max(a.y, b.y) < -margin || Math.min(a.y, b.y) > height + margin) continue;
-
-      ctx.moveTo(a.x, a.y);
-      ctx.lineTo(b.x, b.y);
+    roadDrawStamp = (roadDrawStamp + 1) >>> 0;
+    if (roadDrawStamp === 0) {
+      roadSegmentStamps.fill(0);
+      roadDrawStamp = 1;
     }
 
+    const drawSegment = index => {
+      const segment = Math.floor(index / 4);
+      if (roadSegmentStamps[segment] === roadDrawStamp) return;
+      roadSegmentStamps[segment] = roadDrawStamp;
+
+      const a = worldToScreen(roadSegments[index], roadSegments[index + 1]);
+      const b = worldToScreen(roadSegments[index + 2], roadSegments[index + 3]);
+      if (Math.max(a.x, b.x) < -margin || Math.min(a.x, b.x) > width + margin) return;
+      if (Math.max(a.y, b.y) < -margin || Math.min(a.y, b.y) > height + margin) return;
+      ctx.moveTo(a.x, a.y);
+      ctx.lineTo(b.x, b.y);
+    };
+
+    if (cellCount > 4096) {
+      for (let i = 0; i + 3 < roadSegments.length; i += 4) drawSegment(i);
+    } else {
+      for (let cx = minCellX; cx <= maxCellX; cx++) {
+        for (let cz = minCellZ; cz <= maxCellZ; cz++) {
+          const bucket = roadSpatialIndex.get(cx + ":" + cz);
+          if (!bucket) continue;
+          for (const index of bucket) drawSegment(index);
+        }
+      }
+    }
+
+    for (const index of roadLongSegments) drawSegment(index);
+
     ctx.stroke();
-    drawRoadDebugNodes(ctx, width, height);
+    drawRoadDebugNodes(ctx, width, height, minCellX, maxCellX, minCellZ, maxCellZ, cellCount);
     ctx.restore();
   }
 
-  function drawRoadDebugNodes(ctx, width, height) {
-    if (!roadsFilter || roadDebugNodes.length < 2)
-      return;
+  function drawRoadDebugNodes(ctx, width, height, minCellX, maxCellX, minCellZ, maxCellZ, cellCount) {
+    if (!roadsFilter || roadDebugNodes.length < 2) return;
 
     ctx.save();
     ctx.fillStyle = "rgba(255,255,255,.42)";
 
-    for (let index = 0; index + 1 < roadDebugNodes.length; index += 2) {
+    const drawNode = index => {
       const q = worldToScreen(roadDebugNodes[index], roadDebugNodes[index + 1]);
-      if (q.x < -6 || q.y < -6 || q.x > width + 6 || q.y > height + 6)
-        continue;
-
+      if (q.x < -6 || q.y < -6 || q.x > width + 6 || q.y > height + 6) return;
       ctx.beginPath();
       ctx.arc(q.x, q.y, 2, 0, Math.PI * 2);
       ctx.fill();
+    };
+
+    if (cellCount > 4096) {
+      for (let index = 0; index + 1 < roadDebugNodes.length; index += 2) drawNode(index);
+    } else {
+      for (let cx = minCellX; cx <= maxCellX; cx++) {
+        for (let cz = minCellZ; cz <= maxCellZ; cz++) {
+          const bucket = roadDebugSpatialIndex.get(cx + ":" + cz);
+          if (!bucket) continue;
+          for (const index of bucket) drawNode(index);
+        }
+      }
     }
 
     ctx.restore();
@@ -1074,6 +1282,9 @@
 
     roadSegments = segments;
     roadDebugNodes = Array.isArray(message.debugNodes) ? message.debugNodes : [];
+    rebuildRoadSpatialIndex();
+    roadRevision++;
+    staticMapState = null;
     window.assistWebLog?.("INFO", "Дорожная геометрия получена.", {
       segments: roadSegments.length / 4,
       graphNodes: roadDebugNodes.length / 2
@@ -2756,6 +2967,26 @@
     });
   }
 
+  function scheduleSidebarRender(immediate = false) {
+    if (immediate) {
+      if (sidebarRenderTimer) {
+        window.clearTimeout(sidebarRenderTimer);
+        sidebarRenderTimer = 0;
+      }
+      sidebarRenderScheduled = false;
+      renderSide();
+      return;
+    }
+
+    if (sidebarRenderScheduled) return;
+    sidebarRenderScheduled = true;
+    sidebarRenderTimer = window.setTimeout(() => {
+      sidebarRenderTimer = 0;
+      sidebarRenderScheduled = false;
+      renderSide();
+    }, simulationRunning ? 400 : 50);
+  }
+
   /**
    * Квест, выделенный на карте или в окне кампаний.
    *
@@ -4359,6 +4590,25 @@
       return;
     }
 
+    if (message.type === "live_state") {
+      if (snapshot) {
+        if (message.player) snapshot.player = message.player;
+        if (message.playerVitals) snapshot.playerVitals = message.playerVitals;
+        if (message.playerProgress) snapshot.playerProgress = message.playerProgress;
+        if (message.conditions) snapshot.conditions = message.conditions;
+        if (message.runtime) runtime = message.runtime;
+        if (typeof message.simulationRunning === "boolean") simulationRunning = message.simulationRunning;
+        if (typeof message.simulationPaused === "boolean") simulationPaused = message.simulationPaused;
+        if (typeof message.simulationSpeed === "number") simulationSpeed = message.simulationSpeed;
+        if (message.route) route = normalizeRoute(message.route);
+        lastPlayerSnapshotAt = performance.now();
+        scheduleUiRender();
+        scheduleSidebarRender();
+        ensureRouteAnimation();
+      }
+      return;
+    }
+
     if (message.type === "snapshot") {
       const hadSnapshot = !!snapshot;
       const now = performance.now();
@@ -4393,6 +4643,7 @@
       daylight = message.daylight || null;
       worldSettings = message.worldSettings || worldSettings;
       selectedPointId = snapshot.selection?.point?.id || null;
+      rebuildWorldPointSpatialIndex(snapshot.world?.points || []);
 
       window.assistQuestLog?.("INFO", "Quest UI: snapshot загружен.", {
         graph: questGraph ? {
@@ -4447,7 +4698,7 @@
       // Точка отсчёта локальных часов: снимок приходит редко, а время должно идти.
       syncClockAnchor();
       scheduleUiRender();
-      renderSide();
+      scheduleSidebarRender();
       ensureRouteAnimation();
       return;
     }
@@ -4508,7 +4759,7 @@
         journalHistory.unshift(message.entry);
         journalHistory.splice(250);
       }
-      renderSide();
+      scheduleSidebarRender();
       return;
     }
 
@@ -4573,7 +4824,7 @@
         eventHistory.splice(12);
       }
       scheduleUiRender();
-      renderSide();
+      scheduleSidebarRender();
       return;
     }
 
@@ -4811,7 +5062,7 @@
         z: world.z
       };
 
-      drawMap();
+      scheduleMapDraw();
       event.preventDefault();
       return;
     }
@@ -4866,20 +5117,20 @@
         map.style.cursor = cursor;
 
       if (needsRedraw)
-        drawMap();
+        scheduleMapDraw();
     }
 
     if (draggingPlayer && snapshot) {
       const world = screenToWorld(pos.x, pos.y);
       dragPlayerPosition = { x: world.x, z: world.z };
-      drawMap();
+      scheduleMapDraw();
       return;
     }
 
     if (panning && panStart) {
       camera.cx = panStart.cx - (pos.x - panStart.x) * camera.mpp;
       camera.cz = panStart.cz - (pos.y - panStart.y) * camera.mpp;
-      drawMap();
+      scheduleMapDraw();
     }
   });
 
@@ -5029,7 +5280,7 @@
     const after = screenToWorld(pos.x, pos.y);
     camera.cx += before.x - after.x;
     camera.cz += before.z - after.z;
-    drawMap();
+    scheduleMapDraw();
     sendMapView();
     event.preventDefault();
   }, { passive: false });
@@ -5093,6 +5344,7 @@
   // Галочка дорог не влияет на кликабельность точек: дороги — только фон.
   roadsToggle?.addEventListener("change", () => {
     roadsFilter = !!roadsToggle.checked;
+    staticMapState = null;
     drawMap();
   });
 
@@ -5183,6 +5435,8 @@
   });
 
   window.addEventListener("resize", () => {
+    updateMapSizeCache();
+    staticMapState = null;
     drawMap();
   });
 

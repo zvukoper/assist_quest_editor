@@ -166,6 +166,9 @@ public sealed class SimulatorForm : WebViewForm
             _runtime.Tick();
             _dynamicEventDispatcher.Tick();
             UpdatePlayerConditions();
+
+            if (_runtime.SimulationRunning)
+                PushLiveState();
         };
         _runtimeTimer.Start();
 
@@ -2119,7 +2122,30 @@ public sealed class SimulatorForm : WebViewForm
                 _hub.Get<PlayerState>("player").Value.Position);
         }
 
-        RequestSnapshot("player conditions updated");
+        if (!_runtime.SimulationRunning)
+            RequestSnapshot("player conditions updated");
+    }
+
+    private void PushLiveState()
+    {
+        if (Browser.CoreWebView2 is null || IsDisposed || !IsHandleCreated)
+            return;
+
+        var payload = JsonSerializer.Serialize(new
+        {
+            type = "live_state",
+            player = _hub.Get<PlayerState>("player").Value,
+            playerVitals = _hub.Get<PlayerVitalsState>("player-vitals").Value,
+            playerProgress = _hub.Get<PlayerProgressState>("player-progress").Value,
+            conditions = _hub.Get<PlayerConditionState>("player-conditions").Value,
+            runtime = _runtime.State,
+            simulationRunning = _runtime.SimulationRunning,
+            simulationPaused = _runtime.IsPaused,
+            simulationSpeed = _runtime.SimulationSpeed,
+            route = BuildRouteSnapshot()
+        }, SnapshotJsonOptions);
+
+        PostJson(payload);
     }
 
     private bool IsRouteCursorUsable(RouteCursor cursor)
@@ -2450,6 +2476,9 @@ public sealed class SimulatorForm : WebViewForm
     {
         var statuses = snapshot.QuestStatuses.Quests
             .ToDictionary(item => item.QuestId, StringComparer.OrdinalIgnoreCase);
+        var pointsById = new Dictionary<string, WorldPoint>(StringComparer.OrdinalIgnoreCase);
+        foreach (var point in snapshot.World.Points)
+            pointsById[point.Id] = point;
 
         return _campaignStore.BuildSimulatorCatalog()
             .Select(campaign => new
@@ -2463,7 +2492,7 @@ public sealed class SimulatorForm : WebViewForm
                         : QuestStatus.Available;
                     var step = entry?.Step ?? "available";
 
-                    var resolvedPoint = ResolveActivationPoint(quest.Activation, snapshot.World.Points);
+                    var resolvedPoint = ResolveActivationPoint(quest.Activation, pointsById);
 
                     return new
                     {
@@ -2502,7 +2531,7 @@ public sealed class SimulatorForm : WebViewForm
     /// Проверка нужна отдельно от «включён в кампании»: включённый квест может
     /// просто ждать активации, а панель должна показывать фактическое состояние.
     /// </summary>
-    private WorldPoint? ResolveActivationPoint(QuestActivation? activation, IReadOnlyList<WorldPoint> points)
+    private WorldPoint? ResolveActivationPoint(QuestActivation? activation, IReadOnlyDictionary<string, WorldPoint> points)
     {
         if (activation is null)
             return null;
@@ -2512,14 +2541,16 @@ public sealed class SimulatorForm : WebViewForm
             return _locationResolver.Resolve(activation.LocationId) ??
                    (string.IsNullOrWhiteSpace(activation.WorldPointId)
                        ? null
-                       : points.FirstOrDefault(item =>
-                           item.Id.Equals(activation.WorldPointId, StringComparison.OrdinalIgnoreCase)));
+                       : points.TryGetValue(activation.WorldPointId, out var fallbackPoint)
+                           ? fallbackPoint
+                           : null);
         }
 
         return string.IsNullOrWhiteSpace(activation.WorldPointId)
             ? null
-            : points.FirstOrDefault(item =>
-                item.Id.Equals(activation.WorldPointId, StringComparison.OrdinalIgnoreCase));
+            : points.TryGetValue(activation.WorldPointId, out var point)
+                ? point
+                : null;
     }
 
     private bool IsRuntimeQuest(string questId)
@@ -3249,24 +3280,23 @@ public sealed class SimulatorForm : WebViewForm
         // частная проверка одного источника, и внутренние процессы всё равно
         // забивали журнал тысячами строк.
         var shouldJournal = SimulatorJournalPolicy.ShouldJournal(e.EventType, e.Payload);
+        if (!shouldJournal)
+            return;
 
-        if (shouldJournal)
+        AppendJournal(
+            e.EventType,
+            e.Timestamp,
+            e.Source,
+            e.Payload.Count == 0 ? string.Empty : QuestLogger.Json(e.Payload));
+
+        QuestLogger.Info("Simulator: событие опубликовано.", QuestLogger.Json(new
         {
-            AppendJournal(
-                e.EventType,
-                e.Timestamp,
-                e.Source,
-                e.Payload.Count == 0 ? string.Empty : QuestLogger.Json(e.Payload));
-
-            QuestLogger.Info("Simulator: событие опубликовано.", QuestLogger.Json(new
-            {
-                eventType = e.EventType,
-                timestamp = e.Timestamp,
-                source = e.Source,
-                payload = e.Payload,
-                runtimeState = _runtime.State
-            }));
-        }
+            eventType = e.EventType,
+            timestamp = e.Timestamp,
+            source = e.Source,
+            payload = e.Payload,
+            runtimeState = _runtime.State
+        }));
 
         AppLogger.Info(
             "Simulator: событие опубликовано.",
