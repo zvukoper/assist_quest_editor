@@ -52,7 +52,7 @@ public sealed class RouteTests
     }
 
     [Fact]
-    public void SingleWaypointRouteIsFixedAndPlayerSegmentIsDynamic()
+    public void SingleWaypointRouteStartsAtNearestRoadPointAndKeepsPlayerOutOfFixedGeometry()
     {
         var planner = new RoadRoutePlanner(new[]
         {
@@ -64,16 +64,22 @@ public sealed class RouteTests
             new RouteWaypoint("target", new WorldCoordinate(90, 0, 0), 70)
         });
 
-        var plan = planner.Build(route, new WorldCoordinate(10, 0, 0));
+        var player = new WorldCoordinate(10, 0, 20);
+        var plan = planner.Build(route, player);
 
         Assert.True(plan.IsUsable);
         Assert.Single(plan.Legs);
-        Assert.Equal(0, plan.Legs[0].StartWaypointIndex);
+        Assert.Equal(-1, plan.Legs[0].StartWaypointIndex);
         Assert.Equal(0, plan.Legs[0].EndWaypointIndex);
-        Assert.Single(plan.Points);
-        Assert.Equal(new WorldCoordinate(90, 0, 0), plan.Points[0].Position);
-        Assert.Equal(0, plan.Points[0].WaypointIndex);
+
+        Assert.True(plan.Points.Count >= 2);
+        Assert.Equal(new WorldCoordinate(10, 0, 0), plan.Points[0].Position);
+        Assert.Null(plan.Points[0].WaypointIndex);
         Assert.Equal(0, plan.Points[0].DestinationWaypointIndex);
+
+        Assert.Equal(new WorldCoordinate(90, 0, 0), plan.Points[^1].Position);
+        Assert.Equal(0, plan.Points[^1].WaypointIndex);
+        Assert.Equal(0, plan.Points[^1].DestinationWaypointIndex);
     }
 
     [Fact]
