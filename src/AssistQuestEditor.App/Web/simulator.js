@@ -1469,41 +1469,65 @@
   }
 
   function drawRouteLines(ctx, width, height) {
-    if (!route?.legs?.length)
+    if (!route)
       return;
 
     ctx.save();
     ctx.lineCap = "round";
     ctx.lineJoin = "round";
 
-    for (const leg of route.legs) {
-      const points = Array.isArray(leg.polyline) ? leg.polyline : [];
-      if (points.length < 2)
-        continue;
+    const drawLine = (start, end, shadow = true) => {
+      if (!start || !end)
+        return;
 
-      ctx.beginPath();
+      const a = worldToScreen(Number(start.x), Number(start.z));
+      const b = worldToScreen(Number(end.x), Number(end.z));
 
-      points.forEach((point, index) => {
-        const q = worldToScreen(Number(point.x), Number(point.z));
-        if (index === 0)
-          ctx.moveTo(q.x, q.y);
-        else
-          ctx.lineTo(q.x, q.y);
-      });
-
-      ctx.save();
-      ctx.lineWidth = 8;
-      ctx.strokeStyle = "#ffffff";
-      ctx.stroke();
-      ctx.restore();
+      if (shadow) {
+        ctx.save();
+        ctx.lineWidth = 8;
+        ctx.strokeStyle = "#ffffff";
+        ctx.beginPath();
+        ctx.moveTo(a.x, a.y);
+        ctx.lineTo(b.x, b.y);
+        ctx.stroke();
+        ctx.restore();
+      }
 
       ctx.lineWidth = 4;
       ctx.strokeStyle = "#11fb06";
+      ctx.beginPath();
+      ctx.moveTo(a.x, a.y);
+      ctx.lineTo(b.x, b.y);
       ctx.stroke();
+    };
 
-      // Графовые узлы дороги повторяются и на линии маршрута.
-      ctx.save();
+    // Фиксированные сегменты рисуются только ВПЕРЕДИ текущей точки маршрута.
+    // Всё, что уже прошло игроком, исчезает с карты. В отличие от старой схемы
+    // legs здесь невозможно случайно получить две динамические линии.
+    const segments = Array.isArray(route.segments) ? route.segments : [];
+    const points = Array.isArray(route.routePoints) ? route.routePoints : [];
+    const pointById = new Map(points.map(point => [Number(point.id), point]));
+    const nextPointId = Number.isInteger(route.nextRoutePointId)
+      ? route.nextRoutePointId
+      : null;
+
+    if (segments.length && points.length) {
+      for (const segment of segments) {
+        if (nextPointId !== null &&
+            Number(segment.startPointId) < nextPointId)
+          continue;
+
+        drawLine(
+          pointById.get(Number(segment.startPointId)),
+          pointById.get(Number(segment.endPointId)));
+      }
+
+      // Фиксированные точки маршрута — лёгкие белые точки поверх линии.
       for (const point of points) {
+        if (nextPointId !== null && Number(point.id) < nextPointId)
+          continue;
+
         const q = worldToScreen(Number(point.x), Number(point.z));
         ctx.beginPath();
         ctx.arc(q.x, q.y, 2.3, 0, Math.PI * 2);
@@ -1513,26 +1537,26 @@
         ctx.strokeStyle = "rgba(0,0,0,.85)";
         ctx.stroke();
       }
-      ctx.restore();
-
-      if (leg.startWaypointIndex >= 0 &&
-          Number.isFinite(Number(leg.lengthMeters))) {
-        const labelPoint = routeLegLabelPoint(points);
-
-        if (labelPoint) {
-          drawRouteText(
-            ctx,
-            Math.round(Number(leg.lengthMeters)) + " м",
-            labelPoint.x,
-            labelPoint.y - 5);
+    } else {
+      // Fallback для старого snapshot/WebView-кеша.
+      for (const leg of route.legs || []) {
+        const polyline = Array.isArray(leg.polyline) ? leg.polyline : [];
+        for (let index = 0; index < polyline.length - 1; index++) {
+          drawLine(polyline[index], polyline[index + 1]);
         }
       }
     }
 
+    // РОВНО ОДИН динамический сегмент: игрок → следующая фиксированная точка.
+    // Он всегда перерисовывается по текущей позиции игрока.
+    const dynamic = route.dynamicSegment;
+    if (dynamic?.start && dynamic?.end)
+      drawLine(dynamic.start, dynamic.end);
+
     ctx.restore();
   }
 
-  function routeLegLabelPoint(points) {
+  function routeLegLabelPoint(points)  function routeLegLabelPoint(points) {
     const index = Math.floor((points.length - 1) / 2);
 
     if (index < 0 || !points[index] || !points[index + 1])
@@ -1609,6 +1633,7 @@
   function drawRouteWaypoint(ctx, waypoint, selected) {
     const q = worldToScreen(waypoint.x, waypoint.z);
     const radius = 7.5;
+    const number = Number(waypoint.number) || Number(waypoint.index) || 0;
 
     ctx.save();
 
@@ -1647,7 +1672,7 @@
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
     ctx.fillStyle = "#111419";
-    ctx.fillText(String(waypoint.index || 0), q.x, q.y + .4);
+    ctx.fillText(String(number), q.x, q.y + .4);
 
     ctx.restore();
 
@@ -1660,10 +1685,6 @@
     const stopped = Number.isInteger(route.stoppedWaypointIndex) &&
       route.stoppedWaypointIndex === Number(waypoint.index) - 1;
 
-    // «Остановка» показывается на КАЖДОЙ точке со скоростью 0, а не только на
-    // той, где игрок стоит сейчас: нулевая скорость и есть смысл этой точки, а
-    // «0 км/ч» читалось как «медленно». Жирным оранжевым без пульсации: слово
-    // само по себе заметно, а мерцание только отвлекало от карты.
     if (stopped || speed <= 0) {
       drawRouteText(
         ctx,
@@ -1706,7 +1727,7 @@
       "left");
   }
 
-  function drawRouteWaypoints(ctx, width, height) {
+  function drawRouteWaypoints(ctx, width, height)  function drawRouteWaypoints(ctx, width, height) {
     routeWaypointHitAreas = [];
 
     for (const waypoint of route.waypoints || []) {
@@ -1805,6 +1826,7 @@
       ? value.waypoints.map((item, index) => ({
           id: item.id,
           index: Number(item.index) || index + 1,
+          number: Number(item.number) || Number(item.index) || index + 1,
           x: Number(item.x) || 0,
           y: Number(item.y) || 0,
           z: Number(item.z) || 0,
@@ -1835,17 +1857,24 @@
       currentTargetWaypointIndex: Number.isInteger(value.currentTargetWaypointIndex)
         ? value.currentTargetWaypointIndex
         : null,
+      currentTargetWaypointId: value.currentTargetWaypointId || null,
+      nextRoutePointId: Number.isInteger(value.nextRoutePointId)
+        ? value.nextRoutePointId
+        : null,
       travelTimeRealSeconds: Math.max(0, Number(value.travelTimeRealSeconds) || 0),
       travelTimeGameSeconds: Math.max(0, Number(value.travelTimeGameSeconds) || 0),
       totalDistanceMeters: Number(value.totalDistanceMeters) || 0,
       distanceFromFirstWaypointMeters: Number(value.distanceFromFirstWaypointMeters) || 0,
       waypoints,
+      routePoints: Array.isArray(value.routePoints) ? value.routePoints : [],
+      segments: Array.isArray(value.segments) ? value.segments : [],
+      dynamicSegment: value.dynamicSegment || null,
       legs: Array.isArray(value.legs) ? value.legs : [],
       errors: Array.isArray(value.errors) ? value.errors : []
     };
   }
 
-  let speedometerWasVisibleBeforePause = false;
+  let speedometerWasVisibleBeforePause  let speedometerWasVisibleBeforePause = false;
   let lastPositiveSpeedKmh = 0;
 
   function renderRouteSpeedometer() {
@@ -3675,8 +3704,12 @@
    * плашка спидометра, поэтому проверяется именно остановка на точке.
    */
   function routeStoppedBadgeText() {
-    return Number.isInteger(route?.stoppedWaypointIndex) && route.stoppedWaypointIndex >= 0
-      ? String(route.stoppedWaypointIndex)
+    if (!Number.isInteger(route?.stoppedWaypointIndex) || route.stoppedWaypointIndex < 0)
+      return "";
+
+    const waypoint = route?.waypoints?.[route.stoppedWaypointIndex];
+    return waypoint
+      ? String(Number(waypoint.number) || Number(waypoint.index) || route.stoppedWaypointIndex + 1)
       : "";
   }
 
