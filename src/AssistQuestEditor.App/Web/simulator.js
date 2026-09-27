@@ -4052,6 +4052,15 @@
     if (id === "route") {
       const selectedRoute = (route.waypoints || []).find(item =>
         String(item.id) === String(route.selectedWaypointId));
+      const targetRoute = Number.isInteger(route.currentTargetWaypointIndex)
+        ? (route.waypoints || [])[route.currentTargetWaypointIndex]
+        : null;
+      const selectedRouteNumber = selectedRoute
+        ? (Number(selectedRoute.number) || Number(selectedRoute.index) || 0)
+        : 0;
+      const targetRouteNumber = targetRoute
+        ? (Number(targetRoute.number) || Number(targetRoute.index) || 0)
+        : 0;
       const routeSpeed = selectedRoute ? selectedRoute.speedKmh : route.defaultSpeedKmh;
       const simulationLocked = simulationRunning || simulationPaused;
       const canEdit = route.editing && !simulationLocked;
@@ -4103,7 +4112,7 @@
         "</div>",
         "<div class='routeSpeedRow'>",
           "<span class='routeSpeedOwner'>" +
-            escapeHtml(selectedRoute ? "Точка №" + selectedRoute.index : "Новая точка") +
+            escapeHtml(selectedRoute ? "Точка №" + selectedRouteNumber : "Новая точка") +
           "</span>",
           "<label class='routeSpeedField' title='" +
             (selectedRoute ? "Скорость выбранной путевой точки" : "Скорость по умолчанию для новых путевых точек") +
@@ -4120,10 +4129,10 @@
           "<div class='miniLabel'>Путевые точки</div>",
           "<div class='kv'><span>Точек</span><span>" + route.waypoints.length + "</span></div>",
           selectedRoute
-            ? "<div class='kv'><span>Выбрана</span><span>№ " + selectedRoute.index + " · " + Math.round(selectedRoute.speedKmh) + " км/ч</span></div>"
+            ? "<div class='kv'><span>Выбрана</span><span>№ " + selectedRouteNumber + " · " + Math.round(selectedRoute.speedKmh) + " км/ч</span></div>"
             : "",
           Number.isInteger(route.currentTargetWaypointIndex)
-            ? "<div class='kv'><span>Цель</span><span>№ " + (route.currentTargetWaypointIndex + 1) + "</span></div>"
+            ? "<div class='kv'><span>Цель</span><span>№ " + targetRouteNumber + "</span></div>"
             : "",
           "<div class='kv'><span>Дистанция</span><span>" +
             // Округление до 10 м: иначе подпись менялась бы на каждом пакете и
