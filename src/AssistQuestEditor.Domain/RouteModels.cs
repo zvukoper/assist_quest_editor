@@ -611,13 +611,17 @@ public static class RouteMovementEngine
     }
 
     /// <summary>
-    /// Следующая фиксированная точка маршрута ПО НАПРАВЛЕНИЮ К ПУНКТУ НАЗНАЧЕНИЯ.
+    /// Следующая фиксированная точка маршрута ПО ХОДУ ДОРОЖНОГО МАРШРУТА.
     ///
-    /// Игрок проецируется на все фиксированные сегменты маршрута. Выбирается
-    /// сегмент, к которому он ближе всего, а затем берётся точка ПОСЛЕ проекции.
-    /// При попадании ровно в стык сегментов предпочтение получает сегмент дальше
-    /// по маршруту. Поэтому игрок никогда не начинает движение обратно к уже
-    /// пройденной точке только потому, что она геометрически чуть ближе.
+    /// Сначала игрок проецируется на fixed-геометрию маршрута. Затем выбирается
+    /// ближайшая точка ПОСЛЕ этой проекции в направлении к пункту назначения.
+    /// Никакие точки не отбрасываются только потому, что их евклидово расстояние
+    /// до destination больше расстояния от игрока: дорожный маршрут имеет право
+    /// делать объезд, а решающим является порядок на маршруте.
+    ///
+    /// Если первой fixed-точкой является дорожный якорь игрока, dynamic segment
+    /// заканчивается именно на нём. Путевая точка не используется как dynamic
+    /// цель, пока впереди есть дорожные fixed-точки.
     /// </summary>
     public static int NextRoutePointForPlayer(
         RoutePlan plan,
@@ -665,82 +669,13 @@ public static class RouteMovementEngine
             }
         }
 
-        var candidateStart =
-            bestSegment == 0 && bestT <= 0.000001d
-                ? 0
-                : bestT >= 0.999999d
-                    ? Math.Min(bestSegment + 2, plan.Points.Count - 1)
-                    : bestSegment + 1;
-
-        var destination = plan.WaypointSource is { Count: > 0 }
-            ? plan.WaypointSource[^1].Position
-            : plan.Points[^1].Position;
-
-        var playerDestinationDistance = Distance2D(position, destination);
-        if (!double.IsFinite(playerDestinationDistance))
-            return -1;
-
-        // Игрок уже в пункте назначения: не создаём «обратный» динамический
-        // сегмент. Последняя точка будет завершена обычным движением.
-        if (playerDestinationDistance <= PositionEpsilonMeters)
-            return plan.Points.Count - 1;
-
-        var bestCandidate = -1;
-        var bestPlayerDistance = double.PositiveInfinity;
-
-        for (var index = candidateStart; index < plan.Points.Count; index++)
-        {
-            var point = plan.Points[index];
-            var dx = point.Position.X - position.X;
-            var dz = point.Position.Z - position.Z;
-            var playerDistance = Math.Sqrt(dx * dx + dz * dz);
-
-            var toDestinationX = point.Position.X - destination.X;
-            var toDestinationZ = point.Position.Z - destination.Z;
-            var destinationDistance = Math.Sqrt(
-                toDestinationX * toDestinationX +
-                toDestinationZ * toDestinationZ);
-
-            if (!double.IsFinite(playerDistance) ||
-                !double.IsFinite(destinationDistance))
-                continue;
-
-            // Кандидат обязан приближать игрока к пункту назначения. Для самой
-            // последней точки допускаем равенство: это фактический пункт
-            // назначения, к которому нужно приехать.
-            var movesCloser =
-                index == plan.Points.Count - 1
-                    ? destinationDistance <= playerDestinationDistance + PositionEpsilonMeters
-                    : destinationDistance < playerDestinationDistance - PositionEpsilonMeters;
-
-            if (!movesCloser)
-                continue;
-
-            // Дистанция до пункта назначения вдоль прямого динамического
-            // сегмента должна убывать ВЕСЬ отрезок, а не только оказаться меньше
-            // в конечной точке. Условие по производной расстояния в конце
-            // сегмента гарантирует отсутствие разворота «после ближайшей точки».
-            var segmentX = point.Position.X - position.X;
-            var segmentZ = point.Position.Z - position.Z;
-            var fromDestinationX = point.Position.X - destination.X;
-            var fromDestinationZ = point.Position.Z - destination.Z;
-            var approachDerivative =
-                fromDestinationX * segmentX +
-                fromDestinationZ * segmentZ;
-
-            if (approachDerivative > PositionEpsilonMeters)
-                continue;
-
-            if (playerDistance < bestPlayerDistance - PositionEpsilonMeters ||
-                (Math.Abs(playerDistance - bestPlayerDistance) <= PositionEpsilonMeters &&
-                 index > bestCandidate))
-            {
-                bestCandidate = index;
-                bestPlayerDistance = playerDistance;
-            }
-        }
-
-        return bestCandidate;
+        // Проекция до начала первого сегмента означает, что первый fixed point
+        // ещё впереди. Проекция внутри сегмента означает, что его стартовая точка
+        // уже позади и следующей становится конечная точка. На exact junction
+        // переходим на следующий сегмент, чтобы не выбрать уже достигнутую точку.
+        return bestSegment == 0 && bestT <= 0.000001d
+            ? 0
+            : Math.Min(bestSegment + 1, plan.Points.Count - 1);
     }
 
     /// <summary>
