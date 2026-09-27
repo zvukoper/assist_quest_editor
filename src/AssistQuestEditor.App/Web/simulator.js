@@ -1731,7 +1731,7 @@
       "left");
   }
 
-  function drawRouteWaypoints(ctx, width, height)  function drawRouteWaypoints(ctx, width, height) {
+  function drawRouteWaypoints(ctx, width, height) {
     routeWaypointHitAreas = [];
 
     for (const waypoint of route.waypoints || []) {
