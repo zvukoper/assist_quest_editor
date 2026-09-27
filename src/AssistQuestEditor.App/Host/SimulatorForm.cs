@@ -1717,8 +1717,8 @@ public sealed class SimulatorForm : WebViewForm
         }
 
         // RoutePlan содержит только ФИКСИРОВАННУЮ часть маршрута. Позиция игрока
-        // никогда не записывается в полилинию: динамический сегмент строится только
-        // в BuildRouteSnapshot и в RouteMovementEngine.Advance.
+        // никогда не записывается в полилинию: динамический сегмент строится отдельно
+        // от текущего положения игрока до следующей фиксированной точки.
         _routePlan = _routePlanner.Build(_routeState);
 
         if (trimToPlayer && _routePlan.IsUsable && _routeState.Waypoints.Count > 1)
@@ -4396,7 +4396,6 @@ public sealed class SimulatorForm : WebViewForm
         };
 
     /// <summary>
-    /// Запускает режим прохождения.    /// <summary>
     /// Запускает режим прохождения.
     ///
     /// Автозагрузка выполняется ОДИН раз при открытии Симулятора
@@ -4425,9 +4424,7 @@ public sealed class SimulatorForm : WebViewForm
             _routeMovementLastTick = null;
             AppLogger.Info(
                 "SimulatorForm: симуляция продолжена после паузы.",
-                $"target={(_routeTargetWaypointIndex is int target ? target + 1 : 0)}; " +
-                $"leg={_routeCursor.LegIndex}; segment={_routeCursor.SegmentIndex}; " +
-                $"progress={_routeCursor.SegmentProgressMeters:0.###}");
+                $"target={CurrentTargetNumberText()}");
         }
         else
         {
@@ -4488,9 +4485,7 @@ public sealed class SimulatorForm : WebViewForm
         _routeMovementLastTick = null;
         AppLogger.Info(
             "SimulatorForm: симуляция продолжена.",
-            $"target={(_routeTargetWaypointIndex is int target ? target + 1 : 0)}; " +
-            $"leg={_routeCursor.LegIndex}; segment={_routeCursor.SegmentIndex}; " +
-            $"progress={_routeCursor.SegmentProgressMeters:0.###}");
+            $"target={CurrentTargetNumberText()}");
         RequestSnapshot("simulation resumed");
     }
 
