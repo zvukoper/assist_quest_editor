@@ -212,8 +212,10 @@ public sealed record RoutePlan(
                     waypointIndex = endWaypointIndex;
 
                 var destinationIndex =
-                    endWaypointIndex >= 0 ? endWaypointIndex :
-                    waypointIndex ?? Math.Max(0, startWaypointIndex);
+                    waypointIndex ??
+                    (endWaypointIndex >= 0
+                        ? endWaypointIndex
+                        : Math.Max(0, startWaypointIndex));
 
                 var cutCount = waypointIndex is int exactWaypoint
                     ? exactWaypoint
