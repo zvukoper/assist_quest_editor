@@ -118,8 +118,9 @@ public sealed class RoutePreferredTargetTests
     }
 
     /// <summary>
-    /// Подсказка <c>nearestIndex</c> участвует в сравнении: если вызывающий уже
-    /// знает ближайшую точку, выбирается старшая из неё и кандидата вперёд.
+    /// Подсказка <c>nearestIndex</c> задаёт уже найденную ближайшую точку.
+    /// Если она не стоит точно под игроком, дополнительного «прыжка» вперёд
+    /// нет: выбор самой близкой точки уже завершён на предыдущем шаге.
     /// </summary>
     [Fact]
     public void NearestIndexHintIsComparedWithCandidate()
@@ -130,7 +131,7 @@ public sealed class RoutePreferredTargetTests
             maxIndex: null,
             nearestIndex: 3);
 
-        Assert.Equal(4, target);
+        Assert.Equal(3, target);
     }
 
     /// <summary>Пустой маршрут — цели нет, вызывающий сохраняет прежнее поведение.</summary>
