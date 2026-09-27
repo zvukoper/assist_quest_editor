@@ -45,7 +45,7 @@ public sealed record SimulationSaveState(
     public PlayerConditionState Conditions { get; init; } = PlayerConditionState.Empty;
 
     /// <summary>Текущая версия формата.</summary>
-    public const int CurrentFormatVersion = 8;
+    public const int CurrentFormatVersion = 9;
 
     /// <summary>Пользовательский маршрут Симулятора.</summary>
     public RouteState Route { get; init; } = RouteState.Empty;
