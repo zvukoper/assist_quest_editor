@@ -1140,7 +1140,7 @@ public sealed class SimulatorForm : WebViewForm
             AutoSize = false,
             Dock = DockStyle.Fill,
             TextAlign = ContentAlignment.MiddleLeft,
-            Text = $"Вы загружаете маршрут "{fileName}""
+            Text = $"Вы загружаете маршрут \"{fileName}\""
         };
 
         var buttons = new FlowLayoutPanel
