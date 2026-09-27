@@ -154,6 +154,52 @@ public sealed class QuestRuntimeCoordinatorTests
     }
 
     [Fact]
+    public void AcceleratedTimeWaitUsesGameClock()
+    {
+        var hub = new SimulatorDataSourceAdapter(Array.Empty<WorldPoint>()).Channels;
+        var sceneRuntime = new SceneRuntime(SceneCatalogFactory.CreateStarter(), hub);
+
+        var start = Node("start", "Start");
+        var wait = Node("wait", "Wait", ("seconds", "0.5"));
+        var end = Node("end", "End");
+        var graph = Graph(
+            "quest",
+            new[] { start, wait, end },
+            new[]
+            {
+                Connection("start", "out", "wait", "in"),
+                Connection("wait", "out", "end", "in")
+            });
+
+        var definition = Definition(
+            "quest",
+            string.Empty,
+            null,
+            null,
+            false,
+            graph);
+
+        using var coordinator = new QuestRuntimeCoordinator(
+            hub,
+            sceneRuntime,
+            () => new[] { definition },
+            "quest");
+
+        coordinator.SetSimulationSpeed(8d);
+        coordinator.SetSimulationRunning(true);
+        coordinator.StartQuest("quest");
+
+        Assert.Equal(QuestRuntimeStatus.Waiting, coordinator.State.Status);
+
+        // Первый Tick только устанавливает исходную отметку sim-time.
+        coordinator.Tick();
+        Thread.Sleep(100);
+        coordinator.Tick();
+
+        Assert.Equal(QuestRuntimeStatus.Completed, coordinator.State.Status);
+    }
+
+    [Fact]
     public void AcceleratedSimulationAdvancesWorldClockFasterThanRealTime()
     {
         var hub = new SimulatorDataSourceAdapter(Array.Empty<WorldPoint>()).Channels;
