@@ -1707,7 +1707,7 @@ public sealed class SimulatorForm : WebViewForm
         // RoutePlan содержит только ФИКСИРОВАННУЮ часть маршрута. Позиция игрока
         // никогда не записывается в полилинию: динамический сегмент строится отдельно
         // от текущего положения игрока до следующей фиксированной точки.
-        _routePlan = _routePlanner.Build(_routeState);
+        _routePlan = _routePlanner.Build(_routeState, playerPosition);
 
         if (trimToPlayer && _routePlan.IsUsable && _routeState.Waypoints.Count > 1)
         {
@@ -1738,7 +1738,7 @@ public sealed class SimulatorForm : WebViewForm
                 if (renumberTrimmed)
                     _routeState = _routeState.RenumberWaypoints();
 
-                _routePlan = _routePlanner.Build(_routeState);
+                _routePlan = _routePlanner.Build(_routeState, playerPosition);
 
                 AppLogger.Info(
                     "SimulatorForm: ведущие точки маршрута отсечены.",
@@ -2193,7 +2193,7 @@ public sealed class SimulatorForm : WebViewForm
             return;
         }
 
-        _routePlan = _routePlanner.Build(_routeState);
+        _routePlan = _routePlanner.Build(_routeState, playerPosition);
 
         // Идентификатор — главный источник истины. Индекс нужен только как
         // совместимость со старыми сохранениями, где ID ещё не записывался.
