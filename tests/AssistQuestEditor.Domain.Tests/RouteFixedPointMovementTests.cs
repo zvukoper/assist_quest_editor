@@ -239,8 +239,8 @@ public sealed class RouteFixedPointMovementTests
 
         var remaining = state.RemoveLeadingWaypoints(2);
 
-        Assert.Equal(1, remaining.Waypoints.Count);
-        Assert.Equal(30, remaining.Waypoints[0].Number);
+        var last = Assert.Single(remaining.Waypoints);
+        Assert.Equal(30, last.Number);
 
         var renumbered = remaining.RenumberWaypoints();
 

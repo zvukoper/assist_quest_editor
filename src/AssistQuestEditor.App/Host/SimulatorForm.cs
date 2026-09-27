@@ -39,7 +39,6 @@ public sealed class SimulatorForm : WebViewForm
     private double _routeLastHeading;
     private int? _routeStoppedWaypointIndex;
     private string? _routeStoppedWaypointId;
-    private bool _resumeRouteAfterStop;
     private int? _routeTargetWaypointIndex;
     private string? _routeTargetWaypointId;
     private double _routeTravelRealSeconds;
@@ -972,7 +971,6 @@ public sealed class SimulatorForm : WebViewForm
             // перенумеровывает оставшуюся пользовательскую структуру.
             _routeStoppedWaypointIndex = null;
             _routeStoppedWaypointId = null;
-            _resumeRouteAfterStop = false;
             _routeTargetWaypointIndex = null;
             _routeTargetWaypointId = null;
 
@@ -1275,7 +1273,6 @@ public sealed class SimulatorForm : WebViewForm
             _routeTargetWaypointId = null;
             _routeCursor = RouteCursor.Initial;
             _routeLastHeading = 0d;
-            _resumeRouteAfterStop = false;
             _routeTravelRealSeconds = 0d;
             _routeTravelGameSeconds = 0d;
             _routeEnabled = false;
@@ -1324,10 +1321,11 @@ public sealed class SimulatorForm : WebViewForm
     {
         EnsureRouteEditingAllowed();
 
+        var playerPosition = _hub.Get<PlayerState>("player").Value.Position;
         var position = new WorldCoordinate(
-            Number(root, "x", _hub.Get<PlayerState>("player").Value.Position.X),
-            Number(root, "y", _hub.Get<PlayerState>("player").Value.Y),
-            Number(root, "z", _hub.Get<PlayerState>("player").Value.Z));
+            Number(root, "x", playerPosition.X),
+            Number(root, "y", playerPosition.Y),
+            Number(root, "z", playerPosition.Z));
 
         var waypoint = new RouteWaypoint(
             "route:" + Guid.NewGuid().ToString("N"),
@@ -1342,7 +1340,6 @@ public sealed class SimulatorForm : WebViewForm
         _selectedRouteWaypointId = waypoint.Id;
         _routeStoppedWaypointIndex = null;
         _routeStoppedWaypointId = null;
-        _resumeRouteAfterStop = false;
         RebuildRoute("waypoint added", publishSnapshot: false, trimToPlayer: false);
         PersistSession("автосохранение: waypoint added", force: true);
         PushRouteSnapshot();
@@ -1380,7 +1377,6 @@ public sealed class SimulatorForm : WebViewForm
         _selectedRouteWaypointId = inserted.Id;
         _routeStoppedWaypointIndex = null;
         _routeStoppedWaypointId = null;
-        _resumeRouteAfterStop = false;
         RebuildRoute("waypoint inserted", publishSnapshot: false, trimToPlayer: false);
         PersistSession("автосохранение: waypoint inserted", force: true);
         PushRouteSnapshot();
@@ -1414,7 +1410,6 @@ public sealed class SimulatorForm : WebViewForm
         _selectedRouteWaypointId = id;
         _routeStoppedWaypointIndex = null;
         _routeStoppedWaypointId = null;
-        _resumeRouteAfterStop = false;
         RebuildRoute("route waypoint moved", publishSnapshot: false, trimToPlayer: false);
         PersistSession("автосохранение: waypoint moved", force: true);
         PushRouteSnapshot();
@@ -1438,7 +1433,6 @@ public sealed class SimulatorForm : WebViewForm
         _selectedRouteWaypointId = null;
         _routeStoppedWaypointIndex = null;
         _routeStoppedWaypointId = null;
-        _resumeRouteAfterStop = false;
         RebuildRoute("waypoint deleted", publishSnapshot: false, trimToPlayer: false);
         PersistSession("автосохранение: waypoint deleted", force: true);
         PushRouteSnapshot();
@@ -1485,7 +1479,6 @@ public sealed class SimulatorForm : WebViewForm
         {
             _routeStoppedWaypointId = null;
             _routeStoppedWaypointIndex = null;
-            _resumeRouteAfterStop = false;
         }
 
         RebuildRoute(
@@ -1512,7 +1505,6 @@ public sealed class SimulatorForm : WebViewForm
         {
             _routeStoppedWaypointId = null;
             _routeStoppedWaypointIndex = null;
-            _resumeRouteAfterStop = false;
         }
 
         RebuildRoute(
@@ -1558,7 +1550,6 @@ public sealed class SimulatorForm : WebViewForm
         {
             _routeEnabled = false;
             SetPlayerMovementIdle();
-            _resumeRouteAfterStop = false;
             AppLogger.Info("SimulatorForm: движение по маршруту выключено.");
             PersistSession("автосохранение: движение по маршруту выключено", force: true);
             RequestSnapshot("route movement disabled");
@@ -1595,7 +1586,6 @@ public sealed class SimulatorForm : WebViewForm
                 _routeEnabled = false;
                 _routePlan = RoutePlan.Empty;
                 _routeCursor = RouteCursor.Initial;
-                _resumeRouteAfterStop = false;
 
                 AppendJournal(
                     "RouteMovementCompleted",
@@ -1633,7 +1623,6 @@ public sealed class SimulatorForm : WebViewForm
         }
 
         _routeEnabled = true;
-        _resumeRouteAfterStop = false;
 
         if (resumed && _routeCursor.Initialized)
         {
@@ -1667,7 +1656,6 @@ public sealed class SimulatorForm : WebViewForm
         _selectedRouteWaypointId = null;
         _routeStoppedWaypointIndex = null;
         _routeStoppedWaypointId = null;
-        _resumeRouteAfterStop = false;
         _routeTargetWaypointIndex = null;
         _routeTargetWaypointId = null;
         _routeTravelRealSeconds = 0d;
@@ -2098,7 +2086,6 @@ public sealed class SimulatorForm : WebViewForm
                     result.Position);
 
                 _routeEnabled = false;
-                _resumeRouteAfterStop = false;
                 SetPlayerMovementIdle();
                 PersistSession(
                     "автосохранение: движение по маршруту остановлено",
@@ -2185,7 +2172,6 @@ public sealed class SimulatorForm : WebViewForm
         _routeTargetWaypointId = null;
         _routeCursor = RouteCursor.Initial;
         _routeLastHeading = 0d;
-        _resumeRouteAfterStop = false;
         _routeTravelRealSeconds = runtime is not null &&
             double.IsFinite(runtime.TravelRealSeconds) &&
             runtime.TravelRealSeconds >= 0d
@@ -2212,12 +2198,13 @@ public sealed class SimulatorForm : WebViewForm
         // Идентификатор — главный источник истины. Индекс нужен только как
         // совместимость со старыми сохранениями, где ID ещё не записывался.
         var targetId = runtime?.CurrentTargetWaypointId;
+        var targetIndexFromSave = runtime?.CurrentTargetWaypointIndex;
         if (string.IsNullOrWhiteSpace(targetId) &&
-            runtime?.CurrentTargetWaypointIndex is int targetIndex &&
-            targetIndex >= 0 &&
-            targetIndex < _routeState.Waypoints.Count)
+            targetIndexFromSave is int savedTargetIndex &&
+            savedTargetIndex >= 0 &&
+            savedTargetIndex < _routeState.Waypoints.Count)
         {
-            targetId = _routeState.Waypoints[targetIndex].Id;
+            targetId = _routeState.Waypoints[savedTargetIndex].Id;
         }
 
         var stoppedId = runtime?.StoppedWaypointId;
@@ -2239,11 +2226,11 @@ public sealed class SimulatorForm : WebViewForm
             if (!string.IsNullOrWhiteSpace(_routeStoppedWaypointId))
             {
                 var stopIndex = _routeStoppedWaypointIndex;
-                if (stopIndex is int stop)
+                if (stopIndex is int stoppedPoint)
                 {
                     var candidates = _routePlan.Points
                         .Select((point, index) => (point, index))
-                        .Where(item => item.point.DestinationWaypointIndex == stop)
+                        .Where(item => item.point.DestinationWaypointIndex == stoppedPoint)
                         .ToArray();
 
                     nextPointIndex = NearestCandidateRoutePoint(
@@ -2253,12 +2240,12 @@ public sealed class SimulatorForm : WebViewForm
             }
             else if (!string.IsNullOrWhiteSpace(targetId))
             {
-                var targetIndex = IndexOfWaypoint(targetId);
-                if (targetIndex is int target)
+                var resolvedTargetIndex = IndexOfWaypoint(targetId);
+                if (resolvedTargetIndex is int resolvedTarget)
                 {
                     var candidates = _routePlan.Points
                         .Select((point, index) => (point, index))
-                        .Where(item => item.point.DestinationWaypointIndex == target)
+                        .Where(item => item.point.DestinationWaypointIndex == resolvedTarget)
                         .ToArray();
 
                     nextPointIndex = NearestCandidateRoutePoint(
@@ -2410,7 +2397,7 @@ public sealed class SimulatorForm : WebViewForm
         PostJson(payload);
     }
 
-    private void SetFact(JsonElement root)    private void SetFact(JsonElement root)
+    private void SetFact(JsonElement root)
     {
         var key = Required(root, "key");
         var state = _hub.Get<FactState>("facts").Value;

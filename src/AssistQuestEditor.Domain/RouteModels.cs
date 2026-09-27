@@ -121,10 +121,15 @@ public sealed record RoutePlan(
     public static RoutePlan Empty { get; } =
         new(Array.Empty<RouteLeg>(), Array.Empty<string>());
 
-    public IReadOnlyList<RoutePoint> Points { get; } =
+    // Вычисляемые свойства, а не инициализаторы полей: инициализатор поля не
+    // может обращаться к другим ЧЛЕНАМ экземпляра (CS0236), потому что порядок
+    // инициализации не определён. Здесь же важна и идентичность: `Points` и
+    // `Segments` обязаны строиться из ОДНИХ Legs/WaypointSource, и это
+    // гарантируется только тем, что оба читают одни и те же входные данные.
+    public IReadOnlyList<RoutePoint> Points =>
         BuildPoints(Legs, WaypointSource);
 
-    public IReadOnlyList<RouteSegment> Segments { get; } =
+    public IReadOnlyList<RouteSegment> Segments =>
         BuildSegments(Points);
 
     public double TotalDistanceMeters =>
@@ -295,8 +300,12 @@ public readonly record struct RouteCursor(
             SegmentProgressMeters = 0d,
             NextRoutePointIndex = pointIndex,
             LastHeadingDegrees = heading,
-            StoppedAtWaypointIndex = null,
-            ResumeAfterStop = false
+            // Режим продолжения после остановки обязан переживать смену целевой
+            // точки между тиками: он снимается не при каждой инициализации
+            // курсора, а только когда движение реально прошло путевую точку.
+            StoppedAtWaypointIndex = ResumeAfterStop
+                ? StoppedAtWaypointIndex
+                : null
         };
 }
 
@@ -449,22 +458,34 @@ public static class RouteMovementEngine
                     continue;
                 }
 
+                // Пройдена промежуточная точка дороги, а не путевая. Режим
+                // продолжения после остановки сохраняется до первой путевой
+                // точки: иначе следующий тик снова вернулся бы к нулевой
+                // скорости и маршрут «замирал» после первого шага.
                 nextPointIndex++;
-                resume = false;
                 continue;
             }
 
             var speed = Math.Max(0d, target.TravelSpeedKmh);
 
-            if (resume &&
-                target.WaypointIndex is int resumeWaypointIndex &&
-                resumeWaypointIndex >= 0 &&
-                resumeWaypointIndex < route.Waypoints.Count)
+            if (resume)
             {
-                var waypointSpeed = route.Waypoints[resumeWaypointIndex].SpeedKmh;
-                speed = waypointSpeed > 0d
-                    ? waypointSpeed
-                    : RouteState.DefaultSpeedKmhValue;
+                // Целью продолжения часто является промежуточная точка дороги:
+                // её WaypointIndex пуст, а ближайшая путевая точка лежит в
+                // DestinationWaypointIndex. Без этой подстановки скорость
+                // читалась бы как «неизвестная» и движение не начиналось.
+                var resumeWaypointIndex =
+                    target.WaypointIndex ??
+                    target.DestinationWaypointIndex;
+
+                if (resumeWaypointIndex >= 0 &&
+                    resumeWaypointIndex < route.Waypoints.Count)
+                {
+                    var waypointSpeed = route.Waypoints[resumeWaypointIndex].SpeedKmh;
+                    speed = waypointSpeed > 0d
+                        ? waypointSpeed
+                        : RouteState.DefaultSpeedKmhValue;
+                }
             }
 
             if (speed <= 0d)
@@ -556,10 +577,13 @@ public static class RouteMovementEngine
                         PassedWaypointIds = passedIds
                     };
                 }
+
+                // Путевая точка пройдена: дальше маршрут идёт с обычной
+                // скоростью следующего участка.
+                resume = false;
             }
 
             nextPointIndex++;
-            resume = false;
             cursor = cursor.ForPoint(nextPointIndex, heading);
         }
 
@@ -881,12 +905,19 @@ public static class RouteMovementEngine
             : previous.ForPoint(bestIndex, previous.LastHeadingDegrees);
     }
 
+    /// <summary>
+    /// Курсор на ближайшую точку маршрута ПО НАПРАВЛЕНИЮ движения.
+    ///
+    /// Это не «ближайшая геометрически»: при неоднозначности выбор делается в
+    /// пользу движения вперёд (см. <see cref="NextRoutePointForPlayer"/>), иначе
+    /// ручное перемещение игрока отправляло бы его назад к уже пройденной точке.
+    /// </summary>
     public static RouteCursor ProjectForwardCursor(
         RoutePlan plan,
         WorldCoordinate position,
         RouteCursor previous)
     {
-        var index = NearestRoutePoint(plan, position);
+        var index = NextRoutePointForPlayer(plan, position);
         return index < 0
             ? previous with { Initialized = false, NextRoutePointIndex = -1 }
             : previous.ForPoint(index, previous.LastHeadingDegrees);
@@ -1001,6 +1032,13 @@ public static class RouteMovementEngine
                 : 0d,
             0d,
             segmentLength);
+    }
+
+    private static double Distance2D(WorldCoordinate a, WorldCoordinate b)
+    {
+        var dx = a.X - b.X;
+        var dz = a.Z - b.Z;
+        return Math.Sqrt(dx * dx + dz * dz);
     }
 
     private static double HeadingDegrees(double x, double z)

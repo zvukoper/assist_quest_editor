@@ -917,13 +917,16 @@ try {
     "Без ускорения часы не должны становиться оранжевыми и показывать кратность: " +
       JSON.stringify(stoppedState));
 
-  // Кратность: ff перебирает набор и отправляет новое значение в Host.
+  // Кратность: ff перебирает набор 1x → 2x → 4x → 8x и отправляет новое
+  // значение в Host (см. c745348). С ×1 следующий шаг — ×2, а не ×5.
+  // Повторный шаг проверять здесь нельзя: локальная кратность страницы
+  // обновляется только очередным снимком Host, а не самим кликом.
   await page.click("#simFastForward");
   await page.waitForTimeout(100);
   const speedMessage = await page.evaluate(() =>
     window.__sent.filter(item => item.action === "simulation_set_speed").pop());
-  check(speedMessage && Number(speedMessage.speed) === 5,
-    "ff с ×1 должен запросить ×5: " + JSON.stringify(speedMessage));
+  check(speedMessage && Number(speedMessage.speed) === 2,
+    "ff с ×1 должен запросить ×2: " + JSON.stringify(speedMessage));
 
   await pushSnapshot({ running: true, speed: 20 });
   await page.waitForTimeout(200);

@@ -146,33 +146,51 @@ check(
 // рядом с бездорожным участком, и он выглядел как «маршрут идёт и по дороге, и по
 // бездорожью». Проверялось замером: у такого маршрута 24 дорожных отрезка
 // проходились повторно, после исправления — 0.
+//
+// Контракт переехал с Host-функции `ResolveRouteStartWaypoint` на доменный
+// `RouteMovementEngine`: план хранит ТОЛЬКО фиксированную геометрию, а точка
+// продолжения выбирается по позиции игрока и сохранённой цели. Поэтому «номер
+// начальной точки» больше не сдвигается вручную (`ShiftWaypointIndices` в Host не
+// вызывается) — индексы уже согласованы с полным списком маршрута.
 const rebuildBody = simulatorForm.slice(
   simulatorForm.indexOf("private void RebuildRoute("),
   simulatorForm.indexOf("private void SetRouteStateAfterLoad(")
 );
 check(
-  /ResolveRouteStartWaypoint\(_routeTargetWaypointIndex\)/.test(rebuildBody),
-  "Построение маршрута обязано определять начальную точку продолжения: " +
+  /_routePlanner\.Build\(_routeState\)/.test(rebuildBody),
+  "Построение маршрута обязано собирать только фиксированную геометрию: " +
+  "подъезд от игрока — динамический сегмент, а не часть плана."
+);
+check(
+  /NextRoutePointForPlayer\(\s*_routePlan,\s*playerPosition\)/.test(rebuildBody),
+  "Построение маршрута обязано выбирать точку продолжения по позиции игрока: " +
   "иначе после загрузки маршрут пойдёт назад по уже пройденным дорогам."
 );
 check(
-  /SetRouteStateAfterLoad[\s\S]{0,900}?ResolveRouteStartWaypoint\(/.test(simulatorForm),
+  /candidateStart[\s\S]{0,2000}?destinationDistance < playerDestinationDistance/.test(
+    read("src/AssistQuestEditor.Domain/RouteModels.cs")),
+  "Доменный выбор следующей точки обязан исключать движение к точке, " +
+  "увеличивающей расстояние до пункта назначения."
+);
+const loadRouteBody = simulatorForm.slice(
+  simulatorForm.indexOf("private void SetRouteStateAfterLoad("),
+  simulatorForm.indexOf("private void UpdatePlayerConditions()")
+);
+check(
+  /NextRoutePointForPlayer\(/.test(loadRouteBody),
   "Загрузка сохранения обязана продолжать маршрут от первой непройденной точки: " +
   "иначе карта после перезапуска покажет путь назад по пройденным дорогам."
 );
 check(
-  /ShiftWaypointIndices\(startWaypointIndex\)/.test(rebuildBody),
-  "Номера точек урезанного плана обязаны сдвигаться к полному списку маршрута: " +
-  "иначе текущая цель и состояние курсора укажут на чужую точку."
+  /ProjectCursorToWaypoint\(/.test(loadRouteBody),
+  "Бездорожная/сохранённая текущая цель обязана привязывать курсор к своей " +
+  "фиксированной точке, а не пересчитывать маршрут по дорожному графу."
 );
 check(
-  /targetWaypoint\.IsOffRoad[\s\S]{0,40}?return 0;/.test(simulatorForm),
-  "Бездорожная текущая цель обязана оставлять прежнее построение: " +
-  "её достижимость через дорожный граф не гарантирована."
-);
-check(
-  /projection\.Value\.DistanceMeters > RoadRoutePlanner\.MaxRouteSnapDistanceMeters/.test(simulatorForm),
-  "Точка вне допустимого расстояния привязки обязана оставлять прежнее построение."
+  /DistanceMeters > MaxRouteSnapDistanceMeters/.test(
+    read("src/AssistQuestEditor.Domain/RoadRoutePlanner.cs")),
+  "Точка вне допустимого расстояния привязки обязана отвергаться: иначе дорога " +
+  "рисовалась бы через всю карту от недосягаемой точки."
 );
 check(
   /public RoutePlan ShiftWaypointIndices\(int offset\)/.test(

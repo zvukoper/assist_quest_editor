@@ -195,7 +195,14 @@ public sealed class QuestRuntimeTests
         Assert.Equal("Time", runtime.State.WaitingFor);
         Assert.Equal("wait", runtime.State.CurrentNodeId);
 
-        Thread.Sleep(250);
+        // Ожидание по времени теперь отсчитывается от canonical sim-time
+        // (см. 2f8ef6c), а не от DateTime.UtcNow. Поэтому часы двигает тест,
+        // а не Thread.Sleep: только так проверка не зависит от планировщика ОС.
+        var clock = hub.Get<WorldClockState>("sim-time").Value;
+        hub.Get<WorldClockState>("sim-time").Set(
+            clock with { Elapsed = clock.Elapsed + TimeSpan.FromSeconds(0.25) },
+            "Тест");
+
         runtime.Tick();
 
         Assert.Equal(QuestRuntimeStatus.Completed, runtime.State.Status);

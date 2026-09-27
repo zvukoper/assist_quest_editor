@@ -135,14 +135,25 @@ public sealed class RouteTests
             previous);
 
         Assert.True(cursor.Initialized);
-        Assert.Equal(1, cursor.LegIndex);
-        Assert.Equal(45, cursor.SegmentProgressMeters, 6);
-        Assert.Equal(2, plan.Legs[cursor.LegIndex].EndWaypointIndex);
+        Assert.Equal(2, cursor.NextRoutePointIndex);
+        Assert.Equal(2, cursor.LegIndex);
+        Assert.Equal(2, plan.Points[cursor.NextRoutePointIndex].DestinationWaypointIndex);
     }
 
     [Fact]
     public void ManualProjectionChoosesNextWaypointOnCurrentSegment()
     {
+        var route = new RouteState(90, new[]
+        {
+            new RouteWaypoint("1", new WorldCoordinate(10, 0, 0), 90),
+            new RouteWaypoint("2", new WorldCoordinate(100, 0, 0), 90),
+            new RouteWaypoint("3", new WorldCoordinate(200, 0, 0), 90),
+            new RouteWaypoint("4", new WorldCoordinate(300, 0, 0), 90)
+        });
+
+        // Плану нужен источник путевых точек: скорость участка берётся у его
+        // НАЧАЛА (см. ab01a86). Без WaypointSource все участки получили бы
+        // скорость по умолчанию, и проверка скорости ничего не проверяла бы.
         var plan = new RoutePlan(
             new[]
             {
@@ -171,23 +182,18 @@ public sealed class RouteTests
                         new WorldCoordinate(300, 0, 0)
                     }, 90)
             },
-            Array.Empty<string>());
+            Array.Empty<string>(),
+            route.Waypoints);
 
         var cursor = RouteMovementEngine.ProjectForwardCursor(
             plan,
             new WorldCoordinate(145, 0, 0),
             new RouteCursor(true, 2, 0, 15, false, null, 0));
 
-        Assert.Equal(2, cursor.LegIndex);
-        Assert.Equal(45, cursor.SegmentProgressMeters, 6);
-
-        var route = new RouteState(90, new[]
-        {
-            new RouteWaypoint("1", new WorldCoordinate(10, 0, 0), 90),
-            new RouteWaypoint("2", new WorldCoordinate(100, 0, 0), 90),
-            new RouteWaypoint("3", new WorldCoordinate(200, 0, 0), 90),
-            new RouteWaypoint("4", new WorldCoordinate(300, 0, 0), 90)
-        });
+        // Игрок между точками 100 и 200: следующая фиксированная точка — 200,
+        // потому что проекция обязана смотреть вперёд, а не назад.
+        Assert.Equal(3, cursor.NextRoutePointIndex);
+        Assert.Equal(3, cursor.LegIndex);
 
         var result = RouteMovementEngine.Advance(
             route,
@@ -226,7 +232,10 @@ public sealed class RouteTests
             new WorldCoordinate(100, 0, 0),
             RouteCursor.Initial);
 
-        Assert.Equal(1, cursor.LegIndex);
+        // В стыке legs предпочтение отдаётся следующему участку, а не уже
+        // пройденной точке: курсор встаёт на точку 200, а не на 100.
+        Assert.Equal(2, cursor.NextRoutePointIndex);
+        Assert.Equal(2, cursor.LegIndex);
         Assert.Equal(0, cursor.SegmentProgressMeters, 6);
     }
 
@@ -334,7 +343,7 @@ public sealed class RouteTests
         Assert.False(result.Enabled);
         Assert.True(result.StoppedAtWaypoint);
         Assert.Equal(1, result.Cursor.StoppedAtWaypointIndex);
-        Assert.Equal(2, result.Cursor.LegIndex);
+        Assert.Equal(1, result.Cursor.NextRoutePointIndex);
         Assert.Equal(100, result.Position.X, 6);
     }
 
@@ -408,11 +417,10 @@ public sealed class RouteTests
     /// <summary>
     /// Единственная точка со скоростью 0 — это остановка, а не завершение.
     ///
-    /// Игрок при этом НЕ трогается с места: скорость первого leg берётся у
-    /// самой точки, и нулевая скорость означает «не ехать». Так устроен движок
-    /// (см. SingleWaypointWithZeroSpeedStopsAtWaypoint), важно здесь другое —
-    /// результат обязан быть остановкой, чтобы toggle выключился и появилась
-    /// надпись, а не «маршрут пройден».
+    /// Игрок при этом НЕ стоит на месте: подъезд к первой точке идёт со скоростью
+    /// маршрута по умолчанию, а скорость самой точки действует ПОСЛЕ достижения
+    /// (см. ab01a86). Важно здесь другое — результат обязан быть остановкой, чтобы
+    /// toggle выключился и появилась надпись, а не «маршрут пройден».
     /// </summary>
     [Fact]
     public void FirstAndOnlyWaypointWithZeroSpeedStopsInsteadOfCompleting()
@@ -439,7 +447,8 @@ public sealed class RouteTests
         Assert.True(result.StoppedAtWaypoint);
         Assert.False(result.Completed);
         Assert.Equal(0, result.Cursor.StoppedAtWaypointIndex);
-        Assert.Equal(0, result.Position.X, 6);
+        Assert.Equal(100, result.Position.X, 6);
+        Assert.Equal(0, result.SpeedKmh, 6);
     }
 
     [Fact]
@@ -729,10 +738,10 @@ public sealed class RouteTests
         var plan = planner.Build(route, new WorldCoordinate(10, 0, 0));
 
         Assert.True(plan.IsUsable);
-        Assert.Equal(3, plan.Legs.Count);
-        Assert.True(plan.Legs[2].Polyline.Count >= 2);
-        Assert.Equal(new WorldCoordinate(100, 0, 100), plan.Legs[2].Polyline[0]);
-        Assert.Equal(new WorldCoordinate(140, 0, 100), plan.Legs[2].Polyline[^1]);
+        Assert.Equal(2, plan.Legs.Count);
+        Assert.True(plan.Legs[1].Polyline.Count >= 2);
+        Assert.Equal(new WorldCoordinate(100, 0, 100), plan.Legs[1].Polyline[0]);
+        Assert.Equal(new WorldCoordinate(140, 0, 100), plan.Legs[1].Polyline[^1]);
     }
 
     [Fact]
@@ -827,7 +836,8 @@ public sealed class RouteTests
 
         var cursor = RouteMovementEngine.CreateResumeCursor(plan, 1, 0);
 
-        Assert.Equal(2, cursor.LegIndex);
+        Assert.Equal(3, cursor.NextRoutePointIndex);
+        Assert.Equal(3, cursor.LegIndex);
         Assert.True(cursor.ResumeAfterStop);
 
         var route = new RouteState(60, new[]
