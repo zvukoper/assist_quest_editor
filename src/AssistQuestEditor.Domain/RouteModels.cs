@@ -851,7 +851,7 @@ public static class RouteMovementEngine
         int? stoppedWaypointIndex,
         IReadOnlyList<double> cumulativeMeters)
     {
-        if (plan is null || plan.Points.Count == 0)
+        if (plan is null || cumulativeMeters is null)
             return 0d;
 
         if (stoppedWaypointIndex is int stopped &&
@@ -860,6 +860,23 @@ public static class RouteMovementEngine
         {
             return cumulativeMeters[stopped];
         }
+
+        // Совместимость со старыми диагностическими вызовами, где курсор ещё
+        // хранит LegIndex/SegmentIndex. Новый Host этот путь не использует:
+        // маршрутная дистанция теперь считается из fixed points + dynamic segment.
+        if (cursor.Initialized &&
+            cursor.NextRoutePointIndex < 0 &&
+            cursor.LegIndex >= 0 &&
+            cursor.LegIndex < plan.Legs.Count)
+        {
+            return DistanceAlongLegacyLeg(
+                plan.Legs[cursor.LegIndex],
+                cursor.SegmentIndex,
+                cursor.SegmentProgressMeters);
+        }
+
+        if (plan.Points.Count == 0)
+            return 0d;
 
         var pointIndex = cursor.Initialized
             ? Math.Clamp(
@@ -870,10 +887,38 @@ public static class RouteMovementEngine
 
         var distance = 0d;
         for (var index = 0; index < pointIndex; index++)
-            distance += plan.Segments.FirstOrDefault(
-                item => item.StartPointId == plan.Points[index].Id)?.LengthMeters ?? 0d;
+        {
+            if (index < plan.Segments.Count)
+                distance += plan.Segments[index].LengthMeters;
+        }
 
         return Math.Max(0d, distance);
+    }
+
+    private static double DistanceAlongLegacyLeg(
+        RouteLeg leg,
+        int segmentIndex,
+        double segmentProgressMeters)
+    {
+        var points = leg.Polyline;
+        if (points is null || points.Count < 2)
+            return 0d;
+
+        var segment = Math.Clamp(segmentIndex, 0, points.Count - 2);
+        var distance = 0d;
+
+        for (var index = 0; index < segment; index++)
+            distance += Distance2D(points[index], points[index + 1]);
+
+        var segmentLength =
+            Distance2D(points[segment], points[segment + 1]);
+
+        return distance + Math.Clamp(
+            double.IsFinite(segmentProgressMeters)
+                ? segmentProgressMeters
+                : 0d,
+            0d,
+            segmentLength);
     }
 
     private static double HeadingDegrees(double x, double z)
