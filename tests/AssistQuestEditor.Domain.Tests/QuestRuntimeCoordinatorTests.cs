@@ -133,8 +133,8 @@ public sealed class QuestRuntimeCoordinatorTests
         Assert.Equal(1d, coordinator.SimulationSpeed);
 
         coordinator.SetSimulationRunning(true);
-        coordinator.SetSimulationSpeed(20d);
-        Assert.Equal(20d, coordinator.SimulationSpeed);
+        coordinator.SetSimulationSpeed(2d);
+        Assert.Equal(2d, coordinator.SimulationSpeed);
 
         // Стоп — ускорение сбрасывается, но состояние часов сохраняется как есть:
         // сброс касается только кратности.
@@ -142,7 +142,7 @@ public sealed class QuestRuntimeCoordinatorTests
         Assert.Equal(1d, coordinator.SimulationSpeed);
 
         coordinator.SetSimulationRunning(true);
-        coordinator.SetSimulationSpeed(60d);
+        coordinator.SetSimulationSpeed(8d);
         coordinator.Reset();
         Assert.Equal(1d, coordinator.SimulationSpeed);
 
@@ -151,6 +151,43 @@ public sealed class QuestRuntimeCoordinatorTests
         var savedFields = typeof(SimulationSaveState).GetProperties().Select(item => item.Name).ToArray();
         Assert.DoesNotContain(savedFields, name =>
             name.Contains("Speed", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public void AcceleratedSimulationAdvancesWorldClockFasterThanRealTime()
+    {
+        var hub = new SimulatorDataSourceAdapter(Array.Empty<WorldPoint>()).Channels;
+        var coordinator = new QuestRuntimeCoordinator(
+            hub,
+            new SceneRuntime(SceneCatalogFactory.CreateStarter(), hub),
+            () => Array.Empty<QuestDefinition>(),
+            "quest");
+
+        using (coordinator)
+        {
+            coordinator.SetSimulationSpeed(8d);
+            coordinator.SetSimulationRunning(true);
+
+            // Первый Tick создаёт точку отсчёта часов.
+            coordinator.Tick();
+            var before = hub.Get<WorldClockState>("sim-time").Value.Elapsed;
+
+            Thread.Sleep(120);
+            coordinator.Tick();
+
+            var after = hub.Get<WorldClockState>("sim-time").Value.Elapsed;
+            var gameSeconds = (after - before).TotalSeconds;
+
+            // 120 мс × 8 = ~0.96 игровой секунды. Разрешаем широкий диапазон
+            // из-за планировщика ОС и задержек тестовой машины.
+            Assert.InRange(gameSeconds, 0.35d, 1.8d);
+
+            coordinator.PauseSimulation();
+            Assert.Equal(8d, coordinator.SimulationSpeed);
+
+            coordinator.SetSimulationRunning(false);
+            Assert.Equal(1d, coordinator.SimulationSpeed);
+        }
     }
 
     private static QuestDefinition Definition(
