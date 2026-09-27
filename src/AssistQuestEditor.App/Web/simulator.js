@@ -3709,10 +3709,13 @@
    * плашка спидометра, поэтому проверяется именно остановка на точке.
    */
   function routeStoppedBadgeText() {
-    if (!Number.isInteger(route?.stoppedWaypointIndex) || route.stoppedWaypointIndex < 0)
-      return "";
+    const waypoint = route?.stoppedWaypointId
+      ? (route.waypoints || []).find(item =>
+          String(item.id) === String(route.stoppedWaypointId))
+      : (Number.isInteger(route?.stoppedWaypointIndex) && route.stoppedWaypointIndex >= 0
+          ? route?.waypoints?.[route.stoppedWaypointIndex]
+          : null);
 
-    const waypoint = route?.waypoints?.[route.stoppedWaypointIndex];
     return waypoint
       ? String(Number(waypoint.number) || Number(waypoint.index) || route.stoppedWaypointIndex + 1)
       : "";
@@ -4057,9 +4060,13 @@
     if (id === "route") {
       const selectedRoute = (route.waypoints || []).find(item =>
         String(item.id) === String(route.selectedWaypointId));
-      const targetRoute = Number.isInteger(route.currentTargetWaypointIndex)
-        ? (route.waypoints || [])[route.currentTargetWaypointIndex]
-        : null;
+      const targetRoute =
+        route.currentTargetWaypointId
+          ? (route.waypoints || []).find(item =>
+              String(item.id) === String(route.currentTargetWaypointId))
+          : (Number.isInteger(route.currentTargetWaypointIndex)
+              ? (route.waypoints || [])[route.currentTargetWaypointIndex]
+              : null);
       const selectedRouteNumber = selectedRoute
         ? (Number(selectedRoute.number) || Number(selectedRoute.index) || 0)
         : 0;
