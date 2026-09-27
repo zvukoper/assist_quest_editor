@@ -70,10 +70,12 @@ public sealed class RoadRoutePlanner
         Build(route, null);
 
     /// <summary>
-    /// Строит маршрут начиная С ТЕКУЩЕЙ ПОЗИЦИИ ИГРОКА.
+    /// Строит ТОЛЬКО фиксированную геометрию маршрута. Позиция игрока больше не
+    /// входит в RoutePlan: подъезд от игрока до ближайшей фиксированной точки
+    /// всегда является отдельным динамическим сегментом.
     ///
-    /// Поэтому маршрут с одной путевой точкой уже является полноценным маршрутом:
-    /// первый leg имеет StartWaypointIndex = -1 (игрок) и EndWaypointIndex = 0.
+    /// Параметр playerPosition оставлен для совместимости старого контракта
+    /// и намеренно игнорируется.
     /// </summary>
     public RoutePlan Build(RouteState route, WorldCoordinate? playerPosition)
     {
@@ -82,7 +84,7 @@ public sealed class RoadRoutePlanner
         if (route.Waypoints.Count == 0)
             return RoutePlan.Empty;
 
-        if (IsEmpty && route.Waypoints.All(item => !item.IsOffRoad))
+        if (IsEmpty && route.Waypoints.Any(item => !item.IsOffRoad))
         {
             return new RoutePlan(
                 Array.Empty<RouteLeg>(),
@@ -90,35 +92,22 @@ public sealed class RoadRoutePlanner
                 {
                     "Маршрут не построен: дорожная геометрия пуста. " +
                     "Файл data/world/roads.json не загружен или не содержит отрезков."
-                });
+                },
+                route.Waypoints);
         }
 
         var legs = new List<RouteLeg>();
         var errors = new List<string>();
 
-        if (playerPosition is WorldCoordinate currentPlayer)
+        if (route.Waypoints.Count == 1)
         {
-            var first = route.Waypoints[0];
-            var firstResult = first.IsOffRoad
-                ? BuildDirectLeg(-1, 0, currentPlayer, first.Position)
-                : BuildLeg(
-                    -1,
-                    0,
-                    "текущей позиции игрока",
-                    "точки 1",
-                    currentPlayer,
-                    first.Position,
-                    includeExactStart: true);
+            legs.Add(new RouteLeg(
+                0,
+                0,
+                new[] { route.Waypoints[0].Position },
+                0d));
 
-            if (firstResult.Leg is not null)
-                legs.Add(firstResult.Leg);
-            else if (!string.IsNullOrWhiteSpace(firstResult.Error))
-                errors.Add(firstResult.Error);
-        }
-        else if (route.Waypoints.Count == 1)
-        {
-            errors.Add(
-                "Маршрут с одной точкой не построен: для него нужна текущая позиция игрока.");
+            return new RoutePlan(legs, errors, route.Waypoints);
         }
 
         for (var index = 0; index < route.Waypoints.Count - 1; index++)
@@ -143,7 +132,7 @@ public sealed class RoadRoutePlanner
                 errors.Add(result.Error);
         }
 
-        return new RoutePlan(legs, errors);
+        return new RoutePlan(legs, errors, route.Waypoints);
     }
 
     /// <summary>
