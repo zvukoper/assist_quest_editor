@@ -1617,7 +1617,8 @@ public sealed class SimulatorForm : WebViewForm
                 : "route movement enabled",
             publishSnapshot: false,
             trimToPlayer: !resumed,
-            renumberTrimmed: !resumed);
+            renumberTrimmed: !resumed,
+            anchorWaypointId: resumed ? null : _routeTargetWaypointId);
 
         if (!_routePlan.IsUsable)
         {
