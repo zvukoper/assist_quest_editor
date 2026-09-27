@@ -52,7 +52,7 @@ public sealed class RouteTests
     }
 
     [Fact]
-    public void SingleWaypointRouteStartsFromCurrentPlayerPosition()
+    public void SingleWaypointRouteIsFixedAndPlayerSegmentIsDynamic()
     {
         var planner = new RoadRoutePlanner(new[]
         {
@@ -68,10 +68,12 @@ public sealed class RouteTests
 
         Assert.True(plan.IsUsable);
         Assert.Single(plan.Legs);
-        Assert.Equal(-1, plan.Legs[0].StartWaypointIndex);
+        Assert.Equal(0, plan.Legs[0].StartWaypointIndex);
         Assert.Equal(0, plan.Legs[0].EndWaypointIndex);
-        Assert.Equal(new WorldCoordinate(10, 0, 0), plan.Legs[0].Polyline[0]);
-        Assert.Equal(new WorldCoordinate(90, 0, 0), plan.Legs[0].Polyline[^1]);
+        Assert.Single(plan.Points);
+        Assert.Equal(new WorldCoordinate(90, 0, 0), plan.Points[0].Position);
+        Assert.Equal(0, plan.Points[0].WaypointIndex);
+        Assert.Equal(0, plan.Points[0].DestinationWaypointIndex);
     }
 
     [Fact]
@@ -229,7 +231,7 @@ public sealed class RouteTests
     }
 
     [Fact]
-    public void RoutePlannerExplainsWhenWaypointIsTooFarFromRoad()
+    public void RoutePlannerExplainsWhenWaypointIsTooFarFromRoadOnRoadLeg()
     {
         var planner = new RoadRoutePlanner(new[]
         {
@@ -238,6 +240,7 @@ public sealed class RouteTests
 
         var route = new RouteState(60, new[]
         {
+            new RouteWaypoint("start", new WorldCoordinate(10, 0, 0), 60),
             new RouteWaypoint("target", new WorldCoordinate(1000, 0, 0), 60)
         });
 
@@ -671,7 +674,7 @@ public sealed class RouteTests
     }
 
     [Fact]
-    public void ShiftWaypointIndicesKeepsVirtualPlayerLegAtMinusOne()
+    public void FixedRoutePlanStartsWithWaypointNotPlayer()
     {
         var planner = new RoadRoutePlanner(new[]
         {
@@ -684,12 +687,11 @@ public sealed class RouteTests
         });
 
         var plan = planner.Build(route, new WorldCoordinate(0, 0, 0));
-        var shifted = plan.ShiftWaypointIndices(3);
 
-        // Первый leg начинается от ИГРОКА и не является путевой точкой: его
-        // начало обязано остаться -1, иначе движение стартовало бы не с игрока.
-        Assert.Equal(-1, shifted.Legs[0].StartWaypointIndex);
-        Assert.Equal(3, shifted.Legs[0].EndWaypointIndex);
+        Assert.Equal(0, plan.Legs[0].StartWaypointIndex);
+        Assert.Equal(0, plan.Legs[0].EndWaypointIndex);
+        Assert.Single(plan.Points);
+        Assert.Equal(new WorldCoordinate(100, 0, 0), plan.Points[0].Position);
     }
 
     [Fact]
