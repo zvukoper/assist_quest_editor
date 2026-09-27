@@ -354,7 +354,7 @@ public static class SimulationSaveCodec
             ? ReadDynamicEvents(reader, strings)
             : DynamicEventRuntimeState.Empty;
         var route = formatVersion >= 3
-            ? ReadRoute(reader, strings, formatVersion >= 5)
+            ? ReadRoute(reader, strings, formatVersion >= 5, formatVersion)
             : RouteState.Empty;
         var routeRuntime = formatVersion >= 4
             ? ReadRouteRuntime(reader, formatVersion)
@@ -558,11 +558,11 @@ public static class SimulationSaveCodec
         WriteDouble(writer, route.DefaultSpeedKmh);
         writer.Write(route.Waypoints.Count);
 
-        foreach (var waypoint in route.Waypoints)
+        foreach (var (waypoint, index) in route.Waypoints.Select((item, index) => (item, index)))
         {
             writer.Write(strings.Index(waypoint.Id));
             if (formatVersion >= 9)
-                writer.Write(waypoint.EffectiveNumber(0));
+                writer.Write(waypoint.EffectiveNumber(index));
             WriteDouble(writer, waypoint.Position.X);
             WriteDouble(writer, waypoint.Position.Y);
             WriteDouble(writer, waypoint.Position.Z);
@@ -575,7 +575,8 @@ public static class SimulationSaveCodec
     private static RouteState ReadRoute(
         BinaryReader reader,
         StringTable strings,
-        bool hasOffRoad)
+        bool hasOffRoad,
+        int formatVersion)
     {
         var defaultSpeed = ReadDouble(reader);
         var count = reader.ReadInt32();
@@ -586,13 +587,21 @@ public static class SimulationSaveCodec
         for (var index = 0; index < count; index++)
         {
             var id = strings[reader.ReadInt32()];
+            var number = formatVersion >= 9
+                ? reader.ReadInt32()
+                : index + 1;
             var position = new WorldCoordinate(
                 ReadDouble(reader),
                 ReadDouble(reader),
                 ReadDouble(reader));
             var speed = ReadDouble(reader);
             var isOffRoad = hasOffRoad && reader.ReadBoolean();
-            waypoints.Add(new RouteWaypoint(id, position, speed, isOffRoad));
+            waypoints.Add(new RouteWaypoint(
+                id,
+                position,
+                speed,
+                isOffRoad,
+                number > 0 ? number : index + 1));
         }
 
         return new RouteState(defaultSpeed, waypoints).Normalize();
