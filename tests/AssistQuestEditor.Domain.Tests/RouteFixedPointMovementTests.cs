@@ -63,6 +63,47 @@ public sealed class RouteFixedPointMovementTests
     }
 
     [Fact]
+    public void PlayerRoadAnchorIsTheDynamicTargetBeforeFirstWaypoint()
+    {
+        var waypoints = Waypoints();
+
+        var plan = new RoutePlan(
+            new[]
+            {
+                new RouteLeg(
+                    -1,
+                    0,
+                    new[]
+                    {
+                        new WorldCoordinate(0, 0, 0),
+                        new WorldCoordinate(0, 0, 50),
+                        waypoints[0].Position
+                    },
+                    0),
+                new RouteLeg(
+                    0,
+                    1,
+                    new[] { waypoints[0].Position, waypoints[1].Position },
+                    100),
+                new RouteLeg(
+                    1,
+                    2,
+                    new[] { waypoints[1].Position, waypoints[2].Position },
+                    100)
+            },
+            Array.Empty<string>(),
+            waypoints);
+
+        var nextPoint = RouteMovementEngine.NextRoutePointForPlayer(
+            plan,
+            new WorldCoordinate(0, 0, -20));
+
+        Assert.Equal(0, nextPoint);
+        Assert.Null(plan.Points[nextPoint].WaypointIndex);
+        Assert.Equal(0, plan.Points[nextPoint].DestinationWaypointIndex);
+    }
+
+    [Fact]
     public void PlayerAfterWaypointSelectsTheNextForwardWaypoint()
     {
         var waypoints = Waypoints();
