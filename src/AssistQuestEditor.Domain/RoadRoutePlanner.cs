@@ -125,7 +125,7 @@ public sealed class RoadRoutePlanner
                     "точки " + (index + 2),
                     start.Position,
                     end.Position,
-                    includeExactStart: false,
+                    includeExactStart: true,
                     allowStartOffRoad: start.IsOffRoad);
 
             if (result.Leg is not null)
