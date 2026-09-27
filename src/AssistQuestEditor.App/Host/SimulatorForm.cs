@@ -1479,6 +1479,15 @@ public sealed class SimulatorForm : WebViewForm
             return;
 
         _routeState = _routeState with { Waypoints = waypoints };
+
+        if (_routeStoppedWaypointId is string stoppedId &&
+            stoppedId.Equals(id, StringComparison.OrdinalIgnoreCase))
+        {
+            _routeStoppedWaypointId = null;
+            _routeStoppedWaypointIndex = null;
+            _resumeRouteAfterStop = false;
+        }
+
         RebuildRoute(
             "waypoint speed changed",
             publishSnapshot: false,
@@ -1497,6 +1506,15 @@ public sealed class SimulatorForm : WebViewForm
                 : item).ToArray();
 
         _routeState = _routeState with { Waypoints = waypoints };
+
+        if (_routeStoppedWaypointId is string stoppedId &&
+            stoppedId.Equals(id, StringComparison.OrdinalIgnoreCase))
+        {
+            _routeStoppedWaypointId = null;
+            _routeStoppedWaypointIndex = null;
+            _resumeRouteAfterStop = false;
+        }
+
         RebuildRoute(
             "waypoint off-road changed",
             publishSnapshot: false,
@@ -1566,6 +1584,27 @@ public sealed class SimulatorForm : WebViewForm
             _routeStoppedWaypointIndex = null;
             _routeTargetWaypointId = null;
             _routeTargetWaypointIndex = null;
+
+            if (_routeState.Waypoints.Count == 0)
+            {
+                _routeEnabled = false;
+                _routePlan = RoutePlan.Empty;
+                _routeCursor = RouteCursor.Initial;
+                _resumeRouteAfterStop = false;
+
+                AppendJournal(
+                    "RouteMovementCompleted",
+                    DateTimeOffset.UtcNow,
+                    "Движение по маршруту",
+                    "Маршрут завершён после продолжения с последней остановочной точки.",
+                    _hub.Get<PlayerState>("player").Value.Position);
+
+                PersistSession(
+                    "автосохранение: маршрут пройден",
+                    force: true);
+                RequestSnapshot("route movement completed");
+                return;
+            }
         }
 
         RebuildRoute(
