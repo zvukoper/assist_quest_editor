@@ -660,6 +660,198 @@ public static class RouteMovementEngine
         };
     }
 
+    /// <summary>
+    /// Цель маршрута для позиции игрока, выбранная в пользу ДВИЖЕНИЯ ВПЕРЁД.
+    ///
+    /// Правило заказано явно: «алгоритм движения по маршруту всегда должен выбирать
+    /// цель в пользу следования по маршруту к точке со старшим номером». Поэтому
+    /// сначала берётся ближайшая к игроку точка, а при неоднозначности — та, у
+    /// которой номер БОЛЬШЕ.
+    ///
+    /// Две разные неоднозначности, и обе решаются в пользу старшей точки:
+    ///
+    /// 1. Игрок стоит МЕЖДУ точками N и N+1 (равные или почти равные расстояния).
+    ///    Продолжение пути — вперёд, к N+1; выбор N означал бы движение назад к
+    ///    уже пройденной точке.
+    /// 2. Игрок стоит РОВНО НА точке N. «Ближайшая» — это она сама, расстояние
+    ///    ноль. Но стоящий на точке уже её достиг, и маршрут продолжается вперёд,
+    ///    со следующей точки. Иначе после перезапуска или перемещения игрок
+    ///    «застревал» бы на достигнутой точке, а цель показывалась бы на неё же.
+    ///
+    /// Именно второй случай давал «цель — точка №1»: после загрузки маршрута
+    /// игрок начинал путь с точки №1, оказывался ровно на ней, и ближайшей
+    /// оставалась она же — при нулевой разнице расстояний.
+    ///
+    /// <paramref name="maxIndex"/> ограничивает поиск сверху (прежняя цель): ручное
+    /// перемещение «вперёд» не должно перескакивать намерение игрока.
+    /// <paramref name="nearestIndex"/> — подсказка вызывающего: если он УЖЕ знает
+    /// ближайшую точку (например, посчитал её другим правилом), она участвует в
+    /// сравнении с кандидатом вперёд и выбирается старшая. Иначе ближайшая
+    /// считается здесь.
+    ///
+    /// Возвращает <c>null</c>, если точек нет.
+    /// </summary>
+    public static int? PreferredForwardWaypoint(
+        IReadOnlyList<RouteWaypoint>? waypoints,
+        WorldCoordinate position,
+        int? maxIndex = null,
+        int? nearestIndex = null)
+    {
+        if (waypoints is null || waypoints.Count == 0)
+            return null;
+
+        var nearest = nearestIndex is int hint &&
+                      hint >= 0 &&
+                      hint < waypoints.Count
+            ? hint
+            : NearestForwardWaypoint(waypoints, position, maxIndex) ?? 0;
+
+        var candidate = nearest + 1;
+
+        // За пределами списка двигаться вперёд некуда: остаётся последняя точка.
+        if (candidate >= waypoints.Count)
+            return nearest;
+
+        // Прежняя цель ограничивает поиск. Игрок стоит НА самой цели — это её
+        // достижение, а не повод искать дальше: иначе телепорт на цель уводил бы
+        // маршрут за неё.
+        if (maxIndex is int limit && nearest >= limit)
+            return nearest;
+
+        return candidate;
+    }
+
+    /// <summary>
+    /// Индекс путевой точки, ближайшей К ИГРОКУ среди тех, что лежат между ним и
+    /// прежней целью.
+    ///
+    /// Нужен при РУЧНОМ перемещении игрока и при загрузке маршрута из файла: игрок
+    /// может стоять в любом месте, а движение идёт только к текущей цели, поэтому
+    /// промежуточные точки требуется найти явно.
+    ///
+    /// Именно БЛИЖАЙШАЯ, а не первая непройденная: при перемещении назад (игрок
+    /// оказался перед точкой, которую уже проехал) первой непройденной была бы
+    /// далёкая точка, и маршрут поехал бы через весь пропущенный участок.
+    ///
+    /// Возвращает <c>null</c>, если точек нет — вызывающий обязан оставить
+    /// прежнее поведение.
+    /// </summary>
+    public static int? NearestForwardWaypoint(
+        IReadOnlyList<RouteWaypoint>? waypoints,
+        WorldCoordinate position,
+        int? maxIndex)
+    {
+        if (waypoints is null || waypoints.Count == 0)
+            return null;
+
+        var limit = maxIndex is int value
+            ? Math.Clamp(value, 0, waypoints.Count - 1)
+            : waypoints.Count - 1;
+
+        var bestIndex = -1;
+        var bestDistance = double.PositiveInfinity;
+
+        for (var index = 0; index <= limit; index++)
+        {
+            var waypoint = waypoints[index];
+            if (waypoint is null)
+                continue;
+
+            var dx = waypoint.Position.X - position.X;
+            var dz = waypoint.Position.Z - position.Z;
+            var distance = dx * dx + dz * dz;
+
+            if (!double.IsFinite(distance) || distance >= bestDistance)
+                continue;
+
+            bestDistance = distance;
+            bestIndex = index;
+        }
+
+        // Ни одной конечной координаты (битые данные) — не назначаем цель.
+        return bestIndex < 0 || !double.IsFinite(bestDistance)
+            ? null
+            : bestIndex;
+    }
+
+    /// <summary>
+    /// Пройденная по маршруту дистанция в метрах от начала движения.
+    ///
+    /// Первый leg строится как виртуальный («текущая позиция игрока → точка 1») и
+    /// имеет <see cref="RouteLeg.StartWaypointIndex"/> = −1. Его начала НЕТ в
+    /// массиве накопленных длин, поэтому расстояние внутри виртуального leg
+    /// считается от нуля: иначе подпись под маркером показывала бы «0.0 км» до
+    /// первой путевой точки, то есть всю первую часть пути — ровно то, что
+    /// выглядело как «одометр не работает».
+    /// </summary>
+    public static double RouteDistanceMeters(
+        RoutePlan plan,
+        RouteCursor cursor,
+        int? stoppedWaypointIndex,
+        IReadOnlyList<double> cumulativeMeters)
+    {
+        if (plan is null || cumulativeMeters is null || cumulativeMeters.Count == 0)
+            return 0d;
+
+        // Остановка: игрок стоит на самой точке, значит пройдено ровно до неё.
+        if (!cursor.Initialized &&
+            stoppedWaypointIndex is int stopped &&
+            stopped >= 0 &&
+            stopped < cumulativeMeters.Count)
+        {
+            return cumulativeMeters[stopped];
+        }
+
+        if (!cursor.Initialized ||
+            plan.Legs.Count == 0 ||
+            cursor.LegIndex < 0 ||
+            cursor.LegIndex >= plan.Legs.Count)
+        {
+            return 0d;
+        }
+
+        var leg = plan.Legs[cursor.LegIndex];
+        var legStart = leg.StartWaypointIndex;
+
+        // Виртуальный leg начинается позицией игрока (индекс −1): его стартовая
+        // точка — начало маршрута, а не путевая точка, поэтому база нулевая.
+        var baseMeters = legStart >= 0 && legStart < cumulativeMeters.Count
+            ? cumulativeMeters[legStart]
+            : 0d;
+
+        return Math.Max(0d, baseMeters + DistanceAlongLeg(leg, cursor));
+    }
+
+    private static double DistanceAlongLeg(RouteLeg leg, RouteCursor cursor)
+    {
+        var points = leg.Polyline;
+        if (points is null || points.Count < 2)
+            return 0d;
+
+        var segment = Math.Clamp(cursor.SegmentIndex, 0, points.Count - 2);
+        var distance = 0d;
+
+        for (var index = 0; index < segment; index++)
+        {
+            var a = points[index];
+            var b = points[index + 1];
+            var dx = b.X - a.X;
+            var dz = b.Z - a.Z;
+            distance += Math.Sqrt(dx * dx + dz * dz);
+        }
+
+        var from = points[segment];
+        var to = points[segment + 1];
+        var segmentDx = to.X - from.X;
+        var segmentDz = to.Z - from.Z;
+        var segmentLength = Math.Sqrt(segmentDx * segmentDx + segmentDz * segmentDz);
+
+        return distance + Math.Clamp(
+            cursor.SegmentProgressMeters,
+            0d,
+            segmentLength);
+    }
+
     private static double HeadingDegrees(double x, double z)
     {
         var heading = Math.Atan2(z, x) * 180d / Math.PI;

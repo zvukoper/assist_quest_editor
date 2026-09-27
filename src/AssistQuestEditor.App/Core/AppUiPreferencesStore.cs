@@ -33,7 +33,15 @@ public sealed record AppUiPreferences(
     string? LastWorldId = null,
     // Последняя выбранная кампания. Помнится отдельно от мира: при выборе мира
     // подставляется его запомненная кампания.
-    string? LastCampaignId = null);
+    string? LastCampaignId = null,
+    // Раскрытые разделы правого сайдбара Симулятора — список id секций.
+    //
+    // Хранится здесь, а не в localStorage страницы: localStorage живёт в профиле
+    // WebView2, а профиль меняется вместе с отпечатком сборки. После обновления
+    // версии разделы оказывались закрытыми, тогда как настройки окна переживали
+    // перезапуск именно потому, что лежат в этом файле. Владелец состояния один —
+    // пользовательские настройки.
+    List<string>? SidebarSections = null);
 
 public static class AppUiPreferencesStore
 {

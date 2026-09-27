@@ -45,6 +45,24 @@ public sealed class SimulatorForm : WebViewForm
     private bool _routePlanNeedsRebuildFromCurrentPlayer;
     private DateTimeOffset? _conditionsLastRealTick;
     private TimeSpan? _conditionsLastGameElapsed;
+
+    /// <summary>
+    /// Раскрытые разделы правого сайдбара. Хранятся в пользовательских настройках
+    /// (ui-settings.json), а не в localStorage страницы: localStorage живёт в
+    /// профиле WebView2, а профиль меняется вместе с отпечатком сборки, поэтому
+    /// после обновления версии разделы оказывались закрытыми.
+    /// </summary>
+    private List<string> _sidebarSections = new();
+
+    /// <summary>
+    /// Позиция игрока на прошлом тике начисления условий.
+    ///
+    /// Нужна, чтобы считать ПРОЙДЕННУЮ дистанцию: усталость растёт и по
+    /// километрам, а не только по игровым часам. Обнуляется вместе с остальными
+    /// якорями, иначе первый тик после паузы или загрузки засчитал бы весь путь,
+    /// пройденный до неё, как одну огромную «поездку».
+    /// </summary>
+    private WorldCoordinate? _conditionsLastPosition;
     private bool _inventoryPausedSimulation;
 
     /// <summary>
@@ -154,7 +172,14 @@ public sealed class SimulatorForm : WebViewForm
         _dynamicEventDispatcher = dynamicEventDispatcher ?? throw new ArgumentNullException(nameof(dynamicEventDispatcher));
         _roads = roads ?? new RoadIndex(Array.Empty<RoadSegment>());
         _routePlanner = new RoadRoutePlanner(_roads.Segments, junctions?.ToPoints() ?? Array.Empty<JunctionPoint>());
-        _journalDetached = AppUiPreferencesStore.Load().JournalDetached;
+        // Пользовательские настройки читаются ОДНИМ вызовом: их файл — общий, и
+        // два независимых Load() подряд читали бы его дважды на каждое открытие
+        // Симулятора.
+        var preferences = AppUiPreferencesStore.Load();
+        _journalDetached = preferences.JournalDetached;
+        _sidebarSections = preferences.SidebarSections is { } savedSections
+            ? new List<string>(savedSections)
+            : new List<string>();
         Opacity = 0;
         GlobalHotKeyPressed += SimulatorForm_GlobalHotKeyPressed;
         _questGraph.Changed += QuestGraph_Changed;
@@ -371,6 +396,10 @@ public sealed class SimulatorForm : WebViewForm
             },
             questGraph = _runtime.ActiveGraph ?? _questGraph.Value,
             journalDetached = _journalDetached,
+            // Раскрытые разделы сайдбара едут со снимком: Web их не хранит, а
+            // рисует присланное. Так разделы переживают перезапуск и не зависят
+            // от того, менялся ли профиль WebView2.
+            sidebarSections = _sidebarSections,
             // Режим визуализации Location едет вместе со снимком: снимок
             // перерисовывает всю карту, и без этого набор точек исчезал бы
             // через доли секунды после нажатия «Показать в симуляторе».
@@ -706,6 +735,9 @@ public sealed class SimulatorForm : WebViewForm
                     DetachJournal();
                     break;
 
+                case "set_sidebar_sections":
+                    SetSidebarSections(root);
+                    break;
                 case "open_journal":
                     OpenJournalWindow();
                     break;
@@ -938,23 +970,84 @@ public sealed class SimulatorForm : WebViewForm
 
         if (_routeState.Waypoints.Count > 0)
         {
-            RebuildRoute("player position changed");
-
-            if (hadRouteProgress && _routePlan.IsUsable && _routeState.Waypoints.Count > 1)
-            {
-                _routeCursor = RouteMovementEngine.ProjectForwardCursor(
-                    _routePlan,
+            // Цель пересчитывается ДО перестроения плана, и это принципиально.
+            //
+            // RebuildRoute отбрасывает ведущие точки до ТЕКУЩЕЙ ЦЕЛИ
+            // (ResolveRouteStartWaypoint). Пока целью оставалась прежняя — а ею
+            // была, например, точка №9, — в плане не оказывалось точек 1..8
+            // вовсе, и остановиться на №2 было физически невозможно: этой точки в
+            // плане уже не было.
+            //
+            // Поэтому цель СНИМАЕТСЯ перед перестроением: план строится целиком,
+            // от игрока до последней точки, со всеми промежуточными точками.
+            // Иначе маршрут шёл бы «поверх» них, и остановки на промежуточных
+            // точках не срабатывали бы.
+            //
+            // Новая цель выбирается В ПОЛЬЗУ ДВИЖЕНИЯ ВПЕРЁД (см.
+            // PreferredForwardWaypoint): ближайшая точка, а при неоднозначности —
+            // старшая по номеру. Иначе игрок, переставленный ровно на уже
+            // пройденную точку, «перескакивал» бы назад и начинал путь от неё.
+            var previousTarget = _routeTargetWaypointIndex;
+            var newTarget = hadRouteProgress
+                ? RouteMovementEngine.PreferredForwardWaypoint(
+                    _routeState.Waypoints,
                     position,
-                    _routeCursor);
+                    previousTarget)
+                : null;
 
-                _routeTargetWaypointIndex = GetTargetWaypointIndex(_routeCursor);
-                _routeStoppedWaypointIndex = null;
-                _resumeRouteAfterStop = false;
-                _routeLastHeading = _routeCursor.LastHeadingDegrees;
-            }
+            _routeTargetWaypointIndex = null;
+            RebuildRoute("player position changed");
 
             _routeTravelRealSeconds = previousTravelRealSeconds;
             _routeTravelGameSeconds = previousTravelGameSeconds;
+
+            if (_routePlan.IsUsable && _routeState.Waypoints.Count > 0)
+            {
+                // Курсор привязывается ИМЕННО к выбранной цели: тогда скорость
+                // берётся у НАЧАЛА её участка (как у обычного маршрута), и игрок
+                // ДОЕЗЖАЕТ до точки со скоростью 0, а не замирает на месте из-за
+                // нулевой скорости самой цели.
+                if (newTarget is int targetIndex)
+                {
+                    _routeCursor = RouteMovementEngine.ProjectCursorToWaypoint(
+                        _routePlan,
+                        targetIndex,
+                        position,
+                        _routeCursor);
+                }
+
+                if (!_routeCursor.Initialized)
+                {
+                    // Цель не удалось привязать (бездорожье, недостижимая проекция) —
+                    // берём общий поиск ближайшего участка.
+                    _routeCursor = RouteMovementEngine.ProjectForwardCursor(
+                        _routePlan,
+                        position,
+                        _routeCursor);
+                }
+
+                _routeTargetWaypointIndex = GetTargetWaypointIndex(_routeCursor) ?? newTarget;
+                _routeStoppedWaypointIndex = null;
+                _resumeRouteAfterStop = false;
+
+                if (_routeCursor.Initialized)
+                    _routeLastHeading = _routeCursor.LastHeadingDegrees;
+
+                // Снимок маршрута отправляется здесь: пересчёт цели меняет и цель,
+                // и пройденную дистанцию, а RebuildRoute отправляет снимок только
+                // тогда, когда сам его запросил. Без этого панель продолжала бы
+                // показывать прежнюю цель, из-за которой баг и возникал.
+                if (newTarget != previousTarget)
+                {
+                    AppLogger.Info(
+                        "SimulatorForm: цель маршрута пересчитана при перемещении игрока.",
+                        $"was={(previousTarget is int before ? before + 1 : 0)}; " +
+                        $"now={(_routeTargetWaypointIndex is int after ? after + 1 : 0)}; " +
+                        $"position={position.X:0.#},{position.Z:0.#}");
+                }
+
+                PushRouteSnapshot();
+            }
         }
 
         if (_runtime.State.Status == QuestRuntimeStatus.Waiting)
@@ -1471,16 +1564,47 @@ public sealed class SimulatorForm : WebViewForm
         else
         {
             _resumeRouteAfterStop = false;
+
+            // Цель выбирается ПОД ПОЗИЦИЮ ИГРОКА, а не по индексу курсора.
+            //
+            // Здесь стояло «взять цель из курсора, а без курсора — точку №1».
+            // После загрузки маршрута из файла курсор не инициализирован, поэтому
+            // целью ВСЕГДА становилась точка №1 — даже если игрок стоял между
+            // точками 6 и 7. Он и ехал к №1, то есть назад через весь маршрут.
+            //
+            // Правило то же, что при перемещении игрока: ближайшая точка, а при
+            // неоднозначности — старшая по номеру. Курсор после этого привязывается
+            // к выбранной цели, поэтому скорость берётся у НАЧАЛА её участка и
+            // игрок доезжает до точки со скоростью 0, а не замирает на месте.
+            var playerPosition = _hub.Get<PlayerState>("player").Value.Position;
+
+            var preferredTarget = _routeState.Waypoints.Count > 0
+                ? RouteMovementEngine.PreferredForwardWaypoint(
+                    _routeState.Waypoints,
+                    playerPosition)
+                : null;
+
+            if (preferredTarget is int preferredIndex && _routePlan.IsUsable)
+            {
+                var projected = RouteMovementEngine.ProjectCursorToWaypoint(
+                    _routePlan,
+                    preferredIndex,
+                    playerPosition,
+                    _routeCursor);
+
+                _routeCursor = projected.Initialized
+                    ? projected
+                    : RouteMovementEngine.ProjectForwardCursor(
+                        _routePlan,
+                        playerPosition,
+                        _routeCursor);
+            }
+
+            _routeTargetWaypointIndex =
+                GetTargetWaypointIndex(_routeCursor) ?? preferredTarget;
+
             if (!_routeCursor.Initialized)
-            {
-                _routeTargetWaypointIndex = _routeState.Waypoints.Count > 0 ? 0 : null;
                 _routeCursor = _routeCursor with { ResumeAfterStop = false };
-            }
-            else
-            {
-                _routeTargetWaypointIndex = GetTargetWaypointIndex(_routeCursor)
-                    ?? (_routeState.Waypoints.Count > 0 ? 0 : null);
-            }
         }
 
         LogRouteMovementStart(resumed);
@@ -1921,6 +2045,7 @@ public sealed class SimulatorForm : WebViewForm
         _routeMovementLastTick = null;
         _conditionsLastRealTick = null;
         _conditionsLastGameElapsed = null;
+        _conditionsLastPosition = null;
     }
 
     private void SetRouteAfterSimulationStateChange()
@@ -2072,6 +2197,7 @@ public sealed class SimulatorForm : WebViewForm
         {
             _conditionsLastRealTick = null;
             _conditionsLastGameElapsed = null;
+            _conditionsLastPosition = null;
             return;
         }
 
@@ -2082,6 +2208,7 @@ public sealed class SimulatorForm : WebViewForm
         {
             _conditionsLastRealTick = now;
             _conditionsLastGameElapsed = clock.Elapsed;
+            _conditionsLastPosition = _hub.Get<PlayerState>("player").Value.Position;
             return;
         }
 
@@ -2094,7 +2221,32 @@ public sealed class SimulatorForm : WebViewForm
         if (realSeconds <= 0d && gameSeconds <= 0d)
             return;
 
-        var moving = _hub.Get<PlayerState>("player").Value.SpeedKmh > 0.001d;
+        var currentPlayer = _hub.Get<PlayerState>("player").Value;
+        var moving = currentPlayer.SpeedKmh > 0.001d;
+
+        // Усталость начисляется и за пройденную дистанцию, а не только за
+        // игровое время. Игровое время идёт 1:1 с реальным, поэтому «100% за 18
+        // часов» давало 5.6% в час — в пределах сессии незаметно, и усталость
+        // выглядела неработающей. Дистанция за тик берётся из фактического
+        // смещения игрока: так она учитывает и движение по маршруту, и любые
+        // другие источники перемещения, без второй бухгалтерии скорости.
+        var traveledMeters = 0d;
+
+        if (moving &&
+            _conditionsLastPosition is { } previousPosition &&
+            _conditionsLastGameElapsed is { } previousElapsed &&
+            clock.Elapsed != previousElapsed)
+        {
+            var dx = currentPlayer.Position.X - previousPosition.X;
+            var dz = currentPlayer.Position.Z - previousPosition.Z;
+            var distance = Math.Sqrt(dx * dx + dz * dz);
+
+            if (double.IsFinite(distance))
+                traveledMeters = Math.Max(0d, distance);
+        }
+
+        _conditionsLastPosition = currentPlayer.Position;
+
         var currentVitals = _hub.Get<PlayerVitalsState>("player-vitals").Value;
         var currentConditions = _hub.Get<PlayerConditionState>("player-conditions").Value;
 
@@ -2104,7 +2256,8 @@ public sealed class SimulatorForm : WebViewForm
             gameSeconds,
             realSeconds,
             moving,
-            sleeping: false);
+            sleeping: false,
+            traveledMeters);
 
         if (Equals(update.Vitals, currentVitals) && Equals(update.Conditions, currentConditions))
             return;
@@ -2793,6 +2946,7 @@ public sealed class SimulatorForm : WebViewForm
 
         _conditionsLastRealTick = DateTimeOffset.UtcNow;
         _conditionsLastGameElapsed = nextElapsed;
+        _conditionsLastPosition = _hub.Get<PlayerState>("player").Value.Position;
 
         PersistSession("автосохранение: сон", force: true);
         RequestSnapshot("player sleep");
@@ -3073,9 +3227,54 @@ public sealed class SimulatorForm : WebViewForm
             payload));
     }
 
-    private void DetachJournal()
+    /// <summary>
+    /// Запоминает раскрытые разделы правого сайдбара.
+    ///
+    /// Вызывается на КАЖДОЕ переключение, без задержек: щелчок по заголовку —
+    /// редкое действие, а отложенная запись могла бы не успеть до закрытия окна,
+    /// и раздел «не запомнился». Пишется только изменение: сравнение списков
+    /// избавляет от перезаписи файла на каждое открытие сайдбара.
+    /// </summary>
+    private void SetSidebarSections(JsonElement root)
     {
-        QuestLogger.Info("Journal: отделение журнала.");
+        if (!root.TryGetProperty("sections", out var sections) ||
+            sections.ValueKind != JsonValueKind.Array)
+        {
+            return;
+        }
+
+        var requested = new List<string>();
+
+        foreach (var item in sections.EnumerateArray())
+        {
+            if (item.ValueKind != JsonValueKind.String)
+                continue;
+
+            var value = item.GetString();
+            if (!string.IsNullOrWhiteSpace(value))
+                requested.Add(value);
+        }
+
+        // Повторная запись того же списка — не изменение: файл настроек не
+        // трогается, иначе каждая перерисовка сайдбара писала бы на диск.
+        if (requested.Count == _sidebarSections.Count &&
+            requested.SequenceEqual(_sidebarSections, StringComparer.Ordinal))
+        {
+            return;
+        }
+
+        _sidebarSections = requested;
+
+        var preferences = AppUiPreferencesStore.Load();
+        AppUiPreferencesStore.Save(preferences with { SidebarSections = _sidebarSections });
+
+        AppLogger.Info(
+            "SimulatorForm: раскрытые разделы сайдбара сохранены.",
+            $"sections={_sidebarSections.Count}");
+    }
+
+    private void DetachJournal()
+    {        QuestLogger.Info("Journal: отделение журнала.");
         _journalDetached = true;
         var preferences = AppUiPreferencesStore.Load();
         AppUiPreferencesStore.Save(preferences with { JournalDetached = _journalDetached });
@@ -3787,30 +3986,16 @@ public sealed class SimulatorForm : WebViewForm
                 cumulative[index - 1] + (leg?.LengthMeters ?? 0d);
         }
 
-        var currentDistance = 0d;
-
-        if (_routeStoppedWaypointIndex is int stopped &&
-            stopped >= 0 &&
-            stopped < cumulative.Length &&
-            !_routeCursor.Initialized)
-        {
-            currentDistance = cumulative[stopped];
-        }
-        else if (_routeCursor.Initialized &&
-                 _routePlan.Legs.Count > 0 &&
-                 _routeCursor.LegIndex >= 0 &&
-                 _routeCursor.LegIndex < _routePlan.Legs.Count)
-        {
-            var leg = _routePlan.Legs[_routeCursor.LegIndex];
-
-            if (leg.StartWaypointIndex >= 0 &&
-                leg.StartWaypointIndex < cumulative.Length)
-            {
-                currentDistance =
-                    cumulative[leg.StartWaypointIndex] +
-                    DistanceAlongLeg(leg, _routeCursor);
-            }
-        }
+        // Пройденная дистанция считается в Domain: первый leg — виртуальный
+        // («игрок → точка 1») и не имеет начала в массиве накопленных длин, а
+        // расчёт здесь оставлял базу нулевой ВСЕГДА, пока игрок не доедет до
+        // первой точки. Снаружи это выглядело как неработающий одометр: подпись
+        // под маркером показывала «0.0 км» всю первую часть пути.
+        var currentDistance = RouteMovementEngine.RouteDistanceMeters(
+            _routePlan,
+            _routeCursor,
+            _routeStoppedWaypointIndex,
+            cumulative);
 
         var clock = _hub.Get<WorldClockState>("sim-time").Value;
         var speedScale = Math.Max(0d, _runtime.SimulationSpeed);

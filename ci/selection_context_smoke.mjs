@@ -155,6 +155,16 @@ try {
     });
   });
 
+  // Пересборка боковой панели намеренно отложенная (throttling: 400 мс во время
+  // симуляции, 50 мс без неё) — это часть оптимизации карты. Читать текст сразу
+  // после события нельзя: проверка измеряла бы не обработку timestamp, а гонку
+  // с таймером. Ждём появления ожидаемого текста.
+  await page.waitForFunction(
+    () => document.getElementById("side").innerText.includes("время неизвестно"),
+    null,
+    { timeout: 2000 }
+  ).catch(() => { /* отсутствие текста поймает проверка ниже */ });
+
   const eventText = await page.locator("#side").innerText();
   check(
     eventText.includes("время неизвестно"),

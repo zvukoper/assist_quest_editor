@@ -1,6 +1,5 @@
 (() => {
   const map = document.getElementById("mapCanvas");
-  const staticMap = document.getElementById("mapStaticCanvas");
   const side = document.getElementById("side");
   const hud = document.getElementById("hud");
   const runtimeSide = document.getElementById("runtimeSide");
@@ -58,14 +57,13 @@
   let roadLongSegments = [];
   let roadSegmentStamps = new Uint32Array(0);
   let roadDrawStamp = 0;
-  let roadRevision = 0;
   let mapPointSpatialIndex = new Map();
   let mapPointSpatialSource = null;
   let questPointLookup = new Map();
   let questLayerCache = [];
-  let staticMapState = null;
-  let cachedMapWidth = 1;
-  let cachedMapHeight = 1;
+  // 0 = «ещё не измерено»: до первого замера размеры берутся из DOM.
+  let cachedMapWidth = 0;
+  let cachedMapHeight = 0;
   let mapRenderScheduled = false;
   let sidebarRenderScheduled = false;
   let sidebarRenderTimer = 0;
@@ -99,8 +97,34 @@
   let lastAppliedMapViewRestoreToken = null;
   let eventHistory = [];
   let journalHistory = [];
-  let persistedOpenSections = null;
-  const SIDEBAR_OPEN_STORAGE_KEY = "aqe.simulator.rightSidebar.openSections";
+  // Раскрытые разделы сайдбара приходят СНИМКОМ от Host и хранятся в
+  // пользовательских настройках (ui-settings.json), а не в localStorage.
+  // localStorage живёт в профиле WebView2, а профиль меняется вместе с
+  // отпечатком сборки: после обновления версии разделы оказывались закрытыми.
+  let sidebarSections = null;
+  let lastAppliedSidebarSectionsKey = "";
+  // Идёт ли прямо сейчас нажатие кнопки мыши в сайдбаре. Пока true, его разметка
+  // не пересобирается (см. renderSide).
+  let sidebarPointerDown = false;
+  // Подпись содержимого сайдбара: по ней перерисовка понимает, что менять нечего.
+  let lastSidebarSignature = "";
+  // Последние значения бейджей HUD, зависящих от АВТОРИТЕТНЫХ данных, а не от
+  // текущего момента. По ним видно, изменилось ли содержимое: снимок приходит
+  // 4 раза в секунду, а время в шапке идёт своим тикером, поэтому без кэша HUD
+  // пересобирался бы на каждом пакете — и вместе с ним мигали его бейджи.
+  let lastHudSignature = "";
+
+  function hudSignature() {
+    return [
+      simulationRunning ? 1 : 0,
+      simulationPaused ? 1 : 0,
+      simulationSpeed,
+      routeStoppedBadgeText(),
+      daylight ? [daylight.gameDateLabel, daylight.gameTimeLabel, daylight.isDay ? 1 : 0] : null,
+      route?.stoppedWaypointIndex ?? null,
+      locationVisualisation ? 1 : 0
+    ].join("|");
+  }
   let runtimeTargetKey = "";
   let dragPlayerPosition = null;
   let journalDetached = false;
@@ -153,8 +177,6 @@
   let draggingRouteWaypointId = null;
   let dragRouteWaypointPosition = null;
   let lastPlayerSnapshotAt = 0;
-  let routeAnimationFrame = 0;
-  let lastRouteAnimationPaintAt = 0;
 
   // Акцентный оранжевый приложения. Квестовая графика и подсветка выделения
   // обязаны совпадать с цветом в C#-окне кампаний, поэтому значение задано
@@ -297,11 +319,34 @@
   ];
 
   function updateMapSizeCache() {
-    cachedMapWidth = map.clientWidth || 1;
-    cachedMapHeight = map.clientHeight || 1;
+    // clientWidth/Height равны нулю, пока элемент вне layout (скрытая вкладка,
+    // первый кадр до раскладки). Кэшировать ноль нельзя: отсечение по экрану
+    // получило бы область 1x1 и выбросило бы всю геометрию. Резерв — границы
+    // элемента.
+    let width = map.clientWidth;
+    let height = map.clientHeight;
+
+    if (!width || !height) {
+      const rect = typeof map.getBoundingClientRect === "function"
+        ? map.getBoundingClientRect()
+        : null;
+      if (rect && rect.width && rect.height) {
+        width = rect.width;
+        height = rect.height;
+      }
+    }
+
+    cachedMapWidth = width || 1;
+    cachedMapHeight = height || 1;
   }
 
   function visibleSize() {
+    // Кэш заполняется только после первого измерения. До него размеры берутся
+    // из DOM напрямую: иначе вычисления (fitWorld, worldToScreen) получили бы
+    // 1x1 и вписали карту как в точку.
+    if (!cachedMapWidth || !cachedMapHeight)
+      updateMapSizeCache();
+
     return { width: cachedMapWidth, height: cachedMapHeight };
   }
 
@@ -424,45 +469,12 @@
     });
   }
 
-  function drawStaticMap(dpr, width, height) {
-    if (!staticMap) return;
-    const targetWidth = Math.max(1, Math.round(width * dpr));
-    const targetHeight = Math.max(1, Math.round(height * dpr));
-    if (staticMap.width !== targetWidth || staticMap.height !== targetHeight) {
-      staticMap.width = targetWidth;
-      staticMap.height = targetHeight;
-      staticMapState = null;
-    }
-
-    const nextState = {
-      cx: camera.cx, cz: camera.cz, mpp: camera.mpp,
-      roadsFilter, width, height, dpr, roadRevision
-    };
-
-    if (staticMapState &&
-        staticMapState.cx === nextState.cx &&
-        staticMapState.cz === nextState.cz &&
-        staticMapState.mpp === nextState.mpp &&
-        staticMapState.roadsFilter === nextState.roadsFilter &&
-        staticMapState.width === nextState.width &&
-        staticMapState.height === nextState.height &&
-        staticMapState.dpr === nextState.dpr &&
-        staticMapState.roadRevision === nextState.roadRevision) {
-      return;
-    }
-
-    const staticCtx = staticMap.getContext("2d");
-    staticCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    staticCtx.clearRect(0, 0, width, height);
-    staticCtx.fillStyle = "#0d1014";
-    staticCtx.fillRect(0, 0, width, height);
-    drawGrid(staticCtx, width, height);
-    drawRoads(staticCtx, width, height);
-    staticMapState = nextState;
-  }
-
   function drawMap() {
     if (!snapshot) return;
+    // Замер производительности: выключен по умолчанию, стоит проверки флага.
+    const perf = window.AssistPerf;
+    const frameAt = perf?.start();
+    perf?.frame();
     updateMapSizeCache();
 
     const dpr = window.devicePixelRatio || 1;
@@ -476,17 +488,22 @@
       map.height = targetHeight;
     }
 
-    if (staticMap) {
-      drawStaticMap(dpr, width, height);
-    }
-
     const ctx = map.getContext("2d");
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.clearRect(0, 0, width, height);
+    ctx.fillStyle = "#0d1014";
+    ctx.fillRect(0, 0, width, height);
+    // Фон, сетка и дороги рисуются заново на каждом кадре, но С ОТсечением:
+    // spatial-индекс дорог выдаёт только отрезки видимых ячеек, поэтому
+    // перерисовка дешёвая и без отдельного кэш-канваса.
+    let sectionAt = perf?.start();
+    drawGrid(ctx, width, height);
+    drawRoads(ctx, width, height);
+    perf?.end("Сетка и дороги", sectionAt);
 
-    // Сетка и дороги живут в статическом canvas и не перерисовываются
-    // на каждом runtime-кадре.
+    sectionAt = perf?.start();
     drawRouteLines(ctx, width, height);
+    perf?.end("Линии маршрута", sectionAt);
 
     const points = snapshot.world?.points || [];
     const showAllLabels = camera.mpp < 24;
@@ -498,7 +515,9 @@
     //     ориентирами, иначе карта превратилась бы в пустое поле);
     //   «города» — отдельно гасит города, не трогая СДО.
     // Скрытая точка не попадает ни в отрисовку, ни в зоны попадания.
+    sectionAt = perf?.start();
     const drawnPoints = getVisibleWorldPoints(points, width, height);
+    perf?.end("Отбор видимых точек", sectionAt);
     visiblePoints = [];
 
     // Порядок слоёв задаётся требованием «вся квестовая графика — самый верхний
@@ -522,10 +541,12 @@
       ctx.globalAlpha = 0.5;
     }
 
+    sectionAt = perf?.start();
     for (const point of drawnPoints) {
       drawWorldPoint(ctx, point, width, height, occupied, showAllLabels, labelLimit);
       visiblePoints.push(point);
     }
+    perf?.end("Точки мира", sectionAt);
 
     if (locationVisualisation) {
       ctx.restore();
@@ -540,13 +561,17 @@
     // Квестовая графика не зависит от галочек видимости точек: «только квесты»
     // должна ПОКАЗЫВАТЬ квесты, а не прятать их вместе с их СДО. Квест,
     // привязанный к СДО, остаётся на карте — его ромб и помечают место.
+    sectionAt = perf?.start();
     for (const entry of inactiveQuests) drawQuestMarker(ctx, entry, false);
     for (const entry of activeQuests) drawQuestMarker(ctx, entry, true);
+    perf?.end("Квесты", sectionAt);
 
     // Динамические события — отдельный runtime-слой. Они не превращаются в
     // Quest marker и не меняют статический WorldPoint catalogue: экземпляр
     // содержит собственную resolved WorldPoint.
+    sectionAt = perf?.start();
     drawDynamicEventMarkers(ctx, width, height);
+    perf?.end("Динамические события", sectionAt);
 
     // Отобранные точки рисуются поверх карты и квестов, но под игроком:
     // положение игрока остаётся главным ориентиром даже в этом режиме.
@@ -558,12 +583,14 @@
 
     // Конус обзора идёт до игрока и путевых точек: игрок остаётся самым верхним
     // ориентиром, а сам конус не закрывает маркеры.
+    sectionAt = perf?.start();
     drawRouteFov(ctx, playerForDraw);
 
     drawDistanceRings(ctx, width, height, playerForDraw?.position);
     drawRuntimeTarget(ctx, playerForDraw?.position);
     drawRouteWaypoints(ctx, width, height);
     drawPlayer(ctx, playerForDraw);
+    perf?.end("Игрок, цели и маршрут", sectionAt);
 
     const visualInfo = runtimeTargetInfo();
     const targetScreen = visualInfo.point
@@ -620,6 +647,7 @@
     // дублировала правую панель. Плотность мира читается по самим точкам.
     drawScaleBar(ctx, width, height);
     drawHud();
+    perf?.end("drawMap целиком", frameAt);
   }
 
   /**
@@ -823,14 +851,6 @@
     ctx.beginPath();
     ctx.arc(q.x, q.y, radius, 0, Math.PI * 2);
     ctx.fillStyle = fill;
-    ctx.shadowColor = selected
-      ? "rgba(250,176,3,.95)"
-      : hovered
-        ? "rgba(255,255,255,.9)"
-        : "rgba(0,0,0,.78)";
-    ctx.shadowBlur = selected ? 14 : (hovered ? 10 : 5);
-    ctx.shadowOffsetX = 0;
-    ctx.shadowOffsetY = 1.5;
     ctx.fill();
 
     if (selected) {
@@ -838,16 +858,12 @@
       ctx.arc(q.x, q.y, radius + 5, 0, Math.PI * 2);
       ctx.lineWidth = 4.5;
       ctx.strokeStyle = ACCENT_COLOR;
-      ctx.shadowColor = "rgba(250,176,3,.9)";
-      ctx.shadowBlur = 16;
       ctx.stroke();
     } else if (hovered) {
       ctx.beginPath();
       ctx.arc(q.x, q.y, radius + 3.5, 0, Math.PI * 2);
       ctx.lineWidth = isCity ? 2 : 2.5;
       ctx.strokeStyle = "#ffffff";
-      ctx.shadowColor = "rgba(255,255,255,.75)";
-      ctx.shadowBlur = 9;
       ctx.stroke();
     }
     ctx.restore();
@@ -921,16 +937,7 @@
     ctx.lineTo(q.x - pulse, q.y);
     ctx.closePath();
     ctx.fillStyle = active ? ACCENT_COLOR : INACTIVE_POINT_COLOR;
-
-    // Тень точки квеста: акцентная оранжевая у активного, серая у неактивного.
-    ctx.shadowColor = active ? withAlpha(ACCENT_COLOR, .85) : "rgba(90,96,106,.6)";
-    ctx.shadowBlur = selected ? 16 : (active ? 10 : 5);
-    ctx.shadowOffsetX = 0;
-    ctx.shadowOffsetY = 2.5;
     ctx.fill();
-    ctx.shadowColor = "transparent";
-    ctx.shadowBlur = 0;
-    ctx.shadowOffsetY = 0;
 
     ctx.lineWidth = 2.5;
     ctx.strokeStyle = "rgba(0,0,0,.95)";
@@ -983,19 +990,10 @@
     const x = Math.max(6, Math.min(size.width - boxWidth - 6, centerX - boxWidth / 2));
     const y = Math.max(6, Math.min(size.height - boxHeight - 6, topY));
 
-    // Тень удвоена относительно точки квеста.
-    ctx.shadowColor = active ? "rgba(0,0,0,.94)" : "rgba(0,0,0,.85)";
-    ctx.shadowBlur = 12;
-    ctx.shadowOffsetX = 0;
-    ctx.shadowOffsetY = 5;
-
     ctx.beginPath();
     ctx.roundRect(x, y, boxWidth, boxHeight, 5);
     ctx.fillStyle = active ? ACTIVE_PLATE_FILL : INACTIVE_PLATE_FILL;
     ctx.fill();
-    ctx.shadowColor = "transparent";
-    ctx.shadowBlur = 0;
-    ctx.shadowOffsetY = 0;
     // Рамка плашки: подсветка курсора -> выделение -> обычное состояние.
     ctx.lineWidth = isHoveredQuest(entry) ? 2.5 : selectedStrokeWidth(entry);
     ctx.strokeStyle = isSelectedQuest(entry)
@@ -1283,8 +1281,6 @@
     roadSegments = segments;
     roadDebugNodes = Array.isArray(message.debugNodes) ? message.debugNodes : [];
     rebuildRoadSpatialIndex();
-    roadRevision++;
-    staticMapState = null;
     window.assistWebLog?.("INFO", "Дорожная геометрия получена.", {
       segments: roadSegments.length / 4,
       graphNodes: roadDebugNodes.length / 2
@@ -1498,9 +1494,6 @@
       ctx.save();
       ctx.lineWidth = 8;
       ctx.strokeStyle = "#ffffff";
-      ctx.shadowColor = "rgba(0,0,0,.72)";
-      ctx.shadowBlur = 5;
-      ctx.shadowOffsetY = 2;
       ctx.stroke();
       ctx.restore();
 
@@ -1558,9 +1551,15 @@
     };
   }
 
-  function drawRouteText(ctx, text, x, y, align = "center", color = "#ffffff", alpha = 1) {
+  /**
+   * Текст над элементом маршрута.
+   *
+   * weight — вес шрифта строкой (например "700"): подпись «Остановка» должна
+   * быть заметнее обычных значений, но уже без пульсации и тени.
+   */
+  function drawRouteText(ctx, text, x, y, align = "center", color = "#ffffff", alpha = 1, font = null) {
     ctx.save();
-    ctx.font = "400 9px Open Sans, Arial, sans-serif";
+    ctx.font = font || "400 9px Open Sans, Arial, sans-serif";
     ctx.textAlign = align;
     ctx.textBaseline = "bottom";
     ctx.globalAlpha = alpha;
@@ -1618,11 +1617,7 @@
       ctx.arc(q.x, q.y, radius + 7, 0, Math.PI * 2);
       ctx.lineWidth = 2.5;
       ctx.strokeStyle = "#ffffff";
-      ctx.shadowColor = "rgba(255,255,255,.75)";
-      ctx.shadowBlur = 9;
       ctx.stroke();
-      ctx.shadowColor = "transparent";
-      ctx.shadowBlur = 0;
     }
 
     ctx.beginPath();
@@ -1667,10 +1662,9 @@
 
     // «Остановка» показывается на КАЖДОЙ точке со скоростью 0, а не только на
     // той, где игрок стоит сейчас: нулевая скорость и есть смысл этой точки, а
-    // «0 км/ч» читалось как «медленно». Точка, на которой игрок уже стоит,
-    // пульсирует тем же словом — состояние то же самое.
+    // «0 км/ч» читалось как «медленно». Жирным оранжевым без пульсации: слово
+    // само по себе заметно, а мерцание только отвлекало от карты.
     if (stopped || speed <= 0) {
-      const pulse = 0.55 + 0.45 * ((Math.sin(performance.now() / 220) + 1) / 2);
       drawRouteText(
         ctx,
         "Остановка",
@@ -1678,7 +1672,8 @@
         q.y - radius - 7,
         "center",
         "#ff9f1a",
-        pulse);
+        1,
+        "700 10px Open Sans, Arial, sans-serif");
     } else {
       drawRouteText(
         ctx,
@@ -1929,23 +1924,6 @@
 
     ctx.save();
 
-    // Тень под маркером: мягкое радиальное затемнение со смещением вниз.
-    // Размеры обычные (не удвоенные): квестовая графика читается за счёт
-    // собственного слоя, а не за счёт гигантской тени.
-    const shadowOffsetY = 4;
-    const shadowRadius = radius * 3;
-    const shadowGradient = ctx.createRadialGradient(
-      q.x, q.y + shadowOffsetY, radius * 0.3,
-      q.x, q.y + shadowOffsetY, shadowRadius
-    );
-    shadowGradient.addColorStop(0, "rgba(0,0,0,.96)");
-    shadowGradient.addColorStop(0.42, "rgba(0,0,0,.62)");
-    shadowGradient.addColorStop(1, "rgba(0,0,0,0)");
-    ctx.beginPath();
-    ctx.arc(q.x, q.y + shadowOffsetY, shadowRadius, 0, Math.PI * 2);
-    ctx.fillStyle = shadowGradient;
-    ctx.fill();
-
     // Заливка маркера.
     ctx.beginPath();
     ctx.arc(q.x, q.y, radius, 0, Math.PI * 2);
@@ -1993,11 +1971,7 @@
       ctx.arc(q.x, q.y, radius + 7, 0, Math.PI * 2);
       ctx.lineWidth = 2.5;
       ctx.strokeStyle = "#ffffff";
-      ctx.shadowColor = "rgba(255,255,255,.75)";
-      ctx.shadowBlur = 9;
       ctx.stroke();
-      ctx.shadowColor = "transparent";
-      ctx.shadowBlur = 0;
     }
 
     ctx.restore();
@@ -2057,32 +2031,182 @@
     );
   }
 
+  /**
+   * Сглаживание маркера игрока.
+   *
+   * ПРОБЛЕМА. Позиция игрока приходит сообщениями: Host шлёт live_state
+   * таймером 250 мс, то есть 4 раза в секунду. Между сообщениями маркер не
+   * менялся, а на каждом новом пакете прыгал на 20–60 метров пути — со стороны
+   * это выглядело как движение рывками, хотя FPS страницы не при чём.
+   *
+   * РЕШЕНИЕ — то же, что в миникарте ETS2 Assist (data/js/ar_hud.js, блок
+   * SMOOTH): СНАЧАЛА экстраполируем цель по скорости и курсу до текущего
+   * момента, ЗАТЕМ экспоненциально сглаживаем к ней КАЖДЫЙ КАДР.
+   *   marker = marker + (target − marker) * (1 − exp(−dt / tau))
+   * Коэффициент считается через dt, а не «на кадр»: при 60 и 144 Гц
+   * сглаживание одинаково по времени.
+   *
+   * Телепорт (ручное перемещение, загрузка сохранения) сглаживать нельзя —
+   * маркер «доезжал» бы через полкарты, поэтому скачок больше
+   * snapDistanceMeters принимается как есть.
+   */
+  const MARKER_SMOOTH = {
+    // Отставание картинки: 35 мс при рывке в 250 мс — незаметно.
+    positionTauSeconds: 0.035,
+    // Больше этого скачка — телепорт, а не движение.
+    snapDistanceMeters: 25,
+    // Предел экстраполяции: пакет приходит раз в 250 мс, поэтому окно чуть
+    // больше этого интервала — тогда маркер едет ровно весь промежуток между
+    // пакетами, а не «доходит и ждёт». Если пакеты прекратятся совсем, вперёд
+    // улететь не даст: окно ограничено, а остановка симуляции гасит цикл.
+    maxExtrapolationSeconds: 0.3
+  };
+
+  const markerSmooth = {
+    valid: false,
+    x: 0,
+    z: 0,
+    lastAt: 0
+  };
+
+  let markerAnimationFrame = 0;
+
+  function resetMarkerSmoothing() {
+    markerSmooth.valid = false;
+    markerSmooth.lastAt = 0;
+  }
+
+  /** Нужен ли покадровый цикл: только при реально идущем движении. */
+  function markerAnimationNeeded() {
+    return !!snapshot &&
+      simulationRunning &&
+      !simulationPaused &&
+      (Number(snapshot.player?.speedKmh) || 0) > 0.001;
+  }
+
+  /**
+   * Сглаженная позиция игрока на момент вызова.
+   *
+   * Возвращает null, если сглаживание неприменимо (нет снимка, симуляция
+   * остановлена) — тогда вызывающий рисует авторитетную позицию как есть.
+   */
+  function smoothedMarkerPosition(nowMs) {
+    const player = snapshot?.player;
+
+    if (!player?.position)
+      return null;
+
+    if (!markerAnimationNeeded()) {
+      resetMarkerSmoothing();
+      return null;
+    }
+
+    const x = Number(player.position.x);
+    const z = Number(player.position.z);
+
+    if (!Number.isFinite(x) || !Number.isFinite(z))
+      return null;
+
+    if (!markerSmooth.valid) {
+      // Первый кадр движения: принимаем позицию как есть, без «доезда» от нуля.
+      markerSmooth.x = x;
+      markerSmooth.z = z;
+      markerSmooth.valid = true;
+      markerSmooth.lastAt = nowMs;
+      return { x: markerSmooth.x, z: markerSmooth.z };
+    }
+
+    let dt = (nowMs - markerSmooth.lastAt) / 1000;
+
+    if (!Number.isFinite(dt) || dt <= 0) dt = 1 / 60;
+
+    // Ограничение dt: после фоновой вкладки не «догоняем» рывком.
+    if (dt > 0.25) dt = 0.25;
+
+    markerSmooth.lastAt = nowMs;
+
+    const jump = Math.hypot(x - markerSmooth.x, z - markerSmooth.z);
+
+    if (jump > MARKER_SMOOTH.snapDistanceMeters) {
+      markerSmooth.x = x;
+      markerSmooth.z = z;
+      return { x: markerSmooth.x, z: markerSmooth.z };
+    }
+
+    // Экстраполяция цели по скорости и курсу: возраст данных — время с
+    // последнего авторитетного пакета.
+    const age = Math.min(
+      Math.max(0, (nowMs - lastPlayerSnapshotAt) / 1000),
+      MARKER_SMOOTH.maxExtrapolationSeconds);
+
+    const speedKmh = Math.max(0, Number(player.speedKmh) || 0);
+    const heading = Number(player.heading || 0) * Math.PI / 180;
+    const ahead = speedKmh / 3.6 * age;
+
+    const targetX = x + Math.cos(heading) * ahead;
+    const targetZ = z + Math.sin(heading) * ahead;
+
+    const k = 1 - Math.exp(-dt / MARKER_SMOOTH.positionTauSeconds);
+
+    markerSmooth.x += (targetX - markerSmooth.x) * k;
+    markerSmooth.z += (targetZ - markerSmooth.z) * k;
+
+    return { x: markerSmooth.x, z: markerSmooth.z };
+  }
+
+  function markerAnimationStep() {
+    markerAnimationFrame = 0;
+
+    if (!markerAnimationNeeded())
+      return;
+
+    drawMap();
+    markerAnimationFrame = window.requestAnimationFrame(markerAnimationStep);
+  }
+
+  /**
+   * Включает или выключает покадровую перерисовку маркера.
+   *
+   * Цикл живёт ТОЛЬКО во время движения: постоянный rAF держал бы карту
+   * перерисованной на каждом кадре даже в простое, а это лишний расход
+   * (drawMap — около 0.6–0.9 мс).
+   */
+  function syncMarkerAnimation() {
+    if (markerAnimationNeeded()) {
+      if (!markerAnimationFrame) {
+        markerSmooth.lastAt = performance.now();
+        markerAnimationFrame = window.requestAnimationFrame(markerAnimationStep);
+      }
+      return;
+    }
+
+    if (!markerAnimationFrame)
+      return;
+
+    window.cancelAnimationFrame(markerAnimationFrame);
+    markerAnimationFrame = 0;
+    resetMarkerSmoothing();
+    // Возврат к авторитетной позиции: последний сглаженный кадр остался бы на
+    // экране, пока не придёт следующее сообщение.
+    drawMap();
+  }
+
   function animatedPlayerForDraw() {
     if (!snapshot?.player?.position)
       return snapshot?.player || null;
 
     const player = snapshot.player;
+    const smoothed = smoothedMarkerPosition(performance.now());
 
-    if (!simulationRunning || simulationPaused || !lastPlayerSnapshotAt)
+    if (!smoothed)
       return player;
-
-    const elapsedSeconds = Math.max(
-      0,
-      Math.min(0.35, (performance.now() - lastPlayerSnapshotAt) / 1000));
-
-    const speedKmh = Math.max(0, Number(player.speedKmh) || 0);
-    if (speedKmh <= 0.001 || elapsedSeconds <= 0)
-      return player;
-
-    const heading = Number(player.heading || 0) * Math.PI / 180;
-    const distance = speedKmh / 3.6 * elapsedSeconds;
 
     return {
       ...player,
       position: {
         ...player.position,
-        x: player.position.x + Math.cos(heading) * distance,
-        z: player.position.z + Math.sin(heading) * distance
+        x: smoothed.x,
+        z: smoothed.z
       }
     };
   }
@@ -2125,32 +2249,6 @@
       return hours + ":" + String(minutes).padStart(2, "0") + ":" + String(sec).padStart(2, "0");
 
     return minutes + ":" + String(sec).padStart(2, "0");
-  }
-
-  function ensureRouteAnimation() {
-    const stoppedRoute = Number.isInteger(route?.stoppedWaypointIndex);
-    if (routeAnimationFrame || !simulationRunning ||
-        (!route?.enabled && !stoppedRoute))
-      return;
-
-    routeAnimationFrame = requestAnimationFrame(paintRouteAnimation);
-  }
-
-  function paintRouteAnimation(timestamp) {
-    routeAnimationFrame = 0;
-
-    const stoppedRoute = Number.isInteger(route?.stoppedWaypointIndex);
-    if ((!route?.enabled && !stoppedRoute) || !simulationRunning || !snapshot)
-      return;
-
-    if (timestamp - lastRouteAnimationPaintAt < 33) {
-      ensureRouteAnimation();
-      return;
-    }
-
-    lastRouteAnimationPaintAt = timestamp;
-    drawMap();
-    ensureRouteAnimation();
   }
 
   function hitPlayer(px, py) {
@@ -2203,11 +2301,7 @@
     ctx.lineTo(q.x - 8, q.y);
     ctx.closePath();
     ctx.fillStyle = ACCENT_COLOR;
-    ctx.shadowColor = "rgba(250,176,3,.95)";
-    ctx.shadowBlur = selected ? 14 : 8;
     ctx.fill();
-    ctx.shadowColor = "transparent";
-    ctx.shadowBlur = 0;
     ctx.lineWidth = selected ? 4 : 2;
     ctx.strokeStyle = "#ffffff";
     ctx.stroke();
@@ -2286,11 +2380,7 @@
       ctx.beginPath();
       ctx.arc(q.x, q.y, 9, 0, Math.PI * 2);
       ctx.fillStyle = ACCENT_COLOR;
-      ctx.shadowColor = "rgba(250,176,3,.9)";
-      ctx.shadowBlur = 12;
       ctx.fill();
-      ctx.shadowColor = "transparent";
-      ctx.shadowBlur = 0;
       ctx.lineWidth = 2;
       ctx.strokeStyle = "#ffffff";
       ctx.stroke();
@@ -2645,9 +2735,8 @@
     }
 
     ctx.save();
-    const pulse = 12 + Math.sin(Date.now() / 180) * 2;
     ctx.beginPath();
-    ctx.arc(target.x, target.y, pulse + 5, 0, Math.PI * 2);
+    ctx.arc(target.x, target.y, 17, 0, Math.PI * 2);
     ctx.lineWidth = 2;
     ctx.strokeStyle = "rgba(250,176,3,.48)";
     ctx.stroke();
@@ -2962,8 +3051,14 @@
     uiRenderScheduled = true;
     window.requestAnimationFrame(() => {
       uiRenderScheduled = false;
+      const at = window.AssistPerf?.start();
       drawMap();
       renderGameplayPanels();
+      window.AssistPerf?.end("Кадр UI (карта + панели)", at);
+      // Кадр отрисован; дальше решаем, нужен ли покадровый цикл маркера. Здесь,
+      // а не в подписчике снимка: снимок и live_state приводят сюда оба, а
+      // состояние движения (speedKmh) известно только после применения данных.
+      syncMarkerAnimation();
     });
   }
 
@@ -3579,8 +3674,14 @@
    * надпись. Скорость 0 при паузе симуляции — другое состояние, у него своя
    * плашка спидометра, поэтому проверяется именно остановка на точке.
    */
+  function routeStoppedBadgeText() {
+    return Number.isInteger(route?.stoppedWaypointIndex) && route.stoppedWaypointIndex >= 0
+      ? String(route.stoppedWaypointIndex)
+      : "";
+  }
+
   function routeStoppedBadge() {
-    if (!Number.isInteger(route?.stoppedWaypointIndex) || route.stoppedWaypointIndex < 0)
+    if (!routeStoppedBadgeText())
       return "";
 
     return "<span class='badge stopPulse' id='routeStoppedBadge' " +
@@ -3596,6 +3697,27 @@
     const cityCount = points.filter(point => point.isCity).length;
     const questCount = questCatalog.reduce((sum, campaign) => sum + (campaign.quests?.length || 0), 0);
     renderSimulationTransport();
+
+    // HUD пересобирается ТОЛЬКО при фактическом изменении содержимого.
+    //
+    // Снимок приходит четыре раза в секунду, а игровое время в шапке идёт своим
+    // тикером, который меняет один текстовый узел. Если пересобирать разметку на
+    // каждом пакете, то рядом со «Остановкой» мигал и весь ряд бейджей: у
+    // элемента не было бы шанса доиграть анимацию. Замеры времени остаются
+    // живыми за счёт того, что тикер правит текст напрямую.
+    const signature = hudSignature();
+
+    if (signature === lastHudSignature) {
+      // Содержимое не изменилось, но обработчик выхода из режима мог быть
+      // потерян вместе с разметкой — он навешивается ниже и не нужен, если
+      // разметка та же.
+      renderDaylight();
+      renderRuntimeSidebar();
+      renderRouteSpeedometer();
+      return;
+    }
+
+    lastHudSignature = signature;
 
     // Ускоренное игровое время: часы уходят в оранжевый и рядом появляется
     // кратность. При ×1 ничего не показывается — иначе оранжевый был бы
@@ -3758,35 +3880,70 @@
       "</svg>";
   }
 
-    function loadPersistedOpenSections() {
-    if (persistedOpenSections !== null) return persistedOpenSections;
-    try {
-      const raw = localStorage.getItem(SIDEBAR_OPEN_STORAGE_KEY);
-      const parsed = raw ? JSON.parse(raw) : null;
-      persistedOpenSections = Array.isArray(parsed)
-        ? new Set(parsed.map(String))
-        : null;
-    } catch {
-      persistedOpenSections = null;
-    }
-    return persistedOpenSections;
-  }
-
   function saveOpenSections() {
+    // Список читается с ЖИВОГО DOM, а не из внутреннего набора: только так он
+    // описывает то, что пользователь видит сейчас.
     const open = [...side.querySelectorAll(".acc.open")]
-      .map(section => section.dataset.section);
-    persistedOpenSections = new Set(open);
-    try {
-      localStorage.setItem(SIDEBAR_OPEN_STORAGE_KEY, JSON.stringify(open));
-    } catch {}
+      .map(section => section.dataset.section)
+      .filter(Boolean);
+
+    sidebarSections = open.slice();
+    // Ключ обновляется сразу: иначе ближайший снимок со старым списком
+    // перерисовал бы сайдбар и вернул только что закрытый раздел.
+    lastAppliedSidebarSectionsKey = open.join("|");
+
+    send({ action: "set_sidebar_sections", sections: open });
   }
 
   function renderSide() {
+    const perfAt = window.AssistPerf?.start();
+
+    // Во время нажатия кнопки мыши разметка НЕ пересобирается.
+    //
+    // Снимок приходит 4 раза в секунду, и каждый приход заменял все узлы
+    // сайдбара. Если это случалось между нажатием и отпусканием, click не
+    // срабатывал: под курсором оказывался уже другой узел. Снаружи это ровно и
+    // выглядело как «кнопка нажимается не с первого раза» и «мигает под
+    // курсором». Данные не теряются: следующая перерисовка придёт через 250 мс.
+    // Фокус сохраняется по id: пересборка иначе сбрасывала бы его на body,
+    // и правка поля прерывалась на середине ввода.
+    const active = document.activeElement;
+    const activeId = active && side.contains(active) ? active.id : "";
+
     const previouslyOpen = new Set(
       [...side.querySelectorAll(".acc.open")].map(section => section.dataset.section));
-    const stored = loadPersistedOpenSections();
-    const openSections = stored ?? previouslyOpen;
-    const hasExplicitState = stored !== null || previouslyOpen.size > 0;
+
+    const hasExplicitState = sidebarSections !== null || previouslyOpen.size > 0;
+    const openSections = new Set(
+      sidebarSections !== null ? sidebarSections : previouslyOpen);
+
+    // Содержимое собирается ЗАРАНЕЕ, в строку, и сравнивается с прошлым.
+    //
+    // Сайдбар до этого пересобирался на каждое обновление данных, то есть четыре
+    // раза в секунду, даже когда ни одно поле не менялось. Замена узлов сбрасывает
+    // :hover у элемента под курсором — снаружи это ровно «кнопка мигает и
+    // нажимается не с первого раза», а у пульсирующего бейджа «Остановка» не
+    // оставалось шанса доиграть анимацию: её перезапускал новый узел.
+    //
+    // Здесь же решается и вторая половина проблемы: пока курсор держит кнопку
+    // нажатой, DOM не трогается вообще, иначе click между pointerdown и
+    // pointerup не срабатывает — под курсором оказывается уже другой узел.
+    const sectionsOpenKey = [...openSections].sort().join(",");
+    const bodyMarkup = sections.map(entry => {
+      const id = entry[0];
+      return "<div class='accBody'>" + sectionBody(id) + "</div>";
+    }).join("\u0000");
+    const sidebarSignature = sectionsOpenKey + "\u0001" + bodyMarkup;
+
+    if (sidebarSignature === lastSidebarSignature) {
+      window.AssistPerf?.end("Пересборка sidebar (без изменений)", perfAt);
+      return;
+    }
+
+    if (sidebarPointerDown) {
+      window.AssistPerf?.end("Пересборка sidebar (отложена)", perfAt);
+      return;
+    }
 
     side.innerHTML = sections.map((entry, index) => {
       const id = entry[0];
@@ -3798,10 +3955,26 @@
       "</section>";
     }).join("");
 
+    if (activeId) {
+      const restored = side.querySelector("#" + CSS.escape(activeId));
+      restored?.focus({ preventScroll: true });
+    }
+
     side.querySelectorAll(".accHead").forEach(head => {
       head.addEventListener("click", () => {
         head.parentElement.classList.toggle("open");
         saveOpenSections();
+      });
+    });
+
+    // Нажатие кнопки мыши в сайдбаре замораживает его пересборку до отпускания:
+    // иначе подмена узлов между pointerdown и pointerup съедала бы click.
+    side.querySelectorAll("button").forEach(button => {
+      button.addEventListener("pointerdown", () => {
+        sidebarPointerDown = true;
+        // Страховка: если pointerup потеряется (перетаскивание за пределы окна,
+        // потеря захвата), пересборка не должна остаться отключённой навсегда.
+        window.setTimeout(() => { sidebarPointerDown = false; }, 1000);
       });
     });
 
@@ -3811,6 +3984,12 @@
       const entries = journalHistory.length ? journalHistory : eventHistory;
       eventList.innerHTML = entries.map(entry => renderJournalEntry(entry)).join("");
     }
+
+    // Подпись содержимого: по ней следующая перерисовка понимает, что менять
+    // нечего, и НЕ трогает DOM.
+    lastSidebarSignature = sidebarSignature;
+
+    window.AssistPerf?.end("Пересборка sidebar", perfAt);
   }
 
   function sectionBody(id) {
@@ -3841,10 +4020,6 @@
       const selectedRoute = (route.waypoints || []).find(item =>
         String(item.id) === String(route.selectedWaypointId));
       const routeSpeed = selectedRoute ? selectedRoute.speedKmh : route.defaultSpeedKmh;
-      const plannedStop = !route.enabled &&
-        Number.isInteger(route.stoppedWaypointIndex) &&
-        route.stoppedWaypointIndex >= 0 &&
-        route.stoppedWaypointIndex < route.waypoints.length - 1;
       const simulationLocked = simulationRunning || simulationPaused;
       const canEdit = route.editing && !simulationLocked;
       const editTitle = simulationLocked
@@ -3873,7 +4048,10 @@
         "<div class='routeControls'>",
           "<button class='routeToggleButton" +
             (route.enabled ? " active" : "") +
-            (plannedStop ? " plannedStopPulse" : "") +
+            // Остановка на точке со скоростью 0: кнопка пульсирует, а не мигает.
+            // Состояние требует действия («включите движение снова»), и
+            // пульсация зовёт нажать, не превращаясь в мельтешение.
+            (routeStoppedBadgeText() ? " stopPulse" : "") +
             "' id='routeToggle' type='button' aria-pressed='" + (route.enabled ? "true" : "false") +
             "' title='Включить или выключить движение по маршруту'>Двигаться по маршруту</button>",
           "<span class='routeEditToggleWrap' data-game-tooltip='" + escapeHtml(editTitle) + "'>",
@@ -3915,7 +4093,10 @@
             ? "<div class='kv'><span>Цель</span><span>№ " + (route.currentTargetWaypointIndex + 1) + "</span></div>"
             : "",
           "<div class='kv'><span>Дистанция</span><span>" +
-            (Number(route.distanceFromFirstWaypointMeters) / 1000).toFixed(1) + " км</span></div>",
+            // Округление до 10 м: иначе подпись менялась бы на каждом пакете и
+            // пересобирала сайдбар четыре раза в секунду без пользы для игрока.
+            (Math.round(Number(route.distanceFromFirstWaypointMeters) / 10) / 100).toFixed(1) +
+            " км</span></div>",
           "<div class='kv'><span>Время</span><span>" +
             formatTravelTime(Number(route.travelTimeGameSeconds) || 0) + " / " +
             formatTravelTime(Number(route.travelTimeRealSeconds) || 0) + "</span></div>",
@@ -3932,7 +4113,9 @@
     }
 
     if (id === "statuses") {
-      const q = snapshot.questStatuses.quests[0] || {};
+      // questStatuses может прийти пустым/частичным (smoke-страницы, старый
+      // host): секция рендерится значением по умолчанию, а не роняет sidebar.
+      const q = snapshot.questStatuses?.quests?.[0] || {};
       return [
         "<div class='field'><label>Квест</label><input id='questId' value='" + escapeHtml(q.questId || "special_marinated_shashlik") + "'></div>",
         "<div class='field' style='margin-top:6px'><label>Статус</label><select id='questStatus'>" +
@@ -3945,10 +4128,13 @@
     }
 
     if (id === "states") {
-      const flags = Object.entries(snapshot.states.flags).map(([key, value]) =>
+      // Каналы состояний могут не прийти частичным payload'ом (live_state,
+      // старый host, smoke-страницы): секция обязана рендериться пустой,
+      // а не ронять весь sidebar.
+      const flags = Object.entries(snapshot.states?.flags || {}).map(([key, value]) =>
         "<div class='inline' style='margin-top:6px'><label style='flex:1;font-size:10px;color:var(--muted)'>" + escapeHtml(key) + "</label><input type='checkbox' data-flag='" + escapeHtml(key) + "' " + (value ? "checked" : "") + " style='flex:0 0 auto;width:auto'></div>"
       ).join("");
-      const variables = Object.entries(snapshot.states.variables).map(([key, value]) =>
+      const variables = Object.entries(snapshot.states?.variables || {}).map(([key, value]) =>
         "<div class='field' style='margin-top:6px'><label>" + escapeHtml(key) + "</label><input data-var='" + escapeHtml(key) + "' value='" + escapeHtml(value) + "'></div>"
       ).join("");
       return "<div class='miniLabel'>Флаги</div>" + flags +
@@ -4168,9 +4354,9 @@
         "<div class='kv'><span>Runtime</span><span>" + (runtime?.status || "Stopped") + "</span></div>",
         "<div class='kv'><span>Текущая нода</span><span>" + escapeHtml(runtime?.currentNodeId || "—") + "</span></div>",
         "<div class='kv'><span>Ожидание</span><span>" + escapeHtml(runtime?.waitingFor || "—") + "</span></div>",
-        "<div class='kv'><span>Режим</span><span>" + escapeHtml(snapshot.system.runtimeMode) + "</span></div>",
-        "<div class='kv'><span>Последний переход</span><span>" + escapeHtml(snapshot.system.lastTransition) + "</span></div>",
-        "<div class='kv'><span>Последнее событие</span><span>" + escapeHtml(snapshot.system.lastEvent || "—") + "</span></div>",
+        "<div class='kv'><span>Режим</span><span>" + escapeHtml(snapshot.system?.runtimeMode || "") + "</span></div>",
+        "<div class='kv'><span>Последний переход</span><span>" + escapeHtml(snapshot.system?.lastTransition || "") + "</span></div>",
+        "<div class='kv'><span>Последнее событие</span><span>" + escapeHtml(snapshot.system?.lastEvent || "—") + "</span></div>",
         "<div class='notice' style='margin-top:10px'>Системный канал диагностический и не является источником игровых данных.</div>"
       ].join("");
     }
@@ -4549,6 +4735,20 @@
       return;
     }
 
+    // Замер стоимости ОБРАБОТКИ сообщения от Host: при включённой симуляции
+    // снимок/живое состояние приходят несколько раз в секунду, и именно эта
+    // работа (разбор JSON уже выполнен вызывающим, но разбор полей, пересборка
+    // sidebar, планирование кадров) отнимает отзывчивость кнопок.
+    const perf = window.AssistPerf;
+    const messageAt = perf?.start();
+    try {
+      receiveMessage(message);
+    } finally {
+      perf?.end("Сообщение Host: " + String(message.type || "?"), messageAt);
+    }
+  }
+
+  function receiveMessage(message) {
     // Геометрия дорог приходит отдельным сообщением: она нужна один раз за всю
     // сессию, а снимок уходит после каждого события. 393 364 числа в каждом
     // снимке раздули бы обновления карты в ~4 раза.
@@ -4564,9 +4764,8 @@
         sendMapView();
       }
       drawMap();
-      ensureRouteAnimation();
-      // Do not rebuild the sidebar here: speed is emitted on every input event
-      // and the focused number field must remain editable without losing focus.
+      // Sidebar здесь не пересобирается: скорость приходит на каждое событие
+      // ввода, и поле с числом не должно терять фокус.
       return;
     }
 
@@ -4604,7 +4803,6 @@
         lastPlayerSnapshotAt = performance.now();
         scheduleUiRender();
         scheduleSidebarRender();
-        ensureRouteAnimation();
       }
       return;
     }
@@ -4632,8 +4830,21 @@
       route = normalizeRoute(message.route);
       questGraph = message.questGraph || questGraph;
       lastPlayerSnapshotAt = now;
-      lastRouteAnimationPaintAt = 0;
       journalDetached = !!message.journalDetached;
+
+      // Раскрытые разделы сайдбара приходят от Host (пользовательские настройки).
+      // Применяются только при ФАКТИЧЕСКОМ изменении списка: снимок приходит
+      // четыре раза в секунду, и пересборка сайдбара на каждый из них — это и
+      // есть то мигание, из-за которого кнопки не нажимались с первого раза.
+      if (Array.isArray(message.sidebarSections)) {
+        const key = message.sidebarSections.map(String).join("|");
+
+        if (key !== lastAppliedSidebarSectionsKey) {
+          lastAppliedSidebarSectionsKey = key;
+          sidebarSections = message.sidebarSections.map(String);
+        }
+      }
+
       // Режим визуализации Location едет вместе со снимком: снимок перерисовывает
       // всю карту, поэтому хранить режим только в UI значило бы гасить его на
       // каждом обновлении (они идут постоянно). Пустой набор — не режим.
@@ -4699,7 +4910,6 @@
       syncClockAnchor();
       scheduleUiRender();
       scheduleSidebarRender();
-      ensureRouteAnimation();
       return;
     }
 
@@ -5344,7 +5554,6 @@
   // Галочка дорог не влияет на кликабельность точек: дороги — только фон.
   roadsToggle?.addEventListener("change", () => {
     roadsFilter = !!roadsToggle.checked;
-    staticMapState = null;
     drawMap();
   });
 
@@ -5436,9 +5645,14 @@
 
   window.addEventListener("resize", () => {
     updateMapSizeCache();
-    staticMapState = null;
     drawMap();
   });
+
+  // Отпускание кнопки мыши снимает заморозку пересборки сайдбара. Слушается
+  // документ, а не сами кнопки: отпускание часто происходит уже ВНЕ сайдбара,
+  // если курсор чуть ушёл в сторону.
+  document.addEventListener("pointerup", () => { sidebarPointerDown = false; });
+  document.addEventListener("pointercancel", () => { sidebarPointerDown = false; });
 
   // Часы отображения стартуют один раз: интервал сам проверяет, идёт ли
   // симуляция, поэтому перезапускать его при каждом изменении не нужно.

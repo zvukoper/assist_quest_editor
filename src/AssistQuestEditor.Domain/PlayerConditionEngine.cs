@@ -18,6 +18,18 @@ public static class PlayerConditionEngine
     public const double StressCriticalPercent = 50d;
     public const double FatigueBuildHours = 18d;
     public const double FatigueRestHours = 9d;
+    /// <summary>
+    /// Дистанция, за которую усталость набирается на 100%.
+    ///
+    /// Второе слагаемое к <see cref="FatigueBuildHours"/>, а не замена: работа за
+    /// рулём утомляет и временем, и дорогой, причём по-разному при разной
+    /// скорости. Дальний рейс «600 км за 6 часов» выматывает сильнее, чем те же
+    /// 6 часов на 30 км/ч, и наоборот. Прежняя версия учитывала ТОЛЬКО время,
+    /// поэтому усталость практически не двигалась: игровое время идёт с реальной
+    /// скоростью (1:1), а 100% за 18 часов — это 5.6% за час, чего в пределах
+    /// сессии не видно (значение округляется до целого).
+    /// </summary>
+    public const double FatigueBuildKilometers = 900d;
     public const double StressPerCumulativeFatiguePerHour = 0.5d;
     public const double CumulativeFatiguePerCriticalHour = 1d;
     public const double CumulativeStressPerCriticalHour = 1d;
@@ -42,6 +54,32 @@ public static class PlayerConditionEngine
         double realSeconds,
         bool playerMoving,
         bool sleeping)
+        => Advance(
+            vitals,
+            conditions,
+            gameSeconds,
+            realSeconds,
+            playerMoving,
+            sleeping,
+            traveledMeters: 0d);
+
+    /// <summary>
+    /// То же начисление, но с учётом ПРОЙДЕННОЙ ЗА ЭТОТ ЖЕ ИНТЕРВАЛ дистанции.
+    ///
+    /// Дорога утомляет наравне со временем: усталость растёт и по часам
+    /// (<see cref="FatigueBuildHours"/>), и по километрам
+    /// (<see cref="FatigueBuildKilometers"/>). Дистанция распределяется по часовым
+    /// шагам пропорционально времени шага, поэтому результат не зависит от того,
+    /// пришёл интервал одним вызовом или был разбит на несколько.
+    /// </summary>
+    public static PlayerConditionUpdate Advance(
+        PlayerVitalsState vitals,
+        PlayerConditionState conditions,
+        double gameSeconds,
+        double realSeconds,
+        bool playerMoving,
+        bool sleeping,
+        double traveledMeters)
     {
         vitals = NormalizeVitals(vitals);
         conditions = (conditions ?? PlayerConditionState.Empty).Normalize();
@@ -55,6 +93,13 @@ public static class PlayerConditionEngine
 
         var events = new List<PlayerConditionEvent>();
         var remainingHours = game / SecondsPerGameHour;
+        var totalHours = remainingHours;
+
+        // Дистанция раскладывается по шагам пропорционально их длительности:
+        // сумма слагаемых не зависит от дробления интервала на вызовы.
+        var remainingMeters = Math.Max(
+            0d,
+            double.IsFinite(traveledMeters) ? traveledMeters : 0d);
 
         while (remainingHours > 0.0000001d)
         {
@@ -62,16 +107,23 @@ public static class PlayerConditionEngine
             remainingHours -= hours;
             var totalStressBefore = TotalStress(state);
 
+            var stepMeters = totalHours > 0d
+                ? remainingMeters * hours / totalHours
+                : 0d;
+
             if (playerMoving && !sleeping)
             {
                 var multiplier = HasEffect(state, "burnout")
                     ? BurnoutFatigueBuildMultiplier
                     : 1d;
 
+                var fatigueGain =
+                    100d / FatigueBuildHours * hours +
+                    100d / FatigueBuildKilometers * stepMeters / 1000d;
+
                 vitals = vitals with
                 {
-                    Fatigue = vitals.Fatigue +
-                              100d / FatigueBuildHours * hours * multiplier
+                    Fatigue = vitals.Fatigue + fatigueGain * multiplier
                 };
             }
             else if (!playerMoving && !sleeping)
