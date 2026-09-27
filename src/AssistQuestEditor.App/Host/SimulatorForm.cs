@@ -38,8 +38,10 @@ public sealed class SimulatorForm : WebViewForm
     private DateTimeOffset? _routeMovementLastTick;
     private double _routeLastHeading;
     private int? _routeStoppedWaypointIndex;
+    private string? _routeStoppedWaypointId;
     private bool _resumeRouteAfterStop;
     private int? _routeTargetWaypointIndex;
+    private string? _routeTargetWaypointId;
     private double _routeTravelRealSeconds;
     private double _routeTravelGameSeconds;
     private bool _routePlanNeedsRebuildFromCurrentPlayer;
@@ -952,12 +954,8 @@ public sealed class SimulatorForm : WebViewForm
             throw new InvalidOperationException(
                 "Координаты игрока нельзя менять во время движения по маршруту.");
 
-        var hadRouteProgress = _routeCursor.Initialized ||
-            _routeTargetWaypointIndex.HasValue ||
-            _routeStoppedWaypointIndex.HasValue;
         var previousTravelRealSeconds = _routeTravelRealSeconds;
         var previousTravelGameSeconds = _routeTravelGameSeconds;
-
         var old = _hub.Get<PlayerState>("player").Value;
         var position = new WorldCoordinate(
             Number(root, "x", old.Position.X),
@@ -970,84 +968,26 @@ public sealed class SimulatorForm : WebViewForm
 
         if (_routeState.Waypoints.Count > 0)
         {
-            // Цель пересчитывается ДО перестроения плана, и это принципиально.
-            //
-            // RebuildRoute отбрасывает ведущие точки до ТЕКУЩЕЙ ЦЕЛИ
-            // (ResolveRouteStartWaypoint). Пока целью оставалась прежняя — а ею
-            // была, например, точка №9, — в плане не оказывалось точек 1..8
-            // вовсе, и остановиться на №2 было физически невозможно: этой точки в
-            // плане уже не было.
-            //
-            // Поэтому цель СНИМАЕТСЯ перед перестроением: план строится целиком,
-            // от игрока до последней точки, со всеми промежуточными точками.
-            // Иначе маршрут шёл бы «поверх» них, и остановки на промежуточных
-            // точках не срабатывали бы.
-            //
-            // Новая цель выбирается В ПОЛЬЗУ ДВИЖЕНИЯ ВПЕРЁД (см.
-            // PreferredForwardWaypoint): ближайшая точка, а при неоднозначности —
-            // старшая по номеру. Иначе игрок, переставленный ровно на уже
-            // пройденную точку, «перескакивал» бы назад и начинал путь от неё.
-            var previousTarget = _routeTargetWaypointIndex;
-            var newTarget = hadRouteProgress
-                ? RouteMovementEngine.PreferredForwardWaypoint(
-                    _routeState.Waypoints,
-                    position,
-                    previousTarget)
-                : null;
-
+            // Перемещение игрока пользователем — явный пересчёт маршрута.
+            // Алгоритм отбрасывает точки, которые остались позади игрока, и
+            // перенумеровывает оставшуюся пользовательскую структуру.
+            _routeStoppedWaypointIndex = null;
+            _routeStoppedWaypointId = null;
+            _resumeRouteAfterStop = false;
             _routeTargetWaypointIndex = null;
-            RebuildRoute("player position changed");
+            _routeTargetWaypointId = null;
+
+            RebuildRoute(
+                "player position changed",
+                publishSnapshot: false,
+                trimToPlayer: true,
+                renumberTrimmed: true);
 
             _routeTravelRealSeconds = previousTravelRealSeconds;
             _routeTravelGameSeconds = previousTravelGameSeconds;
 
-            if (_routePlan.IsUsable && _routeState.Waypoints.Count > 0)
-            {
-                // Курсор привязывается ИМЕННО к выбранной цели: тогда скорость
-                // берётся у НАЧАЛА её участка (как у обычного маршрута), и игрок
-                // ДОЕЗЖАЕТ до точки со скоростью 0, а не замирает на месте из-за
-                // нулевой скорости самой цели.
-                if (newTarget is int targetIndex)
-                {
-                    _routeCursor = RouteMovementEngine.ProjectCursorToWaypoint(
-                        _routePlan,
-                        targetIndex,
-                        position,
-                        _routeCursor);
-                }
-
-                if (!_routeCursor.Initialized)
-                {
-                    // Цель не удалось привязать (бездорожье, недостижимая проекция) —
-                    // берём общий поиск ближайшего участка.
-                    _routeCursor = RouteMovementEngine.ProjectForwardCursor(
-                        _routePlan,
-                        position,
-                        _routeCursor);
-                }
-
-                _routeTargetWaypointIndex = GetTargetWaypointIndex(_routeCursor) ?? newTarget;
-                _routeStoppedWaypointIndex = null;
-                _resumeRouteAfterStop = false;
-
-                if (_routeCursor.Initialized)
-                    _routeLastHeading = _routeCursor.LastHeadingDegrees;
-
-                // Снимок маршрута отправляется здесь: пересчёт цели меняет и цель,
-                // и пройденную дистанцию, а RebuildRoute отправляет снимок только
-                // тогда, когда сам его запросил. Без этого панель продолжала бы
-                // показывать прежнюю цель, из-за которой баг и возникал.
-                if (newTarget != previousTarget)
-                {
-                    AppLogger.Info(
-                        "SimulatorForm: цель маршрута пересчитана при перемещении игрока.",
-                        $"was={(previousTarget is int before ? before + 1 : 0)}; " +
-                        $"now={(_routeTargetWaypointIndex is int after ? after + 1 : 0)}; " +
-                        $"position={position.X:0.#},{position.Z:0.#}");
-                }
-
-                PushRouteSnapshot();
-            }
+            PersistSession("автосохранение: player position changed", force: true);
+            PushRouteSnapshot();
         }
 
         if (_runtime.State.Status == QuestRuntimeStatus.Waiting)
@@ -1083,6 +1023,7 @@ public sealed class SimulatorForm : WebViewForm
 
     private sealed record RouteFileWaypoint(
         string Id,
+        int Number,
         double X,
         double Y,
         double Z,
@@ -1123,11 +1064,13 @@ public sealed class SimulatorForm : WebViewForm
         if (dialog.ShowDialog(this) != DialogResult.OK)
             return;
 
+        var normalized = _routeState.Normalize();
         var file = new RouteFile(
-            1,
-            _routeState.DefaultSpeedKmh,
-            _routeState.Waypoints.Select(waypoint => new RouteFileWaypoint(
+            2,
+            normalized.DefaultSpeedKmh,
+            normalized.Waypoints.Select((waypoint, index) => new RouteFileWaypoint(
                 waypoint.Id,
+                waypoint.EffectiveNumber(index),
                 waypoint.Position.X,
                 waypoint.Position.Y,
                 waypoint.Position.Z,
@@ -1142,7 +1085,9 @@ public sealed class SimulatorForm : WebViewForm
 
         var json = JsonSerializer.Serialize(file, RouteFileJsonOptions);
         File.WriteAllText(dialog.FileName, json, Encoding.UTF8);
-        AppLogger.Info("SimulatorForm: маршрут сохранён.", $"path={dialog.FileName}; waypoints={file.Waypoints.Count}");
+        AppLogger.Info(
+            "SimulatorForm: маршрут сохранён.",
+            $"path={dialog.FileName}; waypoints={file.Waypoints.Count}; version={file.Version}");
     }
 
     private void LoadRouteFromFileDialog()
@@ -1157,6 +1102,95 @@ public sealed class SimulatorForm : WebViewForm
 
         if (dialog.ShowDialog(this) == DialogResult.OK)
             OpenRouteFileFromAssociation(dialog.FileName);
+    }
+
+    private enum RouteFileLoadAction
+    {
+        Cancel,
+        MovePlayerToStart,
+        RecalculateToPlayer
+    }
+
+    private RouteFileLoadAction ShowRouteFileLoadDialog(string fileName)
+    {
+        using var dialog = new Form
+        {
+            Text = "Загрузка маршрута",
+            Width = 620,
+            Height = 210,
+            MinimumSize = new Size(620, 210),
+            StartPosition = FormStartPosition.CenterParent,
+            FormBorderStyle = FormBorderStyle.FixedDialog,
+            MaximizeBox = false,
+            MinimizeBox = false,
+            ShowInTaskbar = false
+        };
+
+        var root = new TableLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            ColumnCount = 1,
+            RowCount = 2,
+            Padding = new Padding(12)
+        };
+        root.RowStyles.Add(new RowStyle(SizeType.Percent, 55));
+        root.RowStyles.Add(new RowStyle(SizeType.Percent, 45));
+
+        var label = new Label
+        {
+            AutoSize = false,
+            Dock = DockStyle.Fill,
+            TextAlign = ContentAlignment.MiddleLeft,
+            Text = $"Вы загружаете маршрут "{fileName}""
+        };
+
+        var buttons = new FlowLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            FlowDirection = FlowDirection.RightToLeft,
+            WrapContents = false
+        };
+
+        var result = RouteFileLoadAction.Cancel;
+        var cancel = new Button { Text = "Отмена", AutoSize = true };
+        cancel.Click += (_, _) =>
+        {
+            result = RouteFileLoadAction.Cancel;
+            dialog.Close();
+        };
+
+        var recalculate = new Button
+        {
+            Text = "Пересчитать маршрут до игрока",
+            AutoSize = true
+        };
+        recalculate.Click += (_, _) =>
+        {
+            result = RouteFileLoadAction.RecalculateToPlayer;
+            dialog.Close();
+        };
+
+        var moveStart = new Button
+        {
+            Text = "Переместить игрока к началу маршрута",
+            AutoSize = true
+        };
+        moveStart.Click += (_, _) =>
+        {
+            result = RouteFileLoadAction.MovePlayerToStart;
+            dialog.Close();
+        };
+
+        buttons.Controls.Add(cancel);
+        buttons.Controls.Add(recalculate);
+        buttons.Controls.Add(moveStart);
+        root.Controls.Add(label, 0, 0);
+        root.Controls.Add(buttons, 0, 1);
+        dialog.Controls.Add(root);
+        dialog.CancelButton = cancel;
+
+        dialog.ShowDialog(this);
+        return result;
     }
 
     public void OpenRouteFileFromAssociation(string path)
@@ -1185,30 +1219,34 @@ public sealed class SimulatorForm : WebViewForm
         catch (Exception ex)
         {
             AppLogger.Error("SimulatorForm: маршрут не загружен.", ex, "path=" + path);
-            MessageBox.Show(this, "Не удалось прочитать маршрут: " + ex.Message,
-                "Загрузка маршрута", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            MessageBox.Show(
+                this,
+                "Не удалось прочитать маршрут: " + ex.Message,
+                "Загрузка маршрута",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Error);
             return;
         }
 
         if (file.Waypoints is null || file.Waypoints.Count == 0)
         {
-            MessageBox.Show(this, "Файл не содержит путевых точек.",
-                "Загрузка маршрута", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            MessageBox.Show(
+                this,
+                "Файл не содержит путевых точек.",
+                "Загрузка маршрута",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Warning);
             return;
         }
 
         var name = Path.GetFileName(path);
-        if (MessageBox.Show(
-                this,
-                $"Загрузить маршрут \"{name}\"?",
-                "Загрузка маршрута",
-                MessageBoxButtons.OKCancel,
-                MessageBoxIcon.Question) != DialogResult.OK)
+        var action = ShowRouteFileLoadDialog(name);
+        if (action == RouteFileLoadAction.Cancel)
             return;
 
         try
         {
-            var waypoints = file.Waypoints.Select(item => new RouteWaypoint(
+            var waypoints = file.Waypoints.Select((item, index) => new RouteWaypoint(
                 string.IsNullOrWhiteSpace(item.Id)
                     ? Guid.NewGuid().ToString("N")
                     : item.Id,
@@ -1219,7 +1257,8 @@ public sealed class SimulatorForm : WebViewForm
                         : RouteState.DefaultSpeedKmhValue,
                     RouteState.MinSpeedKmh,
                     RouteState.MaxSpeedKmh),
-                item.IsOffRoad)).ToArray();
+                item.IsOffRoad,
+                item.Number > 0 ? item.Number : index + 1)).ToArray();
 
             _routeState = new RouteState(
                 Math.Clamp(
@@ -1230,20 +1269,11 @@ public sealed class SimulatorForm : WebViewForm
                     RouteState.MaxSpeedKmh),
                 waypoints).Normalize();
 
-            var legs = file.Legs ?? Array.Empty<RouteFileLeg>();
-            _routePlan = new RoutePlan(
-                legs.Select(leg => new RouteLeg(
-                    leg.StartWaypointIndex,
-                    leg.EndWaypointIndex,
-                    (leg.Polyline ?? Array.Empty<RouteFileCoordinate>())
-                        .Select(point => new WorldCoordinate(point.X, point.Y, point.Z))
-                        .ToArray(),
-                    Math.Max(0d, leg.LengthMeters))).ToArray(),
-                Array.Empty<string>());
-
             _selectedRouteWaypointId = null;
             _routeStoppedWaypointIndex = null;
-            _routeTargetWaypointIndex = _routeState.Waypoints.Count > 0 ? 0 : null;
+            _routeStoppedWaypointId = null;
+            _routeTargetWaypointIndex = null;
+            _routeTargetWaypointId = null;
             _routeCursor = RouteCursor.Initial;
             _routeLastHeading = 0d;
             _resumeRouteAfterStop = false;
@@ -1251,101 +1281,79 @@ public sealed class SimulatorForm : WebViewForm
             _routeTravelGameSeconds = 0d;
             _routeEnabled = false;
             _routeEditingEnabled = false;
-            _routePlanNeedsRebuildFromCurrentPlayer = true;
-            _routeMovementLastTick = null;
 
+            if (action == RouteFileLoadAction.MovePlayerToStart)
+            {
+                var player = _hub.Get<PlayerState>("player").Value;
+                _hub.Get<PlayerState>("player").Set(
+                    player with { Position = _routeState.Waypoints[0].Position },
+                    "Загрузка маршрута: перемещение к началу");
+
+                RebuildRoute(
+                    "route file loaded: move player to start",
+                    publishSnapshot: false,
+                    trimToPlayer: true,
+                    renumberTrimmed: false);
+            }
+            else
+            {
+                RebuildRoute(
+                    "route file loaded: recalculate to player",
+                    publishSnapshot: false,
+                    trimToPlayer: true,
+                    renumberTrimmed: true);
+            }
+
+            _routePlanNeedsRebuildFromCurrentPlayer = false;
             PushRouteSnapshot(fitToRoute: true);
             PersistSession("автосохранение: маршрут загружен", force: true);
-            AppLogger.Info("SimulatorForm: маршрут загружен.",
-                $"path={path}; waypoints={waypoints.Length}; legs={legs.Count}");
+            AppLogger.Info(
+                "SimulatorForm: маршрут загружен.",
+                $"path={path}; waypoints={_routeState.Waypoints.Count}; action={action}");
         }
         catch (Exception ex)
         {
             AppLogger.Error("SimulatorForm: ошибка применения маршрута.", ex, "path=" + path);
-            MessageBox.Show(this, "Не удалось загрузить маршрут: " + ex.Message,
-                "Загрузка маршрута", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            MessageBox.Show(
+                this,
+                "Не удалось загрузить маршрут: " + ex.Message,
+                "Загрузка маршрута",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Error);
         }
-    }
-
-    private sealed record RouteRebuildContext(
-        RouteCursor Cursor,
-        int? TargetWaypointIndex,
-        string? TargetWaypointId,
-        int? StoppedWaypointIndex,
-        string? StoppedWaypointId,
-        double TravelRealSeconds,
-        double TravelGameSeconds);
-
-    private RouteRebuildContext CaptureRouteRebuildContext()
-    {
-        var targetIndex = _routeTargetWaypointIndex ?? GetTargetWaypointIndex(_routeCursor);
-
-        static string? WaypointId(RouteState route, int? index) =>
-            index is int value &&
-            value >= 0 &&
-            value < route.Waypoints.Count
-                ? route.Waypoints[value].Id
-                : null;
-
-        return new RouteRebuildContext(
-            _routeCursor,
-            targetIndex,
-            WaypointId(_routeState, targetIndex),
-            _routeStoppedWaypointIndex,
-            WaypointId(_routeState, _routeStoppedWaypointIndex),
-            _routeTravelRealSeconds,
-            _routeTravelGameSeconds);
-    }
-
-    private static int? MapWaypointIndex(
-        RouteState route,
-        string? id,
-        int? fallbackIndex)
-    {
-        if (!string.IsNullOrWhiteSpace(id))
-        {
-            for (var index = 0; index < route.Waypoints.Count; index++)
-            {
-                if (route.Waypoints[index].Id.Equals(id, StringComparison.OrdinalIgnoreCase))
-                    return index;
-            }
-        }
-
-        if (fallbackIndex is not int fallback || route.Waypoints.Count == 0)
-            return null;
-
-        return Math.Clamp(fallback, 0, route.Waypoints.Count - 1);
     }
 
     private void AddRouteWaypoint(JsonElement root)
     {
         EnsureRouteEditingAllowed();
-        var rebuildContext = CaptureRouteRebuildContext();
 
         var position = new WorldCoordinate(
             Number(root, "x", _hub.Get<PlayerState>("player").Value.Position.X),
-            Number(root, "y", _hub.Get<PlayerState>("player").Value.Position.Y),
-            Number(root, "z", _hub.Get<PlayerState>("player").Value.Position.Z));
+            Number(root, "y", _hub.Get<PlayerState>("player").Value.Y),
+            Number(root, "z", _hub.Get<PlayerState>("player").Value.Z));
 
-        var id = "route:" + Guid.NewGuid().ToString("N");
-        var waypoint = new RouteWaypoint(id, position, _routeState.DefaultSpeedKmh);
+        var waypoint = new RouteWaypoint(
+            "route:" + Guid.NewGuid().ToString("N"),
+            position,
+            _routeState.DefaultSpeedKmh);
 
-        _routeState = _routeState with
-        {
-            Waypoints = _routeState.Waypoints.Concat(new[] { waypoint }).ToArray()
-        };
+        _routeState = new RouteState(
+            _routeState.DefaultSpeedKmh,
+            _routeState.Waypoints.Concat(new[] { waypoint }).ToArray())
+            .RenumberWaypoints();
 
-        _selectedRouteWaypointId = id;
+        _selectedRouteWaypointId = waypoint.Id;
         _routeStoppedWaypointIndex = null;
+        _routeStoppedWaypointId = null;
         _resumeRouteAfterStop = false;
-        RebuildRoute("waypoint added", routeRebuildContext: rebuildContext);
+        RebuildRoute("waypoint added", publishSnapshot: false, trimToPlayer: false);
         PersistSession("автосохранение: waypoint added", force: true);
+        PushRouteSnapshot();
     }
 
     private void InsertRouteWaypoint(JsonElement root)
     {
         EnsureRouteEditingAllowed();
-        var rebuildContext = CaptureRouteRebuildContext();
 
         var player = _hub.Get<PlayerState>("player").Value;
         var position = new WorldCoordinate(
@@ -1362,30 +1370,31 @@ public sealed class SimulatorForm : WebViewForm
             _routeState.Waypoints.Count);
 
         var list = _routeState.Waypoints.ToList();
-        list.Insert(
-            insertAt,
-            new RouteWaypoint(
-                "route:" + Guid.NewGuid().ToString("N"),
-                position,
-                _routeState.DefaultSpeedKmh));
+        var inserted = new RouteWaypoint(
+            "route:" + Guid.NewGuid().ToString("N"),
+            position,
+            _routeState.DefaultSpeedKmh);
 
-        _routeState = _routeState with { Waypoints = list };
-        _selectedRouteWaypointId = _routeState.Waypoints[insertAt].Id;
+        list.Insert(insertAt, inserted);
+        _routeState = new RouteState(
+            _routeState.DefaultSpeedKmh,
+            list).RenumberWaypoints();
+
+        _selectedRouteWaypointId = inserted.Id;
         _routeStoppedWaypointIndex = null;
+        _routeStoppedWaypointId = null;
         _resumeRouteAfterStop = false;
-
-        RebuildRoute("waypoint inserted on route line", routeRebuildContext: rebuildContext);
+        RebuildRoute("waypoint inserted", publishSnapshot: false, trimToPlayer: false);
         PersistSession("автосохранение: waypoint inserted", force: true);
+        PushRouteSnapshot();
     }
 
     private void MoveRouteWaypoint(JsonElement root)
     {
         EnsureRouteEditingAllowed();
-        var rebuildContext = CaptureRouteRebuildContext();
 
         var id = Required(root, "id");
         var found = false;
-
         var waypoints = _routeState.Waypoints.Select(item =>
         {
             if (!item.Id.Equals(id, StringComparison.OrdinalIgnoreCase))
@@ -1407,16 +1416,16 @@ public sealed class SimulatorForm : WebViewForm
         _routeState = _routeState with { Waypoints = waypoints };
         _selectedRouteWaypointId = id;
         _routeStoppedWaypointIndex = null;
+        _routeStoppedWaypointId = null;
         _resumeRouteAfterStop = false;
-
-        RebuildRoute("route waypoint moved", routeRebuildContext: rebuildContext);
+        RebuildRoute("route waypoint moved", publishSnapshot: false, trimToPlayer: false);
         PersistSession("автосохранение: waypoint moved", force: true);
+        PushRouteSnapshot();
     }
 
     private void DeleteRouteWaypoint(string id)
     {
         EnsureRouteEditingAllowed();
-        var rebuildContext = CaptureRouteRebuildContext();
 
         var remaining = _routeState.Waypoints
             .Where(item => !item.Id.Equals(id, StringComparison.OrdinalIgnoreCase))
@@ -1425,12 +1434,17 @@ public sealed class SimulatorForm : WebViewForm
         if (remaining.Length == _routeState.Waypoints.Count)
             return;
 
-        _routeState = _routeState with { Waypoints = remaining };
+        _routeState = new RouteState(
+            _routeState.DefaultSpeedKmh,
+            remaining).RenumberWaypoints();
+
         _selectedRouteWaypointId = null;
         _routeStoppedWaypointIndex = null;
+        _routeStoppedWaypointId = null;
         _resumeRouteAfterStop = false;
-        RebuildRoute("waypoint deleted", routeRebuildContext: rebuildContext);
+        RebuildRoute("waypoint deleted", publishSnapshot: false, trimToPlayer: false);
         PersistSession("автосохранение: waypoint deleted", force: true);
+        PushRouteSnapshot();
     }
 
     private void SelectRouteWaypoint(string id)
