@@ -1569,6 +1569,7 @@ public sealed class SimulatorForm : WebViewForm
             throw new InvalidOperationException("Маршрут пуст — движение по нему невозможно.");
 
         var resumed = _routeStoppedWaypointId is not null;
+        var hasStoredTarget = _routeTargetWaypointId is not null;
 
         if (resumed)
         {
@@ -1616,8 +1617,8 @@ public sealed class SimulatorForm : WebViewForm
                 ? "route movement resumed after stop"
                 : "route movement enabled",
             publishSnapshot: false,
-            trimToPlayer: !resumed,
-            renumberTrimmed: !resumed,
+            trimToPlayer: !resumed && !hasStoredTarget,
+            renumberTrimmed: !resumed && !hasStoredTarget,
             anchorWaypointId: resumed ? null : _routeTargetWaypointId);
 
         if (!_routePlan.IsUsable)
