@@ -44,7 +44,6 @@ public sealed class SimulatorForm : WebViewForm
     private string? _routeTargetWaypointId;
     private double _routeTravelRealSeconds;
     private double _routeTravelGameSeconds;
-    private bool _routePlanNeedsRebuildFromCurrentPlayer;
     private DateTimeOffset? _conditionsLastRealTick;
     private TimeSpan? _conditionsLastGameElapsed;
 
@@ -1303,8 +1302,6 @@ public sealed class SimulatorForm : WebViewForm
                     trimToPlayer: true,
                     renumberTrimmed: true);
             }
-
-            _routePlanNeedsRebuildFromCurrentPlayer = false;
             PushRouteSnapshot(fitToRoute: true);
             PersistSession("автосохранение: маршрут загружен", force: true);
             AppLogger.Info(
@@ -1707,7 +1704,6 @@ public sealed class SimulatorForm : WebViewForm
             _routeCursor = RouteCursor.Initial;
             _routeTargetWaypointIndex = null;
             _routeTargetWaypointId = null;
-            _routePlanNeedsRebuildFromCurrentPlayer = false;
 
             foreach (var error in _routePlan.Errors)
                 AppLogger.Warn("SimulatorForm: ошибка маршрута.", error);
@@ -1765,8 +1761,6 @@ public sealed class SimulatorForm : WebViewForm
             _routeTargetWaypointIndex = null;
             _routeTargetWaypointId = null;
         }
-
-        _routePlanNeedsRebuildFromCurrentPlayer = false;
 
         AppLogger.Info(
             "SimulatorForm: маршрут перестроен.",
@@ -2189,7 +2183,7 @@ public sealed class SimulatorForm : WebViewForm
                 {
                     var candidates = _routePlan.Points
                         .Select((point, index) => (point, index))
-                        .Where(item => item.point.DestinationWaypointIndex >= stop)
+                        .Where(item => item.point.DestinationWaypointIndex == stop)
                         .ToArray();
 
                     nextPointIndex = NearestCandidateRoutePoint(
@@ -2204,7 +2198,7 @@ public sealed class SimulatorForm : WebViewForm
                 {
                     var candidates = _routePlan.Points
                         .Select((point, index) => (point, index))
-                        .Where(item => item.point.DestinationWaypointIndex >= target)
+                        .Where(item => item.point.DestinationWaypointIndex == target)
                         .ToArray();
 
                     nextPointIndex = NearestCandidateRoutePoint(
