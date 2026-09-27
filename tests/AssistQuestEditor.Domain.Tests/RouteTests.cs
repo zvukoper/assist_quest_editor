@@ -114,8 +114,10 @@ public sealed class RouteTests
         Assert.Equal(new WorldCoordinate(20, 0, 0), plan.Points[0].Position);
         Assert.Null(plan.Points[0].WaypointIndex);
         Assert.Equal(0, plan.Points[0].DestinationWaypointIndex);
-        Assert.Equal(new WorldCoordinate(80, 0, 40), plan.Points[2].Position);
-        Assert.Equal(0, plan.Points[2].WaypointIndex);
+
+        var offRoadPoint = Assert.Single(
+            plan.Points.Where(point => point.WaypointIndex == 0));
+        Assert.Equal(new WorldCoordinate(80, 0, 40), offRoadPoint.Position);
     }
 
     [Fact]
