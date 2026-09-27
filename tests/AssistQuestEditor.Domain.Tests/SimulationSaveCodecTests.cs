@@ -83,7 +83,9 @@ public sealed class SimulationSaveCodecTests
                 1,
                 123.5,
                 246.0,
-                Enabled: true),
+                Enabled: true,
+                CurrentTargetWaypointId: "route:2",
+                StoppedWaypointId: "route:2"),
             MapView = new SimulatorMapViewState(1234.5, -6789.25, 2.75),
             DynamicEvents = new DynamicEventRuntimeState(
                 new[]
@@ -154,6 +156,8 @@ public sealed class SimulationSaveCodecTests
         Assert.True(decoded.State.Route.Waypoints[1].IsOffRoad);
         Assert.Equal(original.State.RouteRuntime, decoded.State.RouteRuntime);
         Assert.True(decoded.State.RouteRuntime.Enabled);
+        Assert.Equal("route:2", decoded.State.RouteRuntime.CurrentTargetWaypointId);
+        Assert.Equal("route:2", decoded.State.RouteRuntime.StoppedWaypointId);
         Assert.Equal(original.State.MapView, decoded.State.MapView);
         Assert.Equal(original.State.Player.Heading, decoded.State.Player.Heading);
         Assert.Equal(original.State.Player.InCab, decoded.State.Player.InCab);
