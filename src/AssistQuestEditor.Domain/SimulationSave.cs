@@ -93,7 +93,9 @@ public sealed record RouteRuntimeState(
     int? CurrentTargetWaypointIndex = null,
     double TravelRealSeconds = 0d,
     double TravelGameSeconds = 0d,
-    bool Enabled = false)
+    bool Enabled = false,
+    string? CurrentTargetWaypointId = null,
+    string? StoppedWaypointId = null)
 {
     public static RouteRuntimeState Empty => new(RouteCursor.Initial);
 }
