@@ -573,6 +573,97 @@ public static class RouteMovementEngine
         };
     }
 
+    /// <summary>
+    /// Следующая фиксированная точка маршрута ПО НАПРАВЛЕНИЮ К ПУНКТУ НАЗНАЧЕНИЯ.
+    ///
+    /// Игрок проецируется на все фиксированные сегменты маршрута. Выбирается
+    /// сегмент, к которому он ближе всего, а затем берётся точка ПОСЛЕ проекции.
+    /// При попадании ровно в стык сегментов предпочтение получает сегмент дальше
+    /// по маршруту. Поэтому игрок никогда не начинает движение обратно к уже
+    /// пройденной точке только потому, что она геометрически чуть ближе.
+    /// </summary>
+    public static int NextRoutePointForPlayer(
+        RoutePlan plan,
+        WorldCoordinate position)
+    {
+        if (plan is null || plan.Points.Count == 0)
+            return -1;
+
+        if (plan.Points.Count == 1)
+            return 0;
+
+        var bestSegment = 0;
+        var bestT = 0d;
+        var bestDistance = double.PositiveInfinity;
+
+        for (var index = 0; index < plan.Points.Count - 1; index++)
+        {
+            var a = plan.Points[index].Position;
+            var b = plan.Points[index + 1].Position;
+            var dx = b.X - a.X;
+            var dz = b.Z - a.Z;
+            var lengthSquared = dx * dx + dz * dz;
+
+            var t = lengthSquared <= 0.000001d
+                ? 0d
+                : ((position.X - a.X) * dx + (position.Z - a.Z) * dz) / lengthSquared;
+
+            t = Math.Clamp(t, 0d, 1d);
+
+            var px = a.X + dx * t;
+            var pz = a.Z + dz * t;
+            var ddx = position.X - px;
+            var ddz = position.Z - pz;
+            var distance = ddx * ddx + ddz * ddz;
+
+            // При одинаковом расстоянии выбираем более поздний сегмент:
+            // это и есть правило «в пользу движения вперёд».
+            if (distance < bestDistance - 0.000001d ||
+                (Math.Abs(distance - bestDistance) <= 0.000001d &&
+                 index > bestSegment))
+            {
+                bestDistance = distance;
+                bestSegment = index;
+                bestT = t;
+            }
+        }
+
+        if (bestSegment == 0 && bestT <= 0.000001d)
+            return 0;
+
+        if (bestT >= 0.999999d)
+            return Math.Min(bestSegment + 2, plan.Points.Count - 1);
+
+        return bestSegment + 1;
+    }
+
+    /// <summary>
+    /// Путевая точка, которая должна остаться первой после пересчёта маршрута
+    /// до текущей позиции игрока.
+    /// </summary>
+    public static int? PreferredWaypointForPlayer(
+        RoutePlan plan,
+        WorldCoordinate position)
+    {
+        if (plan is null || plan.Points.Count == 0)
+            return null;
+
+        var pointIndex = NextRoutePointForPlayer(plan, position);
+        if (pointIndex < 0 || pointIndex >= plan.Points.Count)
+            return null;
+
+        var destination = plan.Points[pointIndex].DestinationWaypointIndex;
+        if (plan.WaypointSource is null || plan.WaypointSource.Count == 0)
+            return Math.Max(0, destination);
+
+        destination = Math.Clamp(
+            destination,
+            0,
+            plan.WaypointSource.Count - 1);
+
+        return destination;
+    }
+
     public static int? PreferredForwardWaypoint(
         IReadOnlyList<RouteWaypoint>? waypoints,
         WorldCoordinate position,
