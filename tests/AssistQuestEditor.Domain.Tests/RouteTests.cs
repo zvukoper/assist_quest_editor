@@ -269,7 +269,7 @@ public sealed class RouteTests
             plan,
             RouteCursor.Initial,
             new WorldCoordinate(0, 0, 0),
-            1);
+            5);
 
         Assert.False(result.Enabled);
         Assert.True(result.StoppedAtWaypoint);
