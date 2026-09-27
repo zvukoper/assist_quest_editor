@@ -1527,6 +1527,10 @@ public sealed class SimulatorForm : WebViewForm
     {
         EnsureRouteEditingAllowed();
         _routeState = _routeState.WithDefaultSpeed(speed);
+        RebuildRoute(
+            "route default speed changed",
+            publishSnapshot: false,
+            trimToPlayer: false);
         PersistSession("автосохранение: route default speed changed", force: true);
         PushRouteSnapshot();
     }
