@@ -75,8 +75,8 @@ public sealed class SimulationSaveCodecTests
                 80,
                 new[]
                 {
-                    new RouteWaypoint("route:1", new WorldCoordinate(100, 0, 200), 60),
-                    new RouteWaypoint("route:2", new WorldCoordinate(200, 0, 300), 0, true)
+                    new RouteWaypoint("route:1", new WorldCoordinate(100, 0, 200), 60, Number: 12),
+                    new RouteWaypoint("route:2", new WorldCoordinate(200, 0, 300), 0, true, Number: 13)
                 }),
             RouteRuntime = new RouteRuntimeState(
                 new RouteCursor(true, 1, 0, 42.5, false, 1, 12.0),
