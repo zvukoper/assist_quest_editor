@@ -121,6 +121,38 @@ public sealed class RouteTests
     }
 
     [Fact]
+    public void RouteMovementFirstTargetsRoadAnchorInsteadOfWaypoint()
+    {
+        var planner = new RoadRoutePlanner(new[]
+        {
+            new RoadSegment(0, 0, 200, 0)
+        });
+
+        var route = new RouteState(60, new[]
+        {
+            new RouteWaypoint("first", new WorldCoordinate(80, 0, 0), 60),
+            new RouteWaypoint("destination", new WorldCoordinate(180, 0, 0), 60)
+        });
+
+        var player = new WorldCoordinate(20, 0, 30);
+        var plan = planner.Build(route, player);
+
+        var result = RouteMovementEngine.Advance(
+            route,
+            plan,
+            RouteCursor.Initial,
+            player,
+            0.5d);
+
+        // За 0.5 с при 60 км/ч игрок ещё не достигает дороги. Значит результат
+        // обязан лежать на прямом player→road-anchor, а не на прямой player→waypoint.
+        Assert.InRange(result.Position.X, 19.999d, 20.001d);
+        Assert.InRange(result.Position.Z, 21.65d, 21.67d);
+        Assert.Equal(0, result.Cursor.NextRoutePointIndex);
+        Assert.Null(plan.Points[0].WaypointIndex);
+    }
+
+    [Fact]
     public void RouteMovementCanAdvanceToSingleWaypoint()
     {
         var planner = new RoadRoutePlanner(new[]
