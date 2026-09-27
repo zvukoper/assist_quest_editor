@@ -1874,7 +1874,7 @@
     };
   }
 
-  let speedometerWasVisibleBeforePause  let speedometerWasVisibleBeforePause = false;
+  let speedometerWasVisibleBeforePause = false;
   let lastPositiveSpeedKmh = 0;
 
   function renderRouteSpeedometer() {
@@ -4080,7 +4080,7 @@
             "</div>"
           : selectedRoute
             ? "<div class='routeSelectionHint'>Выбрана путевая точка " +
-                escapeHtml(selectedRoute.index) +
+                escapeHtml(String(selectedRouteNumber)) +
                 ". Поле задаёт её скорость.</div>"
             : (route.editing
               ? "<div class='routeSelectionHint'>ЛКМ по пустому месту добавляет точку, ЛКМ по точке позволяет перемещать её, ПКМ по точке удаляет.</div>"
