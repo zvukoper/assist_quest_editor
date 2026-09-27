@@ -94,6 +94,30 @@ public sealed class RouteFixedPointMovementTests
     }
 
     [Fact]
+    public void DynamicTargetMustNotIncreaseDistanceToDestination()
+    {
+        var waypoints = Waypoints();
+        var plan = Plan(waypoints);
+
+        // Игрок находится на 250 м. Ближайшая фиксированная точка впереди —
+        // №3 на 300 м. Точка №2 уже позади и не может стать динамической целью.
+        var nextPoint = RouteMovementEngine.NextRoutePointForPlayer(
+            plan,
+            new WorldCoordinate(0, 0, 250));
+
+        Assert.Equal(2, nextPoint);
+
+        var target = plan.Points[nextPoint].Position;
+        var playerDistance = Math.Abs(target.Z - 250);
+        var destinationDistance =
+            Math.Abs(waypoints[^1].Position.Z - target.Z);
+
+        Assert.True(
+            destinationDistance < Math.Abs(waypoints[^1].Position.Z - 250));
+        Assert.True(playerDistance >= 0);
+    }
+
+    [Fact]
     public void DynamicSegmentMovesStraightToCurrentRoutePoint()
     {
         var waypoints = Waypoints();
