@@ -1682,8 +1682,12 @@
       ? Math.round(distance) + " м"
       : (distance / 1000).toFixed(2) + " км";
 
-    const stopped = Number.isInteger(route.stoppedWaypointIndex) &&
-      route.stoppedWaypointIndex === Number(waypoint.index) - 1;
+    const stopped =
+      (route.stoppedWaypointId &&
+       String(route.stoppedWaypointId) === String(waypoint.id)) ||
+      (!route.stoppedWaypointId &&
+       Number.isInteger(route.stoppedWaypointIndex) &&
+       route.stoppedWaypointIndex === Number(waypoint.index) - 1);
 
     if (stopped || speed <= 0) {
       drawRouteText(
@@ -1854,6 +1858,7 @@
       stoppedWaypointIndex: Number.isInteger(value.stoppedWaypointIndex)
         ? value.stoppedWaypointIndex
         : null,
+      stoppedWaypointId: value.stoppedWaypointId || null,
       currentTargetWaypointIndex: Number.isInteger(value.currentTargetWaypointIndex)
         ? value.currentTargetWaypointIndex
         : null,
