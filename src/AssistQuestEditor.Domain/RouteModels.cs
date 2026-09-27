@@ -221,13 +221,12 @@ public sealed record RoutePlan(
                     ? exactWaypoint
                     : Math.Max(0, startWaypointIndex + 1);
 
+                // Скорость путевой точки действует ПОСЛЕ её достижения.
+                // Поэтому подъезд к первой точке идёт с общей скоростью маршрута,
+                // а каждый следующий leg — со скоростью предыдущей путевой точки.
                 var travelSpeed =
                     legIndex == 0 && isFirstLegPoint
-                        ? (source?.Count > 0
-                            ? source[0].SpeedKmh <= 0d
-                                ? RouteState.DefaultSpeedKmhValue
-                                : source[0].SpeedKmh
-                            : RouteState.DefaultSpeedKmhValue)
+                        ? RouteState.DefaultSpeedKmhValue
                         : startSpeed;
 
                 result.Add(new RoutePoint(
@@ -456,6 +455,18 @@ public static class RouteMovementEngine
             }
 
             var speed = Math.Max(0d, target.TravelSpeedKmh);
+
+            if (resume &&
+                target.WaypointIndex is int resumeWaypointIndex &&
+                resumeWaypointIndex >= 0 &&
+                resumeWaypointIndex < route.Waypoints.Count)
+            {
+                var waypointSpeed = route.Waypoints[resumeWaypointIndex].SpeedKmh;
+                speed = waypointSpeed > 0d
+                    ? waypointSpeed
+                    : RouteState.DefaultSpeedKmhValue;
+            }
+
             if (speed <= 0d)
             {
                 // Нулевая скорость имеет смысл только у самой путевой точки.
