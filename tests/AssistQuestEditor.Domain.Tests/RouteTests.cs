@@ -83,6 +83,42 @@ public sealed class RouteTests
     }
 
     [Fact]
+    public void OffRoadWaypointStillUsesRoadAnchorForDynamicApproach()
+    {
+        var planner = new RoadRoutePlanner(new[]
+        {
+            new RoadSegment(0, 0, 200, 0)
+        });
+
+        var route = new RouteState(60, new[]
+        {
+            new RouteWaypoint(
+                "offroad",
+                new WorldCoordinate(80, 0, 40),
+                60,
+                IsOffRoad: true),
+            new RouteWaypoint(
+                "destination",
+                new WorldCoordinate(180, 0, 0),
+                60)
+        });
+
+        var plan = planner.Build(route, new WorldCoordinate(20, 0, 30));
+
+        Assert.True(plan.IsUsable);
+        Assert.Equal(-1, plan.Legs[0].StartWaypointIndex);
+        Assert.Equal(0, plan.Legs[0].EndWaypointIndex);
+
+        // Только player→(20,0,0) — dynamic. От дорожного якоря до off-road
+        // waypoint уже fixed и прямой, а далее маршрут снова обязан искать дорогу.
+        Assert.Equal(new WorldCoordinate(20, 0, 0), plan.Points[0].Position);
+        Assert.Null(plan.Points[0].WaypointIndex);
+        Assert.Equal(0, plan.Points[0].DestinationWaypointIndex);
+        Assert.Equal(new WorldCoordinate(80, 0, 40), plan.Points[2].Position);
+        Assert.Equal(0, plan.Points[2].WaypointIndex);
+    }
+
+    [Fact]
     public void RouteMovementCanAdvanceToSingleWaypoint()
     {
         var planner = new RoadRoutePlanner(new[]
