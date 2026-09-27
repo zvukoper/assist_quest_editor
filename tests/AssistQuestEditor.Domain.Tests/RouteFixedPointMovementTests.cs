@@ -135,13 +135,11 @@ public sealed class RouteFixedPointMovementTests
             plan,
             cursor,
             new WorldCoordinate(0, 0, 90),
-            2d);
+            0.7d);
 
         Assert.Contains("wp-1", result.PassedWaypointIds);
         Assert.Equal(1, result.Cursor.NextRoutePointIndex);
-        Assert.Equal(200d, result.Cursor.NextRoutePointIndex < plan.Points.Count
-            ? plan.Points[result.Cursor.NextRoutePointIndex].Position.Z
-            : -1d, 6);
+        Assert.Equal(200d, plan.Points[result.Cursor.NextRoutePointIndex].Position.Z, 6);
         Assert.True(result.Enabled);
         Assert.False(result.StoppedAtWaypoint);
     }
