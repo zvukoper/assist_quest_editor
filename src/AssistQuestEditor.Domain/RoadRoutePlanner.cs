@@ -70,12 +70,17 @@ public sealed class RoadRoutePlanner
         Build(route, null);
 
     /// <summary>
-    /// Строит ТОЛЬКО фиксированную геометрию маршрута. Позиция игрока больше не
-    /// входит в RoutePlan: подъезд от игрока до ближайшей фиксированной точки
-    /// всегда является отдельным динамическим сегментом.
+    /// Строит фиксированную геометрию маршрута.
     ///
-    /// Параметр playerPosition оставлен для совместимости старого контракта
-    /// и намеренно игнорируется.
+    /// Когда известна позиция игрока, fixed-часть начинается не с самой путевой
+    /// точки, а с ближайшей точки ДОРОГИ к игроку. Сам игрок в RoutePlan не
+    /// попадает: от игрока до этой дорожной точки всегда остаётся один прямой
+    /// динамический сегмент. После дорожного якоря маршрут идёт по дорожному
+    /// графу к путевым точкам, а отмеченные как «бездорожье» legs идут напрямую.
+    ///
+    /// Именно эта граница разделяет две механики:
+    /// player → road point = dynamic,
+    /// road point → waypoint(s) = fixed route.
     /// </summary>
     public RoutePlan Build(RouteState route, WorldCoordinate? playerPosition)
     {
@@ -87,20 +92,72 @@ public sealed class RoadRoutePlanner
         var legs = new List<RouteLeg>();
         var errors = new List<string>();
 
-        // Для одной путевой точки дорожный граф вообще не нужен: это одна
-        // фиксированная точка маршрута, а подъезд к ней всегда динамический.
-        if (route.Waypoints.Count == 1)
+        if (playerPosition is { } player)
         {
-            legs.Add(new RouteLeg(
-                0,
-                0,
-                new[] { route.Waypoints[0].Position },
-                0d));
+            if (IsEmpty)
+            {
+                return new RoutePlan(
+                    Array.Empty<RouteLeg>(),
+                    new[]
+                    {
+                        "Маршрут не построен: дорожная геометрия пуста. " +
+                        "Невозможно определить ближайшую к игроку точку дороги для динамического сегмента."
+                    },
+                    route.Waypoints);
+            }
 
-            return new RoutePlan(legs, errors, route.Waypoints);
+            var playerRoad = ProjectToRoad(player);
+            if (playerRoad is null)
+            {
+                return new RoutePlan(
+                    Array.Empty<RouteLeg>(),
+                    new[]
+                    {
+                        "Маршрут не построен: для игрока не найдена дорожная геометрия. " +
+                        "Динамический сегмент обязан заканчиваться на точке дороги, а не на путевой точке."
+                    },
+                    route.Waypoints);
+            }
+
+            if (playerRoad.Value.DistanceMeters > MaxRouteSnapDistanceMeters)
+            {
+                return new RoutePlan(
+                    Array.Empty<RouteLeg>(),
+                    new[]
+                    {
+                        "Маршрут не построен: игрок находится в " +
+                        $"{F(playerRoad.Value.DistanceMeters)} м от ближайшей дороги, " +
+                        $"а допустимое расстояние до дорожного якоря — {MaxRouteSnapDistanceMeters:F0} м. " +
+                        $"Ближайшая точка дороги: ({F(playerRoad.Value.Position.X)}, {F(playerRoad.Value.Position.Z)})."
+                    },
+                    route.Waypoints);
+            }
+
+            var first = route.Waypoints[0];
+            var firstLeg = first.IsOffRoad
+                ? BuildDirectLeg(
+                    -1,
+                    0,
+                    playerRoad.Value.Position,
+                    first.Position)
+                : BuildLeg(
+                    -1,
+                    0,
+                    "дорожного якоря игрока",
+                    "точки 1",
+                    playerRoad.Value.Position,
+                    first.Position,
+                    includeExactStart: true);
+
+            if (firstLeg.Leg is not null)
+                legs.Add(firstLeg.Leg);
+            else if (!string.IsNullOrWhiteSpace(firstLeg.Error))
+                errors.Add(firstLeg.Error);
+
+            if (errors.Count > 0)
+                return new RoutePlan(legs, errors, route.Waypoints);
         }
-
-        if (IsEmpty && route.Waypoints.Any(item => !item.IsOffRoad))
+        else if (IsEmpty && route.Waypoints.Any(item => !item.IsOffRoad))
         {
             return new RoutePlan(
                 Array.Empty<RouteLeg>(),
@@ -111,7 +168,20 @@ public sealed class RoadRoutePlanner
                 },
                 route.Waypoints);
         }
+        else if (route.Waypoints.Count == 1)
+        {
+            // Legacy/domain-only вызов без позиции игрока.
+            legs.Add(new RouteLeg(
+                0,
+                0,
+                new[] { route.Waypoints[0].Position },
+                0d));
 
+            return new RoutePlan(legs, errors, route.Waypoints);
+        }
+
+        // Остальная fixed-часть начинается уже от путевых точек. Это важно:
+        // player не участвует в этих legs, он существует только в dynamic segment.
         for (var index = 0; index < route.Waypoints.Count - 1; index++)
         {
             var start = route.Waypoints[index];
