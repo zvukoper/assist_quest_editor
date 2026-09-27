@@ -1462,7 +1462,6 @@ public sealed class SimulatorForm : WebViewForm
     private void SetRouteWaypointSpeed(string id, double speed)
     {
         EnsureRouteEditingAllowed();
-        var rebuildContext = CaptureRouteRebuildContext();
 
         speed = Math.Clamp(
             double.IsFinite(speed) ? speed : RouteState.DefaultSpeedKmhValue,
@@ -1486,7 +1485,7 @@ public sealed class SimulatorForm : WebViewForm
         RebuildRoute(
             "waypoint speed changed",
             publishSnapshot: false,
-            routeRebuildContext: rebuildContext);
+            trimToPlayer: false);
         PersistSession("автосохранение: waypoint speed changed", force: true);
         PushRouteSnapshot();
     }
@@ -1494,7 +1493,6 @@ public sealed class SimulatorForm : WebViewForm
     private void SetRouteWaypointOffRoad(string id, bool offRoad)
     {
         EnsureRouteEditingAllowed();
-        var rebuildContext = CaptureRouteRebuildContext();
 
         var waypoints = _routeState.Waypoints.Select(item =>
             item.Id.Equals(id, StringComparison.OrdinalIgnoreCase)
@@ -1502,8 +1500,12 @@ public sealed class SimulatorForm : WebViewForm
                 : item).ToArray();
 
         _routeState = _routeState with { Waypoints = waypoints };
-        RebuildRoute("waypoint off-road changed", routeRebuildContext: rebuildContext);
+        RebuildRoute(
+            "waypoint off-road changed",
+            publishSnapshot: false,
+            trimToPlayer: false);
         PersistSession("автосохранение: waypoint off-road changed", force: true);
+        PushRouteSnapshot();
     }
 
     private void SetRouteDefaultSpeed(double speed)
@@ -1614,8 +1616,10 @@ public sealed class SimulatorForm : WebViewForm
         _routeCursor = RouteCursor.Initial;
         _selectedRouteWaypointId = null;
         _routeStoppedWaypointIndex = null;
+        _routeStoppedWaypointId = null;
         _resumeRouteAfterStop = false;
         _routeTargetWaypointIndex = null;
+        _routeTargetWaypointId = null;
         _routeTravelRealSeconds = 0d;
         _routeTravelGameSeconds = 0d;
         _routeEnabled = false;
@@ -1638,42 +1642,6 @@ public sealed class SimulatorForm : WebViewForm
             throw new InvalidOperationException(
                 "Включите «Редактирование» в разделе «Движение по маршруту».");
         }
-    }
-
-    /// <summary>
-    /// Индекс точки полного маршрута, ОТ которой продолжается движение.
-    ///
-    /// Возвращает 0 (прежнее поведение), если продолжение неочевидно:
-    /// цель неизвестна или это точка №1, цель не помещается в список, цель
-    /// помечена бездорожьем или лежит дальше допустимого расстояния привязки к
-    /// дороге. Во всех этих случаях отбрасывать ведущие точки нельзя: путь может
-    /// начинаться не там, где ожидается, и планировщик обязан построить его от
-    /// позиции игрока.
-    ///
-    /// Иначе возвращает индекс текущей цели: она — первая точка, которую игрок
-    /// ещё не прошёл.
-    /// </summary>
-    private int ResolveRouteStartWaypoint(int? target)
-    {
-        if (target is not int targetIndex ||
-            targetIndex <= 0 ||
-            targetIndex >= _routeState.Waypoints.Count)
-        {
-            return 0;
-        }
-
-        var targetWaypoint = _routeState.Waypoints[targetIndex];
-        if (targetWaypoint.IsOffRoad)
-            return 0;
-
-        var projection = _routePlanner.ProjectToRoad(targetWaypoint.Position);
-        if (projection is null ||
-            projection.Value.DistanceMeters > RoadRoutePlanner.MaxRouteSnapDistanceMeters)
-        {
-            return 0;
-        }
-
-        return targetIndex;
     }
 
     private void RebuildRoute(
