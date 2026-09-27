@@ -1573,8 +1573,8 @@ public sealed class SimulatorForm : WebViewForm
                 ? "route movement resumed after stop"
                 : "route movement enabled",
             publishSnapshot: false,
-            trimToPlayer: false,
-            renumberTrimmed: false);
+            trimToPlayer: !resumed,
+            renumberTrimmed: !resumed);
 
         if (!_routePlan.IsUsable)
         {
