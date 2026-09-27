@@ -1633,6 +1633,14 @@ public sealed class SimulatorForm : WebViewForm
         _routeEnabled = true;
         _resumeRouteAfterStop = false;
 
+        if (resumed && _routeCursor.Initialized)
+        {
+            _routeCursor = _routeCursor with
+            {
+                ResumeAfterStop = true
+            };
+        }
+
         LogRouteMovementStart(resumed);
 
         AppLogger.Info(
