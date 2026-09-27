@@ -1291,7 +1291,7 @@ public sealed class SimulatorForm : WebViewForm
                 RebuildRoute(
                     "route file loaded: move player to start",
                     publishSnapshot: false,
-                    trimToPlayer: true,
+                    trimToPlayer: false,
                     renumberTrimmed: false);
             }
             else
