@@ -692,6 +692,21 @@ public static class RouteMovementEngine
             if (!movesCloser)
                 continue;
 
+            // Дистанция до пункта назначения вдоль прямого динамического
+            // сегмента должна убывать ВЕСЬ отрезок, а не только оказаться меньше
+            // в конечной точке. Условие по производной расстояния в конце
+            // сегмента гарантирует отсутствие разворота «после ближайшей точки».
+            var segmentX = point.Position.X - position.X;
+            var segmentZ = point.Position.Z - position.Z;
+            var fromDestinationX = point.Position.X - destination.X;
+            var fromDestinationZ = point.Position.Z - destination.Z;
+            var approachDerivative =
+                fromDestinationX * segmentX +
+                fromDestinationZ * segmentZ;
+
+            if (approachDerivative > PositionEpsilonMeters)
+                continue;
+
             if (playerDistance < bestPlayerDistance - PositionEpsilonMeters ||
                 (Math.Abs(playerDistance - bestPlayerDistance) <= PositionEpsilonMeters &&
                  index > bestCandidate))
