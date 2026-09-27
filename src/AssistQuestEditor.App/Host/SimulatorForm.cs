@@ -4277,6 +4277,7 @@ public sealed class SimulatorForm : WebViewForm
             defaultSpeedKmh = _routeState.DefaultSpeedKmh,
             selectedWaypointId = _selectedRouteWaypointId,
             stoppedWaypointIndex = _routeStoppedWaypointIndex,
+            stoppedWaypointId = _routeStoppedWaypointId,
             currentTargetWaypointIndex = _routeTargetWaypointIndex,
             currentTargetWaypointId = _routeTargetWaypointId,
             nextRoutePointId,
