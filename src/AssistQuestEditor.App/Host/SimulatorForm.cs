@@ -2156,104 +2156,14 @@ public sealed class SimulatorForm : WebViewForm
     private void SetRouteStateAfterLoad(RouteState route, RouteRuntimeState? runtime = null)
     {
         _routeState = (route ?? RouteState.Empty).Normalize();
-        var playerPosition = _hub.Get<PlayerState>("player").Value.Position;
-
-        // Как и при перестроении, план строится от ПЕРВОЙ НЕПРОЙДЕННОЙ точки.
-        // Сохранённая цель известна ДО построения, поэтому её можно передать сюда
-        // явно: иначе загруженный маршрут начинался бы от точки №1 и вёл игрока
-        // назад по уже пройденным дорогам (см. ResolveRouteStartWaypoint).
-        var startWaypointIndex = ResolveRouteStartWaypoint(
-            runtime?.CurrentTargetWaypointIndex);
-        var routeSource = startWaypointIndex == 0
-            ? _routeState
-            : _routeState with
-            {
-                Waypoints = _routeState.Waypoints.Skip(startWaypointIndex).ToArray()
-            };
-
-        _routePlan = _routePlanner.Build(routeSource, playerPosition)
-            .ShiftWaypointIndices(startWaypointIndex);
-
-        if (startWaypointIndex > 0)
-        {
-            AppLogger.Info(
-                "SimulatorForm: загруженный маршрут продолжен от первой точки впереди игрока.",
-                $"skipped={startWaypointIndex}; target={(startWaypointIndex + 1)}; legs={_routePlan.Legs.Count}");
-        }
-
-        var savedCursor = runtime?.Cursor ?? RouteCursor.Initial;
-
-        if (savedCursor.Initialized &&
-            savedCursor.LegIndex == 0 &&
-            _routePlan.Legs.Count > 0 &&
-            _routePlan.Legs[0].StartWaypointIndex < 0)
-        {
-            savedCursor = savedCursor with
-            {
-                SegmentIndex = 0,
-                SegmentProgressMeters = 0d
-            };
-        }
-
-        _routeCursor = IsRouteCursorUsable(savedCursor)
-            ? savedCursor
-            : RouteCursor.Initial;
-
-        _routeStoppedWaypointIndex = _routeCursor.StoppedAtWaypointIndex;
-        _routeLastHeading = _routeCursor.LastHeadingDegrees;
-        _resumeRouteAfterStop = false;
         _selectedRouteWaypointId = null;
-
-        _routeTargetWaypointIndex =
-            runtime?.CurrentTargetWaypointIndex is int savedTarget &&
-            savedTarget >= 0 &&
-            savedTarget < _routeState.Waypoints.Count
-                ? savedTarget
-                : GetTargetWaypointIndex(_routeCursor);
-        if (_routeTargetWaypointIndex is null && _routeState.Waypoints.Count > 0)
-            _routeTargetWaypointIndex = 0;
-
-        // Cursor из сохранения относится к геометрии маршрута, существовавшей в
-        // момент записи. После перезапуска актуальный RoutePlan строится заново,
-        // поэтому нельзя безусловно использовать сохранённые SegmentIndex/Progress.
-        // Перепривязываем курсор только к сохранённой логической цели. Это намеренно
-        // НЕ ProjectForwardCursor(): ближайший участок всего маршрута на перекрёстке
-        // может оказаться старой точкой и отправить движение назад.
-        if (_routeCursor.Initialized &&
-            _routeTargetWaypointIndex is int savedLogicalTarget &&
-            _routePlan.IsUsable)
-        {
-            var projected = RouteMovementEngine.ProjectCursorToWaypoint(
-                _routePlan,
-                savedLogicalTarget,
-                playerPosition,
-                _routeCursor);
-
-            if (projected.Initialized)
-            {
-                _routeCursor = projected with
-                {
-                    ResumeAfterStop = savedCursor.ResumeAfterStop,
-                    StoppedAtWaypointIndex = _routeStoppedWaypointIndex
-                };
-                _routeLastHeading = projected.LastHeadingDegrees;
-
-                AppLogger.Info(
-                    "SimulatorForm: сохранённый курсор перепривязан к текущей цели.",
-                    $"target={savedLogicalTarget + 1}; leg={projected.LegIndex}; " +
-                    $"segment={projected.SegmentIndex}; progress={projected.SegmentProgressMeters:0.###}");
-            }
-            else
-            {
-                AppLogger.Warn(
-                    "SimulatorForm: не удалось перепривязать сохранённый курсор к текущей цели.",
-                    $"target={savedLogicalTarget + 1}");
-                _routeCursor = RouteCursor.Initial;
-                _routeStoppedWaypointIndex = null;
-                _resumeRouteAfterStop = false;
-            }
-        }
-
+        _routeStoppedWaypointIndex = null;
+        _routeStoppedWaypointId = null;
+        _routeTargetWaypointIndex = null;
+        _routeTargetWaypointId = null;
+        _routeCursor = RouteCursor.Initial;
+        _routeLastHeading = 0d;
+        _resumeRouteAfterStop = false;
         _routeTravelRealSeconds = runtime is not null &&
             double.IsFinite(runtime.TravelRealSeconds) &&
             runtime.TravelRealSeconds >= 0d
@@ -2268,21 +2178,101 @@ public sealed class SimulatorForm : WebViewForm
         _routeEnabled = runtime?.Enabled ?? false;
         _routeEditingEnabled = false;
 
-        // Если сохранение произошло на остановочной точке speed=0 и движение
-        // по маршруту было включено, первый play должен продолжить со следующей
-        // точки, а не повторно применять остановку предыдущей.
-        if (_routeEnabled &&
-            _routePlan.IsUsable &&
-            _routeStoppedWaypointIndex is int stopped &&
-            stopped >= 0 &&
-            stopped < _routeState.Waypoints.Count - 1)
+        if (_routeState.Waypoints.Count == 0)
         {
-            _routeCursor = RouteMovementEngine.CreateResumeCursor(
+            _routePlan = RoutePlan.Empty;
+            _routeMovementLastTick = null;
+            return;
+        }
+
+        _routePlan = _routePlanner.Build(_routeState);
+
+        // Идентификатор — главный источник истины. Индекс нужен только как
+        // совместимость со старыми сохранениями, где ID ещё не записывался.
+        var targetId = runtime?.CurrentTargetWaypointId;
+        if (string.IsNullOrWhiteSpace(targetId) &&
+            runtime?.CurrentTargetWaypointIndex is int targetIndex &&
+            targetIndex >= 0 &&
+            targetIndex < _routeState.Waypoints.Count)
+        {
+            targetId = _routeState.Waypoints[targetIndex].Id;
+        }
+
+        var stoppedId = runtime?.StoppedWaypointId;
+        if (string.IsNullOrWhiteSpace(stoppedId) &&
+            runtime?.Cursor.StoppedAtWaypointIndex is int stoppedIndex &&
+            stoppedIndex >= 0 &&
+            stoppedIndex < _routeState.Waypoints.Count)
+        {
+            stoppedId = _routeState.Waypoints[stoppedIndex].Id;
+        }
+
+        _routeStoppedWaypointId = stoppedId;
+        _routeStoppedWaypointIndex = IndexOfWaypoint(stoppedId);
+
+        if (_routePlan.IsUsable)
+        {
+            var nextPointIndex = -1;
+
+            if (!string.IsNullOrWhiteSpace(_routeStoppedWaypointId))
+            {
+                var stopIndex = _routeStoppedWaypointIndex;
+                if (stopIndex is int stop)
+                {
+                    var candidates = _routePlan.Points
+                        .Select((point, index) => (point, index))
+                        .Where(item => item.point.DestinationWaypointIndex >= stop)
+                        .ToArray();
+
+                    nextPointIndex = NearestCandidateRoutePoint(
+                        candidates,
+                        _hub.Get<PlayerState>("player").Value.Position);
+                }
+            }
+            else if (!string.IsNullOrWhiteSpace(targetId))
+            {
+                var targetIndex = IndexOfWaypoint(targetId);
+                if (targetIndex is int target)
+                {
+                    var candidates = _routePlan.Points
+                        .Select((point, index) => (point, index))
+                        .Where(item => item.point.DestinationWaypointIndex >= target)
+                        .ToArray();
+
+                    nextPointIndex = NearestCandidateRoutePoint(
+                        candidates,
+                        _hub.Get<PlayerState>("player").Value.Position);
+                }
+            }
+
+            if (nextPointIndex < 0)
+            {
+                nextPointIndex = RouteMovementEngine.NextRoutePointForPlayer(
+                    _routePlan,
+                    _hub.Get<PlayerState>("player").Value.Position);
+            }
+
+            if (nextPointIndex >= 0)
+            {
+                _routeCursor = RouteCursor.Initial.ForPoint(
+                    nextPointIndex,
+                    _routeLastHeading);
+                SetTargetFromRoutePoint(nextPointIndex);
+            }
+        }
+
+        // Если сохранение было сделано на остановке, она остаётся текущей целью.
+        // Пользовательский play/resume удалит её отдельным явным действием.
+        if (_routeStoppedWaypointId is string stopId &&
+            IndexOfWaypoint(stopId) is int stop)
+        {
+            _routeTargetWaypointId = stopId;
+            _routeTargetWaypointIndex = stop;
+            _routeCursor = RouteMovementEngine.ProjectCursorToWaypoint(
                 _routePlan,
-                stopped,
-                _routeLastHeading);
-            _routeTargetWaypointIndex = stopped + 1;
-            _resumeRouteAfterStop = true;
+                stop,
+                _hub.Get<PlayerState>("player").Value.Position,
+                _routeCursor);
         }
 
         _routeMovementLastTick = null;
@@ -2398,30 +2388,7 @@ public sealed class SimulatorForm : WebViewForm
         PostJson(payload);
     }
 
-    private bool IsRouteCursorUsable(RouteCursor cursor)
-    {
-        if (!cursor.Initialized || !_routePlan.IsUsable)
-            return false;
-
-        if (cursor.LegIndex < 0 || cursor.LegIndex >= _routePlan.Legs.Count)
-            return false;
-
-        var points = _routePlan.Legs[cursor.LegIndex].Polyline;
-        if (points.Count < 2 ||
-            cursor.SegmentIndex < 0 ||
-            cursor.SegmentIndex >= points.Count - 1)
-            return false;
-
-        if (!double.IsFinite(cursor.SegmentProgressMeters) ||
-            cursor.SegmentProgressMeters < 0d)
-            return false;
-
-        return cursor.StoppedAtWaypointIndex is null ||
-               (cursor.StoppedAtWaypointIndex.Value >= 0 &&
-                cursor.StoppedAtWaypointIndex.Value < _routeState.Waypoints.Count);
-    }
-
-    private void SetFact(JsonElement root)
+    private void SetFact(JsonElement root)    private void SetFact(JsonElement root)
     {
         var key = Required(root, "key");
         var state = _hub.Get<FactState>("facts").Value;
@@ -4276,7 +4243,9 @@ public sealed class SimulatorForm : WebViewForm
                 _routeTargetWaypointIndex,
                 _routeTravelRealSeconds,
                 _routeTravelGameSeconds,
-                Enabled: _routeEnabled)) with
+                Enabled: _routeEnabled,
+                CurrentTargetWaypointId: _routeTargetWaypointId,
+                StoppedWaypointId: _routeStoppedWaypointId)) with
         {
             MapView = _mapView?.Normalize()
         };
