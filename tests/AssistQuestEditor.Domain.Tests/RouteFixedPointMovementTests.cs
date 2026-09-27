@@ -94,42 +94,12 @@ public sealed class RouteFixedPointMovementTests
     }
 
     [Fact]
-    public void DynamicTargetMustNotIncreaseDistanceToDestination()
-    {
-        var waypoints = Waypoints();
-        var plan = Plan(waypoints);
-
-        // Игрок находится на 250 м. Ближайшая фиксированная точка впереди —
-        // №3 на 300 м. Точка №2 уже позади и не может стать динамической целью.
-        var nextPoint = RouteMovementEngine.NextRoutePointForPlayer(
-            plan,
-            new WorldCoordinate(0, 0, 250));
-
-        Assert.Equal(2, nextPoint);
-
-        var target = plan.Points[nextPoint].Position;
-        var playerDistance = Math.Abs(target.Z - 250);
-        var destinationDistance =
-            Math.Abs(waypoints[^1].Position.Z - target.Z);
-
-        Assert.True(
-            destinationDistance < Math.Abs(waypoints[^1].Position.Z - 250));
-        Assert.True(playerDistance >= 0);
-    }
-
-    [Fact]
-    public void DynamicSegmentCannotTurnAwayFromDestinationNearTarget()
+    public void PlayerMovesToNextFixedPointByRouteOrderEvenWhenDetourGetsFartherFromDestination()
     {
         var waypoints = new[]
         {
-            new RouteWaypoint(
-                "bend",
-                new WorldCoordinate(15, 0, 5),
-                60),
-            new RouteWaypoint(
-                "destination",
-                new WorldCoordinate(10, 0, 0),
-                60)
+            new RouteWaypoint("start", new WorldCoordinate(0, 0, 0), 60),
+            new RouteWaypoint("destination", new WorldCoordinate(100, 0, 0), 60)
         };
 
         var plan = new RoutePlan(
@@ -141,9 +111,53 @@ public sealed class RouteFixedPointMovementTests
                     new[]
                     {
                         waypoints[0].Position,
+                        new WorldCoordinate(-80, 0, 0),
+                        new WorldCoordinate(-80, 0, 80),
                         waypoints[1].Position
                     },
-                    Math.Sqrt(50) + Math.Sqrt(50))
+                    0)
+            },
+            Array.Empty<string>(),
+            waypoints);
+
+        // Игрок находится ближе к destination по прямой, но fixed-маршрут сначала
+        // обязан пройти через дорожную точку (-80, 0). Евклидова дальность до
+        // destination здесь не имеет права выкинуть этот участок маршрута.
+        var nextPoint = RouteMovementEngine.NextRoutePointForPlayer(
+            plan,
+            new WorldCoordinate(-40, 0, 20));
+
+        Assert.Equal(2, nextPoint);
+    }
+
+    [Fact]
+    public void DynamicTargetFollowsRoadAnchorNotWaypoint()
+    {
+        var waypoints = Waypoints();
+
+        var plan = new RoutePlan(
+            new[]
+            {
+                new RouteLeg(
+                    -1,
+                    0,
+                    new[]
+                    {
+                        new WorldCoordinate(0, 0, 20),
+                        new WorldCoordinate(0, 0, 50),
+                        waypoints[0].Position
+                    },
+                    80),
+                new RouteLeg(
+                    0,
+                    1,
+                    new[] { waypoints[0].Position, waypoints[1].Position },
+                    100),
+                new RouteLeg(
+                    1,
+                    2,
+                    new[] { waypoints[1].Position, waypoints[2].Position },
+                    100)
             },
             Array.Empty<string>(),
             waypoints);
@@ -152,10 +166,10 @@ public sealed class RouteFixedPointMovementTests
             plan,
             new WorldCoordinate(0, 0, 0));
 
-        // Прямая к промежуточной точке сначала приближает игрока к
-        // destination, но перед самой точкой начинает удалять от него.
-        // Поэтому динамический сегмент выбирает сам пункт назначения.
-        Assert.Equal(1, nextPoint);
+        // Dynamic segment должен заканчиваться на ближайшей fixed road point,
+        // а не сразу на путевой точке №1.
+        Assert.Equal(0, nextPoint);
+        Assert.Null(plan.Points[nextPoint].WaypointIndex);
     }
 
     [Fact]
