@@ -118,6 +118,47 @@ public sealed class RouteFixedPointMovementTests
     }
 
     [Fact]
+    public void DynamicSegmentCannotTurnAwayFromDestinationNearTarget()
+    {
+        var waypoints = new[]
+        {
+            new RouteWaypoint(
+                "bend",
+                new WorldCoordinate(15, 0, 5),
+                60),
+            new RouteWaypoint(
+                "destination",
+                new WorldCoordinate(10, 0, 0),
+                60)
+        };
+
+        var plan = new RoutePlan(
+            new[]
+            {
+                new RouteLeg(
+                    0,
+                    1,
+                    new[]
+                    {
+                        waypoints[0].Position,
+                        waypoints[1].Position
+                    },
+                    Math.Sqrt(50) + Math.Sqrt(50))
+            },
+            Array.Empty<string>(),
+            waypoints);
+
+        var nextPoint = RouteMovementEngine.NextRoutePointForPlayer(
+            plan,
+            new WorldCoordinate(0, 0, 0));
+
+        // Прямая к промежуточной точке сначала приближает игрока к
+        // destination, но перед самой точкой начинает удалять от него.
+        // Поэтому динамический сегмент выбирает сам пункт назначения.
+        Assert.Equal(1, nextPoint);
+    }
+
+    [Fact]
     public void DynamicSegmentMovesStraightToCurrentRoutePoint()
     {
         var waypoints = Waypoints();
