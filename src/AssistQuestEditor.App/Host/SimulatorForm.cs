@@ -1670,9 +1670,16 @@ public sealed class SimulatorForm : WebViewForm
 
         if (trimToPlayer && _routePlan.IsUsable && _routeState.Waypoints.Count > 1)
         {
-            var preferredWaypointIndex =
-                RouteMovementEngine.PreferredWaypointForPlayer(
+            var preferredWaypointIndex = _routePlan.Errors.Count == 0 &&
+                _routePlan.Points.Count > 0
+                ? RouteMovementEngine.PreferredWaypointForPlayer(
                     _routePlan,
+                    playerPosition)
+                // Если ошибка находится уже ПОЗАДИ игрока, не позволяем ей
+                // блокировать пересчёт до текущей позиции. После отсечения
+                // новый RoutePlan будет построен только для оставшейся структуры.
+                : RouteMovementEngine.PreferredForwardWaypoint(
+                    _routeState.Waypoints,
                     playerPosition);
 
             if (preferredWaypointIndex is int cutIndex && cutIndex > 0)
