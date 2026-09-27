@@ -97,6 +97,8 @@ public sealed class QuestRuntime : IQuestRuntimeController
     public void SetSimulationRunning(bool running)
     {
         SimulationRunning = running;
+        _lastTickUtc = running ? DateTimeOffset.UtcNow : null;
+
         if (running)
             IsPaused = false;
     }
@@ -105,12 +107,14 @@ public sealed class QuestRuntime : IQuestRuntimeController
     {
         SimulationRunning = false;
         IsPaused = true;
+        _lastTickUtc = null;
     }
 
     public void ResumeSimulation()
     {
         SimulationRunning = true;
         IsPaused = false;
+        _lastTickUtc = DateTimeOffset.UtcNow;
     }
 
     public void SetSimulationSpeed(double speed)
