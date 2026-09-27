@@ -1556,7 +1556,7 @@
     ctx.restore();
   }
 
-  function routeLegLabelPoint(points)  function routeLegLabelPoint(points) {
+  function routeLegLabelPoint(points) {
     const index = Math.floor((points.length - 1) / 2);
 
     if (index < 0 || !points[index] || !points[index + 1])
