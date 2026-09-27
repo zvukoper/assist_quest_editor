@@ -3499,7 +3499,9 @@
       };
     }
 
-    const advanced = new Date(clockAnchor.moment.getTime() + (Date.now() - clockAnchor.syncedAt));
+    const realElapsedMs = Math.max(0, Date.now() - clockAnchor.syncedAt);
+    const gameElapsedMs = realElapsedMs * Math.max(0, Number(simulationSpeed) || 1);
+    const advanced = new Date(clockAnchor.moment.getTime() + gameElapsedMs);
     const hours = pad(advanced.getUTCHours());
     const minutes = pad(advanced.getUTCMinutes());
 
@@ -3693,7 +3695,7 @@
    * (1 → 5 → 20 → 60 → 1) позволяет вернуться к нормальной скорости тем же
    * нажатием, не подбирая её обратно.
    */
-  const SIMULATION_SPEEDS = [1, 5, 20, 60];
+  const SIMULATION_SPEEDS = [1, 2, 4, 8];
 
   function nextSimulationSpeed() {
     const current = SIMULATION_SPEEDS.findIndex(value => Math.abs(value - Number(simulationSpeed)) < 0.001);
