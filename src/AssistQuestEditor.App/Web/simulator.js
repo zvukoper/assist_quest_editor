@@ -4720,7 +4720,7 @@
         : null;
       fitLocationVisualisation();
       drawMap();
-      renderSide();
+      scheduleSidebarRender();
       return;
     }
 
@@ -4801,7 +4801,7 @@
         eventHistory.splice(12);
       }
       scheduleUiRender();
-      renderSide();
+      scheduleSidebarRender();
       return;
     }
 
