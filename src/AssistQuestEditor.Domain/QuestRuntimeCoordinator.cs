@@ -233,6 +233,7 @@ public sealed class QuestRuntimeCoordinator : IQuestRuntimeController
             return;
 
         _simulationSpeed = Math.Clamp(speed, MinSimulationSpeed, MaxSimulationSpeed);
+        _activeRuntime?.SetSimulationSpeed(_simulationSpeed);
     }
 
     /// <summary>
@@ -410,6 +411,7 @@ public sealed class QuestRuntimeCoordinator : IQuestRuntimeController
         _activeRuntime = runtime;
         runtime.Published += ActiveRuntime_Published;
         runtime.SetSimulationRunning(_simulationRunning);
+        runtime.SetSimulationSpeed(_simulationSpeed);
         _lastState = runtime.State;
         runtime.Start();
 
