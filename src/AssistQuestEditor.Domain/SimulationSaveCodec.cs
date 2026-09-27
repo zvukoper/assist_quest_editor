@@ -274,7 +274,7 @@ public static class SimulationSaveCodec
         if (header.FormatVersion >= 2)
             WriteDynamicEvents(writer, strings, state.DynamicEvents);
         if (header.FormatVersion >= 3)
-            WriteRoute(writer, strings, state.Route, header.FormatVersion >= 5);
+            WriteRoute(writer, strings, state.Route, header.FormatVersion >= 5, header.FormatVersion);
         if (header.FormatVersion >= 4)
             WriteRouteRuntime(writer, state.RouteRuntime, header.FormatVersion);
         if (header.FormatVersion >= 7)
@@ -460,6 +460,16 @@ public static class SimulationSaveCodec
         return (state with { Effects = effects }).Normalize();
     }
 
+    private static void WriteNullableString(BinaryWriter writer, string? value)
+    {
+        writer.Write(value is not null);
+        if (value is not null)
+            WriteString(writer, value);
+    }
+
+    private static string? ReadNullableString(BinaryReader reader) =>
+        reader.ReadBoolean() ? ReadString(reader) : null;
+
     private static void WriteRouteRuntime(
         BinaryWriter writer,
         RouteRuntimeState runtime,
@@ -485,6 +495,12 @@ public static class SimulationSaveCodec
             WriteDouble(writer, runtime.TravelGameSeconds);
             if (formatVersion >= 6)
                 writer.Write(runtime.Enabled);
+
+            if (formatVersion >= 9)
+            {
+                WriteNullableString(writer, runtime.CurrentTargetWaypointId);
+                WriteNullableString(writer, runtime.StoppedWaypointId);
+            }
         }
     }
 
@@ -509,19 +525,34 @@ public static class SimulationSaveCodec
         // работает только потому, что параметр конструктора уже имеет тип int?.
         int? target = reader.ReadBoolean() ? reader.ReadInt32() : null;
 
+        var travelRealSeconds = ReadDouble(reader);
+        var travelGameSeconds = ReadDouble(reader);
+        var enabled = formatVersion >= 6 && reader.ReadBoolean();
+
+        string? targetId = null;
+        string? stoppedId = null;
+        if (formatVersion >= 9)
+        {
+            targetId = ReadNullableString(reader);
+            stoppedId = ReadNullableString(reader);
+        }
+
         return new RouteRuntimeState(
             cursor,
             target,
-            ReadDouble(reader),
-            ReadDouble(reader),
-            formatVersion >= 6 && reader.ReadBoolean());
+            travelRealSeconds,
+            travelGameSeconds,
+            enabled,
+            targetId,
+            stoppedId);
     }
 
     private static void WriteRoute(
         BinaryWriter writer,
         StringTable strings,
         RouteState route,
-        bool includeOffRoad)
+        bool includeOffRoad,
+        int formatVersion)
     {
         route = (route ?? RouteState.Empty).Normalize();
         WriteDouble(writer, route.DefaultSpeedKmh);
@@ -530,6 +561,8 @@ public static class SimulationSaveCodec
         foreach (var waypoint in route.Waypoints)
         {
             writer.Write(strings.Index(waypoint.Id));
+            if (formatVersion >= 9)
+                writer.Write(waypoint.EffectiveNumber(0));
             WriteDouble(writer, waypoint.Position.X);
             WriteDouble(writer, waypoint.Position.Y);
             WriteDouble(writer, waypoint.Position.Z);
