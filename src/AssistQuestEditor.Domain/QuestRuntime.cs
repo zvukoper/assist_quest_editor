@@ -37,8 +37,7 @@ public sealed class QuestRuntime : IQuestRuntimeController
     private readonly IDataChannelHub _hub;
     private readonly SceneRuntime? _sceneRuntime;
     private readonly ILocationResolver? _locationResolver;
-    private double? _waitRemainingGameSeconds;
-    private DateTimeOffset? _lastTickUtc;
+    private TimeSpan? _waitUntilGameElapsed;
 
     public QuestRuntime(
         QuestGraphStore graphStore,
@@ -97,8 +96,6 @@ public sealed class QuestRuntime : IQuestRuntimeController
     public void SetSimulationRunning(bool running)
     {
         SimulationRunning = running;
-        _lastTickUtc = running ? DateTimeOffset.UtcNow : null;
-
         if (running)
             IsPaused = false;
     }
@@ -107,14 +104,12 @@ public sealed class QuestRuntime : IQuestRuntimeController
     {
         SimulationRunning = false;
         IsPaused = true;
-        _lastTickUtc = null;
     }
 
     public void ResumeSimulation()
     {
         SimulationRunning = true;
         IsPaused = false;
-        _lastTickUtc = DateTimeOffset.UtcNow;
     }
 
     public void SetSimulationSpeed(double speed)
@@ -205,29 +200,13 @@ public sealed class QuestRuntime : IQuestRuntimeController
 
         if (string.Equals(State.WaitingFor, "Time", StringComparison.OrdinalIgnoreCase))
         {
-            if (_waitRemainingGameSeconds is null)
+            var clock = _hub.Get<WorldClockState>("sim-time").Value;
+            if (_waitUntilGameElapsed is not { } target || clock.Elapsed < target)
                 return;
 
-            var now = DateTimeOffset.UtcNow;
-            // Tick() вызывается с фиксированным реальным интервалом; сам прогресс
-            // ожидания считается в игровом времени и поэтому ускоряется вместе с
-            // sim-time. Пауза останавливает Tick(), а Stop() сбрасывает ожидание.
-            var elapsedRealSeconds = _lastTickUtc is { } previous
-                ? Math.Max(0d, (now - previous).TotalSeconds)
-                : 0d;
-
-            _lastTickUtc = now;
-            if (elapsedRealSeconds > 0d)
-            {
-                _waitRemainingGameSeconds = Math.Max(
-                    0d,
-                    _waitRemainingGameSeconds.Value -
-                    elapsedRealSeconds * Math.Max(0d, SimulationSpeed));
-            }
-
-            if (_waitRemainingGameSeconds > 0d)
-                return;
-
+            // Таймер сравнивает canonical sim-time, а не DateTime.UtcNow.
+            // Поэтому 1x/2x/4x/8x, пауза и продолжение автоматически совпадают
+            // с теми же игровыми часами, которые видит весь мир.
             var node = FindCurrentNode();
             if (node is null)
             {
@@ -884,8 +863,8 @@ public sealed class QuestRuntime : IQuestRuntimeController
             return;
         }
 
-        _waitRemainingGameSeconds = seconds;
-        _lastTickUtc = DateTimeOffset.UtcNow;
+        var clock = _hub.Get<WorldClockState>("sim-time").Value;
+        _waitUntilGameElapsed = clock.Elapsed + TimeSpan.FromSeconds(seconds);
         Wait("Time");
     }
 
@@ -1320,8 +1299,7 @@ public sealed class QuestRuntime : IQuestRuntimeController
 
     private void ResetWaiting()
     {
-        _waitRemainingGameSeconds = null;
-        _lastTickUtc = null;
+_waitUntilGameElapsed = null;
     }
 
     private void Publish(string eventType, string source, string? nodeId, string message)
