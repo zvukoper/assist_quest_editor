@@ -38,6 +38,40 @@ public sealed class PlayerConditionEngineTests
     /// лишь часа ожидания не будет.
     /// </summary>
     [Fact]
+    public void AcceleratedGameTimeIncreasesTimeBasedFatigue()
+    {
+        var vitals = new PlayerVitalsState(100, 100, 100, 100, 100, 100, 0, 100);
+        var conditions = PlayerConditionState.Empty;
+        var normal = PlayerConditionEngine.Advance(
+            vitals,
+            conditions,
+            3600,
+            3600,
+            playerMoving: true,
+            sleeping: false,
+            traveledMeters: 0);
+
+        var accelerated = PlayerConditionEngine.Advance(
+            vitals,
+            conditions,
+            8 * 3600,
+            3600,
+            playerMoving: true,
+            sleeping: false,
+            traveledMeters: 0);
+
+        Assert.Equal(
+            100d / PlayerConditionEngine.FatigueBuildHours,
+            normal.Vitals.Fatigue,
+            6);
+
+        Assert.Equal(
+            8d * 100d / PlayerConditionEngine.FatigueBuildHours,
+            accelerated.Vitals.Fatigue,
+            6);
+    }
+
+    [Fact]
     public void TraveledDistanceAddsFatigueBeyondElapsedTime()
     {
         var timeOnly = Advance(hours: 1);
