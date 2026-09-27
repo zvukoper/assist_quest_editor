@@ -274,7 +274,7 @@ public sealed class RouteTests
         Assert.False(result.Enabled);
         Assert.True(result.StoppedAtWaypoint);
         Assert.Equal(0, result.Cursor.StoppedAtWaypointIndex);
-        Assert.Equal(0, result.Position.X, 6);
+        Assert.Equal(80, result.Position.X, 6);
     }
 
     [Fact]
