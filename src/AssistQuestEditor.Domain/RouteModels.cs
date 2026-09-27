@@ -311,6 +311,9 @@ public sealed record RouteMovementResult(
     /// <summary>Путевые точки, физически достигнутые в этом тике.</summary>
     public IReadOnlyList<string> PassedWaypointIds { get; init; } =
         Array.Empty<string>();
+
+    /// <summary>Идентификатор путевой точки, на которой произошла остановка.</summary>
+    public string? StoppedWaypointId { get; init; }
 }
 
 public static class RouteMovementEngine
@@ -417,7 +420,10 @@ public static class RouteMovementEngine
                             },
                             false,
                             false,
-                            true);
+                            true)
+                        {
+                            StoppedWaypointId = waypoint.Id
+                        };
                     }
 
                     passedIds.Add(waypoint.Id);
@@ -516,7 +522,8 @@ public static class RouteMovementEngine
                         false,
                         true)
                     {
-                        PassedWaypointIds = passedIds
+                        PassedWaypointIds = passedIds,
+                        StoppedWaypointId = waypoint.Id
                     };
                 }
 
