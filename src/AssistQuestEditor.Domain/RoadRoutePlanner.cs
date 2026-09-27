@@ -84,6 +84,22 @@ public sealed class RoadRoutePlanner
         if (route.Waypoints.Count == 0)
             return RoutePlan.Empty;
 
+        var legs = new List<RouteLeg>();
+        var errors = new List<string>();
+
+        // Для одной путевой точки дорожный граф вообще не нужен: это одна
+        // фиксированная точка маршрута, а подъезд к ней всегда динамический.
+        if (route.Waypoints.Count == 1)
+        {
+            legs.Add(new RouteLeg(
+                0,
+                0,
+                new[] { route.Waypoints[0].Position },
+                0d));
+
+            return new RoutePlan(legs, errors, route.Waypoints);
+        }
+
         if (IsEmpty && route.Waypoints.Any(item => !item.IsOffRoad))
         {
             return new RoutePlan(
@@ -94,20 +110,6 @@ public sealed class RoadRoutePlanner
                     "Файл data/world/roads.json не загружен или не содержит отрезков."
                 },
                 route.Waypoints);
-        }
-
-        var legs = new List<RouteLeg>();
-        var errors = new List<string>();
-
-        if (route.Waypoints.Count == 1)
-        {
-            legs.Add(new RouteLeg(
-                0,
-                0,
-                new[] { route.Waypoints[0].Position },
-                0d));
-
-            return new RoutePlan(legs, errors, route.Waypoints);
         }
 
         for (var index = 0; index < route.Waypoints.Count - 1; index++)
