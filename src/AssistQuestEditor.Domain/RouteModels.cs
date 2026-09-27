@@ -641,13 +641,67 @@ public static class RouteMovementEngine
             }
         }
 
-        if (bestSegment == 0 && bestT <= 0.000001d)
-            return 0;
+        var candidateStart =
+            bestSegment == 0 && bestT <= 0.000001d
+                ? 0
+                : bestT >= 0.999999d
+                    ? Math.Min(bestSegment + 2, plan.Points.Count - 1)
+                    : bestSegment + 1;
 
-        if (bestT >= 0.999999d)
-            return Math.Min(bestSegment + 2, plan.Points.Count - 1);
+        var destination = plan.WaypointSource is { Count: > 0 }
+            ? plan.WaypointSource[^1].Position
+            : plan.Points[^1].Position;
 
-        return bestSegment + 1;
+        var playerDestinationDistance = Distance2D(position, destination);
+        if (!double.IsFinite(playerDestinationDistance))
+            return -1;
+
+        // Игрок уже в пункте назначения: не создаём «обратный» динамический
+        // сегмент. Последняя точка будет завершена обычным движением.
+        if (playerDestinationDistance <= PositionEpsilonMeters)
+            return plan.Points.Count - 1;
+
+        var bestCandidate = -1;
+        var bestPlayerDistance = double.PositiveInfinity;
+
+        for (var index = candidateStart; index < plan.Points.Count; index++)
+        {
+            var point = plan.Points[index];
+            var dx = point.Position.X - position.X;
+            var dz = point.Position.Z - position.Z;
+            var playerDistance = Math.Sqrt(dx * dx + dz * dz);
+
+            var toDestinationX = point.Position.X - destination.X;
+            var toDestinationZ = point.Position.Z - destination.Z;
+            var destinationDistance = Math.Sqrt(
+                toDestinationX * toDestinationX +
+                toDestinationZ * toDestinationZ);
+
+            if (!double.IsFinite(playerDistance) ||
+                !double.IsFinite(destinationDistance))
+                continue;
+
+            // Кандидат обязан приближать игрока к пункту назначения. Для самой
+            // последней точки допускаем равенство: это фактический пункт
+            // назначения, к которому нужно приехать.
+            var movesCloser =
+                index == plan.Points.Count - 1
+                    ? destinationDistance <= playerDestinationDistance + PositionEpsilonMeters
+                    : destinationDistance < playerDestinationDistance - PositionEpsilonMeters;
+
+            if (!movesCloser)
+                continue;
+
+            if (playerDistance < bestPlayerDistance - PositionEpsilonMeters ||
+                (Math.Abs(playerDistance - bestPlayerDistance) <= PositionEpsilonMeters &&
+                 index > bestCandidate))
+            {
+                bestCandidate = index;
+                bestPlayerDistance = playerDistance;
+            }
+        }
+
+        return bestCandidate;
     }
 
     /// <summary>
