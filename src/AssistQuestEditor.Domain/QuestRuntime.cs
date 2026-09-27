@@ -37,7 +37,8 @@ public sealed class QuestRuntime : IQuestRuntimeController
     private readonly IDataChannelHub _hub;
     private readonly SceneRuntime? _sceneRuntime;
     private readonly ILocationResolver? _locationResolver;
-    private DateTimeOffset? _waitUntil;
+    private double? _waitRemainingGameSeconds;
+    private DateTimeOffset? _lastTickUtc;
 
     public QuestRuntime(
         QuestGraphStore graphStore,
@@ -198,13 +199,31 @@ public sealed class QuestRuntime : IQuestRuntimeController
             return;
         }
 
-        if (_waitUntil is not null && DateTimeOffset.UtcNow < _waitUntil.Value)
-        {
-            return;
-        }
-
         if (string.Equals(State.WaitingFor, "Time", StringComparison.OrdinalIgnoreCase))
         {
+            if (_waitRemainingGameSeconds is null)
+                return;
+
+            var now = DateTimeOffset.UtcNow;
+            // Tick() вызывается с фиксированным реальным интервалом; сам прогресс
+            // ожидания считается в игровом времени и поэтому ускоряется вместе с
+            // sim-time. Пауза останавливает Tick(), а Stop() сбрасывает ожидание.
+            var elapsedRealSeconds = _lastTickUtc is { } previous
+                ? Math.Max(0d, (now - previous).TotalSeconds)
+                : 0d;
+
+            _lastTickUtc = now;
+            if (elapsedRealSeconds > 0d)
+            {
+                _waitRemainingGameSeconds = Math.Max(
+                    0d,
+                    _waitRemainingGameSeconds.Value -
+                    elapsedRealSeconds * Math.Max(0d, SimulationSpeed));
+            }
+
+            if (_waitRemainingGameSeconds > 0d)
+                return;
+
             var node = FindCurrentNode();
             if (node is null)
             {
@@ -861,7 +880,8 @@ public sealed class QuestRuntime : IQuestRuntimeController
             return;
         }
 
-        _waitUntil = DateTimeOffset.UtcNow.AddSeconds(seconds);
+        _waitRemainingGameSeconds = seconds;
+        _lastTickUtc = DateTimeOffset.UtcNow;
         Wait("Time");
     }
 
@@ -1296,7 +1316,8 @@ public sealed class QuestRuntime : IQuestRuntimeController
 
     private void ResetWaiting()
     {
-        _waitUntil = null;
+        _waitRemainingGameSeconds = null;
+        _lastTickUtc = null;
     }
 
     private void Publish(string eventType, string source, string? nodeId, string message)
