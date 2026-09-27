@@ -1531,23 +1531,11 @@ public sealed class SimulatorForm : WebViewForm
 
     private void SetRouteEnabled(bool enabled)
     {
-        if (enabled && _routePlan.Errors.Count > 0)
-        {
-            var details = string.Join(
-                Environment.NewLine,
-                _routePlan.Errors.Select(error => "• " + error));
-
-            throw new InvalidOperationException(
-                "Движение по маршруту недоступно. Ошибка построения маршрута:" +
-                Environment.NewLine +
-                details);
-        }
-
-        _routeEnabled = enabled;
         _routeMovementLastTick = null;
 
         if (!enabled)
         {
+            _routeEnabled = false;
             SetPlayerMovementIdle();
             _resumeRouteAfterStop = false;
             AppLogger.Info("SimulatorForm: движение по маршруту выключено.");
@@ -1556,79 +1544,64 @@ public sealed class SimulatorForm : WebViewForm
             return;
         }
 
-        if (_routePlanNeedsRebuildFromCurrentPlayer)
+        if (_routeState.Waypoints.Count == 0)
+            throw new InvalidOperationException("Маршрут пуст — движение по нему невозможно.");
+
+        var resumed = _routeStoppedWaypointId is not null;
+
+        if (resumed)
         {
-            RebuildRoute("route movement started after route file load", publishSnapshot: false);
-            _routePlanNeedsRebuildFromCurrentPlayer = false;
-        }
-
-        var resumed = false;
-        if (_routeStoppedWaypointIndex is int stopped &&
-            stopped < _routeState.Waypoints.Count - 1)
-        {
-            _routeCursor = RouteMovementEngine.CreateResumeCursor(
-                _routePlan,
-                stopped,
-                _routeLastHeading);
-            _routeTargetWaypointIndex = stopped + 1;
-            _routeStoppedWaypointIndex = null;
-            _resumeRouteAfterStop = true;
-            resumed = true;
-        }
-        else
-        {
-            _resumeRouteAfterStop = false;
-
-            // Цель выбирается ПОД ПОЗИЦИЮ ИГРОКА, а не по индексу курсора.
-            //
-            // Здесь стояло «взять цель из курсора, а без курсора — точку №1».
-            // После загрузки маршрута из файла курсор не инициализирован, поэтому
-            // целью ВСЕГДА становилась точка №1 — даже если игрок стоял между
-            // точками 6 и 7. Он и ехал к №1, то есть назад через весь маршрут.
-            //
-            // Правило то же, что при перемещении игрока: ближайшая точка, а при
-            // неоднозначности — старшая по номеру. Курсор после этого привязывается
-            // к выбранной цели, поэтому скорость берётся у НАЧАЛА её участка и
-            // игрок доезжает до точки со скоростью 0, а не замирает на месте.
-            var playerPosition = _hub.Get<PlayerState>("player").Value.Position;
-
-            var preferredTarget = _routeState.Waypoints.Count > 0
-                ? RouteMovementEngine.PreferredForwardWaypoint(
-                    _routeState.Waypoints,
-                    playerPosition)
-                : null;
-
-            if (preferredTarget is int preferredIndex && _routePlan.IsUsable)
+            var stoppedId = _routeStoppedWaypointId!;
+            _routeState = _routeState with
             {
-                var projected = RouteMovementEngine.ProjectCursorToWaypoint(
-                    _routePlan,
-                    preferredIndex,
-                    playerPosition,
-                    _routeCursor);
+                Waypoints = _routeState.Waypoints
+                    .Where(item => !item.Id.Equals(
+                        stoppedId,
+                        StringComparison.OrdinalIgnoreCase))
+                    .ToArray()
+            };
 
-                _routeCursor = projected.Initialized
-                    ? projected
-                    : RouteMovementEngine.ProjectForwardCursor(
-                        _routePlan,
-                        playerPosition,
-                        _routeCursor);
-            }
-
-            _routeTargetWaypointIndex =
-                GetTargetWaypointIndex(_routeCursor) ?? preferredTarget;
-
-            if (!_routeCursor.Initialized)
-                _routeCursor = _routeCursor with { ResumeAfterStop = false };
+            // Точка остановки теперь пройдена. Удаляем её без перенумерации:
+            // номера остальных точек — часть пользовательской структуры маршрута.
+            _routeStoppedWaypointId = null;
+            _routeStoppedWaypointIndex = null;
+            _routeTargetWaypointId = null;
+            _routeTargetWaypointIndex = null;
         }
+
+        RebuildRoute(
+            resumed
+                ? "route movement resumed after stop"
+                : "route movement enabled",
+            publishSnapshot: false,
+            trimToPlayer: false,
+            renumberTrimmed: false);
+
+        if (!_routePlan.IsUsable)
+        {
+            _routeEnabled = false;
+            throw new InvalidOperationException(
+                "Движение по маршруту недоступно:" +
+                Environment.NewLine +
+                string.Join(
+                    Environment.NewLine,
+                    _routePlan.Errors.Select(error => "• " + error)));
+        }
+
+        _routeEnabled = true;
+        _resumeRouteAfterStop = false;
 
         LogRouteMovementStart(resumed);
 
         AppLogger.Info(
             "SimulatorForm: движение по маршруту включено.",
-            $"waypoints={_routeState.Waypoints.Count}; defaultSpeed={_routeState.DefaultSpeedKmh}; " +
-            $"targetWaypoint={(_routeTargetWaypointIndex is int target ? target + 1 : 0)}");
+            $"waypoints={_routeState.Waypoints.Count}; target={CurrentTargetNumberText()}; resumed={resumed}");
 
-        PersistSession("автосохранение: движение по маршруту включено", force: true);
+        PersistSession(
+            resumed
+                ? "автосохранение: движение по маршруту продолжено"
+                : "автосохранение: движение по маршруту включено",
+            force: true);
         RequestSnapshot("route movement enabled");
     }
 
@@ -1706,137 +1679,205 @@ public sealed class SimulatorForm : WebViewForm
     private void RebuildRoute(
         string reason,
         bool publishSnapshot = true,
-        RouteRebuildContext? routeRebuildContext = null)
-    {        _routeState = _routeState.Normalize();
+        bool trimToPlayer = false,
+        bool renumberTrimmed = false,
+        string? anchorWaypointId = null)
+    {
+        _routeState = _routeState.Normalize();
         var playerPosition = _hub.Get<PlayerState>("player").Value.Position;
 
-        // Маршрут строится от ТОЙ точки, к которой движение реально продолжается.
-        //
-        // Без этого он всегда начинался от точки №1, и после автозагрузки
-        // сохранения (точки 1–7 уже пройдены) первая часть пути вела НАЗАД по тем
-        // же дорогам, которыми игрок только что приехал. На карте это выглядело как
-        // «маршрут идёт по дороге», а пройденная дважды дорога давала лишнюю линию
-        // рядом с бездорожным участком.
-        //
-        // Ведущие пройденные точки отбрасываются только там, где продолжение
-        // очевидно: цель известна и лежит впереди. Любая неопределённость (нет цели,
-        // цель №1, точка бездорожья или недостижимая привязка у самой цели) оставляет
-        // прежнее поведение — планировщик обязан строить путь от игрока.
-        var startWaypointIndex = ResolveRouteStartWaypoint(_routeTargetWaypointIndex);
-        var routeSource = startWaypointIndex == 0
-            ? _routeState
-            : _routeState with
-            {
-                Waypoints = _routeState.Waypoints.Skip(startWaypointIndex).ToArray()
-            };
-
-        _routePlan = _routePlanner.Build(routeSource, playerPosition)
-            .ShiftWaypointIndices(startWaypointIndex);
-
-        if (startWaypointIndex > 0)
+        if (_routeState.Waypoints.Count == 0)
         {
-            AppLogger.Info(
-                "SimulatorForm: маршрут продолжен от первой точки впереди игрока.",
-                $"skipped={startWaypointIndex}; target={(startWaypointIndex + 1)}; legs={_routePlan.Legs.Count}");
+            _routePlan = RoutePlan.Empty;
+            _routeCursor = RouteCursor.Initial;
+            _routeTargetWaypointIndex = null;
+            _routeTargetWaypointId = null;
+
+            if (publishSnapshot)
+                RequestSnapshot("route rebuilt: " + reason);
+            return;
         }
 
-        if (routeRebuildContext is null)
+        // RoutePlan содержит только ФИКСИРОВАННУЮ часть маршрута. Позиция игрока
+        // никогда не записывается в полилинию: динамический сегмент строится только
+        // в BuildRouteSnapshot и в RouteMovementEngine.Advance.
+        _routePlan = _routePlanner.Build(_routeState);
+
+        if (trimToPlayer && _routePlan.IsUsable && _routeState.Waypoints.Count > 1)
+        {
+            var preferredWaypointIndex =
+                RouteMovementEngine.PreferredWaypointForPlayer(
+                    _routePlan,
+                    playerPosition);
+
+            if (preferredWaypointIndex is int cutIndex && cutIndex > 0)
+            {
+                var removedNumbers = _routeState.Waypoints
+                    .Take(cutIndex)
+                    .Select((item, index) => item.EffectiveNumber(index))
+                    .ToArray();
+
+                _routeState = _routeState.RemoveLeadingWaypoints(cutIndex);
+
+                // Это ЯВНЫЙ пересчёт пользователя (перемещение игрока / загрузка
+                // с выбором «пересчитать»), поэтому только здесь нумерация может
+                // стать 1..N. Автоматическое прохождение использует trim=false.
+                if (renumberTrimmed)
+                    _routeState = _routeState.RenumberWaypoints();
+
+                _routePlan = _routePlanner.Build(_routeState);
+
+                AppLogger.Info(
+                    "SimulatorForm: ведущие точки маршрута отсечены.",
+                    $"reason={reason}; removed={string.Join(",", removedNumbers)}; " +
+                    $"renumbered={renumberTrimmed}; remaining={_routeState.Waypoints.Count}");
+            }
+        }
+
+        if (!_routePlan.IsUsable)
         {
             _routeCursor = RouteCursor.Initial;
-            _routeMovementLastTick = null;
-            _routeStoppedWaypointIndex = null;
-            _resumeRouteAfterStop = false;
-            _routeTargetWaypointIndex = _routeState.Waypoints.Count > 0 ? 0 : null;
-            _routeTravelRealSeconds = 0d;
-            _routeTravelGameSeconds = 0d;
+            _routeTargetWaypointIndex = null;
+            _routeTargetWaypointId = null;
+            _routePlanNeedsRebuildFromCurrentPlayer = false;
+
+            foreach (var error in _routePlan.Errors)
+                AppLogger.Warn("SimulatorForm: ошибка маршрута.", error);
+
+            if (publishSnapshot)
+                RequestSnapshot("route rebuilt: " + reason);
+            return;
+        }
+
+        var nextPointIndex = -1;
+
+        // Сохранённая логическая цель используется только как нижняя граница:
+        // сам динамический сегмент всё равно начинается от текущего игрока и идёт
+        // к ближайшей подходящей фиксированной точке маршрута.
+        if (!string.IsNullOrWhiteSpace(anchorWaypointId))
+        {
+            var targetIndex = _routeState.Waypoints
+                .Select((item, index) => (item, index))
+                .Where(item => item.item.Id.Equals(
+                    anchorWaypointId,
+                    StringComparison.OrdinalIgnoreCase))
+                .Select(item => (int?)item.index)
+                .FirstOrDefault();
+
+            if (targetIndex is int minTarget)
+            {
+                var candidates = _routePlan.Points
+                    .Select((point, index) => (point, index))
+                    .Where(item => item.point.DestinationWaypointIndex >= minTarget)
+                    .ToArray();
+
+                nextPointIndex = NearestCandidateRoutePoint(
+                    candidates,
+                    playerPosition);
+            }
+        }
+
+        if (nextPointIndex < 0)
+        {
+            nextPointIndex = RouteMovementEngine.NextRoutePointForPlayer(
+                _routePlan,
+                playerPosition);
+        }
+
+        if (nextPointIndex >= 0)
+        {
+            _routeCursor = RouteCursor.Initial.ForPoint(
+                nextPointIndex,
+                _routeLastHeading);
+            SetTargetFromRoutePoint(nextPointIndex);
         }
         else
         {
-            var context = routeRebuildContext;
-            var targetIndex = MapWaypointIndex(
-                _routeState,
-                context.TargetWaypointId,
-                context.TargetWaypointIndex);
-            var stoppedIndex = MapWaypointIndex(
-                _routeState,
-                context.StoppedWaypointId,
-                context.StoppedWaypointIndex);
-
-            _routeTravelRealSeconds = context.TravelRealSeconds;
-            _routeTravelGameSeconds = context.TravelGameSeconds;
-            _routeStoppedWaypointIndex = stoppedIndex;
-            _resumeRouteAfterStop = context.Cursor.ResumeAfterStop;
-
-            if (_routePlan.IsUsable &&
-                context.Cursor.Initialized &&
-                targetIndex is int preservedTarget)
-            {
-                var projected = RouteMovementEngine.ProjectCursorToWaypoint(
-                    _routePlan,
-                    preservedTarget,
-                    playerPosition,
-                    context.Cursor);
-
-                if (projected.Initialized)
-                {
-                    _routeCursor = projected with
-                    {
-                        ResumeAfterStop = context.Cursor.ResumeAfterStop,
-                        StoppedAtWaypointIndex = stoppedIndex
-                    };
-                    _routeLastHeading = projected.LastHeadingDegrees;
-                    _routeTargetWaypointIndex = preservedTarget;
-                }
-                else
-                {
-                    _routeCursor = context.Cursor with
-                    {
-                        Initialized = false,
-                        ResumeAfterStop = false,
-                        StoppedAtWaypointIndex = null
-                    };
-                    _routeTargetWaypointIndex =
-                        _routeState.Waypoints.Count > 0 ? preservedTarget : null;
-                    _routeStoppedWaypointIndex = null;
-                    _resumeRouteAfterStop = false;
-                }
-            }
-            else
-            {
-                _routeCursor = context.Cursor with
-                {
-                    StoppedAtWaypointIndex = stoppedIndex
-                };
-                _routeTargetWaypointIndex = targetIndex ??
-                    (_routeState.Waypoints.Count > 0 ? 0 : null);
-
-                if (!_routeCursor.Initialized)
-                {
-                    _routeCursor = RouteCursor.Initial;
-                    _routeStoppedWaypointIndex = null;
-                    _resumeRouteAfterStop = false;
-                }
-            }
-
-            _routeMovementLastTick = null;
-
-            AppLogger.Info(
-                "SimulatorForm: состояние маршрута сохранено при перестроении.",
-                $"reason={reason}; target={(_routeTargetWaypointIndex is int target ? target + 1 : 0)}; " +
-                $"leg={_routeCursor.LegIndex}; segment={_routeCursor.SegmentIndex}; " +
-                $"progress={_routeCursor.SegmentProgressMeters:0.###}");
+            _routeCursor = RouteCursor.Initial;
+            _routeTargetWaypointIndex = null;
+            _routeTargetWaypointId = null;
         }
+
+        _routePlanNeedsRebuildFromCurrentPlayer = false;
 
         AppLogger.Info(
             "SimulatorForm: маршрут перестроен.",
             $"reason={reason}; waypoints={_routeState.Waypoints.Count}; " +
-            $"legs={_routePlan.Legs.Count}; errors={_routePlan.Errors.Count}");
-
-        foreach (var error in _routePlan.Errors)
-            AppLogger.Warn("SimulatorForm: ошибка маршрута.", error);
+            $"routePoints={_routePlan.Points.Count}; segments={_routePlan.Segments.Count}; " +
+            $"target={CurrentTargetNumberText()}; errors={_routePlan.Errors.Count}");
 
         if (publishSnapshot)
             RequestSnapshot("route rebuilt: " + reason);
+    }
+
+    private static int NearestCandidateRoutePoint(
+        IReadOnlyList<(RoutePoint point, int index)> candidates,
+        WorldCoordinate position)
+    {
+        var bestIndex = -1;
+        var bestDistance = double.PositiveInfinity;
+
+        foreach (var candidate in candidates)
+        {
+            var dx = candidate.point.Position.X - position.X;
+            var dz = candidate.point.Position.Z - position.Z;
+            var distance = dx * dx + dz * dz;
+
+            if (!double.IsFinite(distance))
+                continue;
+
+            if (distance < bestDistance - 0.000001d ||
+                (Math.Abs(distance - bestDistance) <= 0.000001d &&
+                 candidate.index > bestIndex))
+            {
+                bestDistance = distance;
+                bestIndex = candidate.index;
+            }
+        }
+
+        return bestIndex;
+    }
+
+    private void SetTargetFromRoutePoint(int routePointIndex)
+    {
+        if (routePointIndex < 0 ||
+            routePointIndex >= _routePlan.Points.Count)
+        {
+            _routeTargetWaypointIndex = null;
+            _routeTargetWaypointId = null;
+            return;
+        }
+
+        var point = _routePlan.Points[routePointIndex];
+        var targetIndex = point.DestinationWaypointIndex;
+
+        if (targetIndex < 0 || targetIndex >= _routeState.Waypoints.Count)
+        {
+            _routeTargetWaypointIndex = null;
+            _routeTargetWaypointId = null;
+            return;
+        }
+
+        _routeTargetWaypointIndex = targetIndex;
+        _routeTargetWaypointId = _routeState.Waypoints[targetIndex].Id;
+    }
+
+    private string CurrentTargetNumberText()
+    {
+        if (_routeTargetWaypointId is not string id)
+            return "нет";
+
+        for (var index = 0; index < _routeState.Waypoints.Count; index++)
+        {
+            if (_routeState.Waypoints[index].Id.Equals(
+                    id,
+                    StringComparison.OrdinalIgnoreCase))
+            {
+                return "№" + _routeState.Waypoints[index].EffectiveNumber(index);
+            }
+        }
+
+        return "нет";
     }
 
     private void UpdateRouteMovement()
@@ -1847,110 +1888,52 @@ public sealed class SimulatorForm : WebViewForm
             return;
         }
 
-        if (_routeState.Waypoints.Count < 1 || !_routePlan.IsUsable)
+        if (_routeState.Waypoints.Count == 0 || !_routePlan.IsUsable)
         {
+            _routeEnabled = false;
             SetPlayerMovementIdle();
             return;
         }
 
-        var now = DateTimeOffset.UtcNow;
-
-        // Достигнутая точка со скоростью 0 — это остановка маршрута, а НЕ
-        // выключение пользовательского режима «Двигаться по маршруту».
-        // Пока игрок явно не выключил/включил toggle заново, повторно применять
-        // ту же остановку и создавать одинаковые события не нужно.
-        if (_routeStoppedWaypointIndex.HasValue && !_resumeRouteAfterStop)
+        if (_routeStoppedWaypointId is not null)
         {
-            _routeMovementLastTick = now;
+            _routeMovementLastTick = DateTimeOffset.UtcNow;
             return;
         }
 
+        var now = DateTimeOffset.UtcNow;
         if (_routeMovementLastTick is null)
         {
             _routeMovementLastTick = now;
             return;
         }
 
-        var elapsed = (now - _routeMovementLastTick.Value).TotalSeconds;
+        var elapsed = Math.Min(
+            1d,
+            Math.Max(
+                0d,
+                (now - _routeMovementLastTick.Value).TotalSeconds));
         _routeMovementLastTick = now;
 
         if (elapsed <= 0d)
             return;
 
-        elapsed = Math.Min(1d, elapsed);
-
         var current = _hub.Get<PlayerState>("player").Value;
-        var previousTarget = _routeTargetWaypointIndex;
-        var previousCursor = _routeCursor;
-        var cursor = _resumeRouteAfterStop
-            ? _routeCursor with { ResumeAfterStop = true }
-            : _routeCursor;
+        var previousTargetId = _routeTargetWaypointId;
 
         var result = RouteMovementEngine.Advance(
             _routeState,
             _routePlan,
-            cursor,
+            _routeCursor,
             current.Position,
             elapsed);
 
         _routeTravelRealSeconds += elapsed;
-        _routeTravelGameSeconds += elapsed * Math.Max(0d, _runtime.SimulationSpeed);
+        _routeTravelGameSeconds +=
+            elapsed * Math.Max(0d, _runtime.SimulationSpeed);
 
         _routeCursor = result.Cursor;
         _routeLastHeading = result.HeadingDegrees;
-        _resumeRouteAfterStop = false;
-
-        if (_routeStoppedWaypointIndex.HasValue &&
-            result.Enabled &&
-            !result.StoppedAtWaypoint &&
-            result.SpeedKmh > 0.001d)
-        {
-            _routeStoppedWaypointIndex = null;
-        }
-
-        _routeTargetWaypointIndex = GetTargetWaypointIndex(result.Cursor);
-
-        if (current.SpeedKmh > 0.001d &&
-            result.SpeedKmh > 0.001d &&
-            Math.Abs(current.SpeedKmh - result.SpeedKmh) > 0.001d)
-        {
-            AppendJournal(
-                "RouteSpeedChanged",
-                DateTimeOffset.UtcNow,
-                "Движение по маршруту",
-                $"Изменение скорости: {current.SpeedKmh:0.#} → {result.SpeedKmh:0.#} км/ч.",
-                result.Position);
-        }
-
-        if (result.Cursor.Initialized &&
-            result.Cursor.LegIndex != previousCursor.LegIndex &&
-            IsRouteLegOffRoad(result.Cursor.LegIndex))
-        {
-            AppendJournal(
-                "RouteOffRoadStarted",
-                DateTimeOffset.UtcNow,
-                "Движение по маршруту",
-                "Начато движение по бездорожью.",
-                result.Position);
-        }
-
-        if (_routeTargetWaypointIndex is int target &&
-            previousTarget is int previous &&
-            target > previous)
-        {
-            for (var passed = previous; passed < target; passed++)
-            {
-                AppendJournal(
-                    "RouteWaypointPassed",
-                    DateTimeOffset.UtcNow,
-                    "Движение по маршруту",
-                    $"Пройдена точка №{passed + 1}. Направляемся к следующей точке №{passed + 2}.",
-                    result.Position);
-            }
-        }
-
-        if (result.StoppedAtWaypoint)
-            _routeStoppedWaypointIndex = result.Cursor.StoppedAtWaypointIndex;
 
         var nextPlayer = current with
         {
@@ -1964,79 +1947,179 @@ public sealed class SimulatorForm : WebViewForm
             Math.Abs(current.SpeedKmh - nextPlayer.SpeedKmh) > 0.001d ||
             Math.Abs(current.Heading - nextPlayer.Heading) > 0.001d)
         {
-            _hub.Get<PlayerState>("player").Set(nextPlayer, "Движение по маршруту");
+            _hub.Get<PlayerState>("player").Set(
+                nextPlayer,
+                "Движение по маршруту");
         }
 
-        if (!result.Enabled)
+        if (current.SpeedKmh > 0.001d &&
+            result.SpeedKmh > 0.001d &&
+            Math.Abs(current.SpeedKmh - result.SpeedKmh) > 0.001d)
         {
-            _routeMovementLastTick = null;
+            AppendJournal(
+                "RouteSpeedChanged",
+                DateTimeOffset.UtcNow,
+                "Движение по маршруту",
+                $"Изменение скорости: {current.SpeedKmh:0.#} → {result.SpeedKmh:0.#} км/ч.",
+                result.Position);
+        }
 
-            if (result.StoppedAtWaypoint)
+        // Фиксируем пройденные путевые точки ДО их удаления из RouteState,
+        // поэтому журнал сохраняет их пользовательские номера.
+        foreach (var passedId in result.PassedWaypointIds)
+        {
+            var passed = _routeState.Waypoints.FirstOrDefault(item =>
+                item.Id.Equals(
+                    passedId,
+                    StringComparison.OrdinalIgnoreCase));
+
+            if (passed is null)
+                continue;
+
+            var passedIndex = _routeState.Waypoints
+                .Select((item, index) => (item, index))
+                .FirstOrDefault(item => item.item.Id.Equals(
+                    passed.Id,
+                    StringComparison.OrdinalIgnoreCase))
+                .index;
+
+            AppendJournal(
+                "RouteWaypointPassed",
+                DateTimeOffset.UtcNow,
+                "Движение по маршруту",
+                $"Пройдена точка №{passed.EffectiveNumber(passedIndex)}.",
+                result.Position);
+        }
+
+        var stoppedId = result.StoppedWaypointId;
+        if (stoppedId is not null)
+        {
+            var stopped = _routeState.Waypoints.FirstOrDefault(item =>
+                item.Id.Equals(
+                    stoppedId,
+                    StringComparison.OrdinalIgnoreCase));
+
+            if (stopped is not null)
             {
-                _routeStoppedWaypointIndex = result.Cursor.StoppedAtWaypointIndex;
-                _resumeRouteAfterStop = false;
-                _routeTargetWaypointIndex = _routeStoppedWaypointIndex;
+                _routeStoppedWaypointId = stopped.Id;
+                _routeStoppedWaypointIndex = _routeState.Waypoints
+                    .Select((item, index) => (item, index))
+                    .FirstOrDefault(item => item.item.Id.Equals(
+                        stopped.Id,
+                        StringComparison.OrdinalIgnoreCase))
+                    .index;
+            }
+        }
 
-                var stoppedIndex = _routeStoppedWaypointIndex.GetValueOrDefault();
+        var hasPassedWaypoints = result.PassedWaypointIds.Count > 0;
+
+        if (hasPassedWaypoints)
+        {
+            var passedIds = new HashSet<string>(
+                result.PassedWaypointIds,
+                StringComparer.OrdinalIgnoreCase);
+
+            _routeState = _routeState with
+            {
+                Waypoints = _routeState.Waypoints
+                    .Where(item => !passedIds.Contains(item.Id))
+                    .ToArray()
+            };
+
+            // Автоматическое прохождение никогда не перенумеровывает оставшиеся
+            // точки и никогда дополнительно не отсеивает их.
+            if (_routeState.Waypoints.Count > 0)
+            {
+                RebuildRoute(
+                    "waypoint(s) passed",
+                    publishSnapshot: false,
+                    trimToPlayer: false,
+                    renumberTrimmed: false);
+            }
+            else
+            {
+                _routePlan = RoutePlan.Empty;
+                _routeCursor = RouteCursor.Initial;
+                _routeTargetWaypointIndex = null;
+                _routeTargetWaypointId = null;
+            }
+        }
+        else if (stoppedId is null)
+        {
+            SetTargetFromRoutePoint(result.Cursor.NextRoutePointIndex);
+        }
+
+        if (stoppedId is not null && _routeStoppedWaypointId is not null)
+        {
+            var stopped = _routeState.Waypoints.FirstOrDefault(item =>
+                item.Id.Equals(
+                    _routeStoppedWaypointId,
+                    StringComparison.OrdinalIgnoreCase));
+
+            if (stopped is not null)
+            {
+                _routeTargetWaypointId = stopped.Id;
+                _routeTargetWaypointIndex = _routeState.Waypoints
+                    .Select((item, index) => (item, index))
+                    .FirstOrDefault(item => item.item.Id.Equals(
+                        stopped.Id,
+                        StringComparison.OrdinalIgnoreCase))
+                    .index;
+
                 AppendJournal(
                     "RouteMovementStopped",
                     DateTimeOffset.UtcNow,
                     "Движение по маршруту",
-                    $"Остановка на точке №{stoppedIndex + 1}. Движение по маршруту выключено.",
+                    $"Остановка на точке №{stopped.EffectiveNumber(
+                        _routeTargetWaypointIndex.GetValueOrDefault())}. " +
+                    "Движение по маршруту выключено.",
                     result.Position);
 
                 _routeEnabled = false;
-                SetPlayerMovementIdle();
-            }
-            else if (result.Completed)
-            {
-                _routeStoppedWaypointIndex = _routeState.Waypoints.Count - 1;
                 _resumeRouteAfterStop = false;
-                _routeTargetWaypointIndex = null;
-
-                AppendJournal(
-                    "RouteMovementCompleted",
-                    DateTimeOffset.UtcNow,
-                    "Движение по маршруту",
-                    "Завершение маршрута.",
-                    result.Position);
-
-                PostJson(JsonSerializer.Serialize(new
-                {
-                    type = "route_completed",
-                    message = "Маршрут пройден"
-                }, SnapshotJsonOptions));
+                SetPlayerMovementIdle();
+                PersistSession(
+                    "автосохранение: движение по маршруту остановлено",
+                    force: true);
+                RequestSnapshot("route movement stopped");
+                return;
             }
-
-            // ВАЖНО: _routeEnabled здесь НЕ меняется. Это пользовательский
-            // toggle и его состояние изменяется только action=route_toggle.
-            AppLogger.Info(
-                "SimulatorForm: движение по маршруту остановлено.",
-                result.StoppedAtWaypoint
-                    ? $"причина=скорость точки 0; waypoint={_routeStoppedWaypointIndex.GetValueOrDefault() + 1}; " +
-                      $"target={(_routeTargetWaypointIndex is int nextTarget ? nextTarget + 1 : 0)}; " +
-                      $"resumeAfterStop={result.Cursor.ResumeAfterStop}; " +
-                      $"cursorLeg={result.Cursor.LegIndex}; " +
-                      $"cursorTarget={(GetTargetWaypointIndex(result.Cursor) is int cursorTarget ? cursorTarget + 1 : 0)}; " +
-                      $"legStart={(result.Cursor.LegIndex >= 0 && result.Cursor.LegIndex < _routePlan.Legs.Count ? _routePlan.Legs[result.Cursor.LegIndex].StartWaypointIndex + 1 : 0)}; " +
-                      $"legEnd={(result.Cursor.LegIndex >= 0 && result.Cursor.LegIndex < _routePlan.Legs.Count ? _routePlan.Legs[result.Cursor.LegIndex].EndWaypointIndex + 1 : 0)}"
-                    : result.Completed
-                        ? "причина=достигнута последняя точка"
-                        : "причина=маршрут завершён");
-            PersistSession("автосохранение: движение по маршруту остановлено", force: true);
-            RequestSnapshot("route movement stopped");
         }
-    }
 
-    private bool IsRouteLegOffRoad(int legIndex)
-    {
-        if (legIndex < 0 || legIndex >= _routePlan.Legs.Count)
-            return false;
+        if (result.Completed || _routeState.Waypoints.Count == 0)
+        {
+            _routeEnabled = false;
+            _routeStoppedWaypointIndex = null;
+            _routeStoppedWaypointId = null;
+            _routeTargetWaypointIndex = null;
+            _routeTargetWaypointId = null;
 
-        var end = _routePlan.Legs[legIndex].EndWaypointIndex;
-        return end >= 0 &&
-               end < _routeState.Waypoints.Count &&
-               _routeState.Waypoints[end].IsOffRoad;
+            AppendJournal(
+                "RouteMovementCompleted",
+                DateTimeOffset.UtcNow,
+                "Движение по маршруту",
+                "Завершение маршрута.",
+                result.Position);
+
+            PostJson(JsonSerializer.Serialize(new
+            {
+                type = "route_completed",
+                message = "Маршрут пройден"
+            }, SnapshotJsonOptions));
+
+            SetPlayerMovementIdle();
+            PersistSession(
+                "автосохранение: маршрут пройден",
+                force: true);
+            RequestSnapshot("route movement completed");
+            return;
+        }
+
+        if (hasPassedWaypoints ||
+            previousTargetId != _routeTargetWaypointId)
+        {
+            PushRouteSnapshot();
+        }
     }
 
     private void SetPlayerMovementIdle()
