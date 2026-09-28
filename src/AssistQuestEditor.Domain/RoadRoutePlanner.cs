@@ -13,7 +13,7 @@ public sealed class RoadRoutePlanner
     private const double RecoveryDirectionDot = 0.45d;
     // Мост через пропущенный фрагмент — запасной вариант, а не новая «дорога».
     // Штраф не даёт прямому мосту выигрывать у существующего дорожного пути.
-    private const double RecoveryEdgeCostMultiplier = 4d;
+    private const double RecoveryEdgeCostMultiplier = 20d;
     private const double GridCellSizeMeters = 100d;
 
     /// <summary>
