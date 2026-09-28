@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Симулятор</title>
-<link rel="stylesheet" href="theme.css?v=20744f1c">
+<link rel="stylesheet" href="theme.css?v=b329b3ea">
 <style>
   .mapSurface { position:relative; overflow:hidden; }
   #mapCanvas { display:block; width:100%; height:100%; cursor:default; touch-action:none; background:#0d1014; }
@@ -54,9 +54,14 @@
         <button class="worldSelectorButton" id="simOpenCampaigns" type="button" title="Открыть кампании и квесты">Кампании и квесты</button>
       </div>
       <!-- Транспорт управляет симуляцией, поэтому стоит вплотную к селектору, а
-           состояние показывает плашка в строке 2. Кнопки намеренно НЕ
+           состояние показывает плашка в строке 2. Кнопки симуляции намеренно НЕ
            подсвечиваются: подсветка дублировала бы плашку и «залипала» бы на
-           неверной кнопке после нажатия. -->
+           неверной кнопке после нажатия.
+
+           ИСКЛЮЧЕНИЕ — тогл «Движение по маршруту»: он не управляет временем, а
+           сообщает СОСТОЯНИЕ маршрута, и без подсветки игрок не видел бы, едет
+           машина или стоит. Кнопка дублирует правый сайдбар, поэтому обе обязаны
+           читать одно поле route.enabled и переключать один и тот же признак. -->
       <div class="simTransport" role="group" aria-label="Управление симуляцией">
         <button class="toolButton simTransportButton" id="simPlay" type="button"
                 aria-label="Запустить или приостановить симуляцию">▶</button>
@@ -65,6 +70,23 @@
         <button class="toolButton simTransportButton" id="simFastForward" type="button"
                 aria-label="Ускорить игровое время">⏩</button>
       </div>
+      <!-- Тогл маршрута с иконкой колеса: дублирует кнопку правого сайдбара.
+           Иконка — колесо со стрелкой движения, нарисованное линиями, а не
+           эмодзи: эмодзи различается по платформам, а размер и цвет наследует
+           от кнопки через currentColor. -->
+      <button class="toolButton simTransportButton simRouteWheelToggle" id="simRouteToggle"
+              type="button" aria-pressed="false"
+              aria-label="Включить или выключить движение по маршруту"
+              data-game-tooltip="Движение по маршруту">
+        <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+          <circle cx="12" cy="12" r="8.4"/>
+          <circle cx="12" cy="12" r="3"/>
+          <path d="M12 3.6v5.4"/>
+          <path d="M12 15v5.4"/>
+          <path d="M3.6 12h5.4"/>
+          <path d="M15 12h5.4"/>
+        </svg>
+      </button>
       <!-- Подпись автосохранения: к какому состоянию мира игрок вернётся при
            следующем запуске. Стоит сразу за транспортом, потому что объясняет
            последствия именно его кнопки «стоп». -->
@@ -168,9 +190,9 @@
   </div>
 </div>
 <script src="web_log.js?v=18763af3"></script>
-<script src="vitals.js?v=fca40754"></script>
+<script src="vitals.js?v=c48bd86b"></script>
 <script src="perf.js?v=04a0d57f"></script>
-<script src="simulator.js?v=bffa8902"></script>
+<script src="simulator.js?v=9afbe4e0"></script>
 <script src="interface.js?v=ea4ccb52"></script>
 <script>
 (function () {
@@ -197,8 +219,13 @@
     webview.addEventListener("message", function (event) { update(event.data); });
 
   button.addEventListener("click", function () {
+    // Payload уходит ОБЪЕКТОМ, а не строкой. WebView2 доставляет объект как
+    // JSON-объект, и Host читает `action` напрямую; при `JSON.stringify(...)`
+    // значение приезжает JSON-СТРОКОЙ, `TryGetProperty("action")` бросает
+    // InvalidOperationException, а страница показывает системный диалог
+    // «The requested operation requires an element of type 'Object'».
     if (!button.disabled && webview)
-      webview.postMessage(JSON.stringify({ action: "find_full_lodging" }));
+      webview.postMessage({ action: "find_full_lodging" });
   });
 })();
 </script>

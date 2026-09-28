@@ -611,7 +611,18 @@ New-Check -Id 'webSyntax' -Name 'Синтаксис web JavaScript' -Suites @('f
         # и окно «Игрок»: ошибка синтаксиса в нём оставляла шкалы состояния
         # пустыми, и поймать её было нечем.
         '.\src\AssistQuestEditor.App\Web\vitals.js',
+        # indicators.js тоже подключается страницей окна «Монитор показателей»,
+        # но в список не попадал — ошибка синтаксиса оставляла окно пустым.
+        '.\src\AssistQuestEditor.App\Web\indicators.js',
+        # perf.js подключает Симулятор (счётчики производительности): как и
+        # соседи, он обязан быть в списке, иначе ошибка в нём не ловится ничем.
+        '.\src\AssistQuestEditor.App\Web\perf.js',
         '.\src\AssistQuestEditor.App\Web\inventory.js',
+        # perks.js и items.js подключают новые окна «Перки, баффы, скиллы» и
+        # «Предметы»: без строки здесь ошибка синтаксиса оставляла бы окно пустым,
+        # и ловить её было бы нечем — ровно так уже было с locationEditor.js.
+        '.\src\AssistQuestEditor.App\Web\perks.js',
+        '.\src\AssistQuestEditor.App\Web\items.js',
         '.\src\AssistQuestEditor.App\Web\playerPanels.js',
         '.\src\AssistQuestEditor.App\Web\junctions.js',
         '.\src\AssistQuestEditor.App\Web\cityBoundaries.js',

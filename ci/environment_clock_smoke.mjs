@@ -301,12 +301,34 @@ check(!/simStatusIcon/.test(simulatorJs) && !/simStatusIcon/.test(simulatorHtml)
 check(!/simStatusSpeed/.test(simulatorJs) && !/simStatusSpeed/.test(simulatorHtml),
   "Кратность не должна дублироваться в плашке: она показывается у игровых часов.");
 // Кнопки транспорта не выделяются: состояние показывает плашка.
+//
+// ИСКЛЮЧЕНИЕ — тогл «Движение по маршруту» (#simRouteToggle): он не управляет
+// временем, а сообщает состояние маршрута, и без подсветки игрок не видел бы,
+// едет машина или стоит. Поэтому проверка сторожит ровно три кнопки симуляции,
+// а не любую активную подсветку внутри транспорта.
 check(!/\.simTransportButton\.active\{/.test(themeCss),
   "Кнопки транспорта не должны иметь активного состояния — статуса достаточно.");
-check(!/classList\.toggle\("active"/.test(simulatorJs.slice(
+check(!/\.simPlay\.active|\.simStop\.active|\.simFastForward\.active/.test(themeCss),
+  "Кнопки запуска, стопа и ускорения не должны подсвечиваться как активные.");
+{
+  const transportSource = simulatorJs.slice(
     simulatorJs.indexOf("function renderSimulationTransport()"),
-    simulatorJs.indexOf("function formatSpeed("))),
-  "JS не должен подсвечивать кнопку транспорта: это дублировало бы плашку.");
+    simulatorJs.indexOf("function formatSpeed("));
+
+  // Подсветка допустима ТОЛЬКО для тогла маршрута: любая другая кнопка
+  // транспорта с «active» снова дублировала бы плашку состояния.
+  const activeToggles = [...transportSource.matchAll(
+    /([A-Za-z0-9_$.]+)\.classList\.toggle\(\s*"active"/g)]
+    .map(match => match[1]);
+
+  const offenders = activeToggles.filter(name => name !== "routeToggle");
+  check(offenders.length === 0,
+    "JS не должен подсвечивать кнопки транспорта, кроме тогла маршрута: " +
+    offenders.join(", "));
+
+  check(activeToggles.includes("routeToggle"),
+    "тогл «Движение по маршруту» обязан отражать состояние маршрута подсветкой.");
+}
 
 // Подпись автосохранения — отдельная строка сведений под плашкой.
 check(/id="simAutoSave"/.test(simulatorHtml),

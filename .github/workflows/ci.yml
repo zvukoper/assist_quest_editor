@@ -212,7 +212,11 @@ jobs:
           node --check .\src\AssistQuestEditor.App\Web\interface.js
           node --check .\src\AssistQuestEditor.App\Web\simulator.js
           node --check .\src\AssistQuestEditor.App\Web\vitals.js
+          node --check .\src\AssistQuestEditor.App\Web\indicators.js
+          node --check .\src\AssistQuestEditor.App\Web\perf.js
           node --check .\src\AssistQuestEditor.App\Web\inventory.js
+          node --check .\src\AssistQuestEditor.App\Web\perks.js
+          node --check .\src\AssistQuestEditor.App\Web\items.js
           node --check .\src\AssistQuestEditor.App\Web\playerPanels.js
           node --check .\src\AssistQuestEditor.App\Web\junctions.js
           node --check .\src\AssistQuestEditor.App\Web\cityBoundaries.js

@@ -1,0 +1,132 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Предметы</title>
+<link rel="stylesheet" href="theme.css?v=b329b3ea">
+<style>
+  html, body { height:100%; margin:0; overflow:hidden; background:#0d1014; }
+  .itemsWindow {
+    height:100%;
+    box-sizing:border-box;
+    padding:8px;
+    display:flex;
+    flex-direction:column;
+    min-height:0;
+  }
+  .itemsHead {
+    flex:0 0 auto;
+    display:flex;
+    align-items:baseline;
+    gap:10px;
+    padding:2px 2px 8px;
+  }
+  .itemsHead strong { font-size:13px; }
+  .itemsHead .itemsHint { color:var(--muted); font-size:10px; }
+  .itemsSearch {
+    margin-left:auto;
+    background:#0f141a;
+    color:#e9edf2;
+    border:1px solid var(--border);
+    border-radius:4px;
+    padding:3px 6px;
+    font-size:11px;
+    width:180px;
+  }
+  .itemsBody {
+    flex:1 1 auto;
+    min-height:0;
+    overflow:auto;
+    display:grid;
+    grid-template-columns:repeat(auto-fill,minmax(420px,1fr));
+    gap:8px;
+    align-content:start;
+  }
+
+  .itemCard {
+    border:1px solid var(--border);
+    border-radius:6px;
+    padding:7px;
+    background:rgba(255,255,255,.02);
+    display:flex;
+    gap:8px;
+  }
+  /* Выделение предмета, на который сослались из журнала. */
+  .itemCard.itemHighlight {
+    border-color:var(--accent);
+    background:rgba(120,190,255,.14);
+    box-shadow:0 0 0 2px rgba(120,190,255,.25);
+  }
+  /* Плитка 48×48: реального изображения у предметов нет, поэтому цвет с буквой
+     (прямое указание автора — новые ресурсы не генерировать). */
+  .itemTile {
+    flex:0 0 48px;
+    width:48px;
+    height:48px;
+    border-radius:5px;
+    border:1px solid rgba(0,0,0,.35);
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    font-size:20px;
+    font-weight:700;
+    color:rgba(15,18,22,.82);
+    text-shadow:0 1px 0 rgba(255,255,255,.25);
+    user-select:none;
+  }
+  .itemMain { flex:1 1 auto; min-width:0; display:flex; flex-direction:column; gap:4px; }
+  .itemTitle { display:flex; align-items:baseline; gap:6px; flex-wrap:wrap; }
+  .itemName { font-size:12px; font-weight:600; }
+  .itemCategory { font-size:10px; color:var(--muted); }
+  .itemDescription { font-size:10px; line-height:1.45; color:rgba(233,237,242,.82); }
+  .itemNutrition { font-size:10px; line-height:1.5; }
+  .itemNutrition .itemNutritionLabel { color:var(--muted); }
+  .itemFooter { display:flex; align-items:center; gap:5px; flex-wrap:wrap; }
+  .itemQtyInput {
+    width:56px;
+    background:#0f141a;
+    color:#e9edf2;
+    border:1px solid var(--border);
+    border-radius:4px;
+    padding:2px 4px;
+    font-size:11px;
+    text-align:right;
+  }
+  /* Микрокнопки «+» и «−»: их по две на предмет, и крупные кнопки превратили бы
+     каталог в стену. */
+  .itemMicro {
+    width:22px;
+    height:20px;
+    padding:0;
+    font-size:13px;
+    line-height:1;
+    background:rgba(255,255,255,.06);
+    color:#e9edf2;
+    border:1px solid var(--border);
+    border-radius:4px;
+    cursor:pointer;
+  }
+  .itemMicro:hover:not([disabled]) { background:rgba(255,255,255,.14); }
+  .itemMicro:focus-visible { outline:2px solid var(--accent); outline-offset:1px; }
+  .itemMicro[disabled] { opacity:.4; cursor:not-allowed; }
+  .itemInInventory { font-size:10px; color:var(--muted); }
+  .itemsEmpty { font-size:11px; color:var(--muted); padding:8px; }
+  .itemsError { flex:0 0 auto; font-size:10px; color:#ff9a9a; min-height:12px; padding:0 2px 4px; }
+</style>
+</head>
+<body>
+<div class="itemsWindow">
+  <div class="itemsHead">
+    <strong>Предметы</strong>
+    <span class="itemsHint">каталог симулятора: количество по умолчанию 0, «+» и «−» меняют запас на единицу</span>
+    <input class="itemsSearch" id="itemsSearch" type="search" placeholder="поиск по названию" aria-label="Поиск предмета">
+  </div>
+  <div class="itemsError" id="itemsError"></div>
+  <div class="itemsBody" id="itemsBody"></div>
+</div>
+<script src="web_log.js?v=18763af3"></script>
+<script src="vitals.js?v=c48bd86b"></script>
+<script src="items.js?v=fc528d98"></script>
+</body>
+</html>

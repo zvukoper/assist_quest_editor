@@ -14,6 +14,23 @@ public sealed class RoadRoutePlanner
     // Мост через пропущенный фрагмент — запасной вариант, а не новая «дорога».
     // Штраф не даёт прямому мосту выигрывать у существующего дорожного пути.
     private const double RecoveryEdgeCostMultiplier = 20d;
+    /// <summary>
+    /// Радиус повторных раундов сшивки компонент. Штатному восстановлению нужен
+    /// весь <see cref="RecoveryGapMaxMeters"/>, а сшивка закрывает реальные стыки
+    /// полотна: в данных они 10..25 м, изредка до 60 м. Короткий радиус делает
+    /// повторные раунды дешёвыми — площадь просмотра падает вчетверо.
+    /// </summary>
+    private const double StitchReachMeters = 80d;
+    /// <summary>
+    /// Дальше этого сшивка компонент не имеет смысла: она не должна сама
+    /// придумывать длинные дороги. Настоящие обрывы на стыках — 10..25 м.
+    /// </summary>
+    private const double StitchCandidateMaxMeters = 60d;
+    /// <summary>
+    /// Ограничение числа раундов сшивки. Один раунд закрывает почти все стыки,
+    /// второй — цепочки «остров → промежуточная компонента → материк».
+    /// </summary>
+    private const int MaxStitchRounds = 3;
     private const double GridCellSizeMeters = 100d;
 
     /// <summary>
@@ -31,6 +48,22 @@ public sealed class RoadRoutePlanner
     private readonly Dictionary<(int X, int Z), List<int>> _nodeGrid = new();
     private readonly Dictionary<(int X, int Z), List<int>> _fragmentGrid = new();
     private readonly Dictionary<(int X, int Z), List<JunctionPoint>> _junctionGrid = new();
+    /// <summary>
+    /// Union-find для сшивки компонент: -1 означает «корень сам по себе».
+    /// Родитель хранится числом, а не ссылкой, чтобы не заводить лишних объектов
+    /// на 139 000 узлов ради одного прохода.
+    /// </summary>
+    private readonly List<int> _unionParent = new();
+    /// <summary>
+    /// Отметки «фрагмент уже просмотрен для этого тупика».
+    ///
+    /// Заменяет HashSet пар (тупик, фрагмент): тупиков 70 388, а фрагментов вокруг
+    /// каждого — сотни, поэтому миллионы вставок в хеш-таблицу заметны на старте.
+    /// Фрагменты во время восстановления не добавляются (SplitFragmentAtNode
+    /// добавляет только рёбра), поэтому массив можно завести один раз.
+    /// </summary>
+    private int[] _fragmentStamp = Array.Empty<int>();
+    private int _fragmentStampValue;
 
     private sealed class Node(double x, double z)
     {
@@ -40,6 +73,13 @@ public sealed class RoadRoutePlanner
 
     private readonly record struct Edge(int To, double Cost, bool Recovery);
     private readonly record struct Fragment(RoadSegment Segment, int NodeA, int NodeB);
+    /// <summary>Кандидат сшивки: мост от тупика к точке на чужом фрагменте.</summary>
+    private readonly record struct Stitch(
+        int Source,
+        int Fragment,
+        double Distance,
+        double ProjectionX,
+        double ProjectionZ);
 
     public RoadRoutePlanner(
         IReadOnlyList<RoadSegment> segments,
@@ -360,23 +400,34 @@ public sealed class RoadRoutePlanner
     /// один конец дороги должен попасть в середину другого отрезка. Старый
     /// endpoint→endpoint recovery такого случая не видел и в результате
     /// маршрут мог перескочить напрямик через бездорожье.
+    ///
+    /// Второй проход — сшивка компонент — добавлен потому, что «ближайшая точка
+    /// впереди» почти всегда лежит в СВОЕЙ же компоненте: сеть рассыпана на
+    /// десятки тысяч кусков, и вокруг обрыва стоят и свои, и чужие полотна.
+    /// На стыке (161176.2, -83177.9) ближайшая точка оказалась в своей
+    /// компоненте в 15.3 м, а партнёрский обрыв — в чужой в 15.9 м, и
+    /// единственное ребро тратилось на свою. Поэтому после штатного прохода
+    /// выполняется сшивка: тупик ищет ближайшую пригодную точку именно ЧУЖОЙ
+    /// компоненты (union-find) и соединяется с ней.
+    ///
+    /// Ремонт не удаляет и не фильтрует обрывы: перекрытые съезды и «тупики»
+    /// автор достраивает намеренно, они ценны как квестовые локации. Добавляются
+    /// только рёбра-догадки со штрафом <see cref="RecoveryEdgeCostMultiplier"/>,
+    /// поэтому A* по-прежнему предпочтёт настоящий объезд.
     /// </summary>
     private void AddDirectionalRecoveryEdges()
     {
-        var sourceNodes = Enumerable.Range(0, _nodes.Count)
-            .Where(nodeId => _adjacency[nodeId].Count == 1)
-            .ToArray();
+        // Направления «наружу» фиксируются ДО постройки мостов: после моста
+        // степень тупика уже 2, и направление считалось бы не то, что видит автор.
+        var deadEnds = new List<(int NodeId, double OutwardX, double OutwardZ)>();
 
-        var paired = new HashSet<(int Source, int Fragment)>();
-
-        foreach (var sourceId in sourceNodes)
+        for (var nodeId = 0; nodeId < _nodes.Count; nodeId++)
         {
-            if (sourceId < 0 || sourceId >= _nodes.Count ||
-                _adjacency[sourceId].Count != 1)
+            if (_adjacency[nodeId].Count != 1)
                 continue;
 
-            var neighborId = _adjacency[sourceId][0].To;
-            var source = _nodes[sourceId];
+            var neighborId = _adjacency[nodeId][0].To;
+            var source = _nodes[nodeId];
             var neighbor = _nodes[neighborId];
 
             var outwardX = source.X - neighbor.X;
@@ -388,15 +439,78 @@ public sealed class RoadRoutePlanner
             if (outwardLength <= double.Epsilon)
                 continue;
 
-            outwardX /= outwardLength;
-            outwardZ /= outwardLength;
+            deadEnds.Add((nodeId, outwardX / outwardLength, outwardZ / outwardLength));
+        }
+
+        RunDirectionalRecovery(deadEnds, RecoveryGapMaxMeters, collectCandidates: false);
+        StitchComponents(deadEnds);
+    }
+
+    /// <summary>
+    /// Сшивает компоненты связности дорожной сети.
+    ///
+    /// Фильтр «цель в чужой компоненте» можно применять прямо во время сканирования:
+    /// слияние компонент только уменьшает их число, поэтому пара, признанная своей
+    /// раньше, никогда не станет чужой позже. Это позволяет не хранить все
+    /// кандидаты (их около миллиона), а копить только подходящие — их сотни.
+    ///
+    /// Кандидаты сортируются по расстоянию и обрабатываются по возрастанию
+    /// (как в алгоритме Краскала): если пара уже оказалась в одной компоненте,
+    /// ребро не добавляется. Дальний радиус тут не нужен — повторные раунды идут
+    /// с <see cref="StitchReachMeters"/> и <see cref="StitchCandidateMaxMeters"/>.
+    /// </summary>
+    private void StitchComponents(
+        IReadOnlyList<(int NodeId, double OutwardX, double OutwardZ)> deadEnds)
+    {
+        for (var round = 1; round <= MaxStitchRounds; round++)
+        {
+            // Внутри раунда сначала собираются кандидаты по ВСЕМ тупикам, и только
+            // потом ставятся мосты. Если сшивать сразу в том же цикле, мосты,
+            // поставленные первым тупиком, испортят кандидатов следующим — сетка
+            // фрагментов и компоненты уже изменятся.
+            var merged = RunDirectionalRecovery(
+                deadEnds,
+                StitchReachMeters,
+                collectCandidates: true);
+
+            if (merged == 0)
+                break;
+        }
+    }
+
+    /// <summary>
+    /// Один раунд прохода по тупикам. Штатный мост выбирается всегда (самый
+    /// ближний подходящий во всём радиусе, как раньше), а при
+    /// <paramref name="collectCandidates"/> попутно копятся кандидаты, чья цель
+    /// лежит в другой компоненте; они и сшиваются по возрастанию расстояния.
+    /// Возвращает число сшитых пар.
+    /// </summary>
+    private int RunDirectionalRecovery(
+        IReadOnlyList<(int NodeId, double OutwardX, double OutwardZ)> deadEnds,
+        double reachMeters,
+        bool collectCandidates)
+    {
+        _fragmentStamp = new int[_fragments.Count];
+        var stitches = new List<Stitch>(capacity: 512);
+
+        foreach (var (sourceId, outwardX, outwardZ) in deadEnds)
+        {
+            // Степень НЕ перепроверяется: после штатного прохода тупик уже имеет
+            // степень 2 (единственное ребро ушло в свою же компоненту), но для
+            // сшивки он остаётся тупиком — направление наружу заморожено, и
+            // второй мост делает из него нормальную мини-развязку.
+            if (sourceId < 0 || sourceId >= _nodes.Count)
+                continue;
+
+            var source = _nodes[sourceId];
+            _fragmentStampValue++;
 
             var bestDistance = double.PositiveInfinity;
             var bestFragmentIndex = -1;
             var bestProjectionX = 0d;
             var bestProjectionZ = 0d;
 
-            var reach = RecoveryGapMaxMeters + GridCellSizeMeters;
+            var reach = reachMeters + GridCellSizeMeters;
             var minCell = CellOf(
                 source.X - reach,
                 source.Z - reach,
@@ -405,6 +519,9 @@ public sealed class RoadRoutePlanner
                 source.X + reach,
                 source.Z + reach,
                 GridCellSizeMeters);
+
+            var stitchTarget = rootOf(sourceId);
+            var lastStitchFragment = -1;
 
             for (var cellX = minCell.X; cellX <= maxCell.X; cellX++)
             for (var cellZ = minCell.Z; cellZ <= maxCell.Z; cellZ++)
@@ -416,8 +533,12 @@ public sealed class RoadRoutePlanner
 
                 foreach (var fragmentIndex in candidates)
                 {
-                    if (!paired.Add((sourceId, fragmentIndex)))
+                    // Фрагмент лежит в нескольких клетках сетки, поэтому одну и
+                    // ту же пару нельзя просматривать дважды.
+                    if (_fragmentStamp[fragmentIndex] == _fragmentStampValue)
                         continue;
+
+                    _fragmentStamp[fragmentIndex] = _fragmentStampValue;
 
                     var fragment = _fragments[fragmentIndex];
                     if (fragment.NodeA == sourceId ||
@@ -436,8 +557,7 @@ public sealed class RoadRoutePlanner
                         dz * dz);
 
                     if (distance <= NodeMergeToleranceMeters ||
-                        distance > RecoveryGapMaxMeters ||
-                        distance >= bestDistance)
+                        distance > reachMeters)
                         continue;
 
                     var distanceDirX = dx / distance;
@@ -452,33 +572,142 @@ public sealed class RoadRoutePlanner
                     if (forwardDot < RecoveryDirectionDot)
                         continue;
 
-                    bestDistance = distance;
-                    bestFragmentIndex = fragmentIndex;
-                    bestProjectionX = projection.X;
-                    bestProjectionZ = projection.Z;
+                    if (distance < bestDistance)
+                    {
+                        bestDistance = distance;
+                        bestFragmentIndex = fragmentIndex;
+                        bestProjectionX = projection.X;
+                        bestProjectionZ = projection.Z;
+                    }
+
+                    if (!collectCandidates ||
+                        distance > StitchCandidateMaxMeters)
+                        continue;
+
+                    // Куда попадёт мост: ближайший конец фрагмента — так же
+                    // вычисляется целевой узел при привязке к дороге.
+                    var toA = Distance(_nodes[fragment.NodeA], projection);
+                    var toB = Distance(_nodes[fragment.NodeB], projection);
+                    var target = toA <= toB ? fragment.NodeA : fragment.NodeB;
+
+                    if (rootOf(target) == stitchTarget)
+                        continue;
+
+                    // Один тупик сшивается один раз за раунд: он уже был «своим»
+                    // для всех предыдущих кандидатов и останется таким до конца
+                    // этого раунда (мосты ставятся после сбора).
+                    if (lastStitchFragment == fragmentIndex)
+                        continue;
+
+                    lastStitchFragment = fragmentIndex;
+
+                    stitches.Add(new Stitch(
+                        sourceId,
+                        fragmentIndex,
+                        distance,
+                        projection.X,
+                        projection.Z));
                 }
             }
 
-            if (bestFragmentIndex < 0)
+            // Штатный ближайший мост ставится только в первом проходе: в раундах
+            // сшивки ближайшая точка уже не нужна, там решает чужая компонента.
+            if (!collectCandidates && bestFragmentIndex >= 0)
+            {
+                var fragmentForBridge = _fragments[bestFragmentIndex];
+
+                var bridgeNode = GetOrCreateNode(
+                    bestProjectionX,
+                    bestProjectionZ);
+
+                SplitFragmentAtNode(
+                    bestFragmentIndex,
+                    bridgeNode);
+
+                AddEdge(
+                    sourceId,
+                    bridgeNode,
+                    bestDistance * RecoveryEdgeCostMultiplier,
+                    recovery: true);
+            }
+        }
+
+        if (stitches.Count == 0)
+            return 0;
+
+        stitches.Sort((left, right) => left.Distance.CompareTo(right.Distance));
+
+        var merged = 0;
+
+        foreach (var stitch in stitches)
+        {
+            var fragment = _fragments[stitch.Fragment];
+
+            if (rootOf(stitch.Source) == rootOf(fragment.NodeA))
+                continue;
+            var bridgeNode = GetOrCreateNode(
+                stitch.ProjectionX,
+                stitch.ProjectionZ);
+
+            // Порядок важен: сначала расщепление (чтобы мост попал в новый
+            // под-фрагмент), потом слияние компонент, потом ребро.
+            SplitFragmentAtNode(stitch.Fragment, bridgeNode);
+
+            if (!Union(stitch.Source, bridgeNode))
                 continue;
 
-            var fragmentForBridge =
-                _fragments[bestFragmentIndex];
-
-            var bridgeNode = GetOrCreateNode(
-                bestProjectionX,
-                bestProjectionZ);
-
-            SplitFragmentAtNode(
-                bestFragmentIndex,
-                bridgeNode);
-
             AddEdge(
-                sourceId,
+                stitch.Source,
                 bridgeNode,
-                bestDistance * RecoveryEdgeCostMultiplier,
+                stitch.Distance * RecoveryEdgeCostMultiplier,
                 recovery: true);
+
+            merged++;
         }
+
+        return merged;
+    }
+
+    private double Distance(Node node, (double X, double Z) point)
+    {
+        var dx = node.X - point.X;
+        var dz = node.Z - point.Z;
+        return Math.Sqrt(dx * dx + dz * dz);
+    }
+
+    private int rootOf(int nodeId)
+    {
+        if (nodeId < 0 || nodeId >= _unionParent.Count || _unionParent[nodeId] < 0)
+            return nodeId;
+
+        var root = nodeId;
+        while (_unionParent[root] >= 0)
+            root = _unionParent[root];
+
+        // Сжатие путей: цепочки слияний иначе вырождаются в список.
+        while (nodeId != root)
+        {
+            var next = _unionParent[nodeId];
+            _unionParent[nodeId] = root;
+            nodeId = next;
+        }
+
+        return root;
+    }
+
+    private bool Union(int a, int b)
+    {
+        var rootA = rootOf(a);
+        var rootB = rootOf(b);
+
+        if (rootA == rootB)
+            return false;
+
+        while (_unionParent.Count <= Math.Max(rootA, rootB))
+            _unionParent.Add(-1);
+
+        _unionParent[rootA] = rootB;
+        return true;
     }
 
     private void RegisterFragment(
@@ -929,6 +1158,7 @@ public sealed class RoadRoutePlanner
 
         _adjacency[a].Add(new Edge(b, cost, recovery));
         _adjacency[b].Add(new Edge(a, cost, recovery));
+        Union(a, b);
     }
 
     private bool HasEdge(int a, int b) =>

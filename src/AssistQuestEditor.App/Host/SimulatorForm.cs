@@ -104,6 +104,12 @@ public sealed class SimulatorForm : WebViewForm
     /// <summary>Окно «Монитор показателей» (кнопка под шкалами в сайдбаре).</summary>
     private IndicatorsForm? _indicatorsForm;
 
+    /// <summary>Окно «Перки, баффы, скиллы».</summary>
+    private PerksForm? _perksForm;
+
+    /// <summary>Окно «Предметы» — каталог всех предметов симулятора.</summary>
+    private ItemsForm? _itemsForm;
+
     /// <summary>Мир, которому принадлежит окно. Null — режим без выбранного мира (CI).</summary>
     private readonly WorldRecord? _world;
 
@@ -233,6 +239,19 @@ public sealed class SimulatorForm : WebViewForm
             {
                 _indicatorsForm.Close();
                 _indicatorsForm = null;
+            }
+
+            // Окна перков и предметов — по той же причине: их содержимое
+            // собирает Симулятор, и без него они показывали бы застывший мир.
+            if (_perksForm is not null)
+            {
+                _perksForm.Close();
+                _perksForm = null;
+            }
+            if (_itemsForm is not null)
+            {
+                _itemsForm.Close();
+                _itemsForm = null;
             }
 
             if (_campaignsForm is not null)
@@ -448,6 +467,12 @@ public sealed class SimulatorForm : WebViewForm
         // условия и скорости изменения.
         if (_indicatorsForm is not null && !_indicatorsForm.IsDisposed)
             _indicatorsForm.SetSnapshotJson(payload);
+
+        // Окна перков и предметов обновляются снимком мира: таймеры баффов и
+        // остатки инвентаря меняются вместе с ним, и обновлять их отдельным
+        // событием значило бы завести второй повод для перерисовки.
+        PushPerks();
+        PushItems();
     }
 
     /// <summary>
@@ -523,6 +548,7 @@ public sealed class SimulatorForm : WebViewForm
         _inventoryForm.GlobalHotKeyPressed += SimulatorForm_GlobalHotKeyPressed;
         _inventoryForm.InventoryItemSeenRequested += InventoryForm_ItemSeenRequested;
         _inventoryForm.InventoryItemUseRequested += InventoryForm_ItemUseRequested;
+        _inventoryForm.InventoryItemDropRequested += InventoryForm_ItemDropRequested;
         // Клавиша I и Escape внутри окна закрывают его: страница шлёт просьбу, а
         // закрывает Симулятор — он владеет ссылкой и после закрытия отвечает
         // снимком.
@@ -531,6 +557,7 @@ public sealed class SimulatorForm : WebViewForm
         {
             _inventoryForm.GlobalHotKeyPressed -= SimulatorForm_GlobalHotKeyPressed;
             _inventoryForm.InventoryItemUseRequested -= InventoryForm_ItemUseRequested;
+            _inventoryForm.InventoryItemDropRequested -= InventoryForm_ItemDropRequested;
             var resumeSimulation = _inventoryPausedSimulation;
             _inventoryPausedSimulation = false;
             _inventoryForm = null;
@@ -604,6 +631,656 @@ public sealed class SimulatorForm : WebViewForm
         _indicatorsForm.Close();
     }
 
+    /// <summary>
+    /// Открывает окно «Перки, баффы, скиллы» и подсвечивает названный пункт.
+    ///
+    /// Симуляцию окно НЕ ставит на паузу: оно показывает состояние, и наблюдать
+    /// за тикающими таймерами баффов — половина его смысла.
+    /// </summary>
+    private void OpenPerksWindow(string? highlightPerkId = null, string? perkKind = null)
+    {
+        var target = string.IsNullOrWhiteSpace(highlightPerkId)
+            ? null
+            : highlightPerkId.Trim();
+
+        // Вид («бафф»/«дебафф») из ссылки не выбирает раздел — Id в каталоге
+        // уникальны, — но расхождение вида с разделом означает ошибку в разметке
+        // ссылки, и молчать о ней нельзя: игрок в таком случае попадает в чужой
+        // раздел и решает, что окно сломано.
+        if (target is not null && !string.IsNullOrWhiteSpace(perkKind))
+        {
+            var definition = CharacterPerksCatalog.Find(target);
+
+            if (definition is not null)
+            {
+                var expected = CategoryKey(definition.Category);
+
+                if (!expected.Equals(perkKind.Trim(), StringComparison.OrdinalIgnoreCase))
+                {
+                    AppLogger.Info(
+                        "SimulatorForm: ссылка на перк называет другой раздел.",
+                        $"id={target}; kind={perkKind}; expected={expected}");
+                }
+            }
+        }
+
+        if (_perksForm is not null && !_perksForm.IsDisposed)
+        {
+            _perksForm.WindowState = FormWindowState.Normal;
+            _perksForm.BringToFront();
+            _perksForm.Activate();
+
+            if (target is not null)
+                _perksForm.Highlight(target);
+
+            return;
+        }
+
+        _perksForm = new PerksForm();
+        _perksForm.GlobalHotKeyPressed += SimulatorForm_GlobalHotKeyPressed;
+        _perksForm.StateChangeRequested += PerksForm_StateChangeRequested;
+        _perksForm.CloseRequested += (_, _) => ClosePerksWindow();
+        _perksForm.FormClosed += (_, _) =>
+        {
+            _perksForm!.GlobalHotKeyPressed -= SimulatorForm_GlobalHotKeyPressed;
+            _perksForm.StateChangeRequested -= PerksForm_StateChangeRequested;
+            _perksForm = null;
+        };
+
+        _perksForm.Show(this);
+
+        if (target is not null)
+            _perksForm.Highlight(target);
+
+        // Пакет отправляется сразу: окно, открытое после последнего обновления
+        // мира, иначе показывало бы пустой список до следующего события.
+        PushPerks();
+
+        AppLogger.Info("SimulatorForm: окно перков открыто.",
+            $"size={_perksForm.Width}x{_perksForm.Height}; " +
+            $"highlight={target ?? "-"}; kind={perkKind ?? "-"}");
+    }
+
+    /// <summary>Закрывает окно перков, если оно открыто.</summary>
+    private void ClosePerksWindow()
+    {
+        if (_perksForm is null || _perksForm.IsDisposed)
+            return;
+
+        _perksForm.Close();
+    }
+
+    /// <summary>
+    /// Отправляет в окно перков перечень пунктов и признак «действует сейчас».
+    ///
+    /// Имена собираются доменом (<see cref="CharacterPerksCatalog.DisplayName"/>):
+    /// пометки «(активен)» и «(В разработке)» — это правило показа, и проверяться
+    /// оно должно тестом, а не глазами в вёрстке.
+    /// </summary>
+    private void PushPerks()
+    {
+        if (_perksForm is null || _perksForm.IsDisposed)
+            return;
+
+        var conditions = _hub.Get<PlayerConditionState>("player-conditions").Value;
+        var character = _hub.Get<CharacterState>("character").Value;
+
+        var entries = CharacterPerksCatalog.Entries.Select(entry =>        {
+            var level = SkillLevel(character, entry.Id);
+            var active = entry.Category switch
+            {
+                CharacterPerkCategory.Perk => IsPerkActive(character, entry.Id),
+                CharacterPerkCategory.Skill => level > 0,
+                _ => HasActiveEffect(conditions, entry.Id)
+            };
+
+            return new
+            {
+                id = entry.Id,
+                category = CategoryKey(entry.Category),
+                name = entry.Name,
+                displayName = CharacterPerksCatalog.DisplayName(entry, active),
+                description = entry.Description,
+                affects = entry.Affects,
+                implemented = entry.Implemented,
+                durationLabel = entry.DurationLabel,
+                maxLevel = entry.MaxLevel,
+                level,
+                active
+            };
+        }).ToArray();
+
+        _perksForm.SetPayloadJson(JsonSerializer.Serialize(new
+        {
+            type = "perks",
+            entries
+        }, SnapshotJsonOptions));
+    }
+
+    /// <summary>
+    /// Ключ раздела для страницы. Отдельно от C#-enum, потому что строка уходит
+    /// в разметку, и «Skill» с большой буквы там пришлось бы нормализовать в
+    /// JavaScript — то есть второй раз описывать тот же перечень.
+    /// </summary>
+    private static string CategoryKey(CharacterPerkCategory category) => category switch
+    {
+        CharacterPerkCategory.Perk => "perk",
+        CharacterPerkCategory.Skill => "skill",
+        CharacterPerkCategory.Buff => "buff",
+        _ => "debuff"
+    };
+    /// <summary>Уровень умения из канала персонажа; 0 — умения нет.</summary>
+    private static int SkillLevel(CharacterState character, string skillId) =>
+        character.Skills
+            .Where(skill => skill.Id.Equals(skillId, StringComparison.OrdinalIgnoreCase))
+            .Select(skill => Math.Max(0, skill.Level))
+            .FirstOrDefault();
+
+    private static bool IsPerkActive(CharacterState character, string perkId) =>
+        character.Buffs.Any(id => id.Equals(perkId, StringComparison.OrdinalIgnoreCase)) ||
+        character.Debuffs.Any(id => id.Equals(perkId, StringComparison.OrdinalIgnoreCase));
+
+    private static bool HasActiveEffect(PlayerConditionState conditions, string effectId) =>
+        conditions.Effects.Any(effect =>
+            effect.Id.Equals(effectId, StringComparison.OrdinalIgnoreCase) &&
+            effect.RemainingRealSeconds > 0d);
+
+    /// <summary>
+    /// Открывает окно «Предметы» — каталог всего, что существует в симуляторе.
+    ///
+    /// Симуляцию окно НЕ ставит на паузу: это справочник, а не действие.
+    /// </summary>
+    private void OpenItemsWindow(string? highlightItemId = null)
+    {
+        var target = string.IsNullOrWhiteSpace(highlightItemId)
+            ? null
+            : highlightItemId.Trim();
+
+        if (_itemsForm is not null && !_itemsForm.IsDisposed)
+        {
+            _itemsForm.WindowState = FormWindowState.Normal;
+            _itemsForm.BringToFront();
+            _itemsForm.Activate();
+
+            if (target is not null)
+                _itemsForm.Highlight(target);
+
+            return;
+        }
+
+        _itemsForm = new ItemsForm();
+        _itemsForm.GlobalHotKeyPressed += SimulatorForm_GlobalHotKeyPressed;
+        _itemsForm.StateChangeRequested += ItemsForm_StateChangeRequested;
+        _itemsForm.CloseRequested += (_, _) => CloseItemsWindow();
+        _itemsForm.FormClosed += (_, _) =>
+        {
+            _itemsForm!.GlobalHotKeyPressed -= SimulatorForm_GlobalHotKeyPressed;
+            _itemsForm.StateChangeRequested -= ItemsForm_StateChangeRequested;
+            _itemsForm = null;
+        };
+
+        _itemsForm.Show(this);
+
+        if (target is not null)
+            _itemsForm.Highlight(target);
+
+        PushItems();
+
+        AppLogger.Info("SimulatorForm: окно предметов открыто.",
+            $"size={_itemsForm.Width}x{_itemsForm.Height}; highlight={target ?? "-"}");
+    }
+
+    /// <summary>Закрывает окно предметов, если оно открыто.</summary>
+    private void CloseItemsWindow()
+    {
+        if (_itemsForm is null || _itemsForm.IsDisposed)
+            return;
+
+        _itemsForm.Close();
+    }
+
+    /// <summary>
+    /// Отправляет в окно предметов каталог с пищевой ценностью и количеством.
+    ///
+    /// Пищевую ценность считает домен (<see cref="CharacterConsumableCatalog"/>):
+    /// вторая таблица «сколько ккал в пайке» в этом файле разошлась бы с движком,
+    /// и окно показывало бы одно, а начислялось другое.
+    ///
+    /// Изображений 48×48 нет: автор прямо просил НЕ генерировать новые ресурсы, а
+    /// показывать цвет с буквой. Поэтому страница получает цвет и первую букву
+    /// названия, и подменять их суррогатной иконкой нельзя — её приняли бы за
+    /// настоящую картинку предмета.
+    /// </summary>
+    private void PushItems()
+    {
+        if (_itemsForm is null || _itemsForm.IsDisposed)
+            return;
+
+        var inventory = _hub.Get<InventoryState>("inventory").Value;
+
+        var entries = ItemCatalogFactory.CreateStarter().Select(item =>
+        {
+            var profile = CharacterConsumableCatalog.GetProfile(item.Id);
+
+            inventory.Items.TryGetValue(item.Id, out var count);
+
+            return new
+            {
+                id = item.Id,
+                name = item.Name,
+                description = item.Description,
+                category = item.Category,
+                color = item.Color,
+                letter = Letter(item.Name),
+                // Ноль, если предмета нет: пустое поле читалось бы как «неизвестно»,
+                // а неизвестного здесь нет — канал инвентаря знает точное число.
+                quantity = Math.Max(0, count),
+                // Кормит ли предмет: у неедовых пунктов пищевого блока нет вовсе,
+                // и рисовать «0 ккал» значило бы обещать еду там, где её нет.
+                feeds = profile.Feeds,
+                grams = profile.Grams,
+                kilocalories = profile.Kilocalories,
+                waterMilliliters = profile.WaterMilliliters,
+                energyPercent = profile.EnergyPercent,
+                hydrationPercent = profile.HydrationPercent
+            };
+        }).ToArray();
+
+        _itemsForm.SetPayloadJson(JsonSerializer.Serialize(new
+        {
+            type = "items",
+            entries
+        }, SnapshotJsonOptions));
+    }
+
+    /// <summary>
+    /// Первая буква названия для плитки предмета.
+    ///
+    /// Суррогатной иконки у нас нет, поэтому плитка — это цвет с буквой. Берём
+    /// первую букву, а не инициалы: 48×48 вмещает одну букву, и две читались бы
+    /// хуже, чем помогают.
+    /// </summary>
+    private static string Letter(string name) =>
+        string.IsNullOrWhiteSpace(name)
+            ? "?"
+            : name.Trim()[..1].ToUpperInvariant();
+
+    /// <summary>
+    /// Название предмета для журнала: «Вода», а не «water.bottle».
+    ///
+    /// Идентификатор в записи журнала — это внутреннее имя, и игрок, прочитав
+    /// «Использован предмет: food.meal», не узнаёт, что съел паёк. Название берём
+    /// из того же каталога, что и окно предметов.
+    ///
+    /// Незнакомый Id печатается как есть: предмет мог прийти из кампании, которой
+    /// каталог ещё не знает, и прятать его за «неизвестный предмет» значило бы
+    /// терять единственную зацепку.
+    /// </summary>
+    private static string ItemLabel(string itemId) =>
+        ItemCatalogFactory.CreateStarter()
+            .FirstOrDefault(item =>
+                item.Id.Equals(itemId, StringComparison.OrdinalIgnoreCase))
+            ?.Name
+        ?? itemId;
+
+    /// <summary>
+    /// Правка перка, эффекта или очков умения из окна перков.
+    ///
+    /// Проверки живут ЗДЕСЬ, а не в домене: «клиент может прислать что угодно» —
+    /// это свойство границы между страницей и миром, и отпор обязан стоять ровно
+    /// на ней. Домен получает уже проверенные значения.
+    /// </summary>
+    private void PerksForm_StateChangeRequested(object? sender, string json)
+    {
+        try
+        {
+            using var document = JsonDocument.Parse(json);
+            var root = document.RootElement;
+
+            switch (String(root, "action", string.Empty))
+            {
+                case "set_perk":
+                    SetPerk(root);
+                    break;
+
+                case "set_effect":
+                    SetEffect(root);
+                    break;
+
+                case "set_skill_level":
+                    SetSkillLevel(root);
+                    break;
+            }
+        }
+        catch (Exception ex)
+        {
+            PostSaveError("Не удалось изменить перк: " + ex.Message);
+        }
+    }
+
+    /// <summary>
+    /// Включает или выключает перк.
+    ///
+    /// Пишем в ОБА списка канала персонажа: баффы и дебаффы это разные списки, и
+    /// снятие обязано убрать Id из того, в котором он лежит. Иначе «Убрать»
+    /// оставлял бы перк в другом списке, и окно снова показывало бы его активным.
+    /// </summary>
+    private void SetPerk(JsonElement root)
+    {
+        var perkId = Required(root, "perkId");
+        var enabled = Flag(root, "enabled");
+
+        var definition = CharacterPerksCatalog.Find(perkId);
+        if (definition is null || definition.Category != CharacterPerkCategory.Perk)
+        {
+            PostSaveError("Такого перка нет в каталоге.");
+            return;
+        }
+
+        if (!definition.Implemented)
+        {
+            PostSaveError(
+                "Перк «" + definition.Name + "» " +
+                CharacterPerksCatalog.InProgressSuffix.Trim('(', ')').ToLowerInvariant() +
+                " и пока не подключён к симулятору.");
+            return;
+        }
+
+        var channel = _hub.Get<CharacterState>("character");
+        var character = channel.Value;
+
+        var buffs = new List<string>(character.Buffs);
+        var debuffs = new List<string>(character.Debuffs);
+        buffs.RemoveAll(id => id.Equals(perkId, StringComparison.OrdinalIgnoreCase));
+        debuffs.RemoveAll(id => id.Equals(perkId, StringComparison.OrdinalIgnoreCase));
+
+        if (enabled)
+            buffs.Add(perkId);
+
+        channel.Set(
+            character with { Buffs = buffs, Debuffs = debuffs },
+            enabled ? "Получен перк" : "Снят перк");
+
+        AppendJournal(
+            enabled ? "PerkGained" : "PerkRemoved",
+            DateTimeOffset.UtcNow,
+            "Персонаж",
+            (enabled ? "Получен перк " : "Снят перк ") +
+            "[[perk:" + perkId + ":" + (enabled ? "buff" : "debuff") + "]] " +
+            definition.Name + ".");
+    }
+
+    /// <summary>
+    /// Ставит или снимает бафф/дебафф.
+    ///
+    /// Срок берётся из каталога, а не из сообщения: длительность — правило мира,
+    /// и присланное страницей значение позволило бы выдать себе вечный бафф.
+    /// Нулевая длительность означает, что эффект держится по УСЛОВИЮ (например,
+    /// «Неопрятный» — пока гигиена низкая): такой вручную не выдаётся, потому что
+    /// движок снимет его на ближайшем же пересчёте.
+    /// </summary>
+    private void SetEffect(JsonElement root)
+    {
+        var effectId = Required(root, "effectId");
+        var enabled = Flag(root, "enabled");
+
+        var definition = CharacterPerksCatalog.Find(effectId);
+        if (definition is null ||
+            (definition.Category != CharacterPerkCategory.Buff &&
+             definition.Category != CharacterPerkCategory.Debuff))
+        {
+            PostSaveError("Такого баффа или дебаффа нет в каталоге.");
+            return;
+        }
+
+        if (!enabled)
+        {
+            RemoveEffect(effectId, definition);
+            return;
+        }
+
+        if (definition.DurationRealSeconds <= 0d && definition.DurationGameSeconds <= 0d)
+        {
+            PostSaveError(
+                "«" + definition.Name + "» держится по условию и не выдаётся вручную: " +
+                "движок снимет его на ближайшем пересчёте.");
+            return;
+        }
+
+        var seconds = definition.DurationRealSeconds > 0d
+            ? definition.DurationRealSeconds
+            : definition.DurationGameSeconds / Math.Max(0.0001d, _runtime.SimulationSpeed);
+
+        SetEffectInCondition(
+            definition,
+            seconds,
+            definition.Category == CharacterPerkCategory.Debuff,
+            enabled: true);
+
+        AppendJournal(
+            "EffectActivated",
+            DateTimeOffset.UtcNow,
+            "Состояние игрока",
+            "Активирован [[perk:" + definition.Id + ":" +
+            (definition.Category == CharacterPerkCategory.Debuff ? "debuff" : "buff") +
+            "]] " + definition.Name + ".");
+    }
+
+    /// <summary>
+    /// Записывает эффект в канал условий.
+    ///
+    /// Заменяем одноимённый эффект, а не добавляем второй: два «Выгорания» в
+    /// списке означали бы два независимых таймера, и монитор показывал бы их как
+    /// два разных пункта с одним названием.
+    ///
+    /// «Отдохнувший» и «Расслабление» взаимоисключающие — это правило движка
+    /// (<c>CharacterVitalsEngine</c>), и повторять его здесь приходится: иначе
+    /// правка из окна оставляла бы в списке оба, и движок снял бы один из них на
+    /// следующем же тике, то есть окно показало бы неправду на секунду.
+    /// </summary>
+    private void SetEffectInCondition(
+        CharacterPerkDefinition definition,
+        double remainingRealSeconds,
+        bool isDebuff,
+        bool enabled)
+    {
+        var channel = _hub.Get<PlayerConditionState>("player-conditions");
+        var conditions = channel.Value;
+
+        var kept = conditions.Effects
+            .Where(effect =>
+                !effect.Id.Equals(definition.Id, StringComparison.OrdinalIgnoreCase) &&
+                !MutuallyExclusive(definition.Id, effect.Id))
+            .ToList();
+
+        if (enabled)
+        {
+            kept.Add(new ActivePlayerEffectState(
+                definition.Id,
+                definition.Name,
+                remainingRealSeconds,
+                isDebuff,
+                ExperienceMultiplier: definition.Id.Equals("rested", StringComparison.OrdinalIgnoreCase)
+                    ? CharacterVitalsEngine.RestedExperienceMultiplier
+                    : definition.Id.Equals("relaxation", StringComparison.OrdinalIgnoreCase)
+                        ? CharacterVitalsEngine.RelaxationExperienceMultiplier
+                        : 1d,
+                StressAccumulationSlowdownPercent:
+                    definition.Id.Equals("rested", StringComparison.OrdinalIgnoreCase)
+                        ? CharacterVitalsEngine.RestedStressSlowdownPercent
+                        : definition.Id.Equals("relaxation", StringComparison.OrdinalIgnoreCase)
+                            ? CharacterVitalsEngine.RelaxationStressSlowdownPercent
+                            : 0d));
+        }
+
+        channel.Set(
+            conditions with { Effects = kept.ToArray() },
+            enabled ? "Активирован эффект" : "Деактивирован эффект");
+    }
+
+    /// <summary>«Отдохнувший» и «Расслабление» заменяют друг друга.</summary>
+    private static bool MutuallyExclusive(string first, string second) =>
+        (first.Equals("rested", StringComparison.OrdinalIgnoreCase) &&
+         second.Equals("relaxation", StringComparison.OrdinalIgnoreCase)) ||
+        (first.Equals("relaxation", StringComparison.OrdinalIgnoreCase) &&
+         second.Equals("rested", StringComparison.OrdinalIgnoreCase));
+
+    /// <summary>Снимает эффект и сообщает об этом в журнал.</summary>
+    private void RemoveEffect(string effectId, CharacterPerkDefinition definition)
+    {
+        SetEffectInCondition(
+            definition,
+            remainingRealSeconds: 0d,
+            isDebuff: definition.Category == CharacterPerkCategory.Debuff,
+            enabled: false);
+
+        AppendJournal(
+            "EffectDeactivated",
+            DateTimeOffset.UtcNow,
+            "Состояние игрока",
+            "Деактивирован [[perk:" + definition.Id + ":" +
+            (definition.Category == CharacterPerkCategory.Debuff ? "debuff" : "buff") +
+            "]] " + definition.Name + ".");
+    }
+
+    /// <summary>
+    /// Ставит уровень умения.
+    ///
+    /// Ноль означает «умения нет» — так сказано в требовании автора, и окно такой
+    /// пункт не показывает. Хранить «нет умения» отдельным флагом не нужно:
+    /// уровень уже это выражает, и второй признак мог бы противоречить первому.
+    /// </summary>
+    private void SetSkillLevel(JsonElement root)
+    {
+        var skillId = Required(root, "skillId");
+        var level = (int)Math.Round(Number(root, "level", 0d));
+
+        var definition = CharacterPerksCatalog.Find(skillId);
+        if (definition is null || !definition.IsLevelled)
+        {
+            PostSaveError("Такого умения нет в каталоге.");
+            return;
+        }
+
+        if (level < 0 || level > definition.MaxLevel)
+        {
+            PostSaveError(
+                "Умение «" + definition.Name + "» принимает от 0 до " +
+                definition.MaxLevel + " очков.");
+            return;
+        }
+
+        var channel = _hub.Get<CharacterState>("character");
+        var character = channel.Value;
+
+        var skills = new List<CharacterSkillState>(character.Skills);
+        var index = skills.FindIndex(skill =>
+            skill.Id.Equals(skillId, StringComparison.OrdinalIgnoreCase));
+
+        var updated = new CharacterSkillState(
+            definition.Id,
+            definition.Name,
+            definition.Description,
+            level > 0,
+            level > 0 ? level + " / " + definition.MaxLevel : "нет")
+        {
+            Kind = SkillKind.Levelled,
+            Level = level,
+            MaxLevel = definition.MaxLevel
+        };
+
+        if (index >= 0)
+            skills[index] = updated;
+        else
+            skills.Add(updated);
+
+        channel.Set(
+            character with { Skills = skills },
+            "Уровень умения");
+
+        AppendJournal(
+            "SkillLevel",
+            DateTimeOffset.UtcNow,
+            "Персонаж",
+            "Умение [[perk:" + definition.Id + ":buff]] " + definition.Name +
+            (level > 0 ? ": очков " + level + " из " + definition.MaxLevel + "." : ": снято."));
+    }
+
+    /// <summary>
+    /// Правка количества предмета из окна «Предметы».
+    ///
+    /// Количество ЗАДАЁТСЯ, а не прибавляется: поле показывает текущее число, и
+    /// микрокнопки рядом меняют его на единицу. «Прибавить» вместо «задать»
+    /// значило бы, что повторное чтение того же поля удваивает запас.
+    /// </summary>
+    private void ItemsForm_StateChangeRequested(object? sender, string json)
+    {
+        try
+        {
+            using var document = JsonDocument.Parse(json);
+            var root = document.RootElement;
+
+            if (!String(root, "action", string.Empty).Equals(
+                "set_item_quantity",
+                StringComparison.OrdinalIgnoreCase))
+            {
+                return;
+            }
+
+            var itemId = Required(root, "itemId").Trim();
+            var quantity = Math.Clamp(
+                (int)Math.Round(Number(root, "quantity", 0d)),
+                0,
+                999);
+
+            var definition = ItemCatalogFactory.CreateStarter()
+                .FirstOrDefault(item =>
+                    item.Id.Equals(itemId, StringComparison.OrdinalIgnoreCase));
+
+            if (definition is null)
+            {
+                PostSaveError("Предмет отсутствует в каталоге.");
+                return;
+            }
+
+            var channel = _hub.Get<InventoryState>("inventory");
+            var state = channel.Value;
+            state.Items.TryGetValue(itemId, out var previousQuantity);
+            var items = new Dictionary<string, int>(
+                state.Items,
+                StringComparer.OrdinalIgnoreCase)
+            {
+                [itemId] = quantity
+            };
+
+            var newIds = new HashSet<string>(
+                state.NewItemIds,
+                StringComparer.OrdinalIgnoreCase);
+
+            // Нулевое количество — предмета нет, и «новым» он быть не может:
+            // иначе инвентарь показывал бы непрочитанную метку у пустой строки.
+            if (quantity <= 0)
+                newIds.Remove(itemId);
+
+            channel.Set(
+                new InventoryState(items, newIds.ToArray()),
+                "Правка количества предмета");
+
+            // Окно инвентаря получает ту же правку: два окна с одним состоянием
+            // обязаны показывать одно число. Передаётся РАЗНИЦА, а не новое
+            // количество: уведомление показывает «выдано/изъято», и абсолютное
+            // число читалось бы как «выдано 12 штук» после правки до двенадцати.
+            if (_inventoryForm is not null && !_inventoryForm.IsDisposed)
+                _inventoryForm.NotifyInventoryChange(itemId, quantity - previousQuantity);
+
+            PushItems();
+        }
+        catch (Exception ex)
+        {
+            PostSaveError("Не удалось изменить количество: " + ex.Message);
+        }
+    }
+
     private void SimulatorForm_GlobalHotKeyPressed(object? sender, WebViewHotKeyEventArgs e)
     {
         if (e.Key == Keys.I)
@@ -664,6 +1341,14 @@ public sealed class SimulatorForm : WebViewForm
             return;
 
         UseInventoryItemCore(e.ItemId);
+    }
+
+    private void InventoryForm_ItemDropRequested(object? sender, InventoryItemDropEventArgs e)
+    {
+        if (string.IsNullOrWhiteSpace(e.ItemId))
+            return;
+
+        DropInventoryItemCore(e.ItemId);
     }
 
     protected override void OnWebMessage(string json)
@@ -802,6 +1487,10 @@ public sealed class SimulatorForm : WebViewForm
                     UseInventoryItem(root);
                     break;
 
+                case "drop_inventory_item":
+                    DropInventoryItem(root);
+                    break;
+
                 case "grant_inventory_item":
                     GrantInventoryItem(root);
                     break;
@@ -819,6 +1508,19 @@ public sealed class SimulatorForm : WebViewForm
 
                 case "open_indicators":
                     OpenIndicatorsWindow();
+                    break;
+
+                // Ссылки из монитора, журнала и окна перков: клик по имени
+                // эффекта, показателя или предмета открывает своё окно и
+                // подсвечивает названный пункт.
+                case "open_perks":
+                    OpenPerksWindow(
+                        StringOrNull(root, "perkId"),
+                        StringOrNull(root, "perkKind"));
+                    break;
+
+                case "open_items":
+                    OpenItemsWindow(StringOrNull(root, "itemId"));
                     break;
 
                 case "set_vitals":
@@ -2578,7 +3280,12 @@ public sealed class SimulatorForm : WebViewForm
         // он показывает текущие значения и скорости, а живое обновление ему
         // нужнее, чем карте — именно за изменениями он и наблюдает.
         if (_indicatorsForm is not null && !_indicatorsForm.IsDisposed)
-            _indicatorsForm.SetSnapshotJson(payload);
+            _indicatorsForm.PushLiveStateJson(payload);
+
+        // Окна перков и предметов тоже живое состояние: таймеры баффов тикают, а
+        // количество предметов меняется от еды и квестов.
+        PushPerks();
+        PushItems();
     }
 
     private void SetFact(JsonElement root)
@@ -3072,7 +3779,7 @@ public sealed class SimulatorForm : WebViewForm
             "ItemGranted",
             DateTimeOffset.UtcNow,
             "Инвентарь",
-            $"Выдан предмет «{definition.Name}» ×{amount}.",
+            $"Выдан предмет [[item:{itemId}:{definition.Name}]] {definition.Name} ×{amount}.",
             _hub.Get<PlayerState>("player").Value.Position);
 
         PersistSession(
@@ -3108,6 +3815,58 @@ public sealed class SimulatorForm : WebViewForm
 
     private void UseInventoryItem(JsonElement root) =>
         UseInventoryItemCore(Required(root, "itemId"));
+
+    private void DropInventoryItem(JsonElement root) =>
+        DropInventoryItemCore(Required(root, "itemId"));
+
+    /// <summary>
+    /// «Выбросить» из меню ПКМ: количество уменьшается на одну единицу.
+    ///
+    /// Отдельный путь от употребления: выброс НЕ должен запускать механику
+    /// предмета (иначе «Выбросить обезболивающее» лечило бы игрока), а предмет с
+    /// нулевым количеством уходит из инвентаря совсем, чтобы пустая ячейка не
+    /// висела как «×0».
+    /// </summary>
+    private void DropInventoryItemCore(string itemId)
+    {
+        if (string.IsNullOrWhiteSpace(itemId))
+            return;
+
+        var channel = _hub.Get<InventoryState>("inventory");
+        var inventory = channel.Value;
+        if (!inventory.Items.TryGetValue(itemId, out var quantity) || quantity <= 0)
+        {
+            PostSaveError("Предмет закончился.");
+            return;
+        }
+
+        var items = new Dictionary<string, int>(
+            inventory.Items,
+            StringComparer.OrdinalIgnoreCase);
+
+        if (quantity <= 1)
+            items.Remove(itemId);
+        else
+            items[itemId] = quantity - 1;
+
+        channel.Set(
+            new InventoryState(items, inventory.NewItemIds),
+            "Выброс предмета");
+
+        if (_inventoryForm is not null && !_inventoryForm.IsDisposed)
+            _inventoryForm.NotifyInventoryChange(itemId, -1);
+
+        AppendJournal(
+            "ItemDropped",
+            DateTimeOffset.UtcNow,
+            "Состояние игрока",
+            "Выброшен предмет: [[item:" + itemId + ":" + ItemLabel(itemId) + "]] " +
+            ItemLabel(itemId) + ".",
+            _hub.Get<PlayerState>("player").Value.Position);
+
+        PersistSession("автосохранение: выброс предмета", force: true);
+        RequestSnapshot("inventory item dropped");
+    }
 
     private void UseInventoryItemCore(string itemId)
     {
@@ -3154,7 +3913,8 @@ public sealed class SimulatorForm : WebViewForm
             "ItemUsed",
             DateTimeOffset.UtcNow,
             "Состояние игрока",
-            "Использован предмет: " + itemId + ".",
+            "Использован предмет: [[item:" + itemId + ":" + ItemLabel(itemId) + "]] " +
+            ItemLabel(itemId) + ".",
             _hub.Get<PlayerState>("player").Value.Position);
 
         PersistSession("автосохранение: употребление предмета", force: true);
@@ -3225,6 +3985,9 @@ public sealed class SimulatorForm : WebViewForm
         if (update.Events.Any(item => item.Kind == "SleepBlocked"))
             throw new InvalidOperationException("Сон невозможен: здоровье, энергия или жидкость должны быть выше 5%.");
 
+        var beforeVitals = _hub.Get<PlayerVitalsState>("player-vitals").Value;
+        var beforeConditions = _hub.Get<PlayerConditionState>("player-conditions").Value;
+
         _hub.Get<PlayerVitalsState>("player-vitals").Set(update.Vitals, "Полноценный ночлег");
         _hub.Get<PlayerConditionState>("player-conditions").Set(update.Conditions, "Полноценный ночлег");
         progressChannel.Set(
@@ -3250,8 +4013,53 @@ public sealed class SimulatorForm : WebViewForm
             "Полноценный ночлег: 7 игровых часов, 5000 рублей.",
             player.Position);
 
+        // Отчёт об изменении состояния: автор просил после ночлега, сна и отдыха
+        // показывать в журнале, ЧТО именно изменилось и какие перки получены.
+        // Считает домен — сравнение двух состояний это правило, а не текст
+        // интерфейса, и держать его здесь значило бы дублировать знание о шкалах.
+        AppendStateReport(
+            "HotelSleepReport",
+            "Гостиница",
+            beforeVitals,
+            beforeConditions,
+            update.Vitals,
+            update.Conditions);
+
         PersistSession("автосохранение: полноценный ночлег", force: true);
         RequestSnapshot("hotel lodging completed");
+    }
+
+    /// <summary>
+    /// Печатает в журнал отчёт об изменении состояния после события.
+    ///
+    /// Отдельная запись, а не дописанный текст к событию: строки содержат разметку
+    /// ссылок (<c>[[metric:energy]]</c>, <c>[[perk:...]]</c>), и журнал рисует их
+    /// подчёркнутыми и кликабельными. Слитая запись потеряла бы позиции ссылок —
+    /// их считает <see cref="JournalForm"/> по фактически набранному тексту.
+    ///
+    /// Многострочность — <c>\n</c>: журнал разбирает разметку сам, а перевод строки
+    /// печатается как есть, поэтому отчёт читается списком.
+    /// </summary>
+    private void AppendStateReport(
+        string eventType,
+        string source,
+        PlayerVitalsState beforeVitals,
+        PlayerConditionState beforeConditions,
+        PlayerVitalsState afterVitals,
+        PlayerConditionState afterConditions)
+    {
+        var lines = CharacterStateReport.Describe(
+            beforeVitals,
+            beforeConditions,
+            afterVitals,
+            afterConditions);
+
+        AppendJournal(
+            eventType,
+            DateTimeOffset.UtcNow,
+            source,
+            string.Join("\n", lines),
+            null);
     }
 
     private void SetPlayerVitals(JsonElement root)
@@ -3410,6 +4218,15 @@ public sealed class SimulatorForm : WebViewForm
                 ? "Полноценный сон: 4 игровых часа."
                 : "Полевой сон: 6 игровых часов.");
 
+        // Отчёт об изменении состояния — как и у ночлега: автор просил видеть
+        // после сна, что именно изменилось и какие перки получены.
+        AppendStateReport(
+            fullSleep ? "FullSleepReport" : "FieldSleepReport",
+            "Состояние игрока",
+            currentVitals,
+            currentConditions,
+            update.Vitals,
+            update.Conditions);
         _conditionsLastRealTick = DateTimeOffset.UtcNow;
         _conditionsLastGameElapsed = nextElapsed;
         _conditionsLastPosition = _hub.Get<PlayerState>("player").Value.Position;
@@ -3794,16 +4611,66 @@ public sealed class SimulatorForm : WebViewForm
         _journalForm = new JournalForm();
         _journalForm.GlobalHotKeyPressed += SimulatorForm_GlobalHotKeyPressed;
         _journalForm.CoordinateClicked += JournalForm_CoordinateClicked;
+        _journalForm.MetricClicked += JournalForm_MetricClicked;
+        _journalForm.PerkClicked += JournalForm_PerkClicked;
+        _journalForm.ItemClicked += JournalForm_ItemClicked;
         _journalForm.SetEntries(_journalEntries);
         _journalForm.ReturnToSidebarRequested += JournalForm_ReturnToSidebarRequested;
         _journalForm.FormClosed += (_, _) =>
         {
             _journalForm!.GlobalHotKeyPressed -= SimulatorForm_GlobalHotKeyPressed;
             _journalForm.CoordinateClicked -= JournalForm_CoordinateClicked;
+            _journalForm.MetricClicked -= JournalForm_MetricClicked;
+            _journalForm.PerkClicked -= JournalForm_PerkClicked;
+            _journalForm.ItemClicked -= JournalForm_ItemClicked;
             _journalForm = null;
         };
         _journalForm.Show(this);
         QuestLogger.Info("Journal: native окно показано.", QuestLogger.Json(new { entryCount = _journalEntries.Count }));
+    }
+
+    /// <summary>
+    /// Клик по имени показателя в журнале: открывает монитор и подсвечивает
+    /// блок этой шкалы.
+    ///
+    /// Подсветка живёт в ОКНЕ монитора, а не в журнале: «какой блок показать»
+    /// теряет смысл, когда окно закрыто, и хранить это между окнами значило бы
+    /// держать состояние, у которого нет владельца.
+    /// </summary>
+    private void JournalForm_MetricClicked(string key)
+    {
+        if (InvokeRequired)
+        {
+            BeginInvoke((Action<string>)JournalForm_MetricClicked, key);
+            return;
+        }
+
+        OpenIndicatorsWindow();
+        _indicatorsForm?.Highlight(key);
+    }
+
+    /// <summary>Клик по имени перка, баффа или скилла: окно «Перки, баффы, скиллы».</summary>
+    private void JournalForm_PerkClicked(string perkId, string perkKind)
+    {
+        if (InvokeRequired)
+        {
+            BeginInvoke((Action<string, string>)JournalForm_PerkClicked, perkId, perkKind);
+            return;
+        }
+
+        OpenPerksWindow(perkId, perkKind);
+    }
+
+    /// <summary>Клик по названию предмета в журнале: окно «Предметы».</summary>
+    private void JournalForm_ItemClicked(string itemId)
+    {
+        if (InvokeRequired)
+        {
+            BeginInvoke((Action<string>)JournalForm_ItemClicked, itemId);
+            return;
+        }
+
+        OpenItemsWindow(itemId);
     }
 
     private void JournalForm_CoordinateClicked(WorldCoordinate position)
@@ -5193,6 +6060,40 @@ public sealed class SimulatorForm : WebViewForm
         return root.TryGetProperty(name, out var element) && element.ValueKind != JsonValueKind.Null
             ? element.ToString()
             : fallback;
+    }
+
+    /// <summary>
+    /// Строка сообщения или <c>null</c>, если она пуста.
+    ///
+    /// Отличается от <see cref="String"/> намеренно: у ссылки на показатель или
+    /// предмет пустое значение — это ОТСУТСТВИЕ подсветки, а не пустое имя, и
+    /// склеивать эти два случая значило бы подсвечивать несуществующий пункт.
+    /// </summary>
+    private static string? StringOrNull(JsonElement root, string name)
+    {
+        var value = String(root, name);
+        return string.IsNullOrWhiteSpace(value) ? null : value;
+    }
+
+    /// <summary>
+    /// Логический флаг сообщения; отсутствие поля считается <c>false</c>.
+    ///
+    /// Строка «true» принимается наравне с логическим значением: страница может
+    /// прислать его атрибутом, а разница между <c>true</c> и <c>"true"</c> — это
+    /// подробность формата, а не смысла команды.
+    /// </summary>
+    private static bool Flag(JsonElement root, string name)
+    {
+        if (!root.TryGetProperty(name, out var element))
+            return false;
+
+        return element.ValueKind switch
+        {
+            JsonValueKind.True => true,
+            JsonValueKind.False => false,
+            JsonValueKind.String => bool.TryParse(element.GetString(), out var parsed) && parsed,
+            _ => false
+        };
     }
 
     private static double Number(JsonElement root, string name, double fallback)

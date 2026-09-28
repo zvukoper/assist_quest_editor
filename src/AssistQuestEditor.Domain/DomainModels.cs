@@ -85,6 +85,38 @@ public sealed record PlayerVitalsState(
     public double Hygiene { get; init; } = PlayerConditionScale.Maximum;
     public double Resilience { get; init; } = PlayerConditionScale.FromPercent(60d);
     public double Metabolism { get; init; } = PlayerConditionScale.FromPercent(60d);
+
+    /// <summary>
+    /// Энергия шкалы в КИЛОКАЛОРИЯХ (задано автором: 0..5000).
+    ///
+    /// Внутри энергия хранится в единицах 0..10000, как и все шкалы, а наружу —
+    /// в калориях: 100% шкалы равно
+    /// <see cref="CharacterDigestion.EnergyScaleKilocalories"/> ккал. Пересчёт
+    /// живёт в домене, а не в JavaScript: подсказка интерфейса и правила движка
+    /// обязаны читать одно и то же число, иначе «съел 400 ккал» в окне не
+    /// совпало бы с тем, что начислил движок.
+    /// </summary>
+    public double EnergyKilocalories =>
+        PlayerConditionScale.ToPercent(Energy) /
+        100d *
+        CharacterDigestion.EnergyScaleKilocalories;
+
+    public double MaxEnergyKilocalories =>
+        PlayerConditionScale.ToPercent(MaxEnergy) /
+        100d *
+        CharacterDigestion.EnergyScaleKilocalories;
+
+    /// <summary>Жидкость шкалы в МИЛЛИЛИТРАХ (задано автором: 0..15000).</summary>
+    public double HydrationMilliliters =>
+        PlayerConditionScale.ToPercent(Hydration) /
+        100d *
+        CharacterDigestion.HydrationScaleMilliliters;
+
+    public double MaxHydrationMilliliters =>
+        PlayerConditionScale.ToPercent(MaxHydration) /
+        100d *
+        CharacterDigestion.HydrationScaleMilliliters;
+
     /// <summary>Полные шкалы и нулевая усталость — стартовое состояние мира.</summary>
     public static PlayerVitalsState Default => new(
         PlayerConditionScale.Maximum,
@@ -266,6 +298,26 @@ public sealed record PlayerConditionState(
     public double CaffeineDailyMg { get; init; }
     public double CaffeineDaySeconds { get; init; }
     public double CaffeineDependence { get; init; }
+
+    /// <summary>
+    /// Id ПОСЛЕДНЕГО употреблённого предмета (расходника).
+    ///
+    /// Нужен монитору показателей: пока идёт переваривание, он обязан показать
+    /// ПУНКТ этого предмета и его воздействие на шкалы, а в желудке хранится
+    /// только «сколько осталось» — без имени непонятно, от чего именно.
+    /// Хранится в сохранении: загрузка посреди переваривания иначе потеряла бы
+    /// подпись пункта, и монитор показывал бы безымянный остаток.
+    /// </summary>
+    public string LastConsumedItemId { get; init; } = string.Empty;
+
+    /// <summary>
+    /// Скрытый «виртуальный желудок»: ещё не усвоенное восстановление энергии и
+    /// жидкости. Еда и питьё не восполняют шкалы мгновенно — они перевариваются
+    /// (см. <see cref="CharacterDigestion"/>, <c>Character_Vitals.md</c>), и
+    /// состояние желудка СОХРАНЯЕТСЯ, иначе загрузка во время переваривания
+    /// мгновенно выдала бы остаток.
+    /// </summary>
+    public StomachContents Stomach { get; init; } = StomachContents.Empty;
     /// <summary>
     /// Кумулятивные шкалы и стресс — в ЕДИНИЦАХ (<see cref="PlayerConditionScale"/>),
     /// как и <see cref="PlayerVitalsState"/>. Исключение — критические счётчики
@@ -300,6 +352,10 @@ public sealed record PlayerConditionState(
         CaffeineDailyMg = NormalizeNonNegative(CaffeineDailyMg),
         CaffeineDaySeconds = Math.Max(0d, double.IsFinite(CaffeineDaySeconds) ? CaffeineDaySeconds : 0d),
         CaffeineDependence = Math.Clamp(double.IsFinite(CaffeineDependence) ? CaffeineDependence : 0d, 0d, 100d),
+        LastConsumedItemId = string.IsNullOrWhiteSpace(LastConsumedItemId)
+            ? string.Empty
+            : LastConsumedItemId.Trim(),
+        Stomach = (Stomach ?? StomachContents.Empty).Normalize(),
         CriticalFatigueGameSeconds = Math.Max(
             0d,
             double.IsFinite(CriticalFatigueGameSeconds) ? CriticalFatigueGameSeconds : 0d),

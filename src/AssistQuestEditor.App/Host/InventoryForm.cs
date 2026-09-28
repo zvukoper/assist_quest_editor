@@ -158,6 +158,11 @@ public sealed class InventoryForm : WebViewForm
                         root.TryGetProperty("itemId", out var useItemId) ? useItemId.GetString() ?? string.Empty : string.Empty));
                     break;
 
+                case "drop_inventory_item":
+                    InventoryItemDropRequested?.Invoke(this, new InventoryItemDropEventArgs(
+                        root.TryGetProperty("itemId", out var dropItemId) ? dropItemId.GetString() ?? string.Empty : string.Empty));
+                    break;
+
                 default:
                     AppLogger.Warn("InventoryForm: неизвестное действие.", action);
                     break;
@@ -204,6 +209,9 @@ public sealed class InventoryForm : WebViewForm
 
     public event EventHandler<InventoryItemUseEventArgs>? InventoryItemUseRequested;
 
+    /// <summary>Игрок выбрал «Выбросить» в меню ПКМ: количество уменьшается на одну единицу.</summary>
+    public event EventHandler<InventoryItemDropEventArgs>? InventoryItemDropRequested;
+
     /// <summary>
     /// Просьба закрыть окно (клавиша I или Escape внутри окна).
     ///
@@ -224,6 +232,13 @@ public sealed class InventoryItemSeenEventArgs : EventArgs
 public sealed class InventoryItemUseEventArgs : EventArgs
 {
     public InventoryItemUseEventArgs(string itemId) => ItemId = itemId;
+
+    public string ItemId { get; }
+}
+
+public sealed class InventoryItemDropEventArgs : EventArgs
+{
+    public InventoryItemDropEventArgs(string itemId) => ItemId = itemId;
 
     public string ItemId { get; }
 }

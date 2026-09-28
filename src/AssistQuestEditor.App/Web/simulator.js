@@ -3622,6 +3622,7 @@
     const play = document.getElementById("simPlay");
     const stop = document.getElementById("simStop");
     const fastForward = document.getElementById("simFastForward");
+    const routeToggle = document.getElementById("simRouteToggle");
     const plate = document.getElementById("simStatusPlate");
     const autoSave = document.getElementById("simAutoSave");
 
@@ -3669,6 +3670,24 @@
       const speedText = simulationSpeed === 1 ? "" : " (сейчас ×" + formatSpeed(simulationSpeed) + ")";
       fastForward.title = "Ускорить игровое время" + speedText;
       fastForward.setAttribute("aria-label", fastForward.title);
+    }
+
+    // Тогл маршрута в транспорте — ЗЕРКАЛО кнопки сайдбара.
+    //
+    // Обе обязаны читать одно поле route.enabled, а не собственный признак:
+    // вторая копия состояния неминуемо разошлась бы с первой, и одна кнопка
+    // показывала бы «едем», пока другая показывала «стоим». Поэтому состояние
+    // здесь только ОТРАЖАЕТСЯ, а переключается общим действием route_toggle.
+    if (routeToggle) {
+      const moving = !!(route && route.enabled);
+      routeToggle.classList.toggle("active", moving);
+      routeToggle.setAttribute("aria-pressed", moving ? "true" : "false");
+      // Остановка на точке со скоростью 0 — то же состояние, что и у кнопки
+      // сайдбара: пульсация зовёт нажать, а не мигает впустую.
+      routeToggle.classList.toggle("stopPulse", !!routeStoppedBadgeText());
+      routeToggle.title = moving
+        ? "Остановить движение по маршруту"
+        : "Включить движение по маршруту";
     }
 
     if (plate) {
@@ -4290,6 +4309,13 @@
           // значения, поэтому логично живёт там же, где сами шкалы.
           "<button class='smallButton' id='openIndicators'>Монитор показателей</button>" +
         "</div>",
+        // Перки и предметы — рядом со шкалами: и то и другое объясняет их
+        // значения, и держать причину и следствие в разных разделах значило бы
+        // заставлять игрока искать связь между ними.
+        "<div class='conditionEditActions'>" +
+          "<button class='smallButton' id='openPerks'>Перки, баффы, скиллы</button>" +
+          "<button class='smallButton' id='openItems'>Предметы</button>" +
+        "</div>",
         "<div class='sleepActions'>" +
           "<button class='smallButton' id='fieldSleep'>Полевой сон · 6 ч</button>" +
           "<button class='smallButton' id='fullSleep'>Полноценный сон · 4 ч</button>" +
@@ -4667,6 +4693,17 @@
 
     side.querySelector("#openIndicators")?.addEventListener("click", () => {
       send({ action: "open_indicators" });
+    });
+
+    // Ссылок нет — открываем окно без подсветки: подсветка нужна только при
+    // переходе ПО КОНКРЕТНОМУ пункту (из журнала или монитора), а здесь игрок
+    // открывает окно целиком.
+    side.querySelector("#openPerks")?.addEventListener("click", () => {
+      send({ action: "open_perks" });
+    });
+
+    side.querySelector("#openItems")?.addEventListener("click", () => {
+      send({ action: "open_items" });
     });
 
     side.querySelector("#resetStress")?.addEventListener("click", () => {
@@ -5787,6 +5824,13 @@
 
   document.getElementById("simPlay")?.addEventListener("click", () => {
     send({ action: simulationRunning ? "simulation_pause" : "simulation_start" });
+  });
+
+  // Тогл маршрута в транспорте шлёт ТО ЖЕ действие, что и кнопка сайдбара.
+  // Собственная ветка обработки означала бы два пути к одному состоянию, и они
+  // разошлись бы при первой же правке.
+  document.getElementById("simRouteToggle")?.addEventListener("click", () => {
+    send({ action: "route_toggle", enabled: !(route && route.enabled) });
   });
 
   document.getElementById("simStop")?.addEventListener("click", () => {

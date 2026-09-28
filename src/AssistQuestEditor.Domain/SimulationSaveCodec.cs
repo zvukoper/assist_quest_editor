@@ -475,6 +475,19 @@ public static class SimulationSaveCodec
             WriteDouble(writer, conditions.CaffeineDaySeconds);
             WriteDouble(writer, conditions.CaffeineDependence);
         }
+
+        if (formatVersion >= 13)
+        {
+            WriteDouble(writer, conditions.Stomach.EnergyRemaining);
+            WriteDouble(writer, conditions.Stomach.HydrationRemaining);
+            WriteDouble(writer, conditions.Stomach.EnergyPerGameSecond);
+            WriteDouble(writer, conditions.Stomach.HydrationPerGameSecond);
+        }
+
+        if (formatVersion >= 14)
+        {
+            WriteString(writer, conditions.LastConsumedItemId);
+        }
     }
 
     private static PlayerConditionState ReadConditions(
@@ -534,6 +547,26 @@ public static class SimulationSaveCodec
                 CaffeineDailyMg = ReadDouble(reader),
                 CaffeineDaySeconds = ReadDouble(reader),
                 CaffeineDependence = ReadDouble(reader)
+            };
+        }
+
+        if (formatVersion >= 13)
+        {
+            state = state with
+            {
+                Stomach = new StomachContents(
+                    ReadDouble(reader),
+                    ReadDouble(reader),
+                    ReadDouble(reader),
+                    ReadDouble(reader))
+            };
+        }
+
+        if (formatVersion >= 14)
+        {
+            state = state with
+            {
+                LastConsumedItemId = ReadString(reader)
             };
         }
 

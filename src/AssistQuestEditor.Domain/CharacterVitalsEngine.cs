@@ -39,24 +39,78 @@ public static class CharacterVitalsEngine
 
     /// <summary>
     /// Базовый множитель накопления КУМУЛЯТИВНОЙ усталости.
-    /// Задано автором: накопление увеличено вдвое относительно «1 единица
-    /// истощения на 1% критического перерасхода».
+    /// Задано автором: накопление утроено относительно «1 единица истощения
+    /// на 1% критического перерасхода» (было ×2, стало ×3).
     /// </summary>
-    public const double CumulativeFatigueAccrualBaseMultiplier = 2d;
+    public const double CumulativeFatigueAccrualBaseMultiplier = 3d;
 
     /// <summary>За каждые накопленные 5% кумулятивной усталости коэффициент растёт.</summary>
     public const double CumulativeFatigueAccrualStepPercent = 5d;
 
-    /// <summary>Прирост коэффициента за каждые накопленные 5% (задано автором).</summary>
-    public const double CumulativeFatigueAccrualStepBonus = 0.25d;
+    /// <summary>
+    /// Прирост коэффициента за каждые накопленные 5% (задано автором): штраф
+    /// удвоен — было 0,25, стало 0,5. Вместе с базой ×3 истощение усталости
+    /// превращается в «лавину» заметно быстрее прежнего.
+    /// </summary>
+    public const double CumulativeFatigueAccrualStepBonus = 0.5d;
 
-    public const double HydrationConsumptionHours = 2d;
-    public const double EnergyConsumptionHours = 4d;
+    /// <summary>
+    /// За сколько игровых часов расходуется ВСЯ шкала жидкости.
+    ///
+    /// Число выведено из физических величин, а не назначено «на глаз»: шкала
+    /// жидкости — это <see cref="CharacterDigestion.HydrationScaleMilliliters"/>
+    /// миллилитров, а организм в нормальных условиях тратит около 167 мл в час.
+    /// Прежние 2 часа означали 7,5 литра в час — при усвоении 1 л/ч (
+    /// <see cref="CharacterDigestion.HydrationAbsorptionLitersPerHour"/>) питьё
+    /// ФИЗИЧЕСКИ не могло дать положительную динамику, и автор видел «выпил воды,
+    /// а шкала всё равно красная». Теперь усвоение перекрывает расход в 6 раз.
+    /// </summary>
+    public const double HydrationConsumptionHours = 90d;
+
+    /// <summary>
+    /// За сколько игровых часов расходуется ВСЯ шкала энергии.
+    ///
+    /// Шкала энергии — это <see cref="CharacterDigestion.EnergyScaleKilocalories"/>
+    /// килокалорий, то есть около 167 ккал в час. Усвоение полного желудка
+    /// (5000 ккал за 2 игровых часа) перекрывает этот расход в 15 раз — именно
+    /// это и делает динамику после еды положительной.
+    /// </summary>
+    public const double EnergyConsumptionHours = 30d;
+
     public const double SleepConsumptionMultiplier = 1d / 3d;
+
+    /// <summary>
+    /// За сколько часов ПОЛНОЦЕННОГО сна уходит вся шкала обычного стресса.
+    ///
+    /// Задано автором: «100% стресса уходит за 6 часов полноценного сна».
+    /// Снимается только ОБЫЧНЫЙ стресс; кумулятивный стресс по-прежнему
+    /// снимается лишь отпуском (см. Character_Vitals.md).
+    /// </summary>
+    public const double FullSleepStressClearHours = 6d;
+
+    /// <summary>
+    /// Во сколько раз ОБЫЧНЫЙ сон снимает стресс медленнее полноценного
+    /// (задано автором: «в 2.5 раза меньше»).
+    /// </summary>
+    public const double RegularSleepStressClearPenalty = 2.5d;
+
+    /// <summary>
+    /// Сколько ресурсов стоит восстановление здоровья (задано автором):
+    /// 1 единица здоровья = 1 единица энергии и 2 единицы жидкости.
+    ///
+    /// Регенерация поэтому не бесплатна: при пустой энергии или жидкости она
+    /// встаёт, и «Текущая динамика» здоровья обязана это показывать, а не
+    /// обещать рост, которого не будет.
+    /// </summary>
+    public const double HealthRegenEnergyPerHealthUnit = 1d;
+    public const double HealthRegenHydrationPerHealthUnit = 2d;
     public const double HygieneDecayHours = 72d;
 
     public const double DefaultResiliencePercent = 60d;
     public const double DefaultMetabolismPercent = 60d;
+    /// <summary>Границы нормального метаболизма (45–75%): вне них он меняет расход.</summary>
+    public const double ReducedMetabolismPercent = 45d;
+    public const double ElevatedMetabolismPercent = 75d;
     public const double MetabolismRecoveryPercentPerHour = 1d;
     public const double MetabolismExhaustionPenaltyPerQuarterHour = 2d;
 
@@ -94,14 +148,31 @@ public static class CharacterVitalsEngine
             ? TimeOfDayFatigueMultiplier(gameHourOfDay)
             : 1d;
 
+        // Здоровье восстанавливается за счёт энергии и жидкости (1:1 и 1:2),
+        // поэтому тот же расход обязан попасть в скорость этих шкал. Иначе
+        // подсказка показывала бы только трату жизнедеятельности, и игрок не
+        // понял бы, почему энергия падает при лежании без движения.
+        var healthRegenPerHour = HealthRegenPerHour(vitals, conditions);
+
         var energyPerHour =
             -(100d / EnergyConsumptionHours) *
             metabolismFactor *
-            sleepFactor;
+            sleepFactor -
+            healthRegenPerHour * HealthRegenEnergyPerHealthUnit;
         var hydrationPerHour =
             -(100d / HydrationConsumptionHours) *
             metabolismFactor *
-            sleepFactor;
+            sleepFactor -
+            healthRegenPerHour * HealthRegenHydrationPerHealthUnit;
+
+        // Пищеварение даёт ПОЛОЖИТЕЛЬНУЮ скорость, пока в желудке есть
+        // неусвоенное: пока идёт насыщение, энергия и жидкость растут, и
+        // подсказка обязана показывать это как «динамику вверх» — иначе игрок
+        // не видит, что еда уже действует.
+        var digestionEnergyPerMinute =
+            conditions.Stomach.EnergyPerGameSecond * 60d;
+        var digestionHydrationPerMinute =
+            conditions.Stomach.HydrationPerGameSecond * 60d;
 
         var fatiguePerHour =
             moving && !sleeping
@@ -131,9 +202,11 @@ public static class CharacterVitalsEngine
                 : 0d;
 
         return new CharacterVitalsRates(
-            PlayerConditionScale.RateFromPercent(HealthRegenPerHour(vitals, conditions) / 60d),
-            PlayerConditionScale.RateFromPercent(energyPerHour / 60d),
-            PlayerConditionScale.RateFromPercent(hydrationPerHour / 60d),
+            PlayerConditionScale.RateFromPercent(healthRegenPerHour / 60d),
+            PlayerConditionScale.RateFromPercent(energyPerHour / 60d) +
+                digestionEnergyPerMinute,
+            PlayerConditionScale.RateFromPercent(hydrationPerHour / 60d) +
+                digestionHydrationPerMinute,
             PlayerConditionScale.RateFromPercent(fatiguePerHour / 60d),
             PlayerConditionScale.RateFromPercent(stressPerHour / 60d),
             PlayerConditionScale.RateFromPercent(ResilienceDirection(vitals, conditions) / 60d),
@@ -205,6 +278,25 @@ public static class CharacterVitalsEngine
 
             if (!HasEffect(state, "power_surge"))
             {
+                // Пищеварение: желудок отдаёт шкалам ровно то, что успело
+                // усвоиться за шаг. Именно здесь восстановление становится
+                // ПОСТЕПЕННЫМ — еда и питьё больше не начисляют энергию и
+                // жидкость мгновенно (см. CharacterDigestion).
+                var digestion = CharacterDigestion.Advance(
+                    state.Stomach,
+                    stepSeconds);
+
+                state = state with
+                {
+                    Stomach = digestion.Contents
+                };
+
+                vitals = vitals with
+                {
+                    Energy = vitals.Energy + digestion.EnergyGain,
+                    Hydration = vitals.Hydration + digestion.HydrationGain
+                };
+
                 if (sleeping && !allowSleepInterruption && !CanSleep(vitals))
                 {
                     sleeping = false;
@@ -375,7 +467,14 @@ public static class CharacterVitalsEngine
 
                     if (wholeStressHours > 0d)
                     {
-                        if (!HasEffect(state, "bull") &&
+                        // ВО СНЕ ИСТОЩЕНИЕ НЕ НАКАПЛИВАЕТСЯ (Character_Vitals.md:
+                        // «во время сна не может накапливаться истощение каких-либо
+                        // показателей»). Без этой проверки сон, начатый с высоким
+                        // стрессом, копил кумулятивный стресс — а тот снимается
+                        // ТОЛЬКО отпуском, поэтому «после ночлега стресс остался»
+                        // было не багом отображения, а следствием этой дыры.
+                        if (!sleeping &&
+                            !HasEffect(state, "bull") &&
                             !SkipNegativeRoll(
                                 ref state,
                                 resiliencePercent / 2d))
@@ -477,7 +576,13 @@ public static class CharacterVitalsEngine
                         // почасовое истощение усталости не должно его обходить:
                         // без этой проверки бафф гасил только пошаговое
                         // истощение, а критическая усталость продолжала копить.
-                        if (!HasEffect(state, "bull") &&
+                        //
+                        // Сон — тоже полный запрет на накопление истощения
+                        // (Character_Vitals.md): ночуя усталым, игрок не должен
+                        // просыпаться с новой порцией кумулятивной усталости,
+                        // которую сон как раз и обязан снимать.
+                        if (!sleeping &&
+                            !HasEffect(state, "bull") &&
                             !SkipNegativeRoll(
                                 ref state,
                                 resiliencePercent / 2d))
@@ -529,7 +634,8 @@ public static class CharacterVitalsEngine
                 UpdateResilienceAndMetabolism(
                     ref vitals,
                     state,
-                    stepSeconds);
+                    stepSeconds,
+                    sleeping);
 
                 SyncThresholdEffects(
                     ref vitals,
@@ -664,7 +770,25 @@ public static class CharacterVitalsEngine
                         conditions.CumulativeFatigue -
                         UnitsFromPercentExact(
                             6d)),
-            CriticalFatigueGameSeconds = 0d
+            CriticalFatigueGameSeconds = 0d,
+            // Сон снимает ОБЫЧНЫЙ стресс. До этого стресс умели уменьшать только
+            // предметы, поэтому «устал и лёг спать» не помогало вовсе, и после
+            // гостиницы игрок видел прежние 44%.
+            //
+            // Скорость задана автором: полноценный сон убирает всю шкалу за
+            // <see cref="FullSleepStressClearHours"/> часов, обычный — в
+            // <see cref="RegularSleepStressClearPenalty"/> раз медленнее.
+            // Снимается ровно ОБЫЧНЫЙ стресс: кумулятивный неприкосновенен.
+            Stress = Math.Max(
+                0d,
+                conditions.Stress -
+                UnitsFromPercentExact(
+                    100d /
+                    (fullSleep
+                        ? FullSleepStressClearHours
+                        : FullSleepStressClearHours *
+                          RegularSleepStressClearPenalty) *
+                    safeHours))
         };
 
         vitals = vitals with
@@ -773,6 +897,14 @@ public static class CharacterVitalsEngine
                 conditions,
                 Array.Empty<PlayerConditionEvent>());
 
+        // Физический профиль предмета решает, ЧЕМ он восстанавливает шкалы.
+        //
+        // До этого объём восстановления был задан абстрактными процентами
+        // («вода = +25% жидкости»), и вместе с новой шкалой 15000 мл это
+        // означало бы 3,75 литра из одной бутылки. Теперь числа берутся из
+        // профиля: 500 мл воды дают 500/150 = 3,33% шкалы, как и положено.
+        var profile = CharacterConsumableCatalog.GetProfile(id);
+
         var nextCount =
             conditions.ItemUseCounts.TryGetValue(
                 id,
@@ -790,7 +922,12 @@ public static class CharacterVitalsEngine
 
         conditions = conditions with
         {
-            ItemUseCounts = counts
+            ItemUseCounts = counts,
+            // Подпись пункта в мониторе ставится ДО механики предмета: пищеварение
+            // читает объём порции по этому id, чтобы вычислить время усвоения.
+            // Если ставить подпись только в конце, желудок получил бы порцию
+            // ПРЕДЫДУЩЕГО предмета.
+            LastConsumedItemId = id
         };
 
         var caffeineMg = CharacterConsumableCatalog.GetCaffeineMg(id);
@@ -801,48 +938,39 @@ public static class CharacterVitalsEngine
                 caffeineMg,
                 NormalizeHour(gameHourOfDay));
 
+        // Питание идёт ЧЕРЕЗ ПРОФИЛЬ, а не через проценты в switch: шкалы теперь
+        // измеряются в килокалориях и миллилитрах, и «вода +25%» означала бы
+        // 3,75 литра. Ниже по веткам остаются только эффекты, которые к
+        // питательности не относятся (стресс, усталость, метаболизм, баффы).
+        if (profile.Feeds)
+        {
+            AddResource(
+                ref vitals,
+                ref conditions,
+                "energy",
+                profile.EnergyPercent);
+            AddResource(
+                ref vitals,
+                ref conditions,
+                "hydration",
+                profile.HydrationPercent);
+        }
+
         switch (id.ToLowerInvariant())
         {
-            case "water.bottle":
-                AddResource(
-                    ref vitals,
-                    "hydration",
-                    25d);
-                break;
-
             case "food.milk":
-                AddResource(
-                    ref vitals,
-                    "energy",
-                    8d);
-                AddResource(
-                    ref vitals,
-                    "hydration",
-                    10d);
                 ReduceStress(
                     ref conditions,
                     2d);
                 break;
 
             case "food.meal":
-                AddResource(
-                    ref vitals,
-                    "energy",
-                    15d);
-                AddResource(
-                    ref vitals,
-                    "hydration",
-                    5d);
                 ReduceFatigue(
                     ref vitals,
                     2d);
                 break;
 
             case "drink.lemon_tea":
-                AddResource(
-                    ref vitals,
-                    "hydration",
-                    12d);
                 ReduceStress(
                     ref conditions,
                     3d);
@@ -869,7 +997,6 @@ public static class CharacterVitalsEngine
                 break;
 
             case "drink.energy":
-                AddResource(ref vitals, "energy", 15d);
                 ChangeMetabolism(ref vitals, 2d);
                 break;
 
@@ -887,7 +1014,6 @@ public static class CharacterVitalsEngine
                 break;
 
             case "drink.cola":
-                AddResource(ref vitals, "hydration", 5d);
                 break;
 
             case "drink.decaf_coffee":
@@ -895,103 +1021,75 @@ public static class CharacterVitalsEngine
                 break;
 
             case "drink.ginger_lemon_tea":
-                AddResource(ref vitals, "hydration", 10d);
                 ReduceStress(ref conditions, 3d);
                 ChangeMetabolism(ref vitals, 2d);
                 break;
 
             case "drink.kvass":
-                AddResource(ref vitals, "hydration", 10d);
-                AddResource(ref vitals, "energy", 4d);
                 break;
 
             case "drink.sports":
-                AddResource(ref vitals, "hydration", 25d);
-                AddResource(ref vitals, "energy", 5d);
                 ChangeResilience(ref vitals, 1d);
                 break;
 
             case "electrolyte.sachet":
             case "supplement.electrolyte":
-                AddResource(ref vitals, "hydration", 20d);
                 ChangeResilience(ref vitals, 2d);
                 break;
 
             case "food.kefir":
-                AddResource(ref vitals, "energy", 5d);
-                AddResource(ref vitals, "hydration", 8d);
                 ReduceStress(ref conditions, 2d);
                 break;
 
             case "food.yogurt":
-                AddResource(ref vitals, "energy", 6d);
-                AddResource(ref vitals, "hydration", 6d);
                 ReduceStress(ref conditions, 2d);
                 break;
 
             case "food.cheese":
-                AddResource(ref vitals, "energy", 10d);
                 ChangeResilience(ref vitals, 1d);
                 break;
 
             case "food.nuts":
-                AddResource(ref vitals, "energy", 13d);
                 ChangeResilience(ref vitals, 2d);
                 break;
 
             case "food.oatmeal":
-                AddResource(ref vitals, "energy", 12d);
                 ReduceStress(ref conditions, 1d);
                 ChangeMetabolism(ref vitals, 1d);
                 break;
 
             case "food.buckwheat":
-                AddResource(ref vitals, "energy", 14d);
                 ChangeResilience(ref vitals, 1d);
                 break;
 
             case "food.vegetable_stew":
-                AddResource(ref vitals, "energy", 9d);
-                AddResource(ref vitals, "hydration", 7d);
                 ChangeResilience(ref vitals, 1d);
                 break;
 
             case "food.soup":
-                AddResource(ref vitals, "energy", 8d);
-                AddResource(ref vitals, "hydration", 12d);
                 ReduceFatigue(ref vitals, 1d);
                 break;
 
             case "food.egg_sandwich":
-                AddResource(ref vitals, "energy", 14d);
-                AddResource(ref vitals, "hydration", 3d);
                 break;
 
             case "food.banana":
-                AddResource(ref vitals, "energy", 10d);
-                AddResource(ref vitals, "hydration", 3d);
                 ChangeMetabolism(ref vitals, 1d);
                 break;
 
             case "food.apple":
-                AddResource(ref vitals, "energy", 7d);
-                AddResource(ref vitals, "hydration", 4d);
                 ReduceStress(ref conditions, 1d);
                 break;
 
             case "food.orange":
-                AddResource(ref vitals, "energy", 6d);
-                AddResource(ref vitals, "hydration", 5d);
                 ChangeResilience(ref vitals, 1d);
                 break;
 
             case "food.honey":
-                AddResource(ref vitals, "energy", 9d);
                 ReduceFatigue(ref vitals, 1d);
                 break;
 
             case "food.dark_chocolate":
-                AddResource(ref vitals, "energy", 5d);
                 ReduceStress(ref conditions, 2d);
                 break;
 
@@ -1064,7 +1162,7 @@ public static class CharacterVitalsEngine
                 break;
 
             case "medicine.sorbent":
-                AddResource(ref vitals, "health", 3d);
+                AddResource(ref vitals, ref conditions, "health", 3d);
                 ReduceStress(ref conditions, 2d);
                 conditions = AddOrReplaceEffect(
                     conditions,
@@ -1076,7 +1174,6 @@ public static class CharacterVitalsEngine
                 break;
 
             case "medicine.recovery_salts":
-                AddResource(ref vitals, "hydration", 30d);
                 ChangeResilience(ref vitals, 2d);
                 break;
 
@@ -1095,8 +1192,10 @@ public static class CharacterVitalsEngine
 
             case "drink.beer":
                 ReduceStress(ref conditions, 3d);
-                AddResource(ref vitals, "hydration", -10d);
-                AddResource(ref vitals, "energy", 3d);
+                // Обезвоживание алкоголя остаётся ЯВНЫМ минусом поверх профиля:
+                // пиво даёт воду, но спирт забирает больше, и это правило не
+                // должно зависеть от таблицы питательности.
+                AddResource(ref vitals, ref conditions, "hydration", -6d);
                 ReduceFatigue(ref vitals, -3d);
                 conditions = AddOrReplaceEffect(
                     conditions,
@@ -1146,6 +1245,7 @@ public static class CharacterVitalsEngine
             case "painkiller":
                 AddResource(
                     ref vitals,
+                    ref conditions,
                     "health",
                     5d);
                 ReduceStress(
@@ -1201,31 +1301,39 @@ public static class CharacterVitalsEngine
                 break;
 
             case "meat":
-                AddResource(
-                    ref vitals,
-                    "energy",
-                    12d);
                 break;
 
             case "gosha.homemade_sausage":
-                AddResource(
-                    ref vitals,
-                    "energy",
-                    10d);
                 ReduceStress(
                     ref conditions,
                     1d);
                 break;
 
+            case "water.bottle":
+                // Вода даёт ТОЛЬКО жидкость, и она уже начислена по профилю
+                // выше: ветка нужна лишь затем, чтобы предмет не считался
+                // неизвестным.
+                break;
+
             default:
-                return new CharacterVitalsUpdate(
-                    vitals,
-                    conditions,
-                    new[]
-                    {
-                        new PlayerConditionEvent(
-                            "UnknownItem")
-                    });
+                // Предмета нет ни в одной ветке — но он может быть обычной
+                // едой или питьём, у которого есть физический профиль и нет
+                // побочных эффектов. Такие предметы обрабатываются профилем
+                // выше и НЕ являются неизвестными; «UnknownItem» остаётся
+                // только для того, чего нет в каталоге вовсе.
+                if (!profile.Feeds &&
+                    !IsCatalogItem(id))
+                {
+                    return new CharacterVitalsUpdate(
+                        vitals,
+                        conditions,
+                        new[]
+                        {
+                            new PlayerConditionEvent(
+                                "UnknownItem")
+                        });
+                }
+                break;
         }
 
         if (id.Equals(
@@ -1497,17 +1605,46 @@ public static class CharacterVitalsEngine
             if (HasEffect(state, "bull"))
                 regen *= 1.5d;
 
-            vitals = vitals with
+            // Восстановление здоровья НЕ бесплатно: каждая единица здоровья
+            // берёт 1 единицу энергии и 2 единицы жидкости (задано автором).
+            // Поэтому итог — минимум из «сколько могло бы восстановиться» и
+            // «на сколько хватит запасов»: без этого здоровье росло бы из
+            // воздуха, а «Текущая динамика» обещала бы рост при пустой энергии.
+            var healthUnits =
+                UnitsFromPercentExact(regen);
+            var healthRoom =
+                Math.Max(
+                    0d,
+                    EffectiveHealthMaximum(
+                        vitals,
+                        state) -
+                    vitals.Health);
+            var affordable = Math.Min(
+                vitals.Energy / HealthRegenEnergyPerHealthUnit,
+                vitals.Hydration / HealthRegenHydrationPerHealthUnit);
+            var restored = Math.Max(
+                0d,
+                Math.Min(
+                    healthUnits,
+                    Math.Min(healthRoom, affordable)));
+
+            if (restored > 0d)
             {
-                Health =
-                    Math.Min(
-                        EffectiveHealthMaximum(
-                            vitals,
-                            state),
-                        vitals.Health +
-                        UnitsFromPercentExact(
-                            regen))
-            };
+                vitals = vitals with
+                {
+                    Health = vitals.Health + restored,
+                    Energy = Math.Max(
+                        0d,
+                        vitals.Energy -
+                        restored *
+                        HealthRegenEnergyPerHealthUnit),
+                    Hydration = Math.Max(
+                        0d,
+                        vitals.Hydration -
+                        restored *
+                        HealthRegenHydrationPerHealthUnit)
+                };
+            }
         }
 
         if (sleeping)
@@ -1576,7 +1713,37 @@ public static class CharacterVitalsEngine
         if (HasEffect(state, "bull"))
             value *= 1.5d;
 
-        return value;
+        // Восстановление здоровья тратит энергию 1:1 и жидкость 1:2, поэтому
+        // скорость, которую видит игрок, ОГРАНИЧЕНА запасами: при остатке 0,2%
+        // обещать 1,5% в час было бы прямой ложью о поведении мира.
+        //
+        // Тем же ограничением служит свободное место в шкале: при полном
+        // здоровье восстановления нет, и расход на него НЕ должен попадать в
+        // скорость энергии и жидкости — иначе подсказка показывала бы трату,
+        // которой в мире не происходит.
+        //
+        // Цена берётся в ЕДИНИЦАХ, а не в процентах: правило автора задано
+        // именно так («1 единица здоровья стоит 1 энергии и 2 жидкости»), и
+        // пересчёт в проценты шкалы здесь ничего не даёт — обе величины живут
+        // на одной сетке 0..10000.
+        var healthMaximum =
+            EffectiveHealthMaximum(vitals, state);
+
+        var roomPercent =
+            Math.Max(
+                0d,
+                healthMaximum -
+                vitals.Health) /
+            PlayerConditionScale.UnitsPerPercent;
+        var affordablePercent =
+            Math.Min(
+                vitals.Energy / HealthRegenEnergyPerHealthUnit,
+                vitals.Hydration / HealthRegenHydrationPerHealthUnit) /
+            PlayerConditionScale.UnitsPerPercent;
+
+        return Math.Min(
+            value,
+            Math.Min(roomPercent, affordablePercent));
     }
 
     private static void ApplyHygiene(
@@ -1620,7 +1787,8 @@ public static class CharacterVitalsEngine
     private static void UpdateResilienceAndMetabolism(
         ref PlayerVitalsState vitals,
         PlayerConditionState state,
-        double gameSeconds)
+        double gameSeconds,
+        bool sleeping)
     {
         var quarters =
             gameSeconds /
@@ -1657,16 +1825,21 @@ public static class CharacterVitalsEngine
                  gameSeconds /
                  SecondsPerGameHour);
 
-        var exhaustionScales =
-            (state.CumulativeStress > 0d ? 1 : 0) +
-            (state.CumulativeFatigue > 0d ? 1 : 0) +
-            (state.CumulativeHydration > 0d ? 1 : 0) +
-            (state.CumulativeEnergy > 0d ? 1 : 0);
-
-        metabolismDelta -=
-            exhaustionScales *
-            MetabolismExhaustionPenaltyPerQuarterHour *
-            quarters;
+        // Штраф за истощение НЕ действует во сне — ровно как и начисление самого
+        // истощения (см. Character_Vitals.md: «во время сна не может накапливаться
+        // истощение каких-либо показателей»).
+        //
+        // Без этого правила ночлег в гостинице обнулял метаболизм: семь часов
+        // сна шли ДО того, как снималось истощение, и все четыре шкалы ещё были
+        // на месте — минус 8% каждые 15 минут против 1% в час восстановления.
+        // Игрок видел метаболизм 0 сразу после ночлега.
+        if (!sleeping)
+        {
+            metabolismDelta -=
+                ExhaustionScales(state) *
+                MetabolismExhaustionPenaltyPerQuarterHour *
+                quarters;
+        }
 
         vitals = vitals with
         {
@@ -1686,6 +1859,23 @@ public static class CharacterVitalsEngine
                         100d))
         };
     }
+
+    /// <summary>
+    /// Сколько шкал истощения накоплено (0..4): стресс, усталость, жидкость,
+    /// энергия. Ровно это число движок называет в правилах метаболизма —
+    /// «минус 2% за каждую имеющуюся шкалу истощения за 15 игровых минут».
+    ///
+    /// Метод выделен, потому что одно и то же число нужно в ТРЁХ местах:
+    /// начисление метаболизма, его подсказка (<see cref="MetabolismDirection"/>)
+    /// и регенерация здоровья. Разъехавшись, они показали бы игроку одно, а
+    /// посчитали другое.
+    /// </summary>
+    private static int ExhaustionScales(
+        PlayerConditionState state) =>
+        (state.CumulativeStress > 0d ? 1 : 0) +
+        (state.CumulativeFatigue > 0d ? 1 : 0) +
+        (state.CumulativeHydration > 0d ? 1 : 0) +
+        (state.CumulativeEnergy > 0d ? 1 : 0);
 
     private static void SyncThresholdEffects(
         ref PlayerVitalsState vitals,
@@ -1910,14 +2100,8 @@ public static class CharacterVitalsEngine
                 MetabolismRecoveryPercentPerHour /
                  4d);
 
-        var exhaustionScales =
-            (state.CumulativeStress > 0d ? 1 : 0) +
-            (state.CumulativeFatigue > 0d ? 1 : 0) +
-            (state.CumulativeHydration > 0d ? 1 : 0) +
-            (state.CumulativeEnergy > 0d ? 1 : 0);
-
         return value -
-               exhaustionScales *
+               ExhaustionScales(state) *
                MetabolismExhaustionPenaltyPerQuarterHour;
     }
 
@@ -2316,47 +2500,101 @@ public static class CharacterVitalsEngine
 
     private static void AddResource(
         ref PlayerVitalsState vitals,
+        ref PlayerConditionState state,
         string key,
         double percent)
     {
-        var units =
-            UnitsFromPercentExact(
-                percent);
-
         if (key.Equals(
                 "health",
                 StringComparison.OrdinalIgnoreCase))
-        {
-            vitals = vitals with
+        {            vitals = vitals with
             {
                 Health =
-                    vitals.Health + units
+                    vitals.Health +
+                    UnitsFromPercentExact(percent)
             };
+            return;
         }
-        else if (key.Equals(
-                     "energy",
-                     StringComparison.OrdinalIgnoreCase))
+
+        var isEnergy =
+            key.Equals(
+                "energy",
+                StringComparison.OrdinalIgnoreCase);
+        var isHydration =
+            key.Equals(
+                "hydration",
+                StringComparison.OrdinalIgnoreCase);
+
+        if (!isEnergy && !isHydration)
+            return;
+
+        // Отрицательное значение — это ОТНИМАНИЕ (например, алкоголь
+        // обезвоживает), и оно обязано действовать мгновенно: желудок лишь
+        // замедляет ВОССТАНОВЛЕНИЕ, но не «выпивание в минус».
+        if (percent <= 0d)
         {
-            vitals = vitals with
+            if (isEnergy)
             {
-                Energy =
-                    vitals.Energy + units
-            };
+                vitals = vitals with
+                {
+                    Energy = Math.Max(
+                        0d,
+                        vitals.Energy + UnitsFromPercentExact(percent))
+                };
+            }
+            else
+            {
+                vitals = vitals with
+                {
+                    Hydration = Math.Max(
+                        0d,
+                        vitals.Hydration + UnitsFromPercentExact(percent))
+                };
+            }
+            return;
         }
-        else if (key.Equals(
-                     "hydration",
-                     StringComparison.OrdinalIgnoreCase))
+
+        // «Прилив сил» замораживает шкалы: восстановление от еды не должно
+        // становиться единственным способом обойти заморозку.
+        if (HasEffect(state, "power_surge"))
+            return;
+
+        var metabolism = PlayerConditionScale.ToPercent(vitals.Metabolism);
+
+        state = state with
         {
-            vitals = vitals with
-            {
-                Hydration =
-                    vitals.Hydration + units
-            };
-        }
+            Stomach = CharacterDigestion.Begin(
+                state.Stomach,
+                isEnergy ? percent : 0d,
+                isHydration ? percent : 0d,
+                vitals.MaxEnergy,
+                vitals.MaxHydration,
+                elevatedMetabolism: metabolism >= ElevatedMetabolismPercent,
+                reducedMetabolism: metabolism < ReducedMetabolismPercent,
+                // Объём порции: он задаёт ВРЕМЯ переваривания, а не объём
+                // восстановления. Таблетка не занимает желудок (доля 0) — но
+                // тогда она и мгновенная: иначе добавка «повисала» бы в желудке
+                // на бесконечность с нулевой ставкой.
+                portionFraction: Math.Max(
+                    0.01d,
+                    CharacterConsumableCatalog.GetPortionFraction(state.LastConsumedItemId)))
+        };
     }
 
-    private static void ReduceFatigue(
-        ref PlayerVitalsState vitals,
+    /// <summary>
+    /// Есть ли предмет в каталоге приложения.
+    ///
+    /// Нужно, чтобы отличить «предмет без побочных эффектов» (он уже начислен
+    /// профилем и не является неизвестным) от действительно неизвестного Id.
+    /// Каталог — контент приложения, и его нельзя продублировать в движке.
+    /// </summary>
+    private static bool IsCatalogItem(string itemId) =>
+        ItemCatalogFactory.Items.Any(
+            item => item.Id.Equals(
+                itemId,
+                StringComparison.OrdinalIgnoreCase));
+
+    private static void ReduceFatigue(        ref PlayerVitalsState vitals,
         double percent) =>
         vitals = vitals with
         {

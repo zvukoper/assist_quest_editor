@@ -50,12 +50,14 @@ public sealed class CharacterVitalsRegressionTests
             gameHourOfDay: 12d);
 
         Assert.Equal(
-            PlayerConditionScale.RateFromPercent(-25d / 60d),
+            PlayerConditionScale.RateFromPercent(
+                -100d / CharacterVitalsEngine.EnergyConsumptionHours / 60d),
             rates.EnergyPerGameMinute,
             6);
 
         Assert.Equal(
-            PlayerConditionScale.RateFromPercent(-50d / 60d),
+            PlayerConditionScale.RateFromPercent(
+                -100d / CharacterVitalsEngine.HydrationConsumptionHours / 60d),
             rates.HydrationPerGameMinute,
             6);
 

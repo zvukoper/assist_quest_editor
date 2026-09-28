@@ -1,6 +1,43 @@
 namespace AssistQuestEditor.Domain;
 
 /// <summary>
+/// Физический профиль съедобного/питьевого предмета.
+///
+/// Зачем он нужен. Шкалы получили физический смысл — 5000 ккал энергии и
+/// 15000 мл жидкости, — поэтому «сколько восстанавливает предмет» обязано быть
+/// выражено в КАЛОРИЯХ и МИЛЛИЛИТРАХ, а не в абстрактных процентах. Иначе
+/// бутылка питьевой воды на 500 мл восполняла бы 3,75 литра, а правило автора
+/// «организм усваивает 1 литр в час» не выполнялось бы вовсе: 25% шкалы за час
+/// — это 3,75 л в час.
+///
+/// Масса задаёт ещё и ВРЕМЯ усвоения: она определяет, какую долю литрового
+/// желудка займёт порция (см. <see cref="CharacterDigestion.PortionFraction"/>).
+/// </summary>
+public sealed record ConsumableProfile(
+    double Grams,
+    double Kilocalories,
+    double WaterMilliliters)
+{
+    public static ConsumableProfile None => new(0d, 0d, 0d);
+
+    /// <summary>Сколько процентов шкалы энергии даёт предмет.</summary>
+    public double EnergyPercent =>
+        Kilocalories /
+        (CharacterDigestion.EnergyScaleKilocalories / 100d);
+
+    /// <summary>Сколько процентов шкалы жидкости даёт предмет.</summary>
+    public double HydrationPercent =>
+        WaterMilliliters /
+        (CharacterDigestion.HydrationScaleMilliliters / 100d);
+
+    /// <summary>Какую долю литрового желудка занимает порция.</summary>
+    public double PortionFraction =>
+        CharacterDigestion.PortionFraction(Grams);
+
+    public bool Feeds => EnergyPercent > 0d || HydrationPercent > 0d;
+}
+
+/// <summary>
 /// Расширение каталога предметов для Character Vitals.
 /// Дозы кофеина — игровые справочные значения, а не медицинская инструкция:
 /// они основаны на типичных величинах для соответствующих напитков/продуктов.
@@ -26,6 +63,101 @@ public static class CharacterConsumableCatalog
             out var value)
                 ? value
                 : 0d;
+
+    /// <summary>
+    /// ОБЪЁМ ПОРЦИИ предмета в граммах (для еды) или миллилитрах (для питья).
+    ///
+    /// Число нужно пищеварению: объём порции задаёт, какую долю литрового
+    /// желудка она займёт, а значит и СКОЛЬКО ИГРОВЫХ ЧАСОВ будет восполняться
+    /// шкала (см. <see cref="CharacterDigestion.PortionFraction"/>). Прежняя
+    /// модель времени не учитывала, поэтому мелкая еда не успевала перекрыть
+    /// расход, и динамика энергии оставалась красной.
+    ///
+    /// Значения — справочные бытовые порции, а не медицинские нормы: бутылка
+    /// воды 500 мл, тарелка супа 400 г, банан 150 г.
+    /// </summary>
+    public static double GetPortionSize(string itemId) =>
+        GetProfile(itemId).Grams;
+
+    /// <summary>
+    /// Физический профиль предмета: масса, калорийность, вода.
+    ///
+    /// Единственный источник чисел о еде и питье. Движок берёт из него объём
+    /// восстановления, время усвоения и подпись состава в окне «Предметы», а
+    /// тесты — эталон для проверки баланса. Второй таблицы быть не должно:
+    /// разъехавшись, она показала бы игроку одно, а начислила другое.
+    /// </summary>
+    public static ConsumableProfile GetProfile(string itemId) =>
+        Profiles.TryGetValue(
+            itemId ?? string.Empty,
+            out var profile)
+                ? profile
+                : ConsumableProfile.None;
+
+    /// <summary>
+    /// Объём порции предмета как доля литрового желудка (0..1).
+    ///
+    /// Единое место пересчёта: и начисление (движок), и подсказка интерфейса
+    /// обязаны брать одно число, иначе «съел 400 г» в окне не совпадёт со
+    /// временем переваривания в мире.
+    /// </summary>
+    public static double GetPortionFraction(string itemId) =>
+        GetProfile(itemId).PortionFraction;
+
+    /// <summary>
+    /// Профили еды и питья. Калорийность и содержание воды — справочные бытовые
+    /// значения (на 100 г порции), масса — размер обычной порции.
+    ///
+    /// Лечебные средства (таблетки, настойки, БАДы) сюда НЕ входят: они дают
+    /// эффект, но не кормят и не занимают желудок. Для них остаётся мгновенное
+    /// действие прежних правил.
+    /// </summary>
+    private static readonly IReadOnlyDictionary<string, ConsumableProfile> Profiles =
+        new Dictionary<string, ConsumableProfile>(StringComparer.OrdinalIgnoreCase)
+        {
+            // Напитки: масса ≈ миллилитры, вода из этикетки.
+            ["water.bottle"] = new(500d, 0d, 500d),
+            ["food.milk"] = new(250d, 130d, 220d),
+            ["drink.lemon_tea"] = new(300d, 90d, 290d),
+            ["tea.herbal"] = new(250d, 2d, 245d),
+            ["drink.coffee"] = new(250d, 10d, 245d),
+            ["drink.espresso"] = new(40d, 5d, 38d),
+            ["drink.energy"] = new(330d, 150d, 320d),
+            ["drink.black_tea"] = new(250d, 5d, 245d),
+            ["drink.green_tea"] = new(250d, 2d, 245d),
+            ["drink.decaf_coffee"] = new(250d, 8d, 245d),
+            ["drink.cola"] = new(330d, 140d, 300d),
+            ["drink.ginger_lemon_tea"] = new(300d, 80d, 290d),
+            ["drink.kvass"] = new(500d, 150d, 470d),
+            ["drink.sports"] = new(500d, 120d, 490d),
+            ["drink.beer"] = new(500d, 210d, 460d),
+            ["food.kefir"] = new(250d, 130d, 220d),
+
+            // Растворы для восполнения жидкости: пакетик разводится в воде, и
+            // игрок выпивает раствор целиком, поэтому воды в профиле больше, чем
+            // весит сам порошок.
+            ["electrolyte.sachet"] = new(500d, 60d, 500d),
+            ["supplement.electrolyte"] = new(500d, 80d, 500d),
+            ["medicine.recovery_salts"] = new(1000d, 120d, 1000d),
+
+            // Еда: масса порции и калорийность на неё.
+            ["food.meal"] = new(400d, 600d, 250d),
+            ["food.soup"] = new(400d, 220d, 350d),
+            ["food.oatmeal"] = new(300d, 320d, 240d),
+            ["food.buckwheat"] = new(300d, 330d, 200d),
+            ["food.egg_sandwich"] = new(180d, 350d, 60d),
+            ["food.vegetable_stew"] = new(350d, 240d, 280d),
+            ["food.cheese"] = new(100d, 360d, 40d),
+            ["food.nuts"] = new(60d, 360d, 5d),
+            ["food.yogurt"] = new(150d, 100d, 130d),
+            ["food.banana"] = new(150d, 130d, 110d),
+            ["food.apple"] = new(180d, 90d, 155d),
+            ["food.orange"] = new(200d, 90d, 170d),
+            ["food.honey"] = new(30d, 90d, 5d),
+            ["food.dark_chocolate"] = new(30d, 170d, 2d),
+            ["meat"] = new(300d, 600d, 180d),
+            ["gosha.homemade_sausage"] = new(200d, 500d, 90d)
+        };
 
     public static IReadOnlyList<ItemDefinition> Items =>
     [

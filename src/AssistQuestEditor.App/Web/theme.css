@@ -425,6 +425,39 @@ input,select,textarea{padding:4px 5px;border-radius:4px;font-size:10px}textarea{
   50%{box-shadow:0 0 0 2px rgba(250,176,3,.55),0 0 18px rgba(250,176,3,.34);border-color:var(--accent)}
 }
 
+/* Тогл «Движение по маршруту» в транспорте — иконка КОЛЕСА.
+   Исключение из правила «кнопки транспорта не подсвечиваются»: этот тогл не
+   управляет временем, а показывает состояние маршрута, и без подсветки игрок не
+   понимал бы, едет машина или стоит. Подсветка та же, что у одноимённой кнопки
+   сайдбара (var(--accent)), поэтому две кнопки читаются как одно состояние.
+
+   Иконка рисуется линиями через currentColor: цвет наследуется от кнопки, и
+   активное состояние не требует отдельного правила для SVG. */
+.simRouteWheelToggle{width:34px;height:30px;padding:0}
+.simRouteWheelToggle svg{
+  width:17px;height:17px;
+  fill:none;
+  stroke:currentColor;
+  stroke-width:1.7;
+  stroke-linecap:round;
+}
+.simRouteWheelToggle.active{
+  background:var(--accent);
+  border-color:var(--accent);
+  color:#1b1b1b;
+}
+.simRouteWheelToggle.active:hover{background:var(--accent-2);color:#fff}
+/* Остановка на точке со скоростью 0 — то же состояние, что у кнопки сайдбара:
+   пульсация зовёт нажать. Ключевые кадры общие (routeToggleStopPulse) и
+   объявлены ниже; здесь только привязка. */
+.simRouteWheelToggle.stopPulse{
+  animation:routeToggleStopPulse 1000ms ease-in-out infinite;
+}
+.simRouteWheelToggle.stopPulse:hover{
+  background:var(--hover);
+  animation:none;
+}
+
 /* Плашка статуса симуляции. Цвет задаётся атрибутом data-sim-state, поэтому
    ни одно из трёх состояний не «забывается» при правке JS.
    Цвета по требованию автора: СИНИЙ — симуляции нет, ОРАНЖЕВЫЙ — идёт или
@@ -878,6 +911,10 @@ input,select,textarea{padding:4px 5px;border-radius:4px;font-size:10px}textarea{
    быть квадратным. Полное название даёт подсказка. */
 .inventoryItemName{font-size:7px;line-height:1.1;color:#e7edf4;white-space:nowrap;max-width:100%;overflow:hidden;text-overflow:ellipsis}
 .inventoryItemQty{position:absolute;right:3px;top:2px;color:#fff;font-size:8px;font-weight:800}
+/* Меню ПКМ по предмету: использует вид меню графа (.graphContextMenu), но лежит
+   в окне инвентаря, поэтому переопределяет только якорь и минимальную ширину. */
+.inventoryContextMenu{position:fixed;z-index:100000;min-width:150px}
+.inventoryContextMenu .graphContextMenuTitle{color:var(--accent)}
 .inventoryNewDot{
   display:inline-block;width:5px;height:5px;margin-left:2px;vertical-align:middle;border-radius:50%;
   background:#fab003;box-shadow:0 0 7px rgba(250,176,3,.75);
@@ -1488,6 +1525,13 @@ input,select,textarea{padding:4px 5px;border-radius:4px;font-size:10px}textarea{
 .routeJournalEntry strong{color:#6ea5f5}
 .dualStat{margin-top:7px}
 .dualStatHead{display:flex;justify-content:space-between;gap:8px;margin-bottom:3px;font-size:9px;color:var(--muted)}
+/* Треугольник динамики слева от процентов шкалы: ▲ вверх, ▼ вниз.
+   lime — движение в полезную игроку сторону, красный — во вред. Смысл значка
+   задаёт AssistVitals (направление берётся из скоростей домена), здесь только
+   вид и цвет. */
+.vitalTrend{display:inline-block;margin-right:4px;font-size:9px;line-height:1;vertical-align:1px}
+.vitalTrendGood{color:var(--lime)}
+.vitalTrendBad{color:#ff5b5b}
 .dualBar{position:relative;height:8px;overflow:hidden;background:#272b31;border:1px solid rgba(255,255,255,.08);border-radius:999px}
 .dualBarSoft{position:absolute;inset:0 auto 0 0;opacity:.85}
 /* Кумулятивная часть — ВСЕГДА ярко-жёлтая и одна и та же на всех шкалах: её
@@ -1527,14 +1571,66 @@ input,select,textarea{padding:4px 5px;border-radius:4px;font-size:10px}textarea{
 
 /* Монитор показателей: карточка на шкалу. */
 .indicatorCard{padding:8px;border:1px solid var(--border);border-radius:6px;background:rgba(255,255,255,.02)}
+/* Выделение блока по клику на имя показателя в журнале: рамка и более светлый
+   фон. Только цвет — размеры не меняются, иначе блок «прыгал» бы при выделении. */
+.indicatorCard.indicatorHighlight{border-color:var(--accent);background:rgba(120,190,255,.14);box-shadow:0 0 0 2px rgba(120,190,255,.25)}
 .indicatorTitle{display:flex;align-items:baseline;justify-content:space-between;gap:8px;margin-bottom:6px}
 .indicatorName{font-size:11px;font-weight:700}
 .indicatorValue{font-size:10px;color:var(--accent);white-space:nowrap}
 .indicatorFormula{display:flex;flex-direction:column;gap:3px}
 .indicatorFact{font-size:10px;line-height:1.4;color:var(--muted)}
-.indicatorEffect{display:inline-block;padding:1px 5px;border-radius:4px;font-size:9px;margin:0 3px 0 0}
-.indicatorEffect.buff{background:rgba(144,238,144,.12);color:#b9f7a8}
-.indicatorEffect.debuff{background:rgba(210,215,220,.1);color:#d9dde2}
+.indicatorEffect{
+  display:inline-block;padding:2px 7px;border-radius:4px;font-size:9px;margin:0 3px 3px 0;
+  /* Имя эффекта — КНОПКА: по клику открывается окно перков с подсветкой этого
+     пункта. Кнопкой, а не span с обработчиком, потому что кликабельность должна
+     быть доступна с клавиатуры (Tab/Enter) и видна курсором. */
+  cursor:pointer;
+  border:1px solid transparent;
+  font-family:inherit;
+  line-height:1.5;
+}
+/* Бафф — позитивный цвет (lime), дебафф — негативный (красный). Не наоборот:
+   смысл важнее оттенка, и автор просил именно «позитивными и негативными». */
+.indicatorEffect.buff{
+  background:rgba(144,238,144,.14);color:#b9f7a8;
+  border-color:rgba(144,238,144,.3);
+}
+.indicatorEffect.debuff{
+  background:rgba(255,91,91,.14);color:#ff9a9a;
+  border-color:rgba(255,91,91,.32);
+}
+.indicatorEffect.buff:hover{background:rgba(144,238,144,.26);border-color:#b9f7a8}
+.indicatorEffect.debuff:hover{background:rgba(255,91,91,.26);border-color:#ff9a9a}
+.indicatorEffect:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+/* Пунктир под именем — видимый признак того, что при наведении появится
+   расшифровка (тот же приём, что у строк эффектов в сайдбаре). */
+.indicatorEffect[data-game-tooltip]{text-decoration:underline dotted rgba(255,255,255,.4);text-underline-offset:2px}
+
+/* Динамика показателя: направление и скорость изменения шкалы.
+   Позитивная (полезная игроку) динамика — LIME, негативная — красный. */
+.indicatorDynamicRow{color:#e9edf2}
+.indicatorDynamicGood{color:var(--lime);font-weight:700}.indicatorDynamicBad{color:#ff5b5b;font-weight:700}
+.indicatorDynamicFlat{color:var(--muted);font-weight:700}
+
+/* Пункт переваривания в разделе шкалы: пока в желудке есть неусвоенное, монитор
+   называет съеденное, эффект и его количество. Сам текст нейтральный — смысл
+   несёт цвет вложенного значения (lime растёт, красный убывает). */
+.indicatorDigestionRow{color:#cdd6e0}
+.indicatorDigestionRow strong{color:#fff}
+
+/* Истощение живёт В БЛОКЕ СВОЕЙ ШКАЛЫ (отдельного блока «Истощение» больше нет).
+   Два состояния, и они различаются не оттенком, а читаемостью:
+     • истощения нет — приглушённый белый: механизм виден, но тревоги нет;
+     • истощение есть — красный, потому что это накопленный вред.
+   Красный, а не прежний жёлтый: жёлтый в интерфейсе зарезервирован за
+   кумулятивными шкалами и шкалой форсажа, и путать их нельзя. */
+.indicatorExhaustionRow{font-size:10px;line-height:1.4}
+.indicatorExhaustionNone{color:rgba(233,237,242,.55)}
+.indicatorExhaustionNone strong{color:rgba(233,237,242,.8)}
+/* Красный из темы: 255/91/91 — тот же, что у негативной динамики, поэтому
+   «истощение есть» и «шкала падает» читаются одним цветом. */
+.indicatorExhaustionPresent{color:#ff5b5b}
+.indicatorExhaustionPresent strong{color:#ff8080}
 
 .conditionTopGrid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
 @media(max-width:720px){.conditionTopGrid{grid-template-columns:1fr}}

@@ -9,6 +9,29 @@
   var UNITS_PER_PERCENT = 100;
   var CUMULATIVE_COLOR = "#ffd400";
 
+  /**
+   * «Полезное направление» шкалы: +1 — игроку выгодно, чтобы значение росло,
+   * −1 — чтобы падало.
+   *
+   * Знак нужен потому, что «динамика вверх» для энергии и для усталости
+   * означает ПРОТИВОПОЛОЖНОЕ по смыслу: треугольник обязан показывать пользу
+   * для игрока, а не арифметическое направление. Тот же словарь, что в мониторе
+   * показателей: два разных ответа на один вопрос «растёт или падает» были бы
+   * расхождением интерфейса с самим собой.
+   */
+  var GOOD_DIRECTION = {
+    health: 1,
+    energy: 1,
+    hydration: 1,
+    stress: -1,
+    fatigue: -1,
+    resilience: 1,
+    metabolism: 1
+  };
+
+  /** Ниже этой скорости (единиц шкалы в игровую минуту) считаем «не меняется». */
+  var FLAT_RATE_EPSILON = 0.05;
+
   var SCALES = [
     {
       key: "health",
@@ -264,6 +287,41 @@
         : values.displayPercent) + "%";
   }
 
+  /**
+   * Треугольник динамики слева от процентов шкалы.
+   *
+   * Вверх — значение растёт, вниз — падает; lime, если это ПОЛЕЗНО игроку, и
+   * красный, если во вред. Направление берётся из домена (`conditionRates`),
+   * поэтому треугольник не может разойтись с механикой: вторая таблица правил
+   * в Web неизбежно показывала бы стрелку вверх там, где шкала падает.
+   *
+   * Пока скорости нет (шкала не двигается или снимок ещё не пришёл), значка
+   * тоже нет: пустой треугольник читался бы как «динамики нет — и это нормально».
+   */
+  function dynamicsMarkup(scale, snapshot) {
+    var rates = (snapshot && snapshot.conditionRates) || {};
+    var rate = Number(rates[scale.key]);
+    if (!Number.isFinite(rate) || Math.abs(rate) < FLAT_RATE_EPSILON)
+      return { markup: "", text: "" };
+
+    var rising = rate > 0;
+    var good = GOOD_DIRECTION[scale.key] || 0;
+    var positive = good !== 0 && rising === (good > 0);
+    var arrow = rising ? "▲" : "▼";
+    var meaning = positive ? "полезная динамика" : "вредная динамика";
+    var direction = rising ? "растёт" : "падает";
+    var text = direction + " (" + (rate > 0 ? "+" : "") +
+      Math.round(rate * 100) / 100 + " ед./мин) — " + meaning;
+
+    return {
+      markup: "<span class='vitalTrend " +
+        (positive ? "vitalTrendGood" : "vitalTrendBad") +
+        "' data-vital-trend='" + scale.key +
+        "' title='" + escapeHtml(text) + "'>" + arrow + "</span>",
+      text: text
+    };
+  }
+
   function formatRate(unitsPerMinute) {
     var value = Number(unitsPerMinute);
     if (!Number.isFinite(value))
@@ -346,6 +404,7 @@
         : "";
     var tooltipText =
       escapeHtml(tooltip(scale, values, snapshot));
+    var dynamics = dynamicsMarkup(scale, snapshot);
     var cumulative =
       values.cumulative > 0
         ? "<div class='dualBarCumulative " +
@@ -373,7 +432,9 @@
       tooltipText + "\">" +
       "<div class='dualStatHead'>" +
         "<span>" + escapeHtml(scale.label) + "</span>" +
-        "<span>" + valueLabel(scale, values) + "</span>" +
+        // Треугольник стоит ВНУТРИ общего span с процентами, а именно ПЕРЕД
+        // ними: автор просил значок слева от процентов у КАЖДОЙ шкалы.
+        "<span>" + dynamics.markup + valueLabel(scale, values) + "</span>" +
       "</div>" +
       "<div class='dualBar " + scale.key + "'>" +
         "<div class='dualBarSoft' style=\"width:" +
@@ -546,6 +607,7 @@
     rateFor: rateFor,
     read: read,
     tooltip: tooltip,
+    dynamicsMarkup: dynamicsMarkup,
     barMarkup: barMarkup,
     markup: markup,
     fieldsMarkup: fieldsMarkup,

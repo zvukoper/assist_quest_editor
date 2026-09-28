@@ -203,6 +203,70 @@ check(/AssistInventory\.panelMarkup/.test(inventoryHtml),
 check(!/for \(let index = 0; index < 24/.test(simulatorJs),
   "В Симуляторе осталась собственная сетка инвентаря: разметка должна быть одна.");
 
+// --- 5a. Подсказка предмета: НАЗВАНИЕ и ОПИСАНИЕ ---
+
+// Автор просил: «В хуверен предмета нужно писать название предмета и описание».
+// Прежде в data-game-tooltip лежало ТОЛЬКО описание, поэтому по наведению нельзя
+// было понять, что за предмет перед игроком.
+check(/var tooltip = escapeHtml\(item\.name \|\| itemId\) \+ "\\n" \+/.test(inventoryJs),
+  "Подсказка предмета обязана начинаться с НАЗВАНИЯ, а не только с описания.");
+check(/escapeHtml\(item\.description \|\| "Предмет без зарегистрированного описания\."\)/.test(inventoryJs),
+  "Подсказка предмета обязана содержать и ОПИСАНИЕ.");
+// Атрибут подсказки заключается в ДВОЙНЫЕ кавычки: перевод строки в значении
+// сохраняется, поэтому название и описание в подсказке разойдутся по строкам
+// (gameTooltip использует white-space:pre-line).
+check(/data-game-tooltip=\\?"/.test(inventoryJs),
+  "Подсказка предмета не является многострочной: название и описание склеятся в одну строку.");
+
+// --- 5b. Наведение не мерцает: без перерисовки на mouseenter ---
+
+// Автор сообщил: «при наведении на предмет инвентаря во время симуляции подсветка
+// мерцает». Причина была в render() внутри mouseenter: перерисовка заменяла узлы
+// под курсором, новый узел снова получал mouseenter — и цикл повторялся.
+//
+// Комментарии из куска вырезаются: правка ОБЪЯСНЯЕТ прежний дефект словами
+// «render()», и проверка по сырому тексту падала бы на своём же пояснении.
+const hoverBlock = (() => {
+  const start = inventoryHtml.indexOf('button.addEventListener("mouseenter"');
+  if (start < 0) return "";
+  const end = inventoryHtml.indexOf('button.addEventListener("contextmenu"', start);
+  const raw = inventoryHtml.slice(start, end < 0 ? start + 900 : end);
+  return raw
+    .replace(/\/\/[^\n]*/g, "")
+    .replace(/\/\*[\s\S]*?\*\//g, "");
+})();
+check(hoverBlock.length > 0, "В окне инвентаря не найдено наведение на предмет.");
+check(!/render\(\)/.test(hoverBlock),
+  "Наведение на предмет снова перерисовывает окно: подсветка будет мерцать.");
+
+// --- 5c. ЛКМ не использует предмет, ПКМ открывает меню ---
+
+// Автор: «По ЛКМ пока ничего не делать. Использование только через меню».
+check(!/button\.title = "ЛКМ — использовать предмет"/.test(inventoryHtml),
+  "Подсказка «ЛКМ — использовать предмет» осталась, хотя ЛКМ больше ничего не делает.");
+const clickBlock = (() => {
+  const start = inventoryHtml.indexOf('button.addEventListener("click"');
+  return start < 0 ? "" : inventoryHtml.slice(start, start + 400);
+})();
+check(!/use_inventory_item/.test(clickBlock),
+  "ЛКМ по предмету всё ещё использует его: использование должно быть только в меню ПКМ.");
+check(/addEventListener\("contextmenu"/.test(inventoryHtml),
+  "По ПКМ предмета не открывается меню.");
+check(/data-inventory-menu-action='use'>Использовать/.test(inventoryHtml),
+  "В меню ПКМ нет пункта «Использовать».");
+check(/data-inventory-menu-action='drop'>Выбросить/.test(inventoryHtml),
+  "В меню ПКМ нет пункта «Выбросить».");
+// Пункты обязаны ДЕЙСТВОВАТЬ: «Использовать» идёт прежним путём, «Выбросить» —
+// новым действием Host, которое списывает предмет, не запуская его механику.
+check(/action: action === "drop" \? "drop_inventory_item" : "use_inventory_item"/.test(inventoryHtml),
+  "Пункты меню ПКМ не отправляют действия Host.");
+check(/case "drop_inventory_item":/.test(simulatorForm) &&
+      /case "drop_inventory_item":/.test(inventoryForm),
+  "Host не обрабатывает выброс предмета (drop_inventory_item).");
+check(/private void DropInventoryItemCore\(string itemId\)/.test(simulatorForm) &&
+      /items\.Remove\(itemId\)/.test(simulatorForm),
+  "Выброс предмета обязан списывать одну единицу и убирать предмет при нуле.");
+
 // --- 6. Реальные размеры: число ячеек и размер окна ---
 
 const exe = findExecutable();

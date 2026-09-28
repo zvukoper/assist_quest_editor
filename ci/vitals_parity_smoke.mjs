@@ -35,6 +35,15 @@ const toRgb = value => {
   return `rgb(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255})`;
 };
 
+// Красный считается «красным» по ДОМИНИРУЮЩЕЙ красной составляющей, а не по
+// точному hex: палитра интерфейса меняется, а смысл цвета — нет.
+const isRed = value => {
+  const m = /rgba?\((\d+),\s*(\d+),\s*(\d+)/.exec(String(value || ""));
+  if (!m) return false;
+  const [r, g, b] = [Number(m[1]), Number(m[2]), Number(m[3])];
+  return r >= 160 && r > g * 1.8 && r > b * 1.8;
+};
+
 fs.writeFileSync(path.join(tmp, "Web", "p.html"), `<!doctype html>
 <html lang="ru"><head><meta charset="utf-8"><link rel="stylesheet" href="theme.css"></head>
 <body>
@@ -111,9 +120,20 @@ try {
   const readScales = selector => page.evaluate(sel => {
     const root = document.querySelector(sel);
     if (!root) return null;
+    // Дочерние селекторы `>` обязательны: внутри правого span живёт треугольник
+    // динамики (тоже span), и простой `span:first-child` ловил бы ЕГО, а не
+    // подпись шкалы.
     return {
-      labels: [...root.querySelectorAll(".dualStatHead span:first-child")].map(n => n.textContent.trim()),
-      values: [...root.querySelectorAll(".dualStatHead span:last-child")].map(n => n.textContent.trim()),
+      labels: [...root.querySelectorAll(".dualStatHead > span:first-child")].map(n => n.textContent.trim()),
+      values: [...root.querySelectorAll(".dualStatHead > span:last-child")].map(n => n.textContent.trim()),
+      trends: [...root.querySelectorAll("[data-vital-trend]")].map(n => ({
+        key: n.dataset.vitalTrend,
+        glyph: n.textContent.trim(),
+        cls: n.className,
+        color: getComputedStyle(n).color,
+        // Треугольник обязан стоять ПЕРЕД процентами: автор просил значок слева.
+        beforePercent: n.nextSibling !== null && /^\s*\d+%$/.test(String(n.nextSibling.textContent || ""))
+      })),
       bars: [...root.querySelectorAll(".dualBar")].map(n => ({
         cls: n.className,
         soft: n.querySelector(".dualBarSoft")?.style.width || "",
@@ -144,8 +164,15 @@ try {
     host.innerHTML = "<div class='gameVitals'>" + AssistVitals.markup(v) + "</div>";
     const root = host.querySelector(".gameVitals");
     return {
-      labels: [...root.querySelectorAll(".dualStatHead span:first-child")].map(n => n.textContent.trim()),
-      values: [...root.querySelectorAll(".dualStatHead span:last-child")].map(n => n.textContent.trim()),
+      labels: [...root.querySelectorAll(".dualStatHead > span:first-child")].map(n => n.textContent.trim()),
+      values: [...root.querySelectorAll(".dualStatHead > span:last-child")].map(n => n.textContent.trim()),
+      trends: [...root.querySelectorAll("[data-vital-trend]")].map(n => ({
+        key: n.dataset.vitalTrend,
+        glyph: n.textContent.trim(),
+        cls: n.className,
+        color: getComputedStyle(n).color,
+        beforePercent: n.nextSibling !== null && /^\s*\d+%$/.test(String(n.nextSibling.textContent || ""))
+      })),
       bars: [...root.querySelectorAll(".dualBar")].map(n => ({
         cls: n.className,
         soft: n.querySelector(".dualBarSoft")?.style.width || "",
@@ -260,6 +287,36 @@ try {
   const fatigueBar = out.sidebar?.bars.find(b => b.cls.includes("fatigue"));
   check(fatigueBar && fatigueBar.soft !== "0%",
     "сайдбар: мягкая часть усталости равна " + fatigueBar?.soft + " при усталости 40");
+
+  // --- Треугольник динамики слева от процентов ---
+  // Автор просил цветной треугольник у КАЖДОЙ шкалы: вверх при росте, вниз при
+  // падении, lime для полезного движения и красный для вредного. Снимок даёт
+  // единственную ненулевую скорость — усталость (+55,56 ед./мин), и для игрока
+  // это ВРЕД, значит треугольник обязан смотреть вверх и быть красным.
+  //
+  // Проверка идёт по ВЫЧИСЛЕННОМУ цвету: класс легко оставить, сняв правило CSS.
+  for (const [name, scales] of [["сайдбар", out.sidebar], ["окно «Игрок»", out.playerWindow]]) {
+    if (!scales) continue;
+
+    const trends = scales.trends || [];
+    check(trends.length === 1,
+      `${name}: треугольник обязан быть только у шкалы с ненулевой скоростью, ` +
+      `найдено ${trends.length}`);
+
+    const fatigueTrend = trends.find(t => t.key === "fatigue");
+    check(!!fatigueTrend && fatigueTrend.glyph === "▲",
+      `${name}: рост усталости обязан показывать треугольник вверх: ` +
+      JSON.stringify(fatigueTrend));
+    check(!!fatigueTrend && fatigueTrend.cls.includes("vitalTrendBad"),
+      `${name}: рост усталости вреден игроку — треугольник обязан быть красным: ` +
+      (fatigueTrend ? fatigueTrend.cls : "нет треугольника"));
+    check(!!fatigueTrend && isRed(fatigueTrend.color),
+      `${name}: красный обязан быть ВЫЧИСЛЕННЫМ цветом треугольника: ` +
+      (fatigueTrend ? fatigueTrend.color : "нет треугольника"));
+    // Треугольник стоит ПЕРЕД процентами (автор: «слева от всех процентов»).
+    check(!!fatigueTrend && fatigueTrend.beforePercent,
+      `${name}: треугольник обязан стоять СЛЕВА от процентов шкалы`);
+  }
 
   if (errors.length) failures.push("ошибки страницы: " + errors.join(" | "));
 

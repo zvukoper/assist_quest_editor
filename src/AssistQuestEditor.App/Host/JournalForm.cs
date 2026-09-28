@@ -12,6 +12,19 @@ public sealed record SimulatorJournalEntry(
     string Message,
     WorldCoordinate? Coordinate = null);
 
+/// <summary>
+/// Что открыть по клику на подсвеченный фрагмент строки журнала.
+///
+/// Координата раньше была ЕДИНСТВЕННЫМ кликабельным фрагментом, и её тип был
+/// зашит в список ссылок. Теперь кликабельны ещё и показатели, перки и предметы
+/// (требование автора: «названия шкал, перков и предметов должны быть
+/// кликабельными»), поэтому вид ссылки стал данными, а не отдельным списком на
+/// каждый случай.
+///
+/// Сам ВИД (<see cref="JournalLinkKind"/>) и разбор разметки живут в домене
+/// (<see cref="JournalLinkMarkup"/>): разметку пишет домен, и вторая её половина
+/// в окне означала бы, что правка формата на одной стороне не видна другой.
+/// </summary>
 public sealed class JournalForm : Form
 {
     private static readonly JsonSerializerOptions MessageJsonOptions = new()
@@ -21,7 +34,27 @@ public sealed class JournalForm : Form
 
     private readonly RichTextBox _log;
     private readonly Button _returnButton;
-    private readonly List<(int Start, int Length, WorldCoordinate Coordinate)> _coordinateLinks = new();
+
+    /// <summary>
+    /// Кликабельные фрагменты строки журнала вместе с тем, что по ним открывать.
+    ///
+    /// Раньше список хранил только координаты, и других ссылок быть не могло.
+    /// Теперь элементы разметки заданы данными (<c>[[metric:energy]]</c> и т.п.),
+    /// поэтому вид ссылки хранится рядом с её позицией, а обработка клика — одна.
+    ///
+    /// Координата лежит в самой записи, а не выводится из позиции: у ссылки на
+    /// показатель координаты нет, а у координатной — нет значения, и попытка
+    /// восстановить одно из другого по индексу связала бы два независимых поля.
+    /// </summary>
+    private readonly List<JournalLink> _links = new();
+
+    private sealed record JournalLink(
+        int Start,
+        int Length,
+        JournalLinkKind Kind,
+        string Value,
+        WorldCoordinate? Coordinate = null,
+        JournalLinkMarkup? Markup = null);
 
     public JournalForm()
     {
@@ -95,7 +128,28 @@ public sealed class JournalForm : Form
     }
 
     public event EventHandler? ReturnToSidebarRequested;
+
+    /// <summary>Клик по координате события.</summary>
     public event Action<WorldCoordinate>? CoordinateClicked;
+
+    /// <summary>
+    /// Клик по показателю: открыть монитор показателей и выделить его блок.
+    ///
+    /// Метрика — это ключ шкалы («energy», «stress», …), который знает и монитор:
+    /// подсветка ищется по тому же ключу, поэтому новый вид ссылки не требует
+    /// второй таблицы соответствий.
+    /// </summary>
+    public event Action<string>? MetricClicked;
+
+    /// <summary>
+    /// Клик по перку, баффу или дебаффу: открыть окно «Перки, баффы, скиллы»
+    /// с подсветкой пункта.
+    /// </summary>
+    public event Action<string, string>? PerkClicked;
+
+    /// <summary>Клик по предмету: открыть окно «Предметы» с подсветкой пункта.</summary>
+    public event Action<string>? ItemClicked;
+
 
     /// <summary>
     /// Нажатие общей клавиши симулятора.
@@ -121,14 +175,13 @@ public sealed class JournalForm : Form
     {
         _log.SuspendLayout();
         _log.Clear();
-        _coordinateLinks.Clear();
+        _links.Clear();
 
         foreach (var entry in entries)
         {
             var time = entry.Timestamp.ToLocalTime().ToString("HH:mm:ss");
             var source = string.IsNullOrWhiteSpace(entry.Source) ? "Источник" : entry.Source;
             var formattedMessage = FormatMessage(entry.Message);
-            var detail = string.IsNullOrWhiteSpace(formattedMessage) ? string.Empty : "  " + formattedMessage;
 
             _log.SelectionStart = _log.TextLength;
             _log.SelectionLength = 0;
@@ -143,7 +196,18 @@ public sealed class JournalForm : Form
             _log.SelectionStart = _log.TextLength;
             _log.SelectionLength = 0;
             _log.SelectionColor = Color.FromArgb(205, 215, 225);
-            _log.AppendText("  [" + source + "]" + detail);
+            _log.AppendText("  [" + source + "]");
+
+            // Текст сообщения печатается ЧАСТЯМИ, а не одним AppendText: внутри
+            // него встречается разметка ссылок, и каждая ссылка обязана быть
+            // подчёркнута и кликабельна в своей позиции. Позиция берётся из
+            // _log.TextLength, то есть из фактически набранного текста, поэтому
+            // она не разъедется с разметкой.
+            if (!string.IsNullOrWhiteSpace(formattedMessage))
+            {
+                _log.AppendText("  ");
+                AppendRichText(formattedMessage);
+            }
 
             if (entry.Coordinate is { } coordinate)
             {
@@ -151,11 +215,17 @@ public sealed class JournalForm : Form
                 var start = _log.TextLength;
                 _log.SelectionStart = start;
                 _log.SelectionLength = 0;
-                _log.SelectionColor = Color.FromArgb(110, 170, 255);
                 _log.SelectionFont = new Font(_log.Font, FontStyle.Underline);
+
                 var coordinateText = FormatCoordinate(coordinate);
                 _log.AppendText(coordinateText);
-                _coordinateLinks.Add((start, coordinateText.Length, coordinate));
+
+                _links.Add(new JournalLink(
+                    start,
+                    coordinateText.Length,
+                    JournalLinkKind.Coordinate,
+                    string.Empty,
+                    coordinate));
                 _log.SelectionFont = _log.Font;
             }
 
@@ -166,6 +236,110 @@ public sealed class JournalForm : Form
         _log.SelectionLength = 0;
         _log.ResumeLayout();
     }
+
+    /// <summary>
+    /// Печатает текст с разметкой ссылок.
+    ///
+    /// Разметка — <c>[[metric:energy:Энергия]]</c>,
+    /// <c>[[perk:burnout:debuff:Выгорание]]</c>, <c>[[item:water.bottle:Вода]]</c>.
+    /// Выбрана квадратными скобками, потому что текст журнала — русская проза, и
+    /// любой «обычный» разделитель (двоеточие, слэш) встречается в ней сам по себе.
+    ///
+    /// Последнее поле — ПОДПИСЬ, то, что читает игрок. Раньше её не было, и в
+    /// журнале печаталось значение: «[[perk:rested:buff]]» показывал «buff», а
+    /// «[[item:water.bottle]]» — «water.bottle».
+    ///
+    /// Нераспознанная разметка печатается КАК ЕСТЬ: молча съесть текст значило бы
+    /// потерять часть сообщения, и игрок не понял бы, почему строка обрывается.
+    /// </summary>
+    private void AppendRichText(string text)
+    {
+        var cursor = 0;
+
+        while (cursor < text.Length)
+        {
+            var open = text.IndexOf("[[", cursor, StringComparison.Ordinal);
+
+            if (open < 0)
+            {
+                _log.SelectionFont = _log.Font;
+                _log.SelectionColor = Color.FromArgb(205, 215, 225);
+                _log.AppendText(text[cursor..]);
+                return;
+            }
+
+            var close = text.IndexOf("]]", open + 2, StringComparison.Ordinal);
+
+            if (close < 0)
+            {
+                _log.SelectionFont = _log.Font;
+                _log.SelectionColor = Color.FromArgb(205, 215, 225);
+                _log.AppendText(text[cursor..]);
+                return;
+            }
+
+            // Текст перед разметкой — обычный.
+            if (open > cursor)
+            {
+                _log.SelectionFont = _log.Font;
+                _log.SelectionColor = Color.FromArgb(205, 215, 225);
+                _log.AppendText(text[cursor..open]);
+            }
+
+            var payload = text[(open + 2)..close];
+            var link = ParseLink(payload);
+
+            if (link is null)
+            {
+                _log.SelectionFont = _log.Font;
+                _log.SelectionColor = Color.FromArgb(205, 215, 225);
+                _log.AppendText(text[open..(close + 2)]);
+            }
+            else
+            {
+                var start = _log.TextLength;
+
+                _log.SelectionStart = start;
+                _log.SelectionLength = 0;
+                _log.SelectionColor = LinkColor(link.Kind);
+                _log.SelectionFont = new Font(_log.Font, FontStyle.Underline);
+                _log.AppendText(link.Label);
+
+                _links.Add(new JournalLink(
+                    start,
+                    link.Label.Length,
+                    link.Kind,
+                    link.Value,
+                    Coordinate: null,
+                    Markup: link));
+                _log.SelectionFont = _log.Font;
+            }
+
+            cursor = close + 2;
+        }
+    }
+
+    /// <summary>
+    /// Разбирает полезную нагрузку ссылки.
+    ///
+    /// Разбор вынесен в домен (<see cref="JournalLinkMarkup.Parse"/>): разметку
+    /// ПИШЕТ домен, и держать её половину здесь значило бы, что правка формата на
+    /// одной стороне не видна другой. Домен же покрыт тестами — у окна своей
+    /// сборки нет, и проверить формат через форму было бы нельзя.
+    /// </summary>
+    private static JournalLinkMarkup? ParseLink(string payload) =>
+        JournalLinkMarkup.Parse(payload);
+
+
+    private static Color LinkColor(JournalLinkKind kind) => kind switch
+    {
+        // Координаты были синими; показатели, перки и предметы получают свой
+        // оттенок, чтобы игрок по цвету понимал, куда ведёт ссылка, ещё до клика.
+        JournalLinkKind.Metric => Color.FromArgb(120, 230, 170),
+        JournalLinkKind.Perk => Color.FromArgb(250, 200, 90),
+        JournalLinkKind.Item => Color.FromArgb(190, 160, 255),
+        _ => Color.FromArgb(110, 170, 255)
+    };
 
     private static Color EventColor(SimulatorJournalEntry entry)
     {
@@ -187,11 +361,9 @@ public sealed class JournalForm : Form
 
     private void JournalLog_MouseMove(object? sender, MouseEventArgs e)
     {
-        var index = _log.GetCharIndexFromPosition(e.Location);
-        _log.Cursor = _coordinateLinks.Any(link =>
-            index >= link.Start && index < link.Start + link.Length)
-            ? Cursors.Hand
-            : Cursors.Default;
+        _log.Cursor = LinkAt(e.Location) is null
+            ? Cursors.Default
+            : Cursors.Hand;
     }
 
     private void JournalLog_MouseClick(object? sender, MouseEventArgs e)
@@ -199,12 +371,53 @@ public sealed class JournalForm : Form
         if (e.Button != MouseButtons.Left)
             return;
 
-        var index = _log.GetCharIndexFromPosition(e.Location);
-        var link = _coordinateLinks.FirstOrDefault(item =>
-            index >= item.Start && index < item.Start + item.Length);
+        var link = LinkAt(e.Location);
+        if (link is null)
+            return;
 
-        if (link.Length > 0)
-            CoordinateClicked?.Invoke(link.Coordinate);
+        switch (link.Kind)
+        {
+            case JournalLinkKind.Coordinate when link.Coordinate is { } coordinate:
+                CoordinateClicked?.Invoke(coordinate);
+                break;
+
+            case JournalLinkKind.Metric:
+                MetricClicked?.Invoke(link.Value);
+                break;
+
+            case JournalLinkKind.Perk:
+                // Идентификатор и вид перка берутся из разобранной разметки:
+                // значение составное только у перка, и разбирать его второй раз
+                // здесь значило бы описать один формат в двух местах.
+                PerkClicked?.Invoke(
+                    link.Markup?.PerkId ?? link.Value,
+                    link.Markup?.PerkKind ?? string.Empty);
+                break;
+
+            case JournalLinkKind.Item:
+                ItemClicked?.Invoke(link.Value);
+                break;
+        }
+    }
+
+    /// <summary>
+    /// Ссылка под указателем, если она там есть.
+    ///
+    /// Позиция берётся из <see cref="RichTextBox.GetCharIndexFromPosition"/> —
+    /// того же индекса, по которому ссылки и записывались, поэтому попадание не
+    /// зависит от переносов строк и прокрутки.
+    /// </summary>
+    private JournalLink? LinkAt(Point location)
+    {
+        var index = _log.GetCharIndexFromPosition(location);
+
+        foreach (var link in _links)
+        {
+            if (index >= link.Start && index < link.Start + link.Length)
+                return link;
+        }
+
+        return null;
     }
 
     private static string FormatCoordinate(WorldCoordinate coordinate) =>

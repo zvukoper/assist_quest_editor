@@ -80,4 +80,74 @@ public sealed class RouteGraphRegressionTests
             plan.Legs[0].Polyline,
             point => Assert.InRange(point.Z, -0.001d, 0.001d));
     }
+
+    /// <summary>
+    /// Реальный дефект из журнала: изолированный район (X 143..168 км,
+    /// Z -74..-89 км) не соединялся с остальной сетью, потому что «ближайшая
+    /// точка впереди» почти всегда лежит в СВОЕЙ компоненте.
+    ///
+    /// Остров: A (0,0)–(100,0), петля B (0,0)–(0,-80)–(40,-80)–(120,-30)–(40,0).
+    /// Единственный тупик — (100,0). Кандидатов у него два:
+    ///   • D (120,-30)–(40,0) — 36 м, СВОЯ компонента, направление 0.53;
+    ///   • материк (150,-400)–(150,400) — 50 м, ЧУЖАЯ, направление 1.0.
+    /// Штатный проход выбирает ближайший (свой) и тратит единственный мост
+    /// впустую. Сшивка компонент доводит дело до 50-метрового стыка.
+    /// </summary>
+    [Fact]
+    public void NearestRecoveryTargetInOwnIslandDoesNotBlockStitchingToMainland()
+    {
+        var planner = new RoadRoutePlanner(
+        [
+            new RoadSegment(0, 0, 100, 0),
+            new RoadSegment(0, 0, 0, -80),
+            new RoadSegment(0, -80, 40, -80),
+            new RoadSegment(40, -80, 120, -30),
+            new RoadSegment(120, -30, 40, 0),
+            new RoadSegment(150, -400, 150, 400)
+        ]);
+
+        var route = new RouteState(
+            60,
+            [
+                new RouteWaypoint("a", new WorldCoordinate(80, 0, 0), 60),
+                new RouteWaypoint("b", new WorldCoordinate(150, 0, 0), 60)
+            ]);
+
+        var plan = planner.Build(route);
+
+        Assert.True(
+            plan.IsUsable,
+            "остров обязан сшиться с материком, а не остаться изолированным");
+        Assert.Contains(
+            plan.Legs[0].Polyline,
+            point => Math.Abs(point.X - 150d) < 0.001d);
+    }
+
+    /// <summary>
+    /// Сшивка компонент не должна превращаться в «дорогу»: дальний стык
+    /// остаётся невосстановимым, и обход через него не появляется.
+    /// </summary>
+    [Fact]
+    public void StitchingDoesNotInventLongDetours()
+    {
+        var planner = new RoadRoutePlanner(
+        [
+            new RoadSegment(0, 0, 100, 0),
+            new RoadSegment(0, 0, 0, -80),
+            new RoadSegment(0, -80, 40, -80),
+            new RoadSegment(40, -80, 120, -30),
+            new RoadSegment(120, -30, 40, 0),
+            // Материк отнесён на 140 м — за предел сшивки (60 м).
+            new RoadSegment(240, -400, 240, 400)
+        ]);
+
+        var route = new RouteState(
+            60,
+            [
+                new RouteWaypoint("a", new WorldCoordinate(80, 0, 0), 60),
+                new RouteWaypoint("b", new WorldCoordinate(240, 0, 0), 60)
+            ]);
+
+        Assert.False(planner.Build(route).IsUsable);
+    }
 }

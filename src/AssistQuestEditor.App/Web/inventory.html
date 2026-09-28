@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Игрок</title>
-<link rel="stylesheet" href="theme.css?v=20744f1c">
+<link rel="stylesheet" href="theme.css?v=b329b3ea">
 <style>
   html, body { height:100%; margin:0; overflow:hidden; }
   .playerWindow {
@@ -60,8 +60,8 @@
 
 <div class="inventoryNotifications" id="inventoryNotifications" aria-live="polite"></div>
 
-<script src="vitals.js?v=fca40754"></script>
-<script src="inventory.js?v=1b1f0aca"></script>
+<script src="vitals.js?v=c48bd86b"></script>
+<script src="inventory.js?v=85fe82ff"></script>
 <script src="playerPanels.js?v=e2c1841d"></script>
 <script>
 (function () {
@@ -107,21 +107,126 @@
       });
 
     panel.querySelectorAll("[data-inventory-item]").forEach(function (button) {
-      button.title = "ЛКМ — использовать предмет";
-      button.addEventListener("click", function () {
-        var id = String(button.dataset.inventoryItem || "").toLowerCase();
-        if (id) send({ action: "use_inventory_item", itemId: id });
-      });
+      // ЛКМ по предмету ничего не делает (требование автора): использование —
+      // ТОЛЬКО через меню ПКМ. Подсказки «ЛКМ — использовать» больше нет, она
+      // обещала действие, которого не будет.
       button.addEventListener("mouseenter", function () {
         var id = String(button.dataset.inventoryItem || "").toLowerCase();
-        if (!id) return;
+        if (!id || seenItemIds.has(id)) return;
 
         seenItemIds.add(id);
         send({ action: "mark_inventory_seen", itemId: id });
-        render();
+
+        // Перерисовка ЗДЕСЬ была причиной мерцания подсветки: render() заменял
+        // узлы под курсором, новый узел снова получал mouseenter, и цикл
+        // повторялся — подсветка мигала. Снимаем только значок «новый» у
+        // конкретной кнопки, остальное содержимое не трогаем.
+        var dot = button.querySelector(".inventoryNewDot");
+        if (dot) dot.remove();
+      });
+    });
+
+    panel.querySelectorAll("[data-inventory-item]").forEach(function (button) {
+      button.addEventListener("contextmenu", function (event) {
+        event.preventDefault();
+        event.stopPropagation();
+
+        var id = String(button.dataset.inventoryItem || "").toLowerCase();
+        if (!id) return;
+
+        openInventoryMenu(button, id);
       });
     });
   }
+
+  /**
+   * Меню ПКМ по предмету: «Использовать» и «Выбросить».
+   *
+   * Меню ОДНО на окно и переиспользуется: своя копия на каждый предмет плодила
+   * бы узлы и слушатели, которые оставались бы после перерисовки сетки. Пункты
+   * ровно два, как просил автор; ЛКМ по предмету, в отличие от прежнего
+   * поведения, не делает ничего.
+   */
+  function openInventoryMenu(button, itemId) {
+    var menu = document.getElementById("inventoryContextMenu");
+    if (!menu) {
+      menu = document.createElement("div");
+      menu.id = "inventoryContextMenu";
+      menu.className = "graphContextMenu inventoryContextMenu";
+      menu.hidden = true;
+      menu.innerHTML =
+        "<div class='graphContextMenuTitle'>Предмет</div>" +
+        "<div class='graphContextMenuHint' data-inventory-menu-name></div>" +
+        "<button class='graphContextMenuItem' type='button' data-inventory-menu-action='use'>Использовать</button>" +
+        "<button class='graphContextMenuItem' type='button' data-inventory-menu-action='drop'>Выбросить</button>";
+      document.body.appendChild(menu);
+
+      menu.addEventListener("click", function (event) {
+        var target = event.target && event.target.closest
+          ? event.target.closest("[data-inventory-menu-action]")
+          : null;
+        if (!target) return;
+
+        var action = target.getAttribute("data-inventory-menu-action");
+        var id = menu.dataset.inventoryItemId || "";
+        hideInventoryMenu();
+        if (!id) return;
+
+        send({
+          action: action === "drop" ? "drop_inventory_item" : "use_inventory_item",
+          itemId: id
+        });
+      });
+    }
+
+    var item = AssistInventory.itemDefinition(catalog, itemId);
+    var name = menu.querySelector("[data-inventory-menu-name]");
+    if (name)
+      name.textContent = (item.name || itemId) + " ×" +
+        Number((snapshot.inventory.items || {})[itemId] || 0);
+
+    menu.dataset.inventoryItemId = itemId;
+    menu.hidden = false;
+
+    // Позиция — по курсору, с зажимом в границах окна: меню у нижней кромки
+    // иначе уходило бы за экран, и «Выбросить» было бы недостижимо.
+    var rect = button.getBoundingClientRect();
+    var width = menu.offsetWidth || 205;
+    var height = menu.offsetHeight || 120;
+    menu.style.left = Math.max(4, Math.min(window.innerWidth - width - 4, rect.left)) + "px";
+    menu.style.top = Math.max(4, Math.min(window.innerHeight - height - 4, rect.bottom + 2)) + "px";
+  }
+
+  function hideInventoryMenu() {
+    var menu = document.getElementById("inventoryContextMenu");
+    if (menu) menu.hidden = true;
+  }
+
+  // Закрытие меню: ЛКМ мимо него и Escape. Без этого меню оставалось бы висеть
+  // поверх сетки и перекрывало соседние ячейки до следующего ПКМ.
+  //
+  // Escape здесь перехватывается В ФАЗЕ ПОГРУЖЕНИЯ и не доходит до обработчика
+  // «Escape закрывает окно»: при открытом меню игрок ждёт закрытия МЕНЮ, а не
+  // всего окна инвентаря.
+  document.addEventListener("pointerdown", function (event) {
+    var menu = document.getElementById("inventoryContextMenu");
+    if (!menu || menu.hidden) return;
+    if (event.target && event.target.closest && event.target.closest("#inventoryContextMenu"))
+      return;
+    hideInventoryMenu();
+  }, true);
+
+  document.addEventListener("keydown", function (event) {
+    if (event.key !== "Escape") return;
+    var menu = document.getElementById("inventoryContextMenu");
+    if (!menu || menu.hidden) return;
+    hideInventoryMenu();
+    event.preventDefault();
+    event.stopPropagation();
+  }, true);
+
+  window.addEventListener("blur", hideInventoryMenu);
+  window.addEventListener("resize", hideInventoryMenu);
 
   function send(payload) {
     try {

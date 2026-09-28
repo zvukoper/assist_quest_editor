@@ -18,11 +18,26 @@ namespace AssistQuestEditor.App;
 public sealed class IndicatorsForm : WebViewForm
 {
     /// <summary>
-    /// Последний снимок от Симулятора. Хранится, потому что окно открывают
+    /// Последний ПОЛНЫЙ снимок от Симулятора. Хранится, потому что окно открывают
     /// ПОЗЖЕ первого снимка: без него монитор показывался бы пустым до
     /// следующего обновления мира, а его можно ждать сколько угодно.
+    ///
+    /// Сюда попадает ТОЛЬКО полный снимок. live_state запоминать нельзя: в нём нет
+    /// мира, и если он окажется «снимком для повтора», страница получит его первым
+    /// сообщением и не сможет инициализироваться — окно останется пустым.
     /// </summary>
     private string? _lastSnapshotJson;
+
+    /// <summary>
+    /// Шкала, которую надо подсветить (клик по имени показателя в журнале).
+    ///
+    /// Запоминается, потому что окно монитора может быть ЕЩЁ НЕ загружено: в
+    /// этот момент отправленное сообщение уйдёт в пустоту, и клик в журнале
+    /// остался бы без ответа. Настоящие данные страница запрашивает сама
+    /// (<c>indicators_ready</c>), поэтому выделение надо подождать до того же
+    /// момента.
+    /// </summary>
+    private string? _pendingHighlight;
 
     public IndicatorsForm()
         : base(
@@ -63,18 +78,55 @@ public sealed class IndicatorsForm : WebViewForm
         if (_lastSnapshotJson is not null)
             PostJson(_lastSnapshotJson);
 
+        SendPendingHighlight();
+
         AppLogger.Info("IndicatorsForm: окно монитора показателей готово.",
             $"hasSnapshot={_lastSnapshotJson is not null}; size={Width}x{Height}");
     }
 
-    /// <summary>Обновляет монитор снимком Симулятора.</summary>
+    /// <summary>
+    /// Просит подсветить блок указанной шкалы.
+    ///
+    /// Ключ — тот же, что в разметке отчёта (<c>[[metric:energy]]</c>) и в ключах
+    /// шкал монитора: третьего способа назвать шкалу заводить нельзя, иначе
+    /// ссылка из журнала вёлa бы к блоку с другим именем.
+    /// </summary>
+    public void Highlight(string key)
+    {
+        _pendingHighlight = string.IsNullOrWhiteSpace(key) ? null : key;
+        SendPendingHighlight();
+    }
+
+    private void SendPendingHighlight()
+    {
+        if (string.IsNullOrEmpty(_pendingHighlight))
+            return;
+
+        PostJson(JsonSerializer.Serialize(new
+        {
+            type = "highlight",
+            key = _pendingHighlight
+        }));
+
+        _pendingHighlight = null;
+    }
+
+    /// <summary>Обновляет монитор полным снимком Симулятора и запоминает его.</summary>
     public void SetSnapshotJson(string snapshotJson)
     {
         _lastSnapshotJson = snapshotJson;
 
-        if (Browser.CoreWebView2 is not null)
-            PostJson(snapshotJson);
+        PostJson(snapshotJson);
     }
+
+    /// <summary>
+    /// Обновляет монитор живым состоянием (игрок, шкалы, условия, скорости).
+    ///
+    /// Отдельный метод, а не <see cref="SetSnapshotJson"/>: живое состояние
+    /// приходит четыре раза в секунду и им нельзя подменять снимок для повтора —
+    /// именно из-за этого окно монитора открывалось пустым.
+    /// </summary>
+    public void PushLiveStateJson(string json) => PostJson(json);
 
     protected override void OnWebMessage(string json)
     {
@@ -91,6 +143,7 @@ public sealed class IndicatorsForm : WebViewForm
                 case "indicators_ready":
                     if (_lastSnapshotJson is not null)
                         PostJson(_lastSnapshotJson);
+                    SendPendingHighlight();
                     break;
 
                 // Окно закрывает Симулятор: страница форму Windows закрыть не

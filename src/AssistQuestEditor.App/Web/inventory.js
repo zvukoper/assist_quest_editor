@@ -98,9 +98,17 @@
       var key = String(itemId).toLowerCase();
       var isNew = newIds.has(key) && !seenIds.has(key);
 
+      // Подсказка состоит из НАЗВАНИЯ и ОПИСАНИЯ через перевод строки: прежде
+      // здесь лежало только описание, и по наведению нельзя было понять, что за
+      // предмет перед игроком (у многих описаний названия нет). Подсказка
+      // показывается через white-space:pre-line, поэтому перевод строки — тот
+      // же приём, что в расшифровке шкал.
+      var tooltip = escapeHtml(item.name || itemId) + "\n" +
+        escapeHtml(item.description || "Предмет без зарегистрированного описания.");
+
       slots.push(
-        "<div class='inventorySlot' data-game-tooltip='" +
-          escapeHtml(item.description || item.name) + "'>" +
+        "<div class='inventorySlot' data-inventory-slot='" + escapeHtml(itemId) +
+          "' data-game-tooltip=\"" + tooltip + "\">" +
           "<button class='inventoryItemButton' type='button' data-inventory-item='" +
             escapeHtml(itemId) + "'>" +
             "<span class='inventoryItemSquare' style='background:" +

@@ -1,0 +1,124 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Перки, баффы, скиллы</title>
+<link rel="stylesheet" href="theme.css?v=b329b3ea">
+<style>
+  html, body { height:100%; margin:0; overflow:hidden; background:#0d1014; }
+  .perksWindow {
+    height:100%;
+    box-sizing:border-box;
+    padding:8px;
+    display:flex;
+    flex-direction:column;
+    min-height:0;
+  }
+  .perksHead {
+    flex:0 0 auto;
+    display:flex;
+    align-items:baseline;
+    gap:10px;
+    padding:2px 2px 8px;
+  }
+  .perksHead strong { font-size:13px; }
+  .perksHead .perksHint { color:var(--muted); font-size:10px; }
+
+  /* Разделы идут колонками в две ширины: перков, умений, баффов и дебаффов
+     вместе много, и одним длинным списком их пришлось бы листать. */
+  .perksBody {
+    flex:1 1 auto;
+    min-height:0;
+    overflow:auto;
+    display:grid;
+    grid-template-columns:repeat(auto-fill,minmax(460px,1fr));
+    gap:8px;
+    align-content:start;
+  }
+  .perksCard {
+    padding:8px;
+    border:1px solid var(--border);
+    border-radius:6px;
+    background:rgba(255,255,255,.02);
+    display:flex;
+    flex-direction:column;
+    gap:6px;
+  }
+  .perksCardTitle { font-size:12px; font-weight:600; display:flex; justify-content:space-between; align-items:baseline; gap:8px; }
+  .perksCardTitle .perksCount { color:var(--muted); font-size:10px; font-weight:400; }
+
+  .perkEntry {
+    border:1px solid var(--border);
+    border-radius:5px;
+    padding:6px 7px;
+    display:flex;
+    flex-direction:column;
+    gap:4px;
+    background:rgba(255,255,255,.015);
+  }
+  /* Действующий пункт выделяется жёлтым фоном и рамкой: требование автора —
+     «если у игрока есть перк/умение/бафф, выделять его жёлтым». */
+  .perkEntry.active {
+    border-color:#f2c85a;
+    background:rgba(242,200,90,.13);
+    box-shadow:0 0 0 1px rgba(242,200,90,.35) inset;
+  }
+  /* Пункт, на который сослались из монитора или журнала. Рамка синяя, чтобы не
+     путаться с жёлтым «активен», и более светлый фон — требование автора. */
+  .perkEntry.highlight {
+    border-color:var(--accent);
+    background:rgba(120,190,255,.16);
+    box-shadow:0 0 0 2px rgba(120,190,255,.3);
+  }
+  .perkEntryName { font-size:12px; font-weight:600; }
+  .perkEntry.active .perkEntryName { color:#f7df9b; }
+  .perkEntry.active .perkEntrySuffix { color:#f2c85a; font-weight:600; }
+  .perkEntrySuffix { font-weight:400; font-size:11px; }
+  .perkEntryText { font-size:10px; line-height:1.45; color:rgba(233,237,242,.82); }
+  .perkEntryText .perkEntryLabel { color:var(--muted); }
+  .perkEntryFooter { display:flex; align-items:center; gap:6px; flex-wrap:wrap; }
+  .perkEntryDuration { font-size:10px; color:var(--muted); }
+  .perkLevelInput {
+    width:52px;
+    background:#0f141a;
+    color:#e9edf2;
+    border:1px solid var(--border);
+    border-radius:4px;
+    padding:2px 4px;
+    font-size:11px;
+    text-align:right;
+  }
+  /* Действие пункта — маленькая кнопка: их по паре на пункт, и крупные кнопки
+     превратили бы список в стену. */
+  .perkAction {
+    font-size:10px;
+    padding:2px 8px;
+    background:rgba(255,255,255,.06);
+    color:#e9edf2;
+    border:1px solid var(--border);
+    border-radius:4px;
+    cursor:pointer;
+  }
+  .perkAction:hover:not([disabled]) { background:rgba(255,255,255,.13); }
+  .perkAction:focus-visible { outline:2px solid var(--accent); outline-offset:1px; }
+  /* Кнопка незаконченного пункта видна, но не работает: спрятать её значило бы
+     выдать «в разработке» за отсутствие возможности. */
+  .perkAction[disabled] { opacity:.45; cursor:not-allowed; }
+  .perkError { flex:0 0 auto; font-size:10px; color:#ff9a9a; min-height:12px; padding:0 2px 4px; }
+</style>
+</head>
+<body>
+<div class="perksWindow">
+  <div class="perksHead">
+    <strong>Перки, баффы, скиллы</strong>
+    <span class="perksHint">жёлтым отмечено то, что действует у игрока прямо сейчас</span>
+  </div>
+  <div class="perksError" id="perksError"></div>
+  <div class="perksBody" id="perksBody"></div>
+</div>
+<script src="web_log.js?v=18763af3"></script>
+<script src="vitals.js?v=c48bd86b"></script>
+<script src="perks.js?v=c043a5aa"></script>
+</body>
+</html>
