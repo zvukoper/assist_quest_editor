@@ -4313,10 +4313,44 @@
     }
 
     if (id === "inventory") {
-      return Object.entries(snapshot.inventory.items).map(([key, value]) =>
-        "<div class='field' style='margin-top:6px'><label>" + escapeHtml(key) + "</label><input type='number' data-item='" + escapeHtml(key) + "' value='" + value + "'></div>"
-      ).join("") +
-      "<div class='inline' style='margin-top:8px'><input id='newItemKey' placeholder='item_id'><input id='newItemValue' value='1'><button class='smallButton primary' id='addItem'>+</button></div>";
+      const catalog = Array.isArray(window.__assistItemCatalog)
+        ? window.__assistItemCatalog
+        : [];
+      const catalogOptions = catalog
+        .filter(item => item && item.id)
+        .slice()
+        .sort((a, b) =>
+          String(a.name || a.id).localeCompare(
+            String(b.name || b.id),
+            "ru"))
+        .map(item =>
+          "<option value='" + escapeHtml(item.id) + "'>" +
+          escapeHtml(item.name || item.id) +
+          " — " + escapeHtml(item.category || "") +
+          "</option>")
+        .join("");
+
+      const rows = Object.entries(snapshot.inventory.items).map(([key, value]) =>
+        "<div class='field' style='margin-top:6px'><label>" +
+        escapeHtml(key) +
+        "</label><input type='number' data-item='" +
+        escapeHtml(key) + "' value='" + value + "'></div>"
+      ).join("");
+
+      return rows +
+        "<div class='miniLabel' style='margin-top:10px'>Выдать предмет из каталога</div>" +
+        "<div class='inline' style='margin-top:6px'>" +
+          "<select id='grantItemId' style='min-width:180px'>" +
+            catalogOptions +
+          "</select>" +
+          "<input id='grantItemAmount' type='number' min='1' max='999' value='1' style='width:70px'>" +
+          "<button class='smallButton primary' id='grantItem'>Выдать</button>" +
+        "</div>" +
+        "<div class='inline' style='margin-top:6px'>" +
+          "<input id='newItemKey' placeholder='Произвольный item_id'>" +
+          "<input id='newItemValue' value='1'>" +
+          "<button class='smallButton' id='addItem'>+</button>" +
+        "</div>";
     }
 
     if (id === "reputation") {
@@ -4627,6 +4661,23 @@
     side.querySelector("#addVar")?.addEventListener("click", () => {
       const key = side.querySelector("#newVarKey").value.trim();
       if (key) send({ action: "set_variable", key, value: side.querySelector("#newVarValue").value });
+    });
+
+    side.querySelector("#grantItem")?.addEventListener("click", () => {
+      const select = side.querySelector("#grantItemId");
+      const amount = Math.max(
+        1,
+        Math.min(
+          999,
+          Math.round(
+            Number(side.querySelector("#grantItemAmount").value) || 1)));
+      const key = select?.value?.trim() || "";
+      if (key)
+        send({
+          action: "grant_inventory_item",
+          itemId: key,
+          amount
+        });
     });
 
     side.querySelector("#addItem")?.addEventListener("click", () => {

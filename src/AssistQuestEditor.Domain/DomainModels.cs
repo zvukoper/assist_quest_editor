@@ -262,6 +262,10 @@ public sealed record PlayerConditionState(
 
     public double SkinIssuesGameSeconds { get; init; }
     public long RandomSequence { get; init; }
+    public double CaffeineLoadMg { get; init; }
+    public double CaffeineDailyMg { get; init; }
+    public double CaffeineDaySeconds { get; init; }
+    public double CaffeineDependence { get; init; }
     /// <summary>
     /// Кумулятивные шкалы и стресс — в ЕДИНИЦАХ (<see cref="PlayerConditionScale"/>),
     /// как и <see cref="PlayerVitalsState"/>. Исключение — критические счётчики
@@ -292,6 +296,10 @@ public sealed record PlayerConditionState(
             .Where(pair => !string.IsNullOrWhiteSpace(pair.Key))
             .ToDictionary(pair => pair.Key, pair => Math.Max(0, pair.Value), StringComparer.OrdinalIgnoreCase),
         SkinIssuesGameSeconds = Math.Max(0d, double.IsFinite(SkinIssuesGameSeconds) ? SkinIssuesGameSeconds : 0d),
+        CaffeineLoadMg = NormalizeNonNegative(CaffeineLoadMg),
+        CaffeineDailyMg = NormalizeNonNegative(CaffeineDailyMg),
+        CaffeineDaySeconds = Math.Max(0d, double.IsFinite(CaffeineDaySeconds) ? CaffeineDaySeconds : 0d),
+        CaffeineDependence = Math.Clamp(double.IsFinite(CaffeineDependence) ? CaffeineDependence : 0d, 0d, 100d),
         CriticalFatigueGameSeconds = Math.Max(
             0d,
             double.IsFinite(CriticalFatigueGameSeconds) ? CriticalFatigueGameSeconds : 0d),
@@ -305,6 +313,9 @@ public sealed record PlayerConditionState(
     };
 
     private static double NormalizeOvercharge(double value) =>
+        double.IsFinite(value) ? Math.Max(0d, value) : 0d;
+
+    private static double NormalizeNonNegative(double value) =>
         double.IsFinite(value) ? Math.Max(0d, value) : 0d;
 }
 

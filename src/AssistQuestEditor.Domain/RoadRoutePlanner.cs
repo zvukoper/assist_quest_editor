@@ -4,11 +4,16 @@ namespace AssistQuestEditor.Domain;
 
 public sealed class RoadRoutePlanner
 {
-    private const double NodeMergeToleranceMeters = 8d;
+    // 8 м ошибочно склеивал короткие и близкие параллельные участки дорог.
+    // Для узлов графа это должна быть только почти точная дедупликация концов.
+    private const double NodeMergeToleranceMeters = 1d;
     private const double JunctionSnapToleranceMeters = 8d;
     /// <summary>Максимальный восстанавливаемый разрыв дорожной геометрии.</summary>
     private const double RecoveryGapMaxMeters = 300d;
     private const double RecoveryDirectionDot = 0.45d;
+    // Мост через пропущенный фрагмент — запасной вариант, а не новая «дорога».
+    // Штраф не даёт прямому мосту выигрывать у существующего дорожного пути.
+    private const double RecoveryEdgeCostMultiplier = 4d;
     private const double GridCellSizeMeters = 100d;
 
     /// <summary>
@@ -24,6 +29,7 @@ public sealed class RoadRoutePlanner
     private readonly List<List<Edge>> _adjacency = new();
     private readonly List<Fragment> _fragments = new();
     private readonly Dictionary<(int X, int Z), List<int>> _nodeGrid = new();
+    private readonly Dictionary<(int X, int Z), List<int>> _fragmentGrid = new();
     private readonly Dictionary<(int X, int Z), List<JunctionPoint>> _junctionGrid = new();
 
     private sealed class Node(double x, double z)
@@ -147,7 +153,7 @@ public sealed class RoadRoutePlanner
                     "точки 1",
                     playerRoad.Value.Position,
                     first.Position,
-                    includeExactStart: true);
+                    includeExactStart: false);
 
             if (firstLeg.Leg is not null)
                 legs.Add(firstLeg.Leg);
@@ -195,7 +201,7 @@ public sealed class RoadRoutePlanner
                     "точки " + (index + 2),
                     start.Position,
                     end.Position,
-                    includeExactStart: true,
+                    includeExactStart: false,
                     allowStartOffRoad: start.IsOffRoad);
 
             if (result.Leg is not null)
@@ -310,7 +316,9 @@ public sealed class RoadRoutePlanner
                     continue;
 
                 AddEdge(a, b, length, recovery: false);
+                var fragmentIndex = _fragments.Count;
                 _fragments.Add(new Fragment(segment, a, b));
+                RegisterFragment(fragmentIndex, segment);
             }
         }
 
@@ -344,75 +352,216 @@ public sealed class RoadRoutePlanner
         }
     }
 
+    /// <summary>
+    /// Восстанавливает разрывы дорожной геометрии по принципу «ближайшая
+    /// пригодная точка дороги впереди», а не «только конечный узел напротив».
+    ///
+    /// Реальная выгрузка дорог ETS2 содержит короткие фрагменты и разрывы, где
+    /// один конец дороги должен попасть в середину другого отрезка. Старый
+    /// endpoint→endpoint recovery такого случая не видел и в результате
+    /// маршрут мог перескочить напрямик через бездорожье.
+    /// </summary>
     private void AddDirectionalRecoveryEdges()
     {
-        var degrees = _adjacency.Select(item => item.Count).ToArray();
-        var cellRadius = (int)Math.Ceiling(RecoveryGapMaxMeters / GridCellSizeMeters);
-        var paired = new HashSet<(int A, int B)>();
+        var sourceNodes = Enumerable.Range(0, _nodes.Count)
+            .Where(nodeId => _adjacency[nodeId].Count == 1)
+            .ToArray();
 
-        foreach (var entry in _nodeGrid)
+        var paired = new HashSet<(int Source, int Fragment)>();
+
+        foreach (var sourceId in sourceNodes)
         {
-            var (cellX, cellZ) = entry.Key;
-            var bucket = entry.Value;
+            if (sourceId < 0 || sourceId >= _nodes.Count ||
+                _adjacency[sourceId].Count != 1)
+                continue;
 
-            for (var dxCell = -cellRadius; dxCell <= cellRadius; dxCell++)
-            for (var dzCell = -cellRadius; dzCell <= cellRadius; dzCell++)
+            var neighborId = _adjacency[sourceId][0].To;
+            var source = _nodes[sourceId];
+            var neighbor = _nodes[neighborId];
+
+            var outwardX = source.X - neighbor.X;
+            var outwardZ = source.Z - neighbor.Z;
+            var outwardLength = Math.Sqrt(
+                outwardX * outwardX +
+                outwardZ * outwardZ);
+
+            if (outwardLength <= double.Epsilon)
+                continue;
+
+            outwardX /= outwardLength;
+            outwardZ /= outwardLength;
+
+            var bestDistance = double.PositiveInfinity;
+            var bestFragmentIndex = -1;
+            var bestProjectionX = 0d;
+            var bestProjectionZ = 0d;
+
+            var reach = RecoveryGapMaxMeters + GridCellSizeMeters;
+            var minCell = CellOf(
+                source.X - reach,
+                source.Z - reach,
+                GridCellSizeMeters);
+            var maxCell = CellOf(
+                source.X + reach,
+                source.Z + reach,
+                GridCellSizeMeters);
+
+            for (var cellX = minCell.X; cellX <= maxCell.X; cellX++)
+            for (var cellZ = minCell.Z; cellZ <= maxCell.Z; cellZ++)
             {
-                if (!_nodeGrid.TryGetValue(
-                        (cellX + dxCell, cellZ + dzCell),
-                        out var otherBucket))
+                if (!_fragmentGrid.TryGetValue(
+                        (cellX, cellZ),
+                        out var candidates))
                     continue;
 
-                foreach (var a in bucket)
+                foreach (var fragmentIndex in candidates)
                 {
-                    if (degrees[a] != 1)
+                    if (!paired.Add((sourceId, fragmentIndex)))
                         continue;
 
-                    var bestNode = -1;
-                    var bestDistance = double.PositiveInfinity;
-
-                    foreach (var b in otherBucket)
-                    {
-                        if (a == b || degrees[b] != 1)
-                            continue;
-
-                        var vx = _nodes[b].X - _nodes[a].X;
-                        var vz = _nodes[b].Z - _nodes[a].Z;
-                        var distance = Math.Sqrt(vx * vx + vz * vz);
-
-                        if (distance <= NodeMergeToleranceMeters ||
-                            distance > RecoveryGapMaxMeters ||
-                            distance >= bestDistance)
-                            continue;
-
-                        var dirX = vx / distance;
-                        var dirZ = vz / distance;
-
-                        // CanContinue для тупика смотрит наружу от дороги к концу:
-                        // первый конец должен смотреть к второму, второй — к первому.
-                        if (!CanContinue(degrees, a, dirX, dirZ) ||
-                            !CanContinue(degrees, b, -dirX, -dirZ))
-                            continue;
-
-                        bestNode = b;
-                        bestDistance = distance;
-                    }
-
-                    if (bestNode < 0)
+                    var fragment = _fragments[fragmentIndex];
+                    if (fragment.NodeA == sourceId ||
+                        fragment.NodeB == sourceId)
                         continue;
 
-                    var key = a < bestNode
-                        ? (a, bestNode)
-                        : (bestNode, a);
+                    var projection = ProjectToSegment(
+                        source.X,
+                        source.Z,
+                        fragment.Segment);
 
-                    if (!paired.Add(key) || HasEdge(a, bestNode))
+                    var dx = projection.X - source.X;
+                    var dz = projection.Z - source.Z;
+                    var distance = Math.Sqrt(
+                        dx * dx +
+                        dz * dz);
+
+                    if (distance <= NodeMergeToleranceMeters ||
+                        distance > RecoveryGapMaxMeters ||
+                        distance >= bestDistance)
                         continue;
 
-                    AddEdge(a, bestNode, bestDistance, recovery: true);
+                    var distanceDirX = dx / distance;
+                    var distanceDirZ = dz / distance;
+
+                    // Точка должна находиться именно «впереди» тупика. Это
+                    // отсеивает соединение двух параллельных дорог сбоку.
+                    var forwardDot =
+                        outwardX * distanceDirX +
+                        outwardZ * distanceDirZ;
+
+                    if (forwardDot < RecoveryDirectionDot)
+                        continue;
+
+                    bestDistance = distance;
+                    bestFragmentIndex = fragmentIndex;
+                    bestProjectionX = projection.X;
+                    bestProjectionZ = projection.Z;
                 }
             }
+
+            if (bestFragmentIndex < 0)
+                continue;
+
+            var fragmentForBridge =
+                _fragments[bestFragmentIndex];
+
+            var bridgeNode = GetOrCreateNode(
+                bestProjectionX,
+                bestProjectionZ);
+
+            SplitFragmentAtNode(
+                bestFragmentIndex,
+                bridgeNode);
+
+            AddEdge(
+                sourceId,
+                bridgeNode,
+                bestDistance * RecoveryEdgeCostMultiplier,
+                recovery: true);
         }
     }
+
+    private void RegisterFragment(
+        int fragmentIndex,
+        RoadSegment segment)
+    {
+        var minCell = CellOf(
+            Math.Min(segment.X1, segment.X2),
+            Math.Min(segment.Z1, segment.Z2),
+            GridCellSizeMeters);
+        var maxCell = CellOf(
+            Math.Max(segment.X1, segment.X2),
+            Math.Max(segment.Z1, segment.Z2),
+            GridCellSizeMeters);
+
+        for (var x = minCell.X; x <= maxCell.X; x++)
+        for (var z = minCell.Z; z <= maxCell.Z; z++)
+        {
+            if (!_fragmentGrid.TryGetValue((x, z), out var bucket))
+            {
+                bucket = new List<int>();
+                _fragmentGrid[(x, z)] = bucket;
+            }
+
+            bucket.Add(fragmentIndex);
+        }
+    }
+
+    private void SplitFragmentAtNode(
+        int fragmentIndex,
+        int splitNode)
+    {
+        var fragment = _fragments[fragmentIndex];
+        if (splitNode == fragment.NodeA ||
+            splitNode == fragment.NodeB)
+            return;
+
+        var nodeA = _nodes[fragment.NodeA];
+        var nodeB = _nodes[fragment.NodeB];
+        var split = _nodes[splitNode];
+
+        var lengthA = Distance(nodeA, split);
+        var lengthB = Distance(split, nodeB);
+
+        if (lengthA > 0.000001d)
+            AddEdge(
+                fragment.NodeA,
+                splitNode,
+                lengthA,
+                recovery: false);
+
+        if (lengthB > 0.000001d)
+            AddEdge(
+                splitNode,
+                fragment.NodeB,
+                lengthB,
+                recovery: false);
+    }
+
+    private static (double X, double Z) ProjectToSegment(
+        double x,
+        double z,
+        RoadSegment segment)
+    {
+        var dx = segment.X2 - segment.X1;
+        var dz = segment.Z2 - segment.Z1;
+        var lengthSquared = dx * dx + dz * dz;
+
+        if (lengthSquared <= double.Epsilon)
+            return (segment.X1, segment.Z1);
+
+        var t =
+            ((x - segment.X1) * dx +
+             (z - segment.Z1) * dz) /
+            lengthSquared;
+
+        t = Math.Clamp(t, 0d, 1d);
+
+        return (
+            segment.X1 + t * dx,
+            segment.Z1 + t * dz);
+    }
+
 
     /// <summary>Графовые узлы, которыми реально пользуется планировщик.</summary>
     public double[] DebugNodesFlatArray()
@@ -587,7 +736,10 @@ public sealed class RoadRoutePlanner
         path.Reverse();
 
         var polyline = new List<WorldCoordinate>();
-        if (includeExactStart || allowStartOffRoad)
+        // Обычный leg состоит только из точек дорожного графа. Прямая от
+        // waypoint до ближайшей дороги допустима исключительно для явно
+        // отмеченного «бездорожья».
+        if (allowStartOffRoad)
             AddUnique(polyline, startPosition);
 
         AddUnique(polyline, start.Value.Position);

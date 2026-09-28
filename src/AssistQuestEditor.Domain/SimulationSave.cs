@@ -51,8 +51,11 @@ public sealed record SimulationSaveState(
     /// (<see cref="PlayerConditionScale"/>), а не в процентах. Старые снимки
     /// читаются с домножением процентных значений на 100, поэтому шкалы в
     /// интерфейсе не «схлопываются» при загрузке.
+    /// v11: гигиена, устойчивость, метаболизм, форсажи и служебные данные
+    /// употребления/кожных эффектов.
+    /// v12: сохраняемая физиологическая нагрузка кофеином.
     /// </summary>
-    public const int CurrentFormatVersion = 11;
+    public const int CurrentFormatVersion = 12;
 
     /// <summary>Пользовательский маршрут Симулятора.</summary>
     public RouteState Route { get; init; } = RouteState.Empty;

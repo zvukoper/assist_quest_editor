@@ -625,6 +625,32 @@ public sealed class RouteTests
     }
 
     [Fact]
+    public void RecoveryConnectsShortFragmentToMiddleOfRoad()
+    {
+        var planner = new RoadRoutePlanner(
+            new[]
+            {
+                new RoadSegment(0, 150, 50, 150),
+                new RoadSegment(100, 0, 100, 300)
+            });
+
+        var route = new RouteState(60, new[]
+        {
+            new RouteWaypoint("a", new WorldCoordinate(10, 0, 150), 60),
+            new RouteWaypoint("b", new WorldCoordinate(100, 0, 250), 60)
+        });
+
+        var plan = planner.Build(route);
+
+        Assert.True(plan.IsUsable);
+        Assert.Contains(
+            plan.Legs[0].Polyline,
+            point =>
+                Math.Abs(point.X - 100d) < 0.01d &&
+                Math.Abs(point.Z - 150d) < 0.01d);
+    }
+
+    [Fact]
     public void RoadGapUpToThreeHundredMetersIsRecovered()
     {
         var planner = new RoadRoutePlanner(new[]

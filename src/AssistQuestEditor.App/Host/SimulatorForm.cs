@@ -741,6 +741,10 @@ public sealed class SimulatorForm : WebViewForm
                     UseInventoryItem(root);
                     break;
 
+                case "grant_inventory_item":
+                    GrantInventoryItem(root);
+                    break;
+
                 case "toggle_inventory":
                     if (_inventoryForm is not null && !_inventoryForm.IsDisposed)
                         CloseInventoryWindow();
@@ -2411,8 +2415,10 @@ public sealed class SimulatorForm : WebViewForm
             return;
         }
 
+        var previousElapsed = _conditionsLastGameElapsed.Value;
+        var previousPosition = _conditionsLastPosition;
         var realSeconds = Math.Max(0d, (now - _conditionsLastRealTick.Value).TotalSeconds);
-        var gameSeconds = Math.Max(0d, (clock.Elapsed - _conditionsLastGameElapsed.Value).TotalSeconds);
+        var gameSeconds = Math.Max(0d, (clock.Elapsed - previousElapsed).TotalSeconds);
 
         _conditionsLastRealTick = now;
         _conditionsLastGameElapsed = clock.Elapsed;
@@ -2432,9 +2438,7 @@ public sealed class SimulatorForm : WebViewForm
         var traveledMeters = 0d;
 
         if (moving &&
-            _conditionsLastPosition is { } previousPosition &&
-            _conditionsLastGameElapsed is { } previousElapsed &&
-            clock.Elapsed != previousElapsed)
+            previousPosition is { })
         {
             var dx = currentPlayer.Position.X - previousPosition.X;
             var dz = currentPlayer.Position.Z - previousPosition.Z;
@@ -2954,6 +2958,58 @@ public sealed class SimulatorForm : WebViewForm
         MarkInventoryItemSeen(Required(root, "itemId"));
     }
 
+    private void GrantInventoryItem(JsonElement root)
+    {
+        var itemId = Required(root, "itemId").Trim();
+        var amount = Math.Clamp(
+            (int)Math.Round(Number(root, "amount", 1d)),
+            1,
+            999);
+
+        var definition = ItemCatalogFactory.CreateStarter()
+            .FirstOrDefault(item =>
+                item.Id.Equals(
+                    itemId,
+                    StringComparison.OrdinalIgnoreCase));
+        if (definition is null)
+        {
+            PostSaveError("Предмет отсутствует в каталоге Character Vitals.");
+            return;
+        }
+
+        var channel = _hub.Get<InventoryState>("inventory");
+        var state = channel.Value;
+        var items = new Dictionary<string, int>(
+            state.Items,
+            StringComparer.OrdinalIgnoreCase);
+        items.TryGetValue(itemId, out var oldAmount);
+        items[itemId] = Math.Max(0, oldAmount) + amount;
+
+        var newIds = new HashSet<string>(
+            state.NewItemIds,
+            StringComparer.OrdinalIgnoreCase);
+        newIds.Add(itemId);
+
+        channel.Set(
+            new InventoryState(items, newIds.ToArray()),
+            "Выдача предмета");
+
+        if (_inventoryForm is not null && !_inventoryForm.IsDisposed)
+            _inventoryForm.NotifyInventoryChange(itemId, amount);
+
+        AppendJournal(
+            "ItemGranted",
+            DateTimeOffset.UtcNow,
+            "Инвентарь",
+            $"Выдан предмет «{definition.Name}» ×{amount}.",
+            _hub.Get<PlayerState>("player").Value.Position);
+
+        PersistSession(
+            "автосохранение: выдача предмета",
+            force: true);
+        RequestSnapshot("inventory item granted");
+    }
+
     /// <summary>
     /// Снимает значок «новый предмет».
     ///
@@ -2998,7 +3054,8 @@ public sealed class SimulatorForm : WebViewForm
         var update = CharacterVitalsEngine.UseItem(
             itemId,
             _hub.Get<PlayerVitalsState>("player-vitals").Value,
-            _hub.Get<PlayerConditionState>("player-conditions").Value);
+            _hub.Get<PlayerConditionState>("player-conditions").Value,
+            _hub.Get<WorldClockState>("sim-time").Value.Now.TimeOfDay.TotalHours);
 
         if (update.Events.Any(item => item.Kind == "UnknownItem"))
         {

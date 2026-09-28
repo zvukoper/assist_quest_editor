@@ -467,6 +467,14 @@ public static class SimulationSaveCodec
             WriteDouble(writer, conditions.SkinIssuesGameSeconds);
             writer.Write(conditions.RandomSequence);
         }
+
+        if (formatVersion >= 12)
+        {
+            WriteDouble(writer, conditions.CaffeineLoadMg);
+            WriteDouble(writer, conditions.CaffeineDailyMg);
+            WriteDouble(writer, conditions.CaffeineDaySeconds);
+            WriteDouble(writer, conditions.CaffeineDependence);
+        }
     }
 
     private static PlayerConditionState ReadConditions(
@@ -515,6 +523,17 @@ public static class SimulationSaveCodec
                 ItemUseCounts = ReadIntPairs(reader, strings),
                 SkinIssuesGameSeconds = ReadDouble(reader),
                 RandomSequence = reader.ReadInt64()
+            };
+        }
+
+        if (formatVersion >= 12)
+        {
+            state = state with
+            {
+                CaffeineLoadMg = ReadDouble(reader),
+                CaffeineDailyMg = ReadDouble(reader),
+                CaffeineDaySeconds = ReadDouble(reader),
+                CaffeineDependence = ReadDouble(reader)
             };
         }
 

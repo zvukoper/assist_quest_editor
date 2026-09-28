@@ -239,6 +239,25 @@
         "/" + SCALE_MAXIMUM +
         " (" + Math.round(values.cumulative) + "%)");
 
+    if (scale.key === "energy" || scale.key === "stress") {
+      var conditions = (snapshot && snapshot.conditions) || {};
+      var caffeineLoad = Number(conditions.caffeineLoadMg);
+      var caffeineDaily = Number(conditions.caffeineDailyMg);
+      var caffeineDependence = Number(conditions.caffeineDependence);
+      if (Number.isFinite(caffeineLoad) ||
+          Number.isFinite(caffeineDaily) ||
+          Number.isFinite(caffeineDependence)) {
+        lines.push(
+          "Кофеин: " +
+          (Number.isFinite(caffeineLoad) ? Math.round(caffeineLoad) : 0) +
+          " мг в организме; " +
+          (Number.isFinite(caffeineDaily) ? Math.round(caffeineDaily) : 0) +
+          " мг за игровые сутки; адаптация " +
+          (Number.isFinite(caffeineDependence) ? Math.round(caffeineDependence) : 0) +
+          "%");
+      }
+    }
+
     lines.push(scale.desc);
     return lines.join("\n");
   }

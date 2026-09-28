@@ -118,13 +118,13 @@ public static class CharacterVitalsEngine
                 : 0d;
 
         return new CharacterVitalsRates(
-            HealthRegenPerHour(vitals, conditions) / 60d,
-            energyPerHour / 60d,
-            hydrationPerHour / 60d,
-            fatiguePerHour / 60d,
-            stressPerHour / 60d,
-            ResilienceDirection(vitals, conditions) / 60d,
-            MetabolismDirection(vitals, conditions) / 60d);
+            PlayerConditionScale.RateFromPercent(HealthRegenPerHour(vitals, conditions) / 60d),
+            PlayerConditionScale.RateFromPercent(energyPerHour / 60d),
+            PlayerConditionScale.RateFromPercent(hydrationPerHour / 60d),
+            PlayerConditionScale.RateFromPercent(fatiguePerHour / 60d),
+            PlayerConditionScale.RateFromPercent(stressPerHour / 60d),
+            PlayerConditionScale.RateFromPercent(ResilienceDirection(vitals, conditions) / 60d),
+            PlayerConditionScale.RateFromPercent(MetabolismDirection(vitals, conditions) / 60d));
     }
 
     public static CharacterVitalsUpdate Advance(
@@ -182,6 +182,14 @@ public static class CharacterVitalsEngine
                     : 0d;
             remainingMeters -= stepMeters;
 
+            UpdateCaffeine(
+                ref vitals,
+                ref state,
+                stepSeconds,
+                hour,
+                sleeping,
+                events);
+
             if (!HasEffect(state, "power_surge"))
             {
                 if (sleeping && !allowSleepInterruption && !CanSleep(vitals))
@@ -226,7 +234,7 @@ public static class CharacterVitalsEngine
                         burnoutMultiplier;
 
                     var gain =
-                        PlayerConditionScale.FromPercent(
+                        UnitsFromPercentExact(
                             gainPercent);
 
                     var before =
@@ -256,7 +264,7 @@ public static class CharacterVitalsEngine
                             0d,
                             1d);
                     var recovery =
-                        PlayerConditionScale.FromPercent(
+                        UnitsFromPercentExact(
                             100d / FatigueRestHours *
                             fractionOfHour *
                             recoveryFactor);
@@ -273,13 +281,13 @@ public static class CharacterVitalsEngine
                 }
 
                 var energyDemand =
-                    PlayerConditionScale.FromPercent(
+                    UnitsFromPercentExact(
                         100d / EnergyConsumptionHours *
                         fractionOfHour *
                         metabolismFactor *
                         sleepFactor);
                 var hydrationDemand =
-                    PlayerConditionScale.FromPercent(
+                    UnitsFromPercentExact(
                         100d / HydrationConsumptionHours *
                         fractionOfHour *
                         metabolismFactor *
@@ -363,7 +371,7 @@ public static class CharacterVitalsEngine
                             {
                                 CumulativeStress =
                                     state.CumulativeStress +
-                                    PlayerConditionScale.FromPercent(
+                                    UnitsFromPercentExact(
                                         wholeStressHours)
                             };
                         }
@@ -410,17 +418,17 @@ public static class CharacterVitalsEngine
                         Health = Math.Max(
                             0d,
                             vitals.Health -
-                            PlayerConditionScale.FromPercent(
+                            UnitsFromPercentExact(
                                 5d)),
                         Energy = Math.Max(
                             0d,
                             vitals.Energy -
-                            PlayerConditionScale.FromPercent(
+                            UnitsFromPercentExact(
                                 5d)),
                         Hydration = Math.Max(
                             0d,
                             vitals.Hydration -
-                            PlayerConditionScale.FromPercent(
+                            UnitsFromPercentExact(
                                 5d))
                     };
 
@@ -446,7 +454,7 @@ public static class CharacterVitalsEngine
                     if (wholeHours > 0d)
                     {
                         var cumulativeGain =
-                            PlayerConditionScale.FromPercent(
+                            UnitsFromPercentExact(
                                 wholeHours);
 
                         // «Бык» прекращает ЛЮБОЕ негативное накопление, поэтому
@@ -635,10 +643,10 @@ public static class CharacterVitalsEngine
                 fullSleep
                     ? 0d
                     : Math.Max(
-                        PlayerConditionScale.FromPercent(
+                        UnitsFromPercentExact(
                             10d),
                         conditions.CumulativeFatigue -
-                        PlayerConditionScale.FromPercent(
+                        UnitsFromPercentExact(
                             6d)),
             CriticalFatigueGameSeconds = 0d
         };
@@ -732,7 +740,8 @@ public static class CharacterVitalsEngine
     public static CharacterVitalsUpdate UseItem(
         string itemId,
         PlayerVitalsState vitals,
-        PlayerConditionState conditions)
+        PlayerConditionState conditions,
+        double gameHourOfDay = 12d)
     {
         vitals =
             (vitals ?? PlayerVitalsState.Default)
@@ -767,6 +776,14 @@ public static class CharacterVitalsEngine
         {
             ItemUseCounts = counts
         };
+
+        var caffeineMg = CharacterConsumableCatalog.GetCaffeineMg(id);
+        if (caffeineMg > 0d)
+            ApplyCaffeine(
+                ref vitals,
+                ref conditions,
+                caffeineMg,
+                NormalizeHour(gameHourOfDay));
 
         switch (id.ToLowerInvariant())
         {
@@ -831,66 +848,259 @@ public static class CharacterVitalsEngine
                 break;
 
             case "drink.coffee":
-                AddOvercharge(
-                    ref conditions,
-                    "energy",
-                    10d);
-                ReduceFatigue(
-                    ref vitals,
-                    4d);
-                ReduceStress(
-                    ref conditions,
-                    1d);
-                ChangeMetabolism(
-                    ref vitals,
-                    3d);
-
-                if (nextCount >= 4)
-                {
-                    AddStress(
-                        ref conditions,
-                        2d);
-                    conditions =
-                        AddOrReplaceEffect(
-                            conditions,
-                            new ActivePlayerEffectState(
-                                "caffeine_overuse",
-                                "Кофеин — перенапряжение",
-                                90d * 60d,
-                                true));
-                }
+                ReduceFatigue(ref vitals, 3d);
+                ReduceStress(ref conditions, 1d);
                 break;
 
             case "drink.energy":
-                AddResource(
-                    ref vitals,
-                    "energy",
-                    20d);
-                AddOvercharge(
-                    ref conditions,
-                    "energy",
-                    10d);
-                AddStress(
-                    ref conditions,
-                    4d);
-                ChangeMetabolism(
-                    ref vitals,
-                    4d);
+                AddResource(ref vitals, "energy", 15d);
+                ChangeMetabolism(ref vitals, 2d);
+                break;
 
-                if (nextCount >= 3)
+            case "drink.espresso":
+                ReduceFatigue(ref vitals, 2d);
+                break;
+
+            case "drink.black_tea":
+                ReduceStress(ref conditions, 1d);
+                break;
+
+            case "drink.green_tea":
+                ReduceStress(ref conditions, 2d);
+                ChangeResilience(ref vitals, 1d);
+                break;
+
+            case "drink.cola":
+                AddResource(ref vitals, "hydration", 5d);
+                break;
+
+            case "drink.decaf_coffee":
+                ReduceStress(ref conditions, 1d);
+                break;
+
+            case "drink.ginger_lemon_tea":
+                AddResource(ref vitals, "hydration", 10d);
+                ReduceStress(ref conditions, 3d);
+                ChangeMetabolism(ref vitals, 2d);
+                break;
+
+            case "drink.kvass":
+                AddResource(ref vitals, "hydration", 10d);
+                AddResource(ref vitals, "energy", 4d);
+                break;
+
+            case "drink.sports":
+                AddResource(ref vitals, "hydration", 25d);
+                AddResource(ref vitals, "energy", 5d);
+                ChangeResilience(ref vitals, 1d);
+                break;
+
+            case "electrolyte.sachet":
+            case "supplement.electrolyte":
+                AddResource(ref vitals, "hydration", 20d);
+                ChangeResilience(ref vitals, 2d);
+                break;
+
+            case "food.kefir":
+                AddResource(ref vitals, "energy", 5d);
+                AddResource(ref vitals, "hydration", 8d);
+                ReduceStress(ref conditions, 2d);
+                break;
+
+            case "food.yogurt":
+                AddResource(ref vitals, "energy", 6d);
+                AddResource(ref vitals, "hydration", 6d);
+                ReduceStress(ref conditions, 2d);
+                break;
+
+            case "food.cheese":
+                AddResource(ref vitals, "energy", 10d);
+                ChangeResilience(ref vitals, 1d);
+                break;
+
+            case "food.nuts":
+                AddResource(ref vitals, "energy", 13d);
+                ChangeResilience(ref vitals, 2d);
+                break;
+
+            case "food.oatmeal":
+                AddResource(ref vitals, "energy", 12d);
+                ReduceStress(ref conditions, 1d);
+                ChangeMetabolism(ref vitals, 1d);
+                break;
+
+            case "food.buckwheat":
+                AddResource(ref vitals, "energy", 14d);
+                ChangeResilience(ref vitals, 1d);
+                break;
+
+            case "food.vegetable_stew":
+                AddResource(ref vitals, "energy", 9d);
+                AddResource(ref vitals, "hydration", 7d);
+                ChangeResilience(ref vitals, 1d);
+                break;
+
+            case "food.soup":
+                AddResource(ref vitals, "energy", 8d);
+                AddResource(ref vitals, "hydration", 12d);
+                ReduceFatigue(ref vitals, 1d);
+                break;
+
+            case "food.egg_sandwich":
+                AddResource(ref vitals, "energy", 14d);
+                AddResource(ref vitals, "hydration", 3d);
+                break;
+
+            case "food.banana":
+                AddResource(ref vitals, "energy", 10d);
+                AddResource(ref vitals, "hydration", 3d);
+                ChangeMetabolism(ref vitals, 1d);
+                break;
+
+            case "food.apple":
+                AddResource(ref vitals, "energy", 7d);
+                AddResource(ref vitals, "hydration", 4d);
+                ReduceStress(ref conditions, 1d);
+                break;
+
+            case "food.orange":
+                AddResource(ref vitals, "energy", 6d);
+                AddResource(ref vitals, "hydration", 5d);
+                ChangeResilience(ref vitals, 1d);
+                break;
+
+            case "food.honey":
+                AddResource(ref vitals, "energy", 9d);
+                ReduceFatigue(ref vitals, 1d);
+                break;
+
+            case "food.dark_chocolate":
+                AddResource(ref vitals, "energy", 5d);
+                ReduceStress(ref conditions, 2d);
+                break;
+
+            case "supplement.multivitamin":
+                ChangeResilience(ref vitals, 5d);
+                ChangeMetabolism(ref vitals, 2d);
+                if (nextCount >= 5)
                 {
-                    AddStress(
-                        ref conditions,
-                        2d);
-                    conditions =
-                        AddOrReplaceEffect(
-                            conditions,
-                            new ActivePlayerEffectState(
-                                "energy_drink_overuse",
-                                "Энергетик — злоупотребление",
-                                120d * 60d,
-                                true));
+                    conditions = AddOrReplaceEffect(
+                        conditions,
+                        new ActivePlayerEffectState(
+                            "bull",
+                            "Бык",
+                            2d * 24d * 3600d,
+                            false));
                 }
+                break;
+
+            case "vitamin.c_effervescent":
+                ChangeResilience(ref vitals, 6d);
+                ChangeMetabolism(ref vitals, 2d);
+                ReduceStress(ref conditions, 1d);
+                break;
+
+            case "supplement.omega3":
+                ReduceStress(ref conditions, 2d);
+                ChangeResilience(ref vitals, 2d);
+                break;
+
+            case "vitamin.d3":
+                ChangeResilience(ref vitals, 4d);
+                ChangeMetabolism(ref vitals, 1d);
+                break;
+
+            case "mineral.magnesium":
+                ReduceStress(ref conditions, 5d);
+                ChangeResilience(ref vitals, 2d);
+                ChangeMetabolism(ref vitals, 1d);
+                if (nextCount >= 10)
+                    AddStress(ref conditions, 1d);
+                break;
+
+            case "mineral.zinc":
+                ChangeResilience(ref vitals, 3d);
+                if (nextCount >= 8)
+                    AddStress(ref conditions, 1d);
+                break;
+
+            case "adaptogen.ashwagandha":
+                ReduceStress(ref conditions, 7d);
+                ChangeResilience(ref vitals, 3d);
+                conditions = AddOrReplaceEffect(
+                    conditions,
+                    new ActivePlayerEffectState(
+                        "drowsiness",
+                        "Сонливость",
+                        2d * 3600d,
+                        true));
+                break;
+
+            case "medicine.valerian":
+                ReduceStress(ref conditions, 8d);
+                conditions = AddOrReplaceEffect(
+                    conditions,
+                    new ActivePlayerEffectState(
+                        "drowsiness",
+                        "Сонливость",
+                        2d * 3600d,
+                        true));
+                break;
+
+            case "medicine.sorbent":
+                AddResource(ref vitals, "health", 3d);
+                ReduceStress(ref conditions, 2d);
+                conditions = AddOrReplaceEffect(
+                    conditions,
+                    new ActivePlayerEffectState(
+                        "sorbent",
+                        "Сорбент",
+                        4d * 3600d,
+                        false));
+                break;
+
+            case "medicine.recovery_salts":
+                AddResource(ref vitals, "hydration", 30d);
+                ChangeResilience(ref vitals, 2d);
+                break;
+
+            case "painkiller":
+                AddResource(ref vitals, "health", 5d);
+                ReduceStress(ref conditions, 3d);
+                conditions = AddOrReplaceEffect(
+                    conditions,
+                    new ActivePlayerEffectState(
+                        "analgesia",
+                        "Обезболивание",
+                        2d * 3600d,
+                        false));
+                break;
+
+            case "smoke.cigarette":
+                ReduceStress(ref conditions, 2d);
+                AddOvercharge(ref conditions, "energy", 3d);
+                AddStress(ref conditions, 1d);
+                conditions = AddOrReplaceEffect(
+                    conditions,
+                    new ActivePlayerEffectState(
+                        "nicotine_rebound",
+                        "Никотиновый откат",
+                        60d * 60d,
+                        true));
+                break;
+
+            case "drink.beer":
+                ReduceStress(ref conditions, 3d);
+                AddResource(ref vitals, "hydration", -10d);
+                AddResource(ref vitals, "energy", 3d);
+                ReduceFatigue(ref vitals, -3d);
+                conditions = AddOrReplaceEffect(
+                    conditions,
+                    new ActivePlayerEffectState(
+                        "alcohol_aftereffect",
+                        "Последействие алкоголя",
+                        3d * 3600d,
+                        true));
                 break;
 
             case "vitamin.c":
@@ -968,7 +1178,7 @@ public static class CharacterVitalsEngine
                     Hygiene = Math.Min(
                         PlayerConditionScale.Maximum,
                         vitals.Hygiene +
-                        PlayerConditionScale.FromPercent(
+                        UnitsFromPercentExact(
                             35d))
                 };
                 break;
@@ -1085,7 +1295,7 @@ public static class CharacterVitalsEngine
             return;
 
         var units =
-            PlayerConditionScale.FromPercent(
+            UnitsFromPercentExact(
                 gainPercent);
 
         var normalStressUnits =
@@ -1143,7 +1353,7 @@ public static class CharacterVitalsEngine
                 ? 1d
                 : 0.25d;
         var units =
-            PlayerConditionScale.FromPercent(
+            UnitsFromPercentExact(
                 critical * multiplier);
 
         if (!HasEffect(state, "bull") &&
@@ -1247,6 +1457,13 @@ public static class CharacterVitalsEngine
                 regen *= 0.75d;
             if (state.CumulativeStress > 0d)
                 regen *= 0.5d;
+
+            var metabolism = PlayerConditionScale.ToPercent(vitals.Metabolism);
+            if (metabolism < 45d)
+                regen *= 0.75d;
+            else if (metabolism >= 75d)
+                regen *= 1.5d;
+
             if (HasEffect(state, "bull"))
                 regen *= 1.5d;
 
@@ -1258,7 +1475,7 @@ public static class CharacterVitalsEngine
                             vitals,
                             state),
                         vitals.Health +
-                        PlayerConditionScale.FromPercent(
+                        UnitsFromPercentExact(
                             regen))
             };
         }
@@ -1287,7 +1504,7 @@ public static class CharacterVitalsEngine
                 Math.Max(
                     0d,
                     vitals.Health -
-                    PlayerConditionScale.FromPercent(
+                    UnitsFromPercentExact(
                         healthLossPercent))
         };
     }
@@ -1319,6 +1536,16 @@ public static class CharacterVitalsEngine
             value *= 0.75d;
         if (state.CumulativeStress > 0d)
             value *= 0.5d;
+
+        var metabolism = PlayerConditionScale.ToPercent(vitals.Metabolism);
+        if (metabolism < 45d)
+            value *= 0.75d;
+        else if (metabolism >= 75d)
+            value *= 1.5d;
+
+        if (HasEffect(state, "bull"))
+            value *= 1.5d;
+
         return value;
     }
 
@@ -1328,7 +1555,7 @@ public static class CharacterVitalsEngine
         double gameSeconds)
     {
         var decay =
-            PlayerConditionScale.FromPercent(
+            UnitsFromPercentExact(
                 100d *
                 gameSeconds /
                 (HygieneDecayHours *
@@ -1344,13 +1571,18 @@ public static class CharacterVitalsEngine
 
         if (state.SkinIssuesGameSeconds > 0d)
         {
+            var metabolism = PlayerConditionScale.ToPercent(vitals.Metabolism);
+            var multiplier =
+                metabolism < 45d ? 0.75d :
+                metabolism >= 75d ? 1.5d : 1d;
+
             state = state with
             {
                 SkinIssuesGameSeconds =
                     Math.Max(
                         0d,
                         state.SkinIssuesGameSeconds -
-                        gameSeconds)
+                        gameSeconds * multiplier)
             };
         }
     }
@@ -1409,7 +1641,7 @@ public static class CharacterVitalsEngine
         vitals = vitals with
         {
             Resilience =
-                PlayerConditionScale.FromPercent(
+                UnitsFromPercentExact(
                     Math.Clamp(
                         resilience + resilienceDelta,
                         0d,
@@ -1417,7 +1649,7 @@ public static class CharacterVitalsEngine
                             ? 50d
                             : 100d)),
             Metabolism =
-                PlayerConditionScale.FromPercent(
+                UnitsFromPercentExact(
                     Math.Clamp(
                         metabolism + metabolismDelta,
                         0d,
@@ -1475,7 +1707,7 @@ public static class CharacterVitalsEngine
                         5d *
                         SecondsPerGameHour,
                     Stress =
-                        PlayerConditionScale.FromPercent(
+                        UnitsFromPercentExact(
                             90d)
                 };
 
@@ -1485,7 +1717,7 @@ public static class CharacterVitalsEngine
                         Math.Max(
                             0d,
                             vitals.Health -
-                            PlayerConditionScale.FromPercent(
+                            UnitsFromPercentExact(
                                 25d))
                 };
 
@@ -1681,16 +1913,12 @@ public static class CharacterVitalsEngine
         if (units <= 0d)
             return;
 
-        if (SkipNegativeRoll(
-                ref state,
-                resiliencePercent / 2d))
-            return;
-
         var remaining =
             ConsumeOvercharge(
                 ref state,
                 key,
-                units);
+                units,
+                resiliencePercent / 2d);
 
         if (remaining <= 0d)
             return;
@@ -1790,6 +2018,13 @@ public static class CharacterVitalsEngine
         if (units <= 0d)
             return 0d;
 
+        var available = GetOvercharge(state, key);
+        if (available <= 0d)
+            return ConsumeOvercharge(
+                ref state,
+                key,
+                units);
+
         if (SkipNegativeRoll(
                 ref state,
                 skipChancePercent))
@@ -1799,6 +2034,185 @@ public static class CharacterVitalsEngine
             ref state,
             key,
             units);
+    }
+
+    private static void ApplyCaffeine(
+        ref PlayerVitalsState vitals,
+        ref PlayerConditionState state,
+        double caffeineMg,
+        double gameHour)
+    {
+        var dailyBefore = state.CaffeineDailyMg;
+        var dailyAfter = dailyBefore + caffeineMg;
+        var adaptation = Math.Clamp(
+            state.CaffeineDependence / 100d,
+            0d,
+            0.75d);
+        var effectiveDose =
+            caffeineMg * (1d - adaptation * 0.35d);
+
+        AddOvercharge(
+            ref state,
+            "energy",
+            Math.Max(1d, effectiveDose / 12d));
+        ReduceFatigue(
+            ref vitals,
+            Math.Min(
+                5d,
+                1.5d + effectiveDose / 90d));
+
+        state = state with
+        {
+            CaffeineLoadMg =
+                state.CaffeineLoadMg + caffeineMg,
+            CaffeineDailyMg = dailyAfter,
+            CaffeineDependence =
+                Math.Clamp(
+                    state.CaffeineDependence +
+                    caffeineMg / 100d * 0.8d,
+                    0d,
+                    100d)
+        };
+
+        if (dailyBefore <= 200d &&
+            dailyAfter > 200d)
+            AddStress(ref state, 1d);
+
+        if (dailyBefore <= 400d &&
+            dailyAfter > 400d)
+        {
+            AddStress(ref state, 2d);
+            state = AddOrReplaceEffect(
+                state,
+                new ActivePlayerEffectState(
+                    "caffeine_overuse",
+                    "Кофеин — перенапряжение",
+                    2d * 3600d,
+                    true));
+        }
+
+        if (dailyBefore <= 600d &&
+            dailyAfter > 600d)
+        {
+            AddStress(ref state, 4d);
+            state = AddOrReplaceEffect(
+                state,
+                new ActivePlayerEffectState(
+                    "caffeine_excess",
+                    "Кофеин — избыток",
+                    2d * 3600d,
+                    true));
+        }
+
+        if (caffeineMg >= 200d)
+        {
+            AddStress(ref state, 1d);
+            state = AddOrReplaceEffect(
+                state,
+                new ActivePlayerEffectState(
+                    "caffeine_jitter",
+                    "Кофеиновая возбудимость",
+                    90d * 60d,
+                    true));
+        }
+
+        if (gameHour >= 20d || gameHour < 6d)
+        {
+            AddStress(ref state, 0.5d);
+            state = AddOrReplaceEffect(
+                state,
+                new ActivePlayerEffectState(
+                    "late_caffeine",
+                    "Поздний кофеин",
+                    3d * 3600d,
+                    true));
+        }
+    }
+
+    private static void UpdateCaffeine(
+        ref PlayerVitalsState vitals,
+        ref PlayerConditionState state,
+        double gameSeconds,
+        double gameHour,
+        bool sleeping,
+        List<PlayerConditionEvent> events)
+    {
+        if (gameSeconds <= 0d)
+            return;
+
+        var hours = gameSeconds / SecondsPerGameHour;
+        var loadBefore = state.CaffeineLoadMg;
+        var loadAfter =
+            loadBefore * Math.Pow(
+                0.5d,
+                hours / 5d);
+
+        var daySeconds =
+            state.CaffeineDaySeconds + gameSeconds;
+        var dailyMg = state.CaffeineDailyMg;
+
+        while (daySeconds >= 24d * 3600d)
+        {
+            daySeconds -= 24d * 3600d;
+            dailyMg = 0d;
+        }
+
+        var dependence =
+            Math.Max(
+                0d,
+                state.CaffeineDependence -
+                hours * 0.15d);
+
+        state = state with
+        {
+            CaffeineLoadMg = Math.Max(
+                0d,
+                loadAfter),
+            CaffeineDailyMg = dailyMg,
+            CaffeineDaySeconds = Math.Max(
+                0d,
+                daySeconds),
+            CaffeineDependence =
+                Math.Clamp(
+                    dependence,
+                    0d,
+                    100d)
+        };
+
+        if (HasEffect(state, "power_surge"))
+            return;
+
+        if (dependence >= 20d &&
+            loadBefore >= 20d &&
+            loadAfter < 8d &&
+            !HasEffect(
+                state,
+                "caffeine_withdrawal"))
+        {
+            vitals = vitals with
+            {
+                Fatigue =
+                    vitals.Fatigue +
+                    UnitsFromPercentExact(
+                        sleeping ? 1d : 3d)
+            };
+
+            state = AddOrReplaceEffect(
+                state,
+                new ActivePlayerEffectState(
+                    "caffeine_withdrawal",
+                    "Кофеиновый откат",
+                    2d * 3600d,
+                    true));
+
+            AddStress(
+                ref state,
+                sleeping ? 1d : 2d);
+
+            events.Add(
+                new PlayerConditionEvent(
+                    "CaffeineWithdrawal"));
+        }
     }
 
     private static double GetOvercharge(
@@ -1858,7 +2272,7 @@ public static class CharacterVitalsEngine
                 ? 1.5d
                 : 1d;
         var units =
-            PlayerConditionScale.FromPercent(
+            UnitsFromPercentExact(
                 percent * multiplier);
 
         state =
@@ -1876,7 +2290,7 @@ public static class CharacterVitalsEngine
         double percent)
     {
         var units =
-            PlayerConditionScale.FromPercent(
+            UnitsFromPercentExact(
                 percent);
 
         if (key.Equals(
@@ -1920,7 +2334,7 @@ public static class CharacterVitalsEngine
                 Math.Max(
                     0d,
                     vitals.Fatigue -
-                    PlayerConditionScale.FromPercent(
+                    UnitsFromPercentExact(
                         percent))
         };
 
@@ -1933,7 +2347,7 @@ public static class CharacterVitalsEngine
                 Math.Max(
                     0d,
                     state.Stress -
-                    PlayerConditionScale.FromPercent(
+                    UnitsFromPercentExact(
                         percent))
         };
 
@@ -1944,7 +2358,7 @@ public static class CharacterVitalsEngine
         {
             Stress =
                 state.Stress +
-                PlayerConditionScale.FromPercent(
+                UnitsFromPercentExact(
                     percent)
         };
 
@@ -1955,7 +2369,7 @@ public static class CharacterVitalsEngine
         {
             Resilience =
                 vitals.Resilience +
-                PlayerConditionScale.FromPercent(
+                UnitsFromPercentExact(
                     percent)
         };
 
@@ -1966,7 +2380,7 @@ public static class CharacterVitalsEngine
         {
             Metabolism =
                 vitals.Metabolism +
-                PlayerConditionScale.FromPercent(
+                UnitsFromPercentExact(
                     percent)
         };
 
@@ -2040,6 +2454,11 @@ public static class CharacterVitalsEngine
                  0d,
                  100d) /
              100d));
+
+    private static double UnitsFromPercentExact(double percent) =>
+        double.IsFinite(percent)
+            ? percent * PlayerConditionScale.UnitsPerPercent
+            : 0d;
 
     private static double Percent(
         double value,

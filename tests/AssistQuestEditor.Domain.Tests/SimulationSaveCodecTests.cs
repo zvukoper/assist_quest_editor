@@ -79,6 +79,13 @@ public sealed class SimulationSaveCodecTests
 
         state = state with
         {
+            Conditions = PlayerConditionState.Empty with
+            {
+                CaffeineLoadMg = 95d,
+                CaffeineDailyMg = 220d,
+                CaffeineDaySeconds = 7200d,
+                CaffeineDependence = 12d
+            },
             Route = new RouteState(
                 80,
                 new[]
