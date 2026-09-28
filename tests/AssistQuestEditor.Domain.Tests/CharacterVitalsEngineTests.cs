@@ -25,13 +25,17 @@ public sealed class CharacterVitalsEngineTests
             traveledMeters: 0d,
             gameHourOfDay: 12d);
 
+        // 100% за 4 игровых часа = 25% в час; вычитается из ПОЛНОЙ шкалы,
+        // поэтому остаётся 75%, а не 25%.
         Assert.Equal(
-            PlayerConditionScale.FromPercent(100d / 4d),
+            PlayerConditionScale.FromPercent(75d),
             update.Vitals.Energy,
             3);
 
+        // 100% за 2 игровых часа = 50% в час; вычитается из ПОЛНОЙ шкалы,
+        // поэтому остаётся 50%, а не 0,5%.
         Assert.Equal(
-            PlayerConditionScale.FromPercent(100d - 50d),
+            PlayerConditionScale.FromPercent(50d),
             update.Vitals.Hydration,
             3);
 
@@ -40,11 +44,15 @@ public sealed class CharacterVitalsEngineTests
             update.Vitals.Fatigue,
             3);
 
+        // Гигиена падает на 100% за 3 игровых СУТОК, то есть примерно на 1,39%
+        // за час: остаётся ~98,6%, а не 1,39%. Замер в процентах, потому что
+        // спад считается по шагам (900 с) и округление каждого шага даёт
+        // 9860, а не 9861.
         Assert.Equal(
-            PlayerConditionScale.FromPercent(
-                100d / 72d),
-            update.Vitals.Hygiene,
-            3);
+            98.6d,
+            PlayerConditionScale.ToPercent(
+                update.Vitals.Hygiene),
+            1);
     }
 
     [Fact]

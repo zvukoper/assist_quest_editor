@@ -14,6 +14,17 @@ public static class CharacterVitalsRatesDefaults
     public static CharacterVitalsRates Zero => new(0d, 0d, 0d, 0d, 0d, 0d, 0d);
 }
 
+/// <summary>
+/// Результат шага шкал персонажа: новые значения шкал, новое долгосрочное
+/// состояние (кумулятивные шкалы, перегрузки, эффекты) и события шага.
+/// Форма совпадает с <see cref="PlayerConditionUpdate"/>, чтобы потребители
+/// (Host, кодек сохранений) читали ответ одинаково.
+/// </summary>
+public sealed record CharacterVitalsUpdate(
+    PlayerVitalsState Vitals,
+    PlayerConditionState Conditions,
+    IReadOnlyList<PlayerConditionEvent> Events);
+
 public static class CharacterVitalsEngine
 {
     private const double SecondsPerGameHour = 3600d;
@@ -316,8 +327,14 @@ public static class CharacterVitalsEngine
                         resiliencePercent);
                 }
 
-                var stressBefore =
-                    TotalStressPercent(state);
+                // Признак ВХОДА в критический стресс: счётчик критических часов
+                // обнуляется, как только стресс опустился ниже порога. Дебафф
+                // «Выгорание» выдаётся при входе в критическую зону — в том
+                // числе когда игрок уже стоит в ней без дебаффа (например,
+                // после загрузки сохранения), — но не продлевается, пока
+                // счётчик растёт, поэтому «строго разово» соблюдено.
+                var enteringCriticalStress =
+                    state.CriticalStressGameSeconds <= 0d;
                 AddStress(
                     ref state,
                     stepSeconds,
@@ -376,8 +393,8 @@ public static class CharacterVitalsEngine
                     };
                 }
 
-                if (stressBefore <= StressCriticalPercent &&
-                    stressAfter > StressCriticalPercent &&
+                if (stressAfter > StressCriticalPercent &&
+                    enteringCriticalStress &&
                     !HasEffect(state, "burnout"))
                 {
                     state = AddOrReplaceEffect(
@@ -432,7 +449,12 @@ public static class CharacterVitalsEngine
                             PlayerConditionScale.FromPercent(
                                 wholeHours);
 
-                        if (!SkipNegativeRoll(
+                        // «Бык» прекращает ЛЮБОЕ негативное накопление, поэтому
+                        // почасовое истощение усталости не должно его обходить:
+                        // без этой проверки бафф гасил только пошаговое
+                        // истощение, а критическая усталость продолжала копить.
+                        if (!HasEffect(state, "bull") &&
+                            !SkipNegativeRoll(
                                 ref state,
                                 resiliencePercent / 2d))
                         {
@@ -1544,6 +1566,15 @@ public static class CharacterVitalsEngine
                 ? 1.5d
                 : 1d;
 
+    /// <summary>
+    /// Стресс в процентах (мгновенный + кумулятивный). Правило живёт в
+    /// <see cref="PlayerConditionEngine"/>, чтобы шкалы не разошлись между
+    /// двумя движками; здесь — только короткое имя для расчётов.
+    /// </summary>
+    private static double TotalStressPercent(
+        PlayerConditionState state) =>
+        PlayerConditionEngine.TotalStressPercent(state);
+
     private static double MetabolismConsumptionFactor(
         PlayerVitalsState vitals,
         PlayerConditionState state)
@@ -1740,6 +1771,34 @@ public static class CharacterVitalsEngine
         }
 
         return units - consumed;
+    }
+
+    /// <summary>
+    /// То же поглощение перегрузкой, но с шансом ПРОПУСТИТЬ порцию негатива:
+    /// устойчивость, делённая на два, даёт шанс «не получить очередную порцию».
+    /// При срабатывании перегрузка НЕ расходуется и прирост не применяется —
+    /// возвращается ноль, то есть негативное изменение целиком пропущено.
+    /// Порядок важен: бросок делается ДО чтения перегрузки, иначе шанс
+    /// зависел бы от её величины.
+    /// </summary>
+    private static double ConsumeOvercharge(
+        ref PlayerConditionState state,
+        string key,
+        double units,
+        double skipChancePercent)
+    {
+        if (units <= 0d)
+            return 0d;
+
+        if (SkipNegativeRoll(
+                ref state,
+                skipChancePercent))
+            return 0d;
+
+        return ConsumeOvercharge(
+            ref state,
+            key,
+            units);
     }
 
     private static double GetOvercharge(

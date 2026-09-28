@@ -65,6 +65,47 @@ if (!/drawRoads\s*\(/.test(simulatorJs))
       "Дороги — фон, а не объект поверх карты.");
 }
 
+// Порядок слоёв маршрута задан требованием автора: маршрутные точки и линии
+// маршрута рисуются ПОВЕРХ остальных точек и их названий. Поверх маршрута может
+// рисоваться ТОЛЬКО точка игрока и квестовая графика (ромбы с радиусами).
+// Проверяются обе стороны правила, иначе «починить» можно снятием одной из них.
+{
+  const start = simulatorJs.indexOf("function drawMap()");
+  const end = simulatorJs.indexOf("\n  function ", start + 10);
+  if (start < 0 || end < 0)
+    throw new Error("Не найдено тело drawMap: проверка порядка слоёв невозможна.");
+
+  const drawMap = simulatorJs.slice(start, end);
+  const at = needle => {
+    const index = drawMap.indexOf(needle);
+    if (index < 0)
+      throw new Error("В drawMap нет вызова " + needle + ": слой не рисуется.");
+    return index;
+  };
+
+  const pointsAt = at("drawWorldPoint(");
+  const routeLinesAt = at("drawRouteLines(");
+  const waypointsAt = at("drawRouteWaypoints(");
+  const playerAt = at("drawPlayer(");
+  const questsAt = at("drawQuestMarker(");
+
+  if (routeLinesAt < pointsAt)
+    throw new Error("Линии маршрута рисуются ПОД точками мира: названия точек " +
+      "закроют маршрут. Маршрут обязан идти поверх обычных точек и подписей.");
+  if (waypointsAt < pointsAt)
+    throw new Error("Маршрутные точки рисуются ПОД точками мира: названия точек " +
+      "закроют маршрутные точки.");
+  if (waypointsAt < routeLinesAt)
+    throw new Error("Маршрутные точки рисуются ПОД линиями собственного маршрута: " +
+      "линия перекроет маркер точки.");
+  if (playerAt < waypointsAt)
+    throw new Error("Точка игрока рисуется ПОД маршрутом: игрок — главный ориентир " +
+      "и обязан оставаться поверх маршрутных точек и линий.");
+  if (questsAt < waypointsAt)
+    throw new Error("Квесты рисуются ПОД маршрутом: точка квеста с радиусом обязана " +
+      "перекрывать маршрутные точки и линии.");
+}
+
 // Данные дорог обязаны быть отдельным ресурсом рядом с данными мира.
 {
   const roadsPath = path.join(root, "data", "world", "roads.json");

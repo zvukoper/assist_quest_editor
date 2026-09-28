@@ -590,6 +590,21 @@ public sealed class SimulatorForm : WebViewForm
         RequestSnapshot("inventory item seen in window");
     }
 
+    /// <summary>
+    /// Игрок употребил предмет из окна инвентаря (кнопка «Использовать»).
+    ///
+    /// Идёт ЧЕРЕЗ ТОТ ЖЕ путь, что и употребление из карты
+    /// (<see cref="UseInventoryItemCore"/>): механика, автосохранение и снимок
+    /// не должны отличаться в зависимости от того, какое окно нажали.
+    /// </summary>
+    private void InventoryForm_ItemUseRequested(object? sender, InventoryItemUseEventArgs e)
+    {
+        if (string.IsNullOrWhiteSpace(e.ItemId))
+            return;
+
+        UseInventoryItemCore(e.ItemId);
+    }
+
     protected override void OnWebMessage(string json)
     {
         AppLogger.Info("SimulatorForm: обработка web action.", $"json={json}");

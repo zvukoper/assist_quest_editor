@@ -505,10 +505,6 @@
     drawRoads(ctx, width, height);
     perf?.end("Сетка и дороги", sectionAt);
 
-    sectionAt = perf?.start();
-    drawRouteLines(ctx, width, height);
-    perf?.end("Линии маршрута", sectionAt);
-
     const points = snapshot.world?.points || [];
     const showAllLabels = camera.mpp < 24;
     const labelLimit = camera.mpp < 70 ? 140 : (camera.mpp < 180 ? 55 : 24);
@@ -562,9 +558,35 @@
       visiblePoints.push(temporaryPoint);
     }
 
+    const playerForDraw = currentPlayerForDraw();
+
+    // Кольца дистанций — вспомогательный слой: он не относится ни к игроку, ни
+    // к квестам, поэтому по правилу порядка рисуется ПОД маршрутом.
+    drawDistanceRings(ctx, width, height, playerForDraw?.position);
+
+    // Линии маршрута идут ПОВЕРХ обычных точек и их названий: маршрут обязан
+    // читаться по всей длине, а не уходить под подписи СДО и городов. Выше
+    // маршрута допускаются только точка игрока и квестовая графика — это
+    // единственные слои, которые перекрывают маршрут.
+    //
+    // Конус обзора идёт до игрока и путевых точек: игрок остаётся самым верхним
+    // ориентиром, а сам конус не закрывает маркеры.
+    sectionAt = perf?.start();
+    drawRouteLines(ctx, width, height);
+    drawRouteFov(ctx, playerForDraw);
+    perf?.end("Линии маршрута", sectionAt);
+
+    // Маршрутные точки — поверх линий собственного маршрута.
+    sectionAt = perf?.start();
+    drawRouteWaypoints(ctx, width, height);
+    perf?.end("Точки маршрута", sectionAt);
+
     // Квестовая графика не зависит от галочек видимости точек: «только квесты»
     // должна ПОКАЗЫВАТЬ квесты, а не прятать их вместе с их СДО. Квест,
     // привязанный к СДО, остаётся на карте — его ромб и помечают место.
+    //
+    // Квесты вместе с их радиусами рисуются ПОВЕРХ маршрута: наряду с точкой
+    // игрока это разрешённое исключение из правила «маршрут поверх остального».
     sectionAt = perf?.start();
     for (const entry of inactiveQuests) drawQuestMarker(ctx, entry, false);
     for (const entry of activeQuests) drawQuestMarker(ctx, entry, true);
@@ -577,24 +599,17 @@
     drawDynamicEventMarkers(ctx, width, height);
     perf?.end("Динамические события", sectionAt);
 
-    // Отобранные точки рисуются поверх карты и квестов, но под игроком:
+    // Отобранные точки рисуются поверх карты, квестов и маршрута, но под игроком:
     // положение игрока остаётся главным ориентиром даже в этом режиме.
     if (locationVisualisation) {
       drawLocationVisualisation(ctx, width, height);
     }
 
-    const playerForDraw = currentPlayerForDraw();
-
-    // Конус обзора идёт до игрока и путевых точек: игрок остаётся самым верхним
-    // ориентиром, а сам конус не закрывает маркеры.
+    // Runtime-цель и игрок — самый верхний слой.
     sectionAt = perf?.start();
-    drawRouteFov(ctx, playerForDraw);
-
-    drawDistanceRings(ctx, width, height, playerForDraw?.position);
     drawRuntimeTarget(ctx, playerForDraw?.position);
-    drawRouteWaypoints(ctx, width, height);
     drawPlayer(ctx, playerForDraw);
-    perf?.end("Игрок, цели и маршрут", sectionAt);
+    perf?.end("Игрок и цель", sectionAt);
 
     const visualInfo = runtimeTargetInfo();
     const targetScreen = visualInfo.point

@@ -67,7 +67,8 @@ const snapshot = {
   // в сотую часть и проверки пройдут «успешно» на сломанной разметке.
   playerVitals: {
     health: 8000, maxHealth: 10000, energy: 5500, maxEnergy: 10000,
-    hydration: 7000, maxHydration: 10000, fatigue: 4000, maxFatigue: 10000
+    hydration: 7000, maxHydration: 10000, fatigue: 4000, maxFatigue: 10000,
+    resilience: 6000, metabolism: 6000
   },
   playerProgress: { money: 1500, experience: 0, reserve: 0 },
   character: { stats: { strength: 5 }, skills: [] },
@@ -159,7 +160,17 @@ try {
   }, snapshot);
 
   // --- Проверки ---
-  const required = ["Здоровье", "Стресс", "Энергия", "Жидкость", "Усталость"];
+  // Состав шкал вырос вместе с механикой: к пяти «расходуемым/наполняемым»
+  // добавлены производные «Устойчивость» и «Метаболизм». У производных НЕТ
+  // кумулятивной и перегруженной части по замыслу, поэтому кумулятив ниже
+  // проверяется только у первых пяти.
+  const required = ["Здоровье", "Стресс", "Энергия", "Жидкость", "Усталость", "Устойчивость", "Метаболизм"];
+  const cumulativeScales = ["health", "stress", "energy", "hydration", "fatigue"];
+  const labelByKey = {
+    health: "Здоровье", stress: "Стресс", energy: "Энергия",
+    hydration: "Жидкость", fatigue: "Усталость",
+    resilience: "Устойчивость", metabolism: "Метаболизм"
+  };
   check(JSON.stringify(out.sidebar?.labels) === JSON.stringify(required),
     "сайдбар: состав шкал " + JSON.stringify(out.sidebar?.labels));
   check(JSON.stringify(out.playerWindow?.labels) === JSON.stringify(required),
@@ -170,7 +181,11 @@ try {
 
   const colors = {
     health: "#32cd32", stress: "#8c63d9", energy: "#ff8c00",
-    hydration: "#2f7ff0", fatigue: "#e03131"
+    hydration: "#2f7ff0", fatigue: "#e03131",
+    // «Устойчивость» задана ГРАДИЕНТОМ; браузер нормализует hex внутри него в
+    // rgb(...), поэтому сравнивать надо с нормализованной формой.
+    resilience: "linear-gradient(90deg,rgb(23,59,25),rgb(49,138,53),rgb(103,207,103))",
+    metabolism: "#8a9a68"
   };
   const expectedCumulative = { health: "fromEnd", stress: "fromStart", energy: "fromEnd", hydration: "fromEnd", fatigue: "fromStart" };
 
@@ -181,6 +196,15 @@ try {
       const key = bar.cls.replace("dualBar", "").trim();
       check(toRgb(bar.softColor) === toRgb(colors[key]),
         `${name}: цвет «${key}» ${bar.softColor} вместо ${colors[key]}`);
+
+      if (!cumulativeScales.includes(key)) {
+        // Производная шкала: кумулятивной части быть НЕ должно, иначе поверх
+        // «Устойчивости» рисовалась бы жёлтая полоса, которой у неё нет.
+        check(!bar.cum && !bar.cumColor && !bar.cumClass,
+          `${name}: у производной шкалы «${key}» появилась кумулятивная часть`);
+        continue;
+      }
+
       check(toRgb(bar.cumColor) === toRgb("#ffd400"),
         `${name}: кумулятив «${key}» цвета ${bar.cumColor}, должен быть ярко-жёлтым #ffd400`);
       check(bar.cumClass === expectedCumulative[key],
@@ -192,8 +216,20 @@ try {
       check(scales.tooltips.some(t => t.includes(scale)),
         `${name}: нет подсказки для «${scale}»`);
     }
-    check(scales.tooltips.some(t => t.includes("Кумулятивное значение")),
-      `${name}: подсказка не называет кумулятивное значение отдельно`);
+    // Кумулятив назван ОТДЕЛЬНО у каждой накопительной шкалы, и не упоминается
+    // у производных: у них его нет вовсе.
+    for (const key of cumulativeScales) {
+      const label = labelByKey[key];
+      const tip = scales.tooltips.find(t => t.includes(label)) || "";
+      check(tip.includes("Кумулятивное значение"),
+        `${name}: подсказка «${label}» не называет кумулятивное значение`);
+    }
+    for (const key of ["resilience", "metabolism"]) {
+      const label = labelByKey[key];
+      const tip = scales.tooltips.find(t => t.includes(label)) || "";
+      check(!!tip && !tip.includes("Кумулятивное значение"),
+        `${name}: производная шкала «${label}» не должна показывать кумулятив`);
+    }
     check(scales.tooltips.some(t => t.includes("Реальное значение")),
       `${name}: подсказка не называет реальное значение`);
     // Значение показывается в ЕДИНИЦАХ шкалы с максимумом, а не в процентах:

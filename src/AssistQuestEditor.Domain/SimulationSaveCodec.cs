@@ -387,7 +387,7 @@ public static class SimulationSaveCodec
             ? ReadMapView(reader)
             : null;
         var conditions = formatVersion >= 8
-            ? ReadConditions(reader, formatVersion)
+            ? ReadConditions(reader, formatVersion, strings)
             : PlayerConditionState.Empty;
 
         return new SimulationSaveState(
@@ -469,7 +469,10 @@ public static class SimulationSaveCodec
         }
     }
 
-    private static PlayerConditionState ReadConditions(BinaryReader reader, int formatVersion)
+    private static PlayerConditionState ReadConditions(
+        BinaryReader reader,
+        int formatVersion,
+        StringTable strings)
     {
         var state = new PlayerConditionState(
             ReadDouble(reader),
