@@ -82,6 +82,9 @@ public sealed record PlayerVitalsState(
     double Fatigue,
     double MaxFatigue)
 {
+    public double Hygiene { get; init; } = PlayerConditionScale.Maximum;
+    public double Resilience { get; init; } = PlayerConditionScale.FromPercent(60d);
+    public double Metabolism { get; init; } = PlayerConditionScale.FromPercent(60d);
     /// <summary>Полные шкалы и нулевая усталость — стартовое состояние мира.</summary>
     public static PlayerVitalsState Default => new(
         PlayerConditionScale.Maximum,
@@ -107,7 +110,10 @@ public sealed record PlayerVitalsState(
         Health = ClampValue(Health, MaxHealth),
         Energy = ClampValue(Energy, MaxEnergy),
         Hydration = ClampValue(Hydration, MaxHydration),
-        Fatigue = ClampValue(Fatigue, MaxFatigue)
+        Fatigue = ClampValue(Fatigue, MaxFatigue),
+        Hygiene = ClampValue(Hygiene, PlayerConditionScale.Maximum),
+        Resilience = ClampValue(Resilience, PlayerConditionScale.Maximum),
+        Metabolism = ClampValue(Metabolism, PlayerConditionScale.Maximum)
     };
 
     private static double ClampMaximum(double value) =>
@@ -163,7 +169,8 @@ public sealed record InterfaceDialogue(
     string RequestId,
     string Title,
     string Speaker,
-    string Text);
+    string Text,
+    string ButtonText = "Продолжить");
 
 public sealed record InterfaceState(
     InterfaceChoiceDialog? ActiveDialog,
@@ -244,6 +251,17 @@ public sealed record PlayerConditionState(
     double CriticalStressGameSeconds,
     IReadOnlyList<ActivePlayerEffectState> Effects)
 {
+    public double OverchargeHealth { get; init; }
+    public double OverchargeEnergy { get; init; }
+    public double OverchargeHydration { get; init; }
+    public double OverchargeFatigue { get; init; }
+    public double OverchargeStress { get; init; }
+
+    public IReadOnlyDictionary<string, int> ItemUseCounts { get; init; } =
+        new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+
+    public double SkinIssuesGameSeconds { get; init; }
+    public long RandomSequence { get; init; }
     /// <summary>
     /// Кумулятивные шкалы и стресс — в ЕДИНИЦАХ (<see cref="PlayerConditionScale"/>),
     /// как и <see cref="PlayerVitalsState"/>. Исключение — критические счётчики
@@ -265,6 +283,15 @@ public sealed record PlayerConditionState(
                 Math.Clamp(CumulativeStress, 0d, PlayerConditionScale.Maximum)),
         CumulativeStress = Math.Clamp(CumulativeStress, 0d, PlayerConditionScale.Maximum),
         CumulativeFatigue = Math.Clamp(CumulativeFatigue, 0d, PlayerConditionScale.Maximum),
+        OverchargeHealth = NormalizeOvercharge(OverchargeHealth),
+        OverchargeEnergy = NormalizeOvercharge(OverchargeEnergy),
+        OverchargeHydration = NormalizeOvercharge(OverchargeHydration),
+        OverchargeFatigue = NormalizeOvercharge(OverchargeFatigue),
+        OverchargeStress = NormalizeOvercharge(OverchargeStress),
+        ItemUseCounts = (ItemUseCounts ?? new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase))
+            .Where(pair => !string.IsNullOrWhiteSpace(pair.Key))
+            .ToDictionary(pair => pair.Key, pair => Math.Max(0, pair.Value), StringComparer.OrdinalIgnoreCase),
+        SkinIssuesGameSeconds = Math.Max(0d, double.IsFinite(SkinIssuesGameSeconds) ? SkinIssuesGameSeconds : 0d),
         CriticalFatigueGameSeconds = Math.Max(
             0d,
             double.IsFinite(CriticalFatigueGameSeconds) ? CriticalFatigueGameSeconds : 0d),
@@ -276,6 +303,9 @@ public sealed record PlayerConditionState(
             .Where(effect => effect.RemainingRealSeconds > 0d)
             .ToArray()
     };
+
+    private static double NormalizeOvercharge(double value) =>
+        double.IsFinite(value) ? Math.Max(0d, value) : 0d;
 }
 
 // ReputationState живёт в NpcReputation.cs: репутация ведётся по НПЦ, а не по

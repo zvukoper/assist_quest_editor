@@ -52,7 +52,7 @@ public sealed record SimulationSaveState(
     /// читаются с домножением процентных значений на 100, поэтому шкалы в
     /// интерфейсе не «схлопываются» при загрузке.
     /// </summary>
-    public const int CurrentFormatVersion = 10;
+    public const int CurrentFormatVersion = 11;
 
     /// <summary>Пользовательский маршрут Симулятора.</summary>
     public RouteState Route { get; init; } = RouteState.Empty;

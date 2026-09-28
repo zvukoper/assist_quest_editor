@@ -123,7 +123,8 @@
         <span class="mapStatusSpacer"></span>
         <span class="mapStatusHint" id="mapStatusHint"></span>
       </div>
-      <button class="backpackButton" id="backpackButton" type="button"
+      <button class="lodgingButton" id="lodgingButton" type="button" hidden>Найти полноценный ночлег</button>
+      <button class="backpackButton" id="backpackButton" type="button
               aria-haspopup="dialog"
               data-game-tooltip="Инвентарь — клавиша I (в любой раскладке)">
         <svg viewBox="0 0 24 24" aria-hidden="true">
@@ -170,5 +171,35 @@
 <script src="perf.js?v=04a0d57f"></script>
 <script src="simulator.js?v=6e3cf9e3"></script>
 <script src="interface.js?v=860a27e5"></script>
+<script>
+(function () {
+  "use strict";
+  var button = document.getElementById("lodgingButton");
+
+  function update(message) {
+    if (!message) return;
+    if (typeof message === "string") {
+      try { message = JSON.parse(message); } catch (_) { return; }
+    }
+    var lodging = message.lodging;
+    if (!lodging) return;
+    button.hidden = !lodging.visible;
+    button.disabled = !!lodging.blockedByRoute || !lodging.canAfford;
+    button.title = lodging.visible
+      ? (lodging.canAfford ? "Цена 5000 рублей." : "Недостаточно денег: нужно 5000 рублей.")
+      : "";
+  }
+
+  window.addEventListener("message", function (event) { update(event.data); });
+  var webview = window.chrome && window.chrome.webview;
+  if (webview && typeof webview.addEventListener === "function")
+    webview.addEventListener("message", function (event) { update(event.data); });
+
+  button.addEventListener("click", function () {
+    if (!button.disabled && webview)
+      webview.postMessage(JSON.stringify({ action: "find_full_lodging" }));
+  });
+})();
+</script>
 </body>
 </html>

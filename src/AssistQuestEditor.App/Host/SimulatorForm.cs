@@ -29,6 +29,7 @@ public sealed class SimulatorForm : WebViewForm
     private readonly IDynamicEventDispatcher _dynamicEventDispatcher;
     private readonly RoadIndex _roads;
     private readonly RoadRoutePlanner _routePlanner;
+    private readonly CityBoundaryFileSource _cityBoundaries;
     private RouteState _routeState = RouteState.Empty;
     private RoutePlan _routePlan = RoutePlan.Empty;
     private RouteCursor _routeCursor = RouteCursor.Initial;
@@ -172,6 +173,7 @@ public sealed class SimulatorForm : WebViewForm
         _dynamicEventDispatcher = dynamicEventDispatcher ?? throw new ArgumentNullException(nameof(dynamicEventDispatcher));
         _roads = roads ?? new RoadIndex(Array.Empty<RoadSegment>());
         _routePlanner = new RoadRoutePlanner(_roads.Segments, junctions?.ToPoints() ?? Array.Empty<JunctionPoint>());
+        _cityBoundaries = new CityBoundaryFileSource();
         // Пользовательские настройки читаются ОДНИМ вызовом: их файл — общий, и
         // два независимых Load() подряд читали бы его дважды на каждое открытие
         // Симулятора.
@@ -412,6 +414,7 @@ public sealed class SimulatorForm : WebViewForm
             // через доли секунды после нажатия «Показать в симуляторе».
             locationVisualisation = _locationVisualisation,
             route = BuildRouteSnapshot(),
+            lodging = BuildLodgingSnapshot(),
             mapView = _mapView,
             mapViewRestoreToken = _mapViewRestoreToken,
             // Индикатор светового дня: астрономию считает домен, UI только рисует.
@@ -442,15 +445,34 @@ public sealed class SimulatorForm : WebViewForm
     /// Покой/движение берутся из скорости игрока, сон — из того, что Симулятор не
     /// выполняет начисление во время сна.
     /// </summary>
+    private object BuildLodgingSnapshot()
+    {
+        var player = _hub.Get<PlayerState>("player").Value;
+        var city = _cityBoundaries.Current.FindCity(
+            player.Position.X,
+            player.Position.Z);
+        var money = _hub.Get<PlayerProgressState>("player-progress").Value;
+
+        return new
+        {
+            visible = city is not null,
+            cityName = city?.CityName,
+            price = (int)CharacterVitalsEngine.HotelPrice,
+            canAfford = money.Money >= CharacterVitalsEngine.HotelPrice,
+            blockedByRoute = _routeEnabled
+        };
+    }
+
     private object BuildConditionRates(SimulatorSnapshot snapshot)
     {
         var player = _hub.Get<PlayerState>("player").Value;
         var moving = !_runtime.IsPaused && player.SpeedKmh > 0.001d;
-        var rates = PlayerConditionRates.From(
+        var rates = CharacterVitalsEngine.RatesFrom(
             snapshot.PlayerVitals,
             snapshot.Conditions,
             moving,
-            sleeping: false);
+            sleeping: false,
+            snapshot.Clock.Now.TimeOfDay.TotalHours);
 
         return new
         {
@@ -458,7 +480,9 @@ public sealed class SimulatorForm : WebViewForm
             energy = rates.EnergyPerGameMinute,
             hydration = rates.HydrationPerGameMinute,
             fatigue = rates.FatiguePerGameMinute,
-            stress = rates.StressPerGameMinute
+            stress = rates.StressPerGameMinute,
+            resilience = rates.ResiliencePerGameMinute,
+            metabolism = rates.MetabolismPerGameMinute
         };
     }
 
@@ -482,6 +506,7 @@ public sealed class SimulatorForm : WebViewForm
         _inventoryForm = new InventoryForm();
         _inventoryForm.GlobalHotKeyPressed += SimulatorForm_GlobalHotKeyPressed;
         _inventoryForm.InventoryItemSeenRequested += InventoryForm_ItemSeenRequested;
+        _inventoryForm.InventoryItemUseRequested += InventoryForm_ItemUseRequested;
         // Клавиша I и Escape внутри окна закрывают его: страница шлёт просьбу, а
         // закрывает Симулятор — он владеет ссылкой и после закрытия отвечает
         // снимком.
@@ -489,6 +514,7 @@ public sealed class SimulatorForm : WebViewForm
         _inventoryForm.FormClosed += (_, _) =>
         {
             _inventoryForm.GlobalHotKeyPressed -= SimulatorForm_GlobalHotKeyPressed;
+            _inventoryForm.InventoryItemUseRequested -= InventoryForm_ItemUseRequested;
             var resumeSimulation = _inventoryPausedSimulation;
             _inventoryPausedSimulation = false;
             _inventoryForm = null;
@@ -696,11 +722,19 @@ public sealed class SimulatorForm : WebViewForm
                 // Инвентарь открывается и закрывается клавишей I. Решение
                 // принимает Host, а не страница: окно — настоящая форма Windows,
                 // и создавать её из JS было бы невозможно.
+                case "use_inventory_item":
+                    UseInventoryItem(root);
+                    break;
+
                 case "toggle_inventory":
                     if (_inventoryForm is not null && !_inventoryForm.IsDisposed)
                         CloseInventoryWindow();
                     else
                         OpenInventoryWindow();
+                    break;
+
+                case "find_full_lodging":
+                    FindFullLodging();
                     break;
 
                 case "set_vitals":
@@ -2400,14 +2434,15 @@ public sealed class SimulatorForm : WebViewForm
         var currentVitals = _hub.Get<PlayerVitalsState>("player-vitals").Value;
         var currentConditions = _hub.Get<PlayerConditionState>("player-conditions").Value;
 
-        var update = PlayerConditionEngine.Advance(
+        var update = CharacterVitalsEngine.Advance(
             currentVitals,
             currentConditions,
             gameSeconds,
             realSeconds,
             moving,
             sleeping: false,
-            traveledMeters);
+            traveledMeters,
+            clock.Now.TimeOfDay.TotalHours);
 
         if (Equals(update.Vitals, currentVitals) && Equals(update.Conditions, currentConditions))
             return;
@@ -2449,7 +2484,8 @@ public sealed class SimulatorForm : WebViewForm
             simulationRunning = _runtime.SimulationRunning,
             simulationPaused = _runtime.IsPaused,
             simulationSpeed = _runtime.SimulationSpeed,
-            route = BuildRouteSnapshot()
+            route = BuildRouteSnapshot(),
+            lodging = BuildLodgingSnapshot()
         }, SnapshotJsonOptions);
 
         PostJson(payload);
@@ -2928,6 +2964,153 @@ public sealed class SimulatorForm : WebViewForm
             "Simulator UI");
     }
 
+    private void UseInventoryItem(JsonElement root) =>
+        UseInventoryItemCore(Required(root, "itemId"));
+
+    private void UseInventoryItemCore(string itemId)
+    {
+        if (string.IsNullOrWhiteSpace(itemId))
+            return;
+
+        var channel = _hub.Get<InventoryState>("inventory");
+        var inventory = channel.Value;
+        if (!inventory.Items.TryGetValue(itemId, out var quantity) || quantity <= 0)
+        {
+            PostSaveError("Предмет закончился.");
+            return;
+        }
+
+        var update = CharacterVitalsEngine.UseItem(
+            itemId,
+            _hub.Get<PlayerVitalsState>("player-vitals").Value,
+            _hub.Get<PlayerConditionState>("player-conditions").Value);
+
+        if (update.Events.Any(item => item.Kind == "UnknownItem"))
+        {
+            PostSaveError("Для этого предмета нет механики употребления.");
+            return;
+        }
+
+        var items = new Dictionary<string, int>(
+            inventory.Items,
+            StringComparer.OrdinalIgnoreCase)
+        {
+            [itemId] = quantity - 1
+        };
+
+        _hub.Get<PlayerVitalsState>("player-vitals").Set(update.Vitals, "Употребление предмета");
+        _hub.Get<PlayerConditionState>("player-conditions").Set(update.Conditions, "Употребление предмета");
+        channel.Set(
+            new InventoryState(items, inventory.NewItemIds),
+            "Употребление предмета");
+
+        if (_inventoryForm is not null && !_inventoryForm.IsDisposed)
+            _inventoryForm.NotifyInventoryChange(itemId, -1);
+
+        AppendJournal(
+            "ItemUsed",
+            DateTimeOffset.UtcNow,
+            "Состояние игрока",
+            "Использован предмет: " + itemId + ".",
+            _hub.Get<PlayerState>("player").Value.Position);
+
+        PersistSession("автосохранение: употребление предмета", force: true);
+        RequestSnapshot("inventory item used");
+    }
+
+    private void FindFullLodging()
+    {
+        if (_routeEnabled)
+        {
+            PostSaveError("Перед поиском ночлега выключите «Движение по маршруту».");
+            return;
+        }
+
+        var player = _hub.Get<PlayerState>("player").Value;
+        var city = _cityBoundaries.Current.FindCity(
+            player.Position.X,
+            player.Position.Z);
+
+        if (city is null)
+        {
+            PostSaveError("Игрок должен находиться в границах города.");
+            return;
+        }
+
+        var money = _hub.Get<PlayerProgressState>("player-progress").Value.Money;
+        if (money < CharacterVitalsEngine.HotelPrice)
+        {
+            PostSaveError("Полноценный ночлег стоит 5000 рублей.");
+            return;
+        }
+
+        _hub.Get<InterfaceState>("interfaces").Set(
+            new InterfaceState(
+                null,
+                new InterfaceDialogue(
+                    "hotel-" + Guid.NewGuid().ToString("N"),
+                    "Полноценный ночлег",
+                    city.CityName,
+                    "Вы получили полноценный сон в гостинице или отеле",
+                    "ОК")),
+            "Гостиница");
+
+        RequestSnapshot("hotel lodging dialog");
+    }
+
+    private void CompleteFullLodging(string requestId)
+    {
+        var dialogue = _hub.Get<InterfaceState>("interfaces").Value.ActiveDialogue;
+        if (dialogue is null ||
+            !dialogue.RequestId.Equals(requestId, StringComparison.OrdinalIgnoreCase) ||
+            !dialogue.Title.Equals("Полноценный ночлег", StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException("Запрос гостиницы уже неактуален.");
+
+        var player = _hub.Get<PlayerState>("player").Value;
+        if (_cityBoundaries.Current.FindCity(player.Position.X, player.Position.Z) is null)
+            throw new InvalidOperationException("Игрок больше не находится в границах города.");
+
+        var progressChannel = _hub.Get<PlayerProgressState>("player-progress");
+        var progress = progressChannel.Value;
+        if (progress.Money < CharacterVitalsEngine.HotelPrice)
+            throw new InvalidOperationException("Для полноценного ночлега нужно 5000 рублей.");
+
+        var update = CharacterVitalsEngine.CompleteHotelSleep(
+            _hub.Get<PlayerVitalsState>("player-vitals").Value,
+            _hub.Get<PlayerConditionState>("player-conditions").Value);
+
+        if (update.Events.Any(item => item.Kind == "SleepBlocked"))
+            throw new InvalidOperationException("Сон невозможен: здоровье, энергия или жидкость должны быть выше 5%.");
+
+        _hub.Get<PlayerVitalsState>("player-vitals").Set(update.Vitals, "Полноценный ночлег");
+        _hub.Get<PlayerConditionState>("player-conditions").Set(update.Conditions, "Полноценный ночлег");
+        progressChannel.Set(
+            progress with { Money = progress.Money - (int)CharacterVitalsEngine.HotelPrice },
+            "Оплата гостиницы");
+
+        var clockChannel = _hub.Get<WorldClockState>("sim-time");
+        var nextElapsed = clockChannel.Value.Elapsed + TimeSpan.FromHours(CharacterVitalsEngine.HotelSleepHours);
+        clockChannel.Set(clockChannel.Value with { Elapsed = nextElapsed }, "Полноценный ночлег");
+
+        _hub.Get<InterfaceState>("interfaces").Set(
+            new InterfaceState(null, null),
+            "Гостиница");
+
+        _conditionsLastRealTick = DateTimeOffset.UtcNow;
+        _conditionsLastGameElapsed = nextElapsed;
+        _conditionsLastPosition = player.Position;
+
+        AppendJournal(
+            "HotelSleep",
+            DateTimeOffset.UtcNow,
+            "Гостиница",
+            "Полноценный ночлег: 7 игровых часов, 5000 рублей.",
+            player.Position);
+
+        PersistSession("автосохранение: полноценный ночлег", force: true);
+        RequestSnapshot("hotel lodging completed");
+    }
+
     private void SetPlayerVitals(JsonElement root)
     {
         var current = _hub.Get<PlayerVitalsState>("player-vitals").Value;
@@ -2939,7 +3122,9 @@ public sealed class SimulatorForm : WebViewForm
             Health = PlayerConditionScale.FromPercent(Number(root, "health", PlayerConditionScale.ToPercent(current.Health))),
             Energy = PlayerConditionScale.FromPercent(Number(root, "energy", PlayerConditionScale.ToPercent(current.Energy))),
             Hydration = PlayerConditionScale.FromPercent(Number(root, "hydration", PlayerConditionScale.ToPercent(current.Hydration))),
-            Fatigue = PlayerConditionScale.FromPercent(Number(root, "fatigue", PlayerConditionScale.ToPercent(current.Fatigue)))
+            Fatigue = PlayerConditionScale.FromPercent(Number(root, "fatigue", PlayerConditionScale.ToPercent(current.Fatigue))),
+            Resilience = PlayerConditionScale.FromPercent(Number(root, "resilience", PlayerConditionScale.ToPercent(current.Resilience))),
+            Metabolism = PlayerConditionScale.FromPercent(Number(root, "metabolism", PlayerConditionScale.ToPercent(current.Metabolism)))
         };
 
         // Стресс — часть условий, а не потребностей, но правится из того же блока
@@ -3048,11 +3233,17 @@ public sealed class SimulatorForm : WebViewForm
         var currentVitals = _hub.Get<PlayerVitalsState>("player-vitals").Value;
         var currentConditions = _hub.Get<PlayerConditionState>("player-conditions").Value;
 
-        var update = PlayerConditionEngine.Sleep(
+        var update = CharacterVitalsEngine.Sleep(
             currentVitals,
             currentConditions,
             hours,
             fullSleep);
+
+        if (update.Events.Any(item => item.Kind == "SleepBlocked"))
+        {
+            PostSaveError("Сон невозможен: здоровье, энергия или жидкость должны быть выше 5%.");
+            return;
+        }
 
         _hub.Get<PlayerVitalsState>("player-vitals").Set(
             update.Vitals,
@@ -3297,6 +3488,13 @@ public sealed class SimulatorForm : WebViewForm
         var requestId = String(root, "requestId");
         if (!string.Equals(dialogue.RequestId, requestId, StringComparison.OrdinalIgnoreCase))
             throw new InvalidOperationException("Запрос интерфейса диалога уже неактуален.");
+
+        if (dialogue.Title.Equals("Полноценный ночлег", StringComparison.OrdinalIgnoreCase) &&
+            dialogue.ButtonText.Equals("ОК", StringComparison.OrdinalIgnoreCase))
+        {
+            CompleteFullLodging(dialogue.RequestId);
+            return;
+        }
 
         _hub.Events.Publish(new SimulatorEvent(
             "DialogueContinue",

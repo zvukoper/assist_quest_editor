@@ -153,6 +153,11 @@ public sealed class InventoryForm : WebViewForm
                         root.TryGetProperty("itemId", out var itemId) ? itemId.GetString() ?? string.Empty : string.Empty));
                     break;
 
+                case "use_inventory_item":
+                    InventoryItemUseRequested?.Invoke(this, new InventoryItemUseEventArgs(
+                        root.TryGetProperty("itemId", out var useItemId) ? useItemId.GetString() ?? string.Empty : string.Empty));
+                    break;
+
                 default:
                     AppLogger.Warn("InventoryForm: неизвестное действие.", action);
                     break;
@@ -197,6 +202,8 @@ public sealed class InventoryForm : WebViewForm
     /// <summary>Игрок увидел предмет: значок «новый» надо снять.</summary>
     public event EventHandler<InventoryItemSeenEventArgs>? InventoryItemSeenRequested;
 
+    public event EventHandler<InventoryItemUseEventArgs>? InventoryItemUseRequested;
+
     /// <summary>
     /// Просьба закрыть окно (клавиша I или Escape внутри окна).
     ///
@@ -210,6 +217,13 @@ public sealed class InventoryForm : WebViewForm
 public sealed class InventoryItemSeenEventArgs : EventArgs
 {
     public InventoryItemSeenEventArgs(string itemId) => ItemId = itemId;
+
+    public string ItemId { get; }
+}
+
+public sealed class InventoryItemUseEventArgs : EventArgs
+{
+    public InventoryItemUseEventArgs(string itemId) => ItemId = itemId;
 
     public string ItemId { get; }
 }

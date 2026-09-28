@@ -20,6 +20,7 @@
       title: value.title || "",
       speaker: value.speaker || "",
       text: value.text || "",
+      buttonText: value.buttonText || "Продолжить",
       options: (value.options || []).map(option => ({
         id: option.id || "",
         text: option.text || ""
@@ -58,10 +59,14 @@
           ? "<div class='interfaceChoices'>" +
               "<button class='interfaceChoice interfaceDialogueContinue' data-interface-dialogue-continue>" +
                 "<span class='interfaceChoiceIndex' aria-hidden='true'>▶</span>" +
-                "<span>Продолжить</span>" +
+                "<span>" + escapeHtml(active.buttonText || "Продолжить") + "</span>" +
               "</button>" +
             "</div>" +
-            "<div class='interfaceHint'>Продолжение передаётся обратно в Scene Runtime через интерфейсный канал.</div>"
+            "<div class='interfaceHint'>" +
+          escapeHtml(active.buttonText === "ОК"
+            ? "Подтверждение операции."
+            : "Продолжение передаётся обратно в Scene Runtime через интерфейсный канал.") +
+        "</div>"
           : "<div class='interfaceChoices'>" +
               options.map((option, index) =>
                 "<button class='interfaceChoice' data-interface-choice='" + (index + 1) + "'>" +

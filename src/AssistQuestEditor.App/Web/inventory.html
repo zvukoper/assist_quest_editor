@@ -107,6 +107,11 @@
       });
 
     panel.querySelectorAll("[data-inventory-item]").forEach(function (button) {
+      button.title = "ЛКМ — использовать предмет";
+      button.addEventListener("click", function () {
+        var id = String(button.dataset.inventoryItem || "").toLowerCase();
+        if (id) send({ action: "use_inventory_item", itemId: id });
+      });
       button.addEventListener("mouseenter", function () {
         var id = String(button.dataset.inventoryItem || "").toLowerCase();
         if (!id) return;

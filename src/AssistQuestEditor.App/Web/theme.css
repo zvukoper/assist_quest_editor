@@ -1509,3 +1509,34 @@ input,select,textarea{padding:4px 5px;border-radius:4px;font-size:10px}textarea{
 
 .conditionTopGrid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
 @media(max-width:720px){.conditionTopGrid{grid-template-columns:1fr}}
+
+.dualBarOvercharge {
+  position: absolute; top: 0; bottom: 0; border-radius: inherit;
+  background: linear-gradient(90deg,#5cff72,#d6ff65);
+  box-shadow: 0 0 7px rgba(130,255,110,.85);
+  animation: vitalOverchargePulse 1.8s ease-in-out infinite;
+  pointer-events: none;
+}
+.dualBarOvercharge.fromStart { left: 0; }
+.dualBarOvercharge.fromEnd { right: 0; }
+.dualStat.powerSurge .dualBarSoft {
+  background: linear-gradient(90deg,#39e35d,#a6ff62) !important;
+  box-shadow: 0 0 8px rgba(100,255,100,.8);
+  animation: vitalPowerSurgePulse 2.4s ease-in-out infinite;
+}
+.dualStat.powerSurge .dualBarCumulative {
+  background: #6aff61 !important;
+  animation: vitalPowerSurgePulse 2.4s ease-in-out infinite;
+}
+@keyframes vitalOverchargePulse { 0%,100% { opacity:.7 } 50% { opacity:1 } }
+@keyframes vitalPowerSurgePulse { 0%,100% { opacity:.72 } 50% { opacity:1 } }
+.lodgingButton {
+  position: absolute; left: 18px; bottom: 18px; z-index: 40;
+  min-height: 34px; padding: 7px 12px;
+  border: 1px solid rgba(255,215,100,.65); border-radius: 6px;
+  background: rgba(35,26,12,.92); color: #ffe39a;
+  font: inherit; font-weight: 600; cursor: pointer;
+  box-shadow: 0 3px 10px rgba(0,0,0,.35);
+}
+.lodgingButton:hover:not(:disabled) { background: rgba(65,46,17,.96); }
+.lodgingButton:disabled { opacity:.48; cursor:default; }

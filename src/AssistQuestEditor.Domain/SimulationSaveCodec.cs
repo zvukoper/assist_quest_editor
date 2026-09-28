@@ -190,6 +190,7 @@ public static class SimulationSaveCodec
         var reputation = Sorted(state.ReputationValues);
         var characterStats = Sorted(state.CharacterStats);
         var skillLevels = Sorted(state.SkillLevels);
+        var itemUseCounts = Sorted(state.Conditions.ItemUseCounts);
 
         foreach (var pair in facts) { strings.Add(pair.Key); strings.Add(pair.Value); }
         foreach (var pair in variables) { strings.Add(pair.Key); strings.Add(pair.Value); }
@@ -204,6 +205,7 @@ public static class SimulationSaveCodec
         foreach (var value in state.CharacterDebuffs) strings.Add(value);
         foreach (var pair in skillLevels) strings.Add(pair.Key);
         foreach (var id in state.UnlockedSkills) strings.Add(id);
+        foreach (var pair in itemUseCounts) strings.Add(pair.Key);
         strings.Add(state.Weather);
 
         foreach (var instance in state.DynamicEvents.Instances)
@@ -253,6 +255,12 @@ public static class SimulationSaveCodec
         WriteDouble(writer, state.PlayerVitals.MaxHydration);
         WriteDouble(writer, state.PlayerVitals.Fatigue);
         WriteDouble(writer, state.PlayerVitals.MaxFatigue);
+        if (header.FormatVersion >= 11)
+        {
+            WriteDouble(writer, state.PlayerVitals.Hygiene);
+            WriteDouble(writer, state.PlayerVitals.Resilience);
+            WriteDouble(writer, state.PlayerVitals.Metabolism);
+        }
 
         WriteVarint(writer, ZigZag(state.PlayerProgress.Money));
         WriteVarint(writer, ZigZag(state.PlayerProgress.Experience));
@@ -280,7 +288,7 @@ public static class SimulationSaveCodec
         if (header.FormatVersion >= 7)
             WriteMapView(writer, state.MapView);
         if (header.FormatVersion >= 8)
-            WriteConditions(writer, state.Conditions);
+            WriteConditions(writer, strings, state.Conditions, header.FormatVersion);
     }
 
     private static SimulationSaveState ReadInner(BinaryReader reader, int formatVersion)
@@ -329,6 +337,16 @@ public static class SimulationSaveCodec
             ReadDouble(reader), ReadDouble(reader),
             ReadDouble(reader), ReadDouble(reader),
             ReadDouble(reader), ReadDouble(reader));
+
+        if (formatVersion >= 11)
+        {
+            vitals = vitals with
+            {
+                Hygiene = ReadDouble(reader),
+                Resilience = ReadDouble(reader),
+                Metabolism = ReadDouble(reader)
+            };
+        }
 
         // До v10 состояние персонажа писалось в процентах (0..100). Единицы шкалы
         // вводятся без изменения раскладки байтов: снимок v9 читается тем же кодом,
@@ -413,7 +431,9 @@ public static class SimulationSaveCodec
 
     private static void WriteConditions(
         BinaryWriter writer,
-        PlayerConditionState conditions)
+        StringTable strings,
+        PlayerConditionState conditions,
+        int formatVersion)
     {
         conditions = (conditions ?? PlayerConditionState.Empty).Normalize();
         WriteDouble(writer, conditions.CumulativeHealth);
@@ -434,6 +454,18 @@ public static class SimulationSaveCodec
             writer.Write(effect.IsDebuff);
             WriteDouble(writer, effect.ExperienceMultiplier);
             WriteDouble(writer, effect.StressAccumulationSlowdownPercent);
+        }
+
+        if (formatVersion >= 11)
+        {
+            WriteDouble(writer, conditions.OverchargeHealth);
+            WriteDouble(writer, conditions.OverchargeEnergy);
+            WriteDouble(writer, conditions.OverchargeHydration);
+            WriteDouble(writer, conditions.OverchargeFatigue);
+            WriteDouble(writer, conditions.OverchargeStress);
+            WriteIntPairs(writer, strings, Sorted(conditions.ItemUseCounts));
+            WriteDouble(writer, conditions.SkinIssuesGameSeconds);
+            writer.Write(conditions.RandomSequence);
         }
     }
 
@@ -461,6 +493,26 @@ public static class SimulationSaveCodec
                 reader.ReadBoolean(),
                 ReadDouble(reader),
                 ReadDouble(reader)));
+        }
+
+        state = state with
+        {
+            Effects = effects
+        };
+
+        if (formatVersion >= 11)
+        {
+            state = state with
+            {
+                OverchargeHealth = ReadDouble(reader),
+                OverchargeEnergy = ReadDouble(reader),
+                OverchargeHydration = ReadDouble(reader),
+                OverchargeFatigue = ReadDouble(reader),
+                OverchargeStress = ReadDouble(reader),
+                ItemUseCounts = ReadIntPairs(reader, strings),
+                SkinIssuesGameSeconds = ReadDouble(reader),
+                RandomSequence = reader.ReadInt64()
+            };
         }
 
         // До v10 шкалы условий тоже были в процентах. Критические счётчики
