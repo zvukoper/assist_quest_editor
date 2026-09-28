@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Монитор показателей</title>
+<link rel="stylesheet" href="theme.css?v=20744f1c">
+<style>
+  html, body { height:100%; margin:0; overflow:hidden; background:#0d1014; }
+  .indicatorsWindow {
+    height:100%;
+    box-sizing:border-box;
+    padding:8px;
+    display:flex;
+    flex-direction:column;
+    min-height:0;
+  }
+  .indicatorsHead {
+    flex:0 0 auto;
+    display:flex;
+    align-items:baseline;
+    gap:10px;
+    padding:2px 2px 8px;
+  }
+  .indicatorsHead strong { font-size:13px; }
+  .indicatorsHead .indicatorsHint {
+    color:var(--muted);
+    font-size:10px;
+  }
+  .indicatorsBody {
+    flex:1 1 auto;
+    min-height:0;
+    overflow:auto;
+    display:grid;
+    grid-template-columns:repeat(auto-fill,minmax(430px,1fr));
+    gap:8px;
+    align-content:start;
+  }
+</style>
+</head>
+<body>
+<div class="indicatorsWindow">
+  <div class="indicatorsHead">
+    <strong>Монитор показателей</strong>
+    <span class="indicatorsHint">текущее / максимум = формула: все факторы, влияющие на скорость изменения шкалы</span>
+  </div>
+  <div class="indicatorsBody" id="indicatorsBody"></div>
+</div>
+<script src="web_log.js?v=18763af3"></script>
+<script src="vitals.js?v=fca40754"></script>
+<script src="indicators.js?v=1e55f47f"></script>
+</body>
+</html>

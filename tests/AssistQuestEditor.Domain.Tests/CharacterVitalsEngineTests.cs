@@ -39,9 +39,13 @@ public sealed class CharacterVitalsEngineTests
             update.Vitals.Hydration,
             3);
 
+        // Усталость растёт по шагам (900 с) без округления единиц: 100% за 18
+        // игровых часов даёт 5,(5)% за час, а сравнение в ЕДИНИЦАХ округлило
+        // бы 555,56 до 556. Поэтому меряем в процентах.
         Assert.Equal(
-            PlayerConditionScale.FromPercent(100d / 18d),
-            update.Vitals.Fatigue,
+            100d / 18d,
+            PlayerConditionScale.ToPercent(
+                update.Vitals.Fatigue),
             3);
 
         // Гигиена падает на 100% за 3 игровых СУТОК, то есть примерно на 1,39%
@@ -150,15 +154,18 @@ public sealed class CharacterVitalsEngineTests
             vitals,
             PlayerConditionState.Empty);
 
+        // Энергетик даёт +15% к энергии и кофеин 80 мг; кофеин добавляет
+        // форсаж энергии примерно (80 / 12) = 6,67%.
         Assert.Equal(
-            PlayerConditionScale.FromPercent(70d),
+            PlayerConditionScale.FromPercent(65d),
             after.Vitals.Energy,
             3);
 
         Assert.Equal(
-            PlayerConditionScale.FromPercent(10d),
-            after.Conditions.OverchargeEnergy,
-            3);
+            80d / 12d,
+            PlayerConditionScale.ToPercent(
+                after.Conditions.OverchargeEnergy),
+            2);
 
         Assert.Equal(
             1,

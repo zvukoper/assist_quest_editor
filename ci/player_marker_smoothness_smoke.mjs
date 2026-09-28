@@ -33,6 +33,25 @@ for (const name of [
 const failures = [];
 const check = (condition, message) => { if (!condition) failures.push(message); };
 
+// Статическая защита от рывков на УСКОРЕННОМ времени (автор: «при x5 метка
+// игрока начинает двигаться рывками»).
+//
+// Причина была в пороге телепорта: он задан константой (25 м), а шаг игрока за
+// интервал пакета (250 мс) растёт с кратностью ускорения — на ×5 при 72 км/ч это
+// ровно 25 м. Порог не масштабировался, поэтому одни пакеты сглаживались, а
+// другие принимались скачком, и движение выглядело рваным. Порог обязан расти
+// вместе с кратностью, иначе дефект вернётся.
+const simulatorSource = fs.readFileSync(
+  path.join(root, "src", "AssistQuestEditor.App", "Web", "simulator.js"), "utf8");
+const snapBlock = simulatorSource.slice(
+  simulatorSource.indexOf("const speedScale = Math.max(1"),
+  simulatorSource.indexOf("const speedScale = Math.max(1") + 400);
+check(/snapDistance\s*=\s*MARKER_SMOOTH\.snapDistanceMeters\s*\*\s*speedScale/.test(snapBlock),
+  "порог телепорта маркера обязан масштабироваться кратностью ускорения: " +
+  "иначе на ×5 обычный шаг пакета принимается за телепорт и метка дёргается.");
+check(/if \(jump > snapDistance\)/.test(snapBlock),
+  "сравнение скачка обязано идти с масштабированным порогом, а не с константой.");
+
 fs.writeFileSync(path.join(tmp, "Web", "s.html"), `<!doctype html>
 <html lang="ru"><head><meta charset="utf-8"><link rel="stylesheet" href="theme.css">
 <style>body{margin:0}#mapCanvas{display:block;width:900px;height:640px}</style></head>

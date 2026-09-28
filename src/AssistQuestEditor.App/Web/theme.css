@@ -433,8 +433,11 @@ input,select,textarea{padding:4px 5px;border-radius:4px;font-size:10px}textarea{
    на два разных смысла. Пауза отличается от хода ПУЛЬСАЦИЕЙ, а не цветом:
    идёт работа и идёт пауза — оба состояния «симуляция есть».
 
-   В обычном состоянии плашка показывает «Игровое время». Во время паузы
-   подпись меняется на «Пауза» и пульсирует вместе с оформлением плашки. */
+   Текст плашки называет состояние словами и совпадает с цветом: «Симуляция не
+   запущена» / «Идёт симуляция» / «На паузе». Статическая подпись «Игровое
+   время» была реакцией на другой дефект — стоп не сбрасывал признак паузы, и
+   подпись оставалась «На паузе»; причина устранена в Host, поэтому текст снова
+   сообщает состояние. */
 .simStatusPlate{
   display:inline-flex;align-items:center;gap:7px;
   padding:5px 11px;border-radius:8px;
@@ -1501,11 +1504,37 @@ input,select,textarea{padding:4px 5px;border-radius:4px;font-size:10px}textarea{
 .conditionLegendCumulative{color:#ffd400}
 .conditionEditActions{display:flex;gap:6px;margin-top:7px}
 .conditionEditActions>*{flex:1}
+/* Строка поля с кнопкой применения. Кнопка компактная и стоит ВПЛОТНУЮ к полю:
+   она применяет ТОЛЬКО это значение, поэтому и стоит рядом именно с ним, а не
+   общей кнопкой под списком (общая затирала все поля сразу). */
+.fieldRow{display:flex;align-items:stretch;gap:4px}
+.fieldRow>input{flex:1 1 auto;min-width:0}
+.fieldApplyButton{
+  flex:0 0 auto;width:22px;padding:0;
+  display:inline-flex;align-items:center;justify-content:center;
+  font-size:12px;font-weight:700;line-height:1;
+  color:var(--accent);border-color:rgba(250,176,3,.45);background:rgba(250,176,3,.08);
+}
+.fieldApplyButton:hover{background:rgba(250,176,3,.22);border-color:var(--accent)}
 .effectRow{display:flex;justify-content:space-between;gap:8px;padding:5px 6px;margin-top:4px;border-radius:5px;font-size:9px}
 .effectRow.buff{background:rgba(144,238,144,.08);color:#b9f7a8}
 .effectRow.debuff{background:rgba(210,215,220,.07);color:#d9dde2}
+/* Строка эффекта с описанием подчёркнута пунктиром: это видимый признак того,
+   что при наведении появится расшифровка. */
+.effectRow[data-game-tooltip]{cursor:help;text-decoration:underline dotted rgba(255,255,255,.35);text-underline-offset:2px}
 .sleepActions{display:flex;gap:6px;margin-top:7px}
 .sleepActions>*{flex:1}
+
+/* Монитор показателей: карточка на шкалу. */
+.indicatorCard{padding:8px;border:1px solid var(--border);border-radius:6px;background:rgba(255,255,255,.02)}
+.indicatorTitle{display:flex;align-items:baseline;justify-content:space-between;gap:8px;margin-bottom:6px}
+.indicatorName{font-size:11px;font-weight:700}
+.indicatorValue{font-size:10px;color:var(--accent);white-space:nowrap}
+.indicatorFormula{display:flex;flex-direction:column;gap:3px}
+.indicatorFact{font-size:10px;line-height:1.4;color:var(--muted)}
+.indicatorEffect{display:inline-block;padding:1px 5px;border-radius:4px;font-size:9px;margin:0 3px 0 0}
+.indicatorEffect.buff{background:rgba(144,238,144,.12);color:#b9f7a8}
+.indicatorEffect.debuff{background:rgba(210,215,220,.1);color:#d9dde2}
 
 .conditionTopGrid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
 @media(max-width:720px){.conditionTopGrid{grid-template-columns:1fr}}

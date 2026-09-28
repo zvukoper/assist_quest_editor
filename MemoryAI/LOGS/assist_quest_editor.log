@@ -1,754 +1,397 @@
-2026-09-28 13:54:41.120 [INFO] [PID 8408] [TID 2] === Assist Quest Editor START === | Version=1.0.40.196-CHARACTER-STATE-10000-R1; Mode=User; BaseDirectory=C:\Users\Admin\AppData\Local\Temp\.net\AssistQuestEditor\Z73VNtWqw3ci\; CurrentDirectory=F:\repo\assist_quest_editor; LogPath=F:\repo\assist_quest_editor\MemoryAI\LOGS\assist_quest_editor.log
-2026-09-28 13:54:41.141 [INFO] [PID 8408] [TID 2] Single instance: экземпляр первый. | mutex=Local\AssistQuestEditor.SingleInstance.2
-2026-09-28 13:54:41.145 [INFO] [PID 8408] [TID 2] WebView2: отпечаток сборки прочитан из файла. | path=F:\repo\assist_quest_editor\bin\Release\net10.0-windows\win-x64\publish\web-build.stamp; stamp=723d0de80506ca19
-2026-09-28 13:54:41.147 [INFO] [PID 8408] [TID 2] WebView2: профиль подготовлен. | stamp=723d0de80506ca19; path=C:\Users\Admin\AppData\Local\AssistQuestEditor\WebView2\723d0de80506ca19; removed=0; kept=1
-2026-09-28 13:54:41.148 [INFO] [PID 8408] [TID 2] Splash: подготовка. | path=C:\Users\Admin\AppData\Local\Temp\.net\AssistQuestEditor\Z73VNtWqw3ci\Assets\SplashScreen.png; exists=True
-2026-09-28 13:54:41.212 [INFO] [PID 8408] [TID 2] Splash: прозрачность. | applied=True; size=1056x594; image=800x450
-2026-09-28 13:54:41.316 [INFO] [PID 8408] [TID 2] Ресурсы при запуске проверены. | Ресурсы публикации совпадают с манифестом: файлов 26.
-2026-09-28 13:54:41.386 [INFO] [PID 8408] [TID 2] CampaignInstaller: Campaign актуальна. | campaignId=sibir_map; version=1
-2026-09-28 13:54:41.386 [INFO] [PID 8408] [TID 2] CampaignInstaller: синхронизация завершена. | sourceCampaigns=1; userRoot=C:\Users\Admin\Documents\Assist Quest Editor\worlds; visibleChanges=0
-2026-09-28 13:54:41.406 [INFO] [PID 8408] [TID 2] Splash: завершён. | Перед первичной настройкой.
-2026-09-28 13:54:41.416 [INFO] [PID 8408] [TID 2] WorldStore: каталог миров загружен. | worlds=1; root=C:\Users\Admin\Documents\Assist Quest Editor\worlds; readOnly=False
-2026-09-28 13:54:41.417 [INFO] [PID 8408] [TID 2] Startup: миров найдено. | count=1
-2026-09-28 13:54:44.709 [INFO] [PID 8408] [TID 2] Startup: мир выбран. | world=demo; folder=C:\Users\Admin\Documents\Assist Quest Editor\worlds\Демо Мир; lastCampaign=training
-2026-09-28 13:54:44.709 [INFO] [PID 8408] [TID 2] Загрузка СДО world data.
-2026-09-28 13:54:44.711 [INFO] [PID 8408] [TID 2] SdoWorldDataLoader.Load() | path=F:\repo\assist_quest_editor\bin\Release\net10.0-windows\win-x64\publish\data\world/sdo_points.json; exists=True
-2026-09-28 13:54:44.714 [INFO] [PID 8408] [TID 2] Файл СДО прочитан. | bytes=756275; chars=708222
-2026-09-28 13:54:44.738 [INFO] [PID 8408] [TID 2] Метаданные СДО разобраны. | schema=1; source=zvukoper/ets2_assist:data/editor_static_data; categoryCount=71; pointCount=5115; parsedPoints=5115
-2026-09-28 13:54:44.739 [INFO] [PID 8408] [TID 2] СДО-точки отфильтрованы. | input=5115; valid=5115; invalid=0
-2026-09-28 13:54:44.745 [INFO] [PID 8408] [TID 2] СДО world points готовы. | count=5115; X=[118733,199063]; Y=[-41,7734,220,812]; Z=[-110503,-43350,1]
-2026-09-28 13:54:44.746 [INFO] [PID 8408] [TID 2] CityWorldDataLoader.Load() | path=F:\repo\assist_quest_editor\bin\Release\net10.0-windows\win-x64\publish\data\world/cities.json; exists=True
-2026-09-28 13:54:44.751 [INFO] [PID 8408] [TID 2] Города world points готовы. | input=77; valid=77; invalid=0
-2026-09-28 13:54:44.751 [INFO] [PID 8408] [TID 2] World data загружены. | sdo=5115; cities=77; total=5192
-2026-09-28 13:54:44.752 [INFO] [PID 8408] [TID 2] RoadWorldDataLoader.Load() | path=F:\repo\assist_quest_editor\bin\Release\net10.0-windows\win-x64\publish\data\world/roads.json; exists=True
-2026-09-28 13:54:44.818 [INFO] [PID 8408] [TID 2] Дорожная геометрия готова. | source=zvukoper/ets2_assist:data/GeoJson/roads.geojson; declared=98341; parsed=98341; invalid=0
-2026-09-28 13:54:44.852 [INFO] [PID 8408] [TID 2] Дорожная геометрия загружена. | segments=98341
-2026-09-28 13:54:44.853 [INFO] [PID 8408] [TID 2] JunctionWorldDataLoader.Load() | path=F:\repo\assist_quest_editor\bin\Release\net10.0-windows\win-x64\publish\data\world/junctions.json; exists=True
-2026-09-28 13:54:44.856 [INFO] [PID 8408] [TID 2] Перекрёстки готовы. | source=zvukoper/ets2_assist:data/GeoJson/roads.geojson; declared=3275; parsed=3275; invalid=0; method=gaps:converge10-120m>=3dirs+window35m/20deg+tee4-50m>30deg + noding+snap6m+slack20m+dir30deg
-2026-09-28 13:54:44.858 [INFO] [PID 8408] [TID 2] Перекрёстки загружены. | count=3275
-2026-09-28 13:54:44.861 [INFO] [PID 8408] [TID 2] CityBoundaryStore.Load(): черты прочитаны. | cities=8; rejected=0; path=C:\Users\Admin\AppData\Local\Assist Quest Editor\world\city_boundaries.json
-2026-09-28 13:54:44.861 [INFO] [PID 8408] [TID 2] CityBoundaryFileSource: черты перечитаны. | count=8; path=C:\Users\Admin\AppData\Local\Assist Quest Editor\world\city_boundaries.json
-2026-09-28 13:54:44.862 [INFO] [PID 8408] [TID 2] Черты городов загружены. | count=8; path=C:\Users\Admin\AppData\Local\Assist Quest Editor\world\city_boundaries.json
-2026-09-28 13:54:44.870 [INFO] [PID 8408] [TID 2] Создан SimulatorDataSourceAdapter. | channels=18; points=5192
-2026-09-28 13:54:44.886 [INFO] [PID 8408] [TID 2] WorldStore: каталог миров загружен. | worlds=1; root=C:\Users\Admin\Documents\Assist Quest Editor\worlds; readOnly=False
-2026-09-28 13:54:44.889 [INFO] [PID 8408] [TID 2] CampaignStore: каталог загружен. | campaigns=2; root=C:\Users\Admin\Documents\Assist Quest Editor\worlds; readOnly=False
-2026-09-28 13:54:44.890 [INFO] [PID 8408] [TID 2] CampaignStore: каталог загружен. | campaigns=1; root=C:\Users\Admin\Documents\Assist Quest Editor\worlds\Демо Мир; readOnly=False
-2026-09-28 13:54:44.891 [INFO] [PID 8408] [TID 2] CampaignStore: каталог ограничен миром. | world=C:\Users\Admin\Documents\Assist Quest Editor\worlds\Демо Мир; campaigns=1
-2026-09-28 13:54:44.892 [INFO] [PID 8408] [TID 2] QuestDefinitionLoader.LoadDocumentOrFallback() | path=C:\Users\Admin\Documents\Assist Quest Editor\worlds\SibirMap\quests\tutorial_ruslan_shashlik.aqquest; userExists=True; sourceExists=True
-2026-09-28 13:54:44.898 [INFO] [PID 8408] [TID 2] Учебный Quest Definition загружен. | questId=tutorial_ruslan_shashlik; nodes=21; connections=20
-2026-09-28 13:54:44.900 [INFO] [PID 8408] [TID 2] SceneCatalogLoader.Load() | directory=C:\Users\Admin\Documents\Assist Quest Editor\worlds; exists=True
-2026-09-28 13:54:44.911 [INFO] [PID 8408] [TID 2] Scene Definition загружена. | id=gosha_delivery; path=C:\Users\Admin\Documents\Assist Quest Editor\worlds\SibirMap\scenes\gosha_delivery.aqscene
-2026-09-28 13:54:44.917 [INFO] [PID 8408] [TID 2] Scene Definition загружена. | id=gosha_meat; path=C:\Users\Admin\Documents\Assist Quest Editor\worlds\SibirMap\scenes\gosha_meat.aqscene
-2026-09-28 13:54:44.923 [INFO] [PID 8408] [TID 2] Scene Definition загружена. | id=gosha_shop; path=C:\Users\Admin\Documents\Assist Quest Editor\worlds\SibirMap\scenes\gosha_shop.aqscene
-2026-09-28 13:54:44.928 [INFO] [PID 8408] [TID 2] Scene Definition загружена. | id=ruslan_delivery; path=C:\Users\Admin\Documents\Assist Quest Editor\worlds\SibirMap\scenes\ruslan_delivery.aqscene
-2026-09-28 13:54:44.932 [INFO] [PID 8408] [TID 2] Scene Definition загружена. | id=ruslan_finish; path=C:\Users\Admin\Documents\Assist Quest Editor\worlds\SibirMap\scenes\ruslan_finish.aqscene
-2026-09-28 13:54:44.937 [INFO] [PID 8408] [TID 2] Scene Definition загружена. | id=ruslan_start; path=C:\Users\Admin\Documents\Assist Quest Editor\worlds\SibirMap\scenes\ruslan_start.aqscene
-2026-09-28 13:54:44.937 [INFO] [PID 8408] [TID 2] Scene catalog готов. | sceneCount=6
-2026-09-28 13:54:44.983 [INFO] [PID 8408] [TID 2] LocationStore: библиотека загружена. | root=C:\Users\Admin\Documents\Assist Quest Editor\locations; overlays=1; count=1; readOnly=False
-2026-09-28 13:54:44.994 [INFO] [PID 8408] [TID 2] DynamicEventStore: библиотека загружена. | root=C:\Users\Admin\Documents\Assist Quest Editor\events; overlays=1; count=1; readOnly=False
-2026-09-28 13:54:45.009 [INFO] [PID 8408] [TID 2] MainForm создан. Запуск Application.Run().
-2026-09-28 13:54:45.017 [INFO] [PID 8408] [TID 2] WebView2: начало инициализации. | form=Редактор; page=main.html
-2026-09-28 13:54:45.295 [INFO] [PID 8408] [TID 2] WebView2: CoreWebView2 создан. | browser=153.0.4234.48
-2026-09-28 13:54:45.306 [INFO] [PID 8408] [TID 2] WebView2: Navigate. | form=Редактор; uri=file:///C:/Users/Admin/AppData/Local/Temp/.net/AssistQuestEditor/Z73VNtWqw3ci/Web/main.html?v=1.0.40.196; sourceExists=True; sourceBytes=8823
-2026-09-28 13:54:45.402 [INFO] [PID 8408] [TID 2] WEB: Web document load завершён. | {"title":"Редактор","url":"file:///C:/Users/Admin/AppData/Local/Temp/.net/AssistQuestEditor/Z73VNtWqw3ci/Web/main.html?v=1.0.40.196"}
-2026-09-28 13:54:45.404 [INFO] [PID 8408] [TID 2] WebView2: NavigationCompleted. | form=Редактор; success=True; error=Unknown
-2026-09-28 13:54:45.405 [INFO] [PID 8408] [TID 2] WebView2: browser ready. | form=Редактор; page=main.html
-2026-09-28 13:54:45.414 [INFO] [PID 8408] [TID 2] CampaignStore: каталог загружен. | campaigns=1; root=C:\Users\Admin\Documents\Assist Quest Editor\worlds\Демо Мир; readOnly=False
-2026-09-28 13:54:45.415 [INFO] [PID 8408] [TID 2] CampaignStore: каталог ограничен миром. | world=C:\Users\Admin\Documents\Assist Quest Editor\worlds\Демо Мир; campaigns=1
-2026-09-28 13:54:45.959 [INFO] [PID 8408] [TID 2] WebView2: начало инициализации. | form=Симулятор; page=simulator.html
-2026-09-28 13:54:46.026 [INFO] [PID 8408] [TID 2] WebView2: CoreWebView2 создан. | browser=153.0.4234.48
-2026-09-28 13:54:46.027 [INFO] [PID 8408] [TID 2] WebView2: Navigate. | form=Симулятор; uri=file:///C:/Users/Admin/AppData/Local/Temp/.net/AssistQuestEditor/Z73VNtWqw3ci/Web/simulator.html?v=1.0.40.196; sourceExists=True; sourceBytes=13971
-2026-09-28 13:54:46.075 [INFO] [PID 8408] [TID 2] WEB: Simulator Web UI готов. | {"canvas":true,"side":true,"url":"file:///C:/Users/Admin/AppData/Local/Temp/.net/AssistQuestEditor/Z73VNtWqw3ci/Web/simulator.html?v=1.0.40.196"}
-2026-09-28 13:54:46.077 [INFO] [PID 8408] [TID 2] WEB: Simulator interface layer готов. | {"layer":true,"supportsDialogue":true,"supportsChoice":true}
-2026-09-28 13:54:46.078 [INFO] [PID 8408] [TID 2] WEB: Web document load завершён. | {"title":"Симулятор","url":"file:///C:/Users/Admin/AppData/Local/Temp/.net/AssistQuestEditor/Z73VNtWqw3ci/Web/simulator.html?v=1.0.40.196"}
-2026-09-28 13:54:46.079 [INFO] [PID 8408] [TID 2] WebView2: NavigationCompleted. | form=Симулятор; success=True; error=Unknown
-2026-09-28 13:54:46.079 [INFO] [PID 8408] [TID 2] WebView2: browser ready. | form=Симулятор; page=simulator.html
-2026-09-28 13:54:46.080 [INFO] [PID 8408] [TID 2] SimulatorForm: browser ready, отправляю snapshot.
-2026-09-28 13:54:46.113 [INFO] [PID 8408] [TID 2] Simulator: событие опубликовано. | event=ChannelChanged; source=Загрузка сохранения; payload={"channel":"facts","description":"Изменён факт"}
-2026-09-28 13:54:46.114 [INFO] [PID 8408] [TID 2] Simulator: событие опубликовано. | event=ChannelChanged; source=Загрузка сохранения; payload={"channel":"states","description":"Изменено состояние"}
-2026-09-28 13:54:46.115 [INFO] [PID 8408] [TID 2] Simulator: событие опубликовано. | event=ChannelChanged; source=Загрузка сохранения; payload={"channel":"quest-statuses","description":"Изменён статус квеста"}
-2026-09-28 13:54:46.116 [INFO] [PID 8408] [TID 2] Simulator: событие опубликовано. | event=ChannelChanged; source=Загрузка сохранения; payload={"channel":"inventory","description":"Изменён инвентарь"}
-2026-09-28 13:54:46.119 [INFO] [PID 8408] [TID 2] Simulator: событие опубликовано. | event=ChannelChanged; source=Загрузка сохранения; payload={"channel":"reputation","description":"Изменена репутация"}
-2026-09-28 13:54:46.120 [INFO] [PID 8408] [TID 2] Simulator: событие опубликовано. | event=ChannelChanged; source=Загрузка сохранения; payload={"channel":"player-progress","description":"Изменены деньги/опыт"}
-2026-09-28 13:54:46.121 [INFO] [PID 8408] [TID 2] Simulator: событие опубликовано. | event=ChannelChanged; source=Загрузка сохранения; payload={"channel":"character","description":"Изменены данные персонажа"}
-2026-09-28 13:54:46.123 [INFO] [PID 8408] [TID 2] Simulator: событие опубликовано. | event=ChannelChanged; source=Загрузка сохранения; payload={"channel":"environment","description":"Изменено окружение"}
-2026-09-28 13:54:46.123 [INFO] [PID 8408] [TID 2] Simulator: событие опубликовано. | event=ChannelChanged; source=Загрузка сохранения; payload={"channel":"dynamic-events","description":"Динамических событий: 4"}
-2026-09-28 13:54:46.142 [INFO] [PID 8408] [TID 2] SimulatorForm: мир восстановлен из автосохранения. | createdAt=2026-09-28 08:10:04; gameDate=2026-01-01 00:40; simulationRunning=false
-2026-09-28 13:54:46.231 [INFO] [PID 8408] [TID 2] SimulatorForm: отправляю дорожную геометрию. | segments=98341; jsonChars=6026420
-2026-09-28 13:54:46.346 [INFO] [PID 8408] [TID 2] SimulatorForm: формирование snapshot. | points=5192; selected=<none>; player=WorldCoordinate { X = 165328,5760381417, Y = 89,5193, Z = -77798,90361612904 }
-2026-09-28 13:54:46.364 [INFO] [PID 8408] [TID 2] CityBoundaryStore.Load(): черты прочитаны. | cities=8; rejected=0; path=C:\Users\Admin\AppData\Local\Assist Quest Editor\world\city_boundaries.json
-2026-09-28 13:54:46.365 [INFO] [PID 8408] [TID 2] CityBoundaryFileSource: черты перечитаны. | count=8; path=C:\Users\Admin\AppData\Local\Assist Quest Editor\world\city_boundaries.json
-2026-09-28 13:54:46.452 [INFO] [PID 8408] [TID 2] SimulatorForm: отправляю snapshot в WebView2. | jsonChars=1331130; points=5192
-2026-09-28 13:54:46.538 [INFO] [PID 8408] [TID 2] SimulatorForm: формирование snapshot. | points=5192; selected=<none>; player=WorldCoordinate { X = 165328,5760381417, Y = 89,5193, Z = -77798,90361612904 }
-2026-09-28 13:54:46.572 [INFO] [PID 8408] [TID 2] SimulatorForm: отправляю snapshot в WebView2. | jsonChars=1331130; points=5192
-2026-09-28 13:54:46.618 [ERROR] [PID 8408] [TID 2] WEB: window.error | {"message":"Script error.","filename":"","line":0,"column":0}
-2026-09-28 13:54:46.619 [INFO] [PID 8408] [TID 2] WEB: Дорожная геометрия получена. | {"segments":98341,"graphNodes":130443}
-2026-09-28 13:54:46.620 [INFO] [PID 8408] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
-2026-09-28 13:54:46.622 [INFO] [PID 8408] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":165211.9939420941,"cz":-77724.63165172448,"mpp":0.5543027770962045}
-2026-09-28 13:54:46.623 [INFO] [PID 8408] [TID 2] WEB: Simulator получил snapshot. | {"points":5192,"selectedPointId":null,"player":{"x":165328.5760381417,"y":89.5193,"z":-77798.90361612904},"version":"1.0.40.196-CHARACTER-STATE-10000-R1"}
-2026-09-28 13:54:46.629 [INFO] [PID 8408] [TID 2] WEB: Simulator получил snapshot. | {"points":5192,"selectedPointId":null,"player":{"x":165328.5760381417,"y":89.5193,"z":-77798.90361612904},"version":"1.0.40.196-CHARACTER-STATE-10000-R1"}
-2026-09-28 13:54:59.562 [INFO] [PID 8408] [TID 2] WebView2: получено действие. | form=Симулятор; action=simulation_start
-2026-09-28 13:54:59.563 [INFO] [PID 8408] [TID 2] SimulatorForm: обработка web action. | json={"action":"simulation_start"}
-2026-09-28 13:54:59.567 [INFO] [PID 8408] [TID 2] Quest Runtime: событие. | event=SimulationStarted; source=QuestRuntimeCoordinator; node=<none>; status=Stopped; waiting=<none>; transition=; message=Симуляция запущена.
-2026-09-28 13:54:59.569 [INFO] [PID 8408] [TID 2] Simulator: событие опубликовано. | event=ChannelChanged; source=DynamicEventDispatcher.Initialize; payload={"channel":"dynamic-events","description":"Динамических событий: 4"}
-2026-09-28 13:54:59.570 [INFO] [PID 8408] [TID 2] Simulator: событие опубликовано. | event=DynamicEventDispatcherStarted; source=DynamicEventDispatcher; payload={}
-2026-09-28 13:54:59.570 [INFO] [PID 8408] [TID 2] SimulatorForm: симуляция запущена.
-2026-09-28 13:54:59.610 [INFO] [PID 8408] [TID 2] SimulatorForm: формирование snapshot. | points=5192; selected=<none>; player=WorldCoordinate { X = 165328,5760381417, Y = 89,5193, Z = -77798,90361612904 }
-2026-09-28 13:54:59.625 [INFO] [PID 8408] [TID 2] SimulatorForm: отправляю snapshot в WebView2. | jsonChars=1332059; points=5192
-2026-09-28 13:54:59.657 [INFO] [PID 8408] [TID 2] WEB: Simulator получил snapshot. | {"points":5192,"selectedPointId":null,"player":{"x":165328.5760381417,"y":89.5193,"z":-77798.90361612904},"version":"1.0.40.196-CHARACTER-STATE-10000-R1"}
-2026-09-28 13:55:11.696 [INFO] [PID 8408] [TID 2] Simulator: событие опубликовано. | event=DynamicEventExpired; source=DynamicEventDispatcher; payload={"definitionId":"test_dynamic_cache","instanceId":"test_dynamic_cache#4","pointId":"sdo:forest_fire:0x4774f230f8c00000","x":"165219","y":"111.129","z":"-77746.5"}
-2026-09-28 13:55:11.697 [INFO] [PID 8408] [TID 2] Simulator: событие опубликовано. | event=ChannelChanged; source=DynamicEventDispatcher.Expire; payload={"channel":"dynamic-events","description":"Динамических событий: 4"}
-2026-09-28 13:55:11.763 [INFO] [PID 8408] [TID 2] Simulator: событие опубликовано. | event=ChannelChanged; source=DynamicEventDispatcher.Spawn; payload={"channel":"dynamic-events","description":"Динамических событий: 5"}
-2026-09-28 13:55:11.764 [INFO] [PID 8408] [TID 2] Simulator: событие опубликовано. | event=DynamicEventSpawned; source=DynamicEventDispatcher; payload={"definitionId":"test_dynamic_cache","instanceId":"test_dynamic_cache#5","pointId":"sdo:forest_fire:0x4774f6a8c0800000","x":"168753","y":"96.3164","z":"-81434.2"}
-2026-09-28 13:55:11.765 [INFO] [PID 8408] [TID 2] Simulator: событие опубликовано. | event=ChannelChanged; source=DynamicEventDispatcher.Tick; payload={"channel":"dynamic-events","description":"Динамических событий: 5"}
-2026-09-28 13:55:11.807 [INFO] [PID 8408] [TID 2] SimulatorForm: формирование snapshot. | points=5192; selected=<none>; player=WorldCoordinate { X = 165459,4647224652, Y = 89,5193, Z = -77948,81556956758 }
-2026-09-28 13:55:11.814 [INFO] [PID 8408] [TID 2] SimulatorForm: отправляю snapshot в WebView2. | jsonChars=1334988; points=5192
-2026-09-28 13:55:11.847 [INFO] [PID 8408] [TID 2] WEB: Simulator получил snapshot. | {"points":5192,"selectedPointId":null,"player":{"x":165459.4647224652,"y":89.5193,"z":-77948.81556956758},"version":"1.0.40.196-CHARACTER-STATE-10000-R1"}
-2026-09-28 13:55:21.739 [INFO] [PID 8408] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
-2026-09-28 13:55:21.740 [INFO] [PID 8408] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":165165.70966020657,"cz":-77722.3971186543,"mpp":0.6928784713702556}
-2026-09-28 13:55:21.772 [INFO] [PID 8408] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
-2026-09-28 13:55:21.773 [INFO] [PID 8408] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":165108.027527465,"cz":-77719.6039523166,"mpp":0.8660980892128195}
-2026-09-28 13:55:21.822 [INFO] [PID 8408] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
-2026-09-28 13:55:21.823 [INFO] [PID 8408] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":165036.1413860603,"cz":-77716.11249439446,"mpp":1.0826226115160245}
-2026-09-28 13:55:22.178 [INFO] [PID 8408] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
-2026-09-28 13:55:22.179 [INFO] [PID 8408] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":164946.2837093045,"cz":-77711.74817199179,"mpp":1.3532782643950305}
-2026-09-28 13:55:22.211 [INFO] [PID 8408] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
-2026-09-28 13:55:22.212 [INFO] [PID 8408] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":164833.96161335972,"cz":-77706.29276898845,"mpp":1.6915978304937882}
-2026-09-28 13:55:22.228 [INFO] [PID 8408] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
-2026-09-28 13:55:22.228 [INFO] [PID 8408] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":164693.5589934287,"cz":-77699.47351523426,"mpp":2.114497288117235}
-2026-09-28 13:55:23.320 [INFO] [PID 8408] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
-2026-09-28 13:55:23.320 [INFO] [PID 8408] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":165308.87770427082,"cz":-78283.07476675462,"mpp":2.114497288117235}
-2026-09-28 13:55:23.761 [INFO] [PID 8408] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
-2026-09-28 13:55:23.762 [INFO] [PID 8408] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":165179.89336969567,"cz":-78254.99159964682,"mpp":2.643121610146544}
-2026-09-28 13:55:23.794 [INFO] [PID 8408] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
-2026-09-28 13:55:23.795 [INFO] [PID 8408] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":165018.66295147673,"cz":-78219.88764076207,"mpp":3.3039020126831797}
-2026-09-28 13:55:24.190 [INFO] [PID 8408] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
-2026-09-28 13:55:24.191 [INFO] [PID 8408] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":164817.12492870307,"cz":-78176.00769215611,"mpp":4.129877515853975}
-2026-09-28 13:55:24.217 [INFO] [PID 8408] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
-2026-09-28 13:55:24.217 [INFO] [PID 8408] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":164565.20240023595,"cz":-78121.15775639868,"mpp":5.162346894817469}
-2026-09-28 13:55:24.244 [INFO] [PID 8408] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
-2026-09-28 13:55:24.245 [INFO] [PID 8408] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":164250.2992396521,"cz":-78052.59533670188,"mpp":6.452933618521836}
-2026-09-28 13:55:24.272 [INFO] [PID 8408] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
-2026-09-28 13:55:24.273 [INFO] [PID 8408] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":163856.67028892227,"cz":-77966.89231208089,"mpp":8.066167023152296}
-2026-09-28 13:55:24.828 [INFO] [PID 8408] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
-2026-09-28 13:55:24.829 [INFO] [PID 8408] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":164250.2992396521,"cz":-78052.59533670188,"mpp":6.452933618521837}
-2026-09-28 13:55:24.846 [INFO] [PID 8408] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
-2026-09-28 13:55:24.846 [INFO] [PID 8408] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":164565.20240023595,"cz":-78121.15775639868,"mpp":5.16234689481747}
-2026-09-28 13:55:26.097 [INFO] [PID 8408] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
-2026-09-28 13:55:26.098 [INFO] [PID 8408] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":164836.74184690337,"cz":-78132.64397823965,"mpp":4.129877515853976}
-2026-09-28 13:55:26.117 [INFO] [PID 8408] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
-2026-09-28 13:55:26.117 [INFO] [PID 8408] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":165053.97340423727,"cz":-78141.83295571242,"mpp":3.303902012683181}
-2026-09-28 13:55:26.150 [INFO] [PID 8408] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
-2026-09-28 13:55:26.151 [INFO] [PID 8408] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":165227.75865010443,"cz":-78149.18413769064,"mpp":2.643121610146545}
-2026-09-28 13:55:26.183 [INFO] [PID 8408] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
-2026-09-28 13:55:26.184 [INFO] [PID 8408] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":165366.78684679812,"cz":-78155.06508327322,"mpp":2.1144972881172364}
-2026-09-28 13:55:35.761 [INFO] [PID 8408] [TID 2] WebView2: получено действие. | form=Симулятор; action=simulation_stop
-2026-09-28 13:55:35.762 [INFO] [PID 8408] [TID 2] SimulatorForm: обработка web action. | json={"action":"simulation_stop"}
-2026-09-28 13:55:35.763 [INFO] [PID 8408] [TID 2] Quest Runtime: событие. | event=SimulationStopped; source=QuestRuntimeCoordinator; node=<none>; status=Stopped; waiting=<none>; transition=; message=Симуляция остановлена.
-2026-09-28 13:55:35.765 [INFO] [PID 8408] [TID 2] Simulator: событие опубликовано. | event=ChannelChanged; source=DynamicEventDispatcher.Initialize; payload={"channel":"dynamic-events","description":"Динамических событий: 5"}
-2026-09-28 13:55:35.766 [INFO] [PID 8408] [TID 2] Simulator: событие опубликовано. | event=DynamicEventDispatcherStopped; source=DynamicEventDispatcher; payload={}
-2026-09-28 13:55:35.786 [INFO] [PID 8408] [TID 2] SimulatorForm: прохождение записано. | reason=автосохранение: симуляция остановлена вручную; gameTime=2026-01-01 00:40; elapsed=00:40:47.6159499
-2026-09-28 13:55:35.830 [INFO] [PID 8408] [TID 2] SimulatorForm: формирование snapshot. | points=5192; selected=<none>; player=WorldCoordinate { X = 165558,09072688135, Y = 89,5193, Z = -78328,25197813266 }
-2026-09-28 13:55:35.836 [INFO] [PID 8408] [TID 2] SimulatorForm: отправляю snapshot в WebView2. | jsonChars=1335946; points=5192
-2026-09-28 13:55:35.870 [INFO] [PID 8408] [TID 2] WEB: Simulator получил snapshot. | {"points":5192,"selectedPointId":null,"player":{"x":165558.09072688135,"y":89.5193,"z":-78328.25197813266},"version":"1.0.40.196-CHARACTER-STATE-10000-R1"}
-2026-09-28 13:55:43.105 [INFO] [PID 8408] [TID 2] WebView2: получено действие. | form=Симулятор; action=toggle_inventory
-2026-09-28 13:55:43.106 [INFO] [PID 8408] [TID 2] SimulatorForm: обработка web action. | json={"action":"toggle_inventory","open":null}
-2026-09-28 13:55:43.110 [INFO] [PID 8408] [TID 2] WebView2: начало инициализации. | form=Игрок; page=inventory.html
-2026-09-28 13:55:43.144 [INFO] [PID 8408] [TID 2] SimulatorForm: окно инвентаря открыто. | size=900x600
-2026-09-28 13:55:43.145 [INFO] [PID 8408] [TID 2] SimulatorForm: формирование snapshot. | points=5192; selected=<none>; player=WorldCoordinate { X = 165558,09072688135, Y = 89,5193, Z = -78328,25197813266 }
-2026-09-28 13:55:43.151 [INFO] [PID 8408] [TID 2] SimulatorForm: отправляю snapshot в WebView2. | jsonChars=1335946; points=5192
-2026-09-28 13:55:43.179 [INFO] [PID 8408] [TID 2] WebView2: CoreWebView2 создан. | browser=153.0.4234.48
-2026-09-28 13:55:43.180 [INFO] [PID 8408] [TID 2] WebView2: Navigate. | form=Игрок; uri=file:///C:/Users/Admin/AppData/Local/Temp/.net/AssistQuestEditor/Z73VNtWqw3ci/Web/inventory.html?v=1.0.40.196; sourceExists=True; sourceBytes=6969
-2026-09-28 13:55:43.182 [INFO] [PID 8408] [TID 2] WEB: Simulator получил snapshot. | {"points":5192,"selectedPointId":null,"player":{"x":165558.09072688135,"y":89.5193,"z":-78328.25197813266},"version":"1.0.40.196-CHARACTER-STATE-10000-R1"}
-2026-09-28 13:55:43.214 [ERROR] [PID 8408] [TID 2] WebView2: ошибка разбора web message. | System.InvalidOperationException: The requested operation requires an element of type 'Object', but the target element has type 'String'. \n    at System.Text.Json.ThrowHelper.ThrowJsonElementWrongTypeException(JsonTokenType expectedType, JsonTokenType actualType) \n    at System.Text.Json.JsonDocument.TryGetNamedPropertyValue(Int32 index, ReadOnlySpan`1 propertyName, JsonElement& value) \n    at AssistQuestEditor.App.WebViewForm.Browser_WebMessageReceived(Object sender, CoreWebView2WebMessageReceivedEventArgs e)
-2026-09-28 13:55:43.238 [INFO] [PID 8408] [TID 2] WebView2: NavigationCompleted. | form=Игрок; success=True; error=Unknown
-2026-09-28 13:55:43.238 [INFO] [PID 8408] [TID 2] WebView2: browser ready. | form=Игрок; page=inventory.html
-2026-09-28 13:55:43.264 [INFO] [PID 8408] [TID 2] InventoryForm: окно инвентаря готово. | hasSnapshot=True; size=900x600
-2026-09-28 13:56:10.088 [INFO] [PID 8408] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
-2026-09-28 13:56:10.088 [INFO] [PID 8408] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":165275.86346340907,"cz":-78119.05255133497,"mpp":2.6431216101465456}
-2026-09-28 13:56:10.111 [INFO] [PID 8408] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
-2026-09-28 13:56:10.112 [INFO] [PID 8408] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":165162.20923417277,"cz":-78074.03688641216,"mpp":3.303902012683182}
-2026-09-28 13:56:10.133 [INFO] [PID 8408] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
-2026-09-28 13:56:10.134 [INFO] [PID 8408] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":165020.1414476274,"cz":-78017.76730525863,"mpp":4.129877515853978}
-2026-09-28 13:56:10.518 [INFO] [PID 8408] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
-2026-09-28 13:56:10.518 [INFO] [PID 8408] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":164827.06967376123,"cz":-77947.43032881674,"mpp":5.162346894817472}
-2026-09-28 13:56:10.543 [INFO] [PID 8408] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
-2026-09-28 13:56:10.544 [INFO] [PID 8408] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":164585.72995642852,"cz":-77859.50910826439,"mpp":6.45293361852184}
-2026-09-28 13:56:10.559 [INFO] [PID 8408] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
-2026-09-28 13:56:10.560 [INFO] [PID 8408] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":164284.05530976263,"cz":-77749.60758257394,"mpp":8.0661670231523}
-2026-09-28 13:56:11.201 [INFO] [PID 8408] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
-2026-09-28 13:56:11.202 [INFO] [PID 8408] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":165284.26002063352,"cz":-79725.81850324625,"mpp":8.0661670231523}
-2026-09-28 13:56:11.919 [INFO] [PID 8408] [TID 2] WebView2: получено действие. | form=Симулятор; action=route_edit_toggle
-2026-09-28 13:56:11.920 [INFO] [PID 8408] [TID 2] SimulatorForm: обработка web action. | json={"action":"route_edit_toggle","enabled":true}
-2026-09-28 13:56:11.921 [INFO] [PID 8408] [TID 2] SimulatorForm: режим редактирования маршрута изменён. | enabled=True
-2026-09-28 13:56:11.921 [INFO] [PID 8408] [TID 2] SimulatorForm: формирование snapshot. | points=5192; selected=<none>; player=WorldCoordinate { X = 165558,09072688135, Y = 89,5193, Z = -78328,25197813266 }
-2026-09-28 13:56:11.926 [INFO] [PID 8408] [TID 2] SimulatorForm: отправляю snapshot в WebView2. | jsonChars=1335942; points=5192
-2026-09-28 13:56:11.978 [INFO] [PID 8408] [TID 2] WEB: Simulator получил snapshot. | {"points":5192,"selectedPointId":null,"player":{"x":165558.09072688135,"y":89.5193,"z":-78328.25197813266},"version":"1.0.40.196-CHARACTER-STATE-10000-R1"}
-2026-09-28 13:56:13.353 [INFO] [PID 8408] [TID 2] WebView2: получено действие. | form=Симулятор; action=route_clear
-2026-09-28 13:56:13.354 [INFO] [PID 8408] [TID 2] SimulatorForm: обработка web action. | json={"action":"route_clear"}
-2026-09-28 13:56:13.358 [INFO] [PID 8408] [TID 2] SimulatorForm: прохождение записано. | reason=автосохранение: route cleared; gameTime=2026-01-01 00:40; elapsed=00:40:47.6159499
-2026-09-28 13:56:13.358 [INFO] [PID 8408] [TID 2] SimulatorForm: формирование snapshot. | points=5192; selected=<none>; player=WorldCoordinate { X = 165558,09072688135, Y = 89,5193, Z = -78328,25197813266 }
-2026-09-28 13:56:13.364 [INFO] [PID 8408] [TID 2] SimulatorForm: отправляю snapshot в WebView2. | jsonChars=1328007; points=5192
-2026-09-28 13:56:13.411 [INFO] [PID 8408] [TID 2] WEB: Simulator получил snapshot. | {"points":5192,"selectedPointId":null,"player":{"x":165558.09072688135,"y":89.5193,"z":-78328.25197813266},"version":"1.0.40.196-CHARACTER-STATE-10000-R1"}
-2026-09-28 13:56:13.772 [INFO] [PID 8408] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
-2026-09-28 13:56:13.773 [INFO] [PID 8408] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":164848.68700138328,"cz":-79739.6822278173,"mpp":10.082708778940376}
-2026-09-28 13:56:13.800 [INFO] [PID 8408] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
-2026-09-28 13:56:13.801 [INFO] [PID 8408] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":164316.82411329416,"cz":-79767.09459231004,"mpp":12.603385973675469}
-2026-09-28 13:56:13.811 [INFO] [PID 8408] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
-2026-09-28 13:56:13.812 [INFO] [PID 8408] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":163661.44804266302,"cz":-79807.66174091281,"mpp":15.754232467094337}
-2026-09-28 13:56:13.844 [INFO] [PID 8408] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
-2026-09-28 13:56:13.845 [INFO] [PID 8408] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":162854.04362872444,"cz":-79862.30923478304,"mpp":19.69279058386792}
-2026-09-28 13:56:14.122 [INFO] [PID 8408] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
-2026-09-28 13:56:14.123 [INFO] [PID 8408] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":161879.25049482298,"cz":-79950.3113927047,"mpp":24.6159882298349}
-2026-09-28 13:56:14.156 [INFO] [PID 8408] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
-2026-09-28 13:56:14.156 [INFO] [PID 8408] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":160660.75907744616,"cz":-80066.46808716423,"mpp":30.769985287293625}
-2026-09-28 13:56:14.166 [INFO] [PID 8408] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
-2026-09-28 13:56:14.167 [INFO] [PID 8408] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":159137.6448057251,"cz":-80211.66395523865,"mpp":38.462481609117035}
-2026-09-28 13:56:14.711 [INFO] [PID 8408] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
-2026-09-28 13:56:14.712 [INFO] [PID 8408] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":160737.68404066438,"cz":-80066.46808716423,"mpp":30.76998528729363}
-2026-09-28 13:56:14.754 [INFO] [PID 8408] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
-2026-09-28 13:56:14.755 [INFO] [PID 8408] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":162017.7154286158,"cz":-79950.3113927047,"mpp":24.615988229834905}
-2026-09-28 13:56:14.800 [INFO] [PID 8408] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
-2026-09-28 13:56:14.800 [INFO] [PID 8408] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":163041.74053897694,"cz":-79857.38603713707,"mpp":19.692790583867925}
-2026-09-28 13:56:14.850 [INFO] [PID 8408] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
-2026-09-28 13:56:14.851 [INFO] [PID 8408] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":163860.96062726583,"cz":-79783.04575268297,"mpp":15.75423246709434}
-2026-09-28 13:56:16.199 [INFO] [PID 8408] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
-2026-09-28 13:56:16.200 [INFO] [PID 8408] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":164254.8164389432,"cz":-79559.72950746192,"mpp":12.603385973675472}
-2026-09-28 13:56:16.215 [INFO] [PID 8408] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
-2026-09-28 13:56:16.216 [INFO] [PID 8408] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":164569.90108828509,"cz":-79381.07651128506,"mpp":10.082708778940379}
-2026-09-28 13:56:16.239 [INFO] [PID 8408] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
-2026-09-28 13:56:16.239 [INFO] [PID 8408] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":164821.9688077586,"cz":-79238.15411434359,"mpp":8.066167023152303}
-2026-09-28 13:56:16.250 [INFO] [PID 8408] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
-2026-09-28 13:56:16.250 [INFO] [PID 8408] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":165023.6229833374,"cz":-79123.8161967904,"mpp":6.452933618521843}
-2026-09-28 13:56:16.301 [INFO] [PID 8408] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
-2026-09-28 13:56:16.302 [INFO] [PID 8408] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":165184.94632380045,"cz":-79032.34586274785,"mpp":5.162346894817475}
-2026-09-28 13:56:16.544 [INFO] [PID 8408] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
-2026-09-28 13:56:16.545 [INFO] [PID 8408] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":165311.94005741298,"cz":-78957.1046567559,"mpp":4.1298775158539796}
-2026-09-28 13:56:16.566 [INFO] [PID 8408] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
-2026-09-28 13:56:16.567 [INFO] [PID 8408] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":165411.88309329664,"cz":-78895.25974095598,"mpp":3.3039020126831837}
-2026-09-28 13:56:16.578 [INFO] [PID 8408] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
-2026-09-28 13:56:16.578 [INFO] [PID 8408] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":165491.17674160103,"cz":-78845.1230279135,"mpp":2.6431216101465473}
-2026-09-28 13:56:16.593 [INFO] [PID 8408] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
-2026-09-28 13:56:16.594 [INFO] [PID 8408] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":165553.5544116005,"cz":-78804.4850331575,"mpp":2.114497288117238}
-2026-09-28 13:56:16.625 [INFO] [PID 8408] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
-2026-09-28 13:56:16.626 [INFO] [PID 8408] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":165603.03364814245,"cz":-78771.55173789506,"mpp":1.6915978304937906}
-2026-09-28 13:56:17.802 [INFO] [PID 8408] [TID 2] WebView2: получено действие. | form=Симулятор; action=route_add_waypoint
-2026-09-28 13:56:17.803 [INFO] [PID 8408] [TID 2] SimulatorForm: обработка web action. | json={"action":"route_add_waypoint","x":165542.13612624467,"y":89.5193,"z":-78817.43632904721}
-2026-09-28 13:56:17.808 [INFO] [PID 8408] [TID 2] SimulatorForm: маршрут перестроен. | reason=waypoint added; waypoints=1; routePoints=11; segments=10; target=№1; errors=0
-2026-09-28 13:56:17.812 [INFO] [PID 8408] [TID 2] SimulatorForm: прохождение записано. | reason=автосохранение: waypoint added; gameTime=2026-01-01 00:40; elapsed=00:40:47.6159499
-2026-09-28 13:56:17.813 [INFO] [PID 8408] [TID 2] SimulatorForm: формирование snapshot. | points=5192; selected=<none>; player=WorldCoordinate { X = 165558,09072688135, Y = 89,5193, Z = -78328,25197813266 }
-2026-09-28 13:56:17.819 [INFO] [PID 8408] [TID 2] SimulatorForm: отправляю snapshot в WebView2. | jsonChars=1332641; points=5192
-2026-09-28 13:56:17.868 [INFO] [PID 8408] [TID 2] WEB: Simulator получил snapshot. | {"points":5192,"selectedPointId":null,"player":{"x":165558.09072688135,"y":89.5193,"z":-78328.25197813266},"version":"1.0.40.196-CHARACTER-STATE-10000-R1"}
-2026-09-28 13:56:18.417 [INFO] [PID 8408] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
-2026-09-28 13:56:18.417 [INFO] [PID 8408] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":165599.22755302384,"cz":-78759.6576906494,"mpp":2.114497288117238}
-2026-09-28 13:56:18.428 [INFO] [PID 8408] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
-2026-09-28 13:56:18.428 [INFO] [PID 8408] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":165594.46993412558,"cz":-78745.84738023639,"mpp":2.643121610146548}
-2026-09-28 13:56:18.444 [INFO] [PID 8408] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
-2026-09-28 13:56:18.445 [INFO] [PID 8408] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":165588.52291050274,"cz":-78728.58449222012,"mpp":3.3039020126831846}
-2026-09-28 13:56:18.455 [INFO] [PID 8408] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
-2026-09-28 13:56:18.456 [INFO] [PID 8408] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":165581.0891309742,"cz":-78707.83185770294,"mpp":4.12987751585398}
-2026-09-28 13:56:18.478 [INFO] [PID 8408] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
-2026-09-28 13:56:18.478 [INFO] [PID 8408] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":165571.79690656354,"cz":-78681.89106455649,"mpp":5.1623468948174756}
-2026-09-28 13:56:18.694 [INFO] [PID 8408] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
-2026-09-28 13:56:18.695 [INFO] [PID 8408] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":165560.1816260502,"cz":-78649.46507312341,"mpp":6.452933618521844}
-2026-09-28 13:56:18.722 [INFO] [PID 8408] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
-2026-09-28 13:56:18.723 [INFO] [PID 8408] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":165545.66252540852,"cz":-78608.93258383208,"mpp":8.066167023152305}
-2026-09-28 13:56:18.730 [INFO] [PID 8408] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
-2026-09-28 13:56:18.731 [INFO] [PID 8408] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":165527.51364960644,"cz":-78558.2669722179,"mpp":10.08270877894038}
-2026-09-28 13:56:18.744 [INFO] [PID 8408] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
-2026-09-28 13:56:18.745 [INFO] [PID 8408] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":165504.8275548538,"cz":-78494.93495770018,"mpp":12.603385973675476}
-2026-09-28 13:56:18.755 [INFO] [PID 8408] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
-2026-09-28 13:56:18.756 [INFO] [PID 8408] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":165476.46993641305,"cz":-78415.76993955304,"mpp":15.754232467094344}
-2026-09-28 13:56:18.779 [INFO] [PID 8408] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
-2026-09-28 13:56:18.780 [INFO] [PID 8408] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":165441.02291336207,"cz":-78316.8136668691,"mpp":19.69279058386793}
-2026-09-28 13:56:19.028 [INFO] [PID 8408] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
-2026-09-28 13:56:19.028 [INFO] [PID 8408] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":165396.71413454838,"cz":-78193.11832601418,"mpp":24.61598822983491}
-2026-09-28 13:56:19.057 [INFO] [PID 8408] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
-2026-09-28 13:56:19.058 [INFO] [PID 8408] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":165341.32816103124,"cz":-78038.49914994552,"mpp":30.76998528729364}
-2026-09-28 13:56:19.067 [INFO] [PID 8408] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
-2026-09-28 13:56:19.068 [INFO] [PID 8408] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":165272.09569413486,"cz":-77845.22517985971,"mpp":38.46248160911705}
-2026-09-28 13:56:19.097 [INFO] [PID 8408] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
-2026-09-28 13:56:19.098 [INFO] [PID 8408] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":165185.55511051434,"cz":-77603.63271725245,"mpp":48.07810201139631}
-2026-09-28 13:56:19.137 [INFO] [PID 8408] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
-2026-09-28 13:56:19.137 [INFO] [PID 8408] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":165077.37938098868,"cz":-77301.64213899337,"mpp":60.09762751424539}
-2026-09-28 13:56:20.070 [INFO] [PID 8408] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
-2026-09-28 13:56:20.071 [INFO] [PID 8408] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":164211.97354478357,"cz":-79731.08873125675,"mpp":48.07810201139631}
-2026-09-28 13:56:20.126 [INFO] [PID 8408] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
-2026-09-28 13:56:20.126 [INFO] [PID 8408] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":163519.64887581946,"cz":-81674.64600506744,"mpp":38.46248160911705}
-2026-09-28 13:56:20.169 [INFO] [PID 8408] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
-2026-09-28 13:56:20.169 [INFO] [PID 8408] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":162965.78914064818,"cz":-83229.49182411599,"mpp":30.76998528729364}
-2026-09-28 13:56:20.347 [INFO] [PID 8408] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
-2026-09-28 13:56:20.348 [INFO] [PID 8408] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":162436.54539370674,"cz":-84485.67647346975,"mpp":24.61598822983491}
-2026-09-28 13:56:20.361 [INFO] [PID 8408] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
-2026-09-28 13:56:20.362 [INFO] [PID 8408] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":162013.15039615356,"cz":-85490.62419295276,"mpp":19.692790583867932}
-2026-09-28 13:56:20.376 [INFO] [PID 8408] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
-2026-09-28 13:56:20.376 [INFO] [PID 8408] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":161674.43439811104,"cz":-86294.58236853917,"mpp":15.754232467094347}
-2026-09-28 13:56:20.396 [INFO] [PID 8408] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
-2026-09-28 13:56:20.397 [INFO] [PID 8408] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":161403.46159967702,"cz":-86937.7489090083,"mpp":12.60338597367548}
-2026-09-28 13:56:20.677 [INFO] [PID 8408] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
-2026-09-28 13:56:20.678 [INFO] [PID 8408] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":161161.47658898245,"cz":-87359.0170851784,"mpp":10.082708778940384}
-2026-09-28 13:56:20.693 [INFO] [PID 8408] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
-2026-09-28 13:56:20.694 [INFO] [PID 8408] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":160967.8885804268,"cz":-87694.0150843587,"mpp":8.066167023152309}
-2026-09-28 13:56:20.717 [INFO] [PID 8408] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
-2026-09-28 13:56:20.717 [INFO] [PID 8408] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":160813.01817358227,"cz":-87958.78701689368,"mpp":6.452933618521847}
-2026-09-28 13:56:20.728 [INFO] [PID 8408] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
-2026-09-28 13:56:20.728 [INFO] [PID 8408] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":160689.12184810665,"cz":-88170.60456292167,"mpp":5.162346894817478}
-2026-09-28 13:56:20.750 [INFO] [PID 8408] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
-2026-09-28 13:56:20.750 [INFO] [PID 8408] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":160590.00478772615,"cz":-88340.05859974405,"mpp":4.129877515853983}
-2026-09-28 13:56:21.061 [INFO] [PID 8408] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
-2026-09-28 13:56:21.062 [INFO] [PID 8408] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":160574.3112531659,"cz":-88443.40878457829,"mpp":3.303902012683187}
-2026-09-28 13:56:21.083 [INFO] [PID 8408] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
-2026-09-28 13:56:21.084 [INFO] [PID 8408] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":160561.7564255177,"cz":-88526.0889324457,"mpp":2.6431216101465496}
-2026-09-28 13:56:21.094 [INFO] [PID 8408] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
-2026-09-28 13:56:21.095 [INFO] [PID 8408] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":160551.71256339917,"cz":-88592.23305073961,"mpp":2.11449728811724}
-2026-09-28 13:56:21.121 [INFO] [PID 8408] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
-2026-09-28 13:56:21.122 [INFO] [PID 8408] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":160543.6774737043,"cz":-88645.14834537474,"mpp":1.691597830493792}
-2026-09-28 13:56:21.958 [INFO] [PID 8408] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
-2026-09-28 13:56:21.959 [INFO] [PID 8408] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":160648.55653919492,"cz":-88936.10317221966,"mpp":1.691597830493792}
-2026-09-28 13:56:22.247 [INFO] [PID 8408] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
-2026-09-28 13:56:22.248 [INFO] [PID 8408] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":160679.00530014382,"cz":-88941.12510327893,"mpp":2.11449728811724}
-2026-09-28 13:56:22.281 [INFO] [PID 8408] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
-2026-09-28 13:56:22.282 [INFO] [PID 8408] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":160717.06625132993,"cz":-88947.40251710304,"mpp":2.64312161014655}
-2026-09-28 13:56:22.313 [INFO] [PID 8408] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
-2026-09-28 13:56:22.314 [INFO] [PID 8408] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":160764.64244031257,"cz":-88955.24928438316,"mpp":3.3039020126831877}
-2026-09-28 13:56:24.846 [INFO] [PID 8408] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
-2026-09-28 13:56:24.846 [INFO] [PID 8408] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":160793.05599762165,"cz":-88917.00661858634,"mpp":2.6431216101465504}
-2026-09-28 13:56:24.866 [INFO] [PID 8408] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
-2026-09-28 13:56:24.867 [INFO] [PID 8408] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":160815.7868434689,"cz":-88886.4124859489,"mpp":2.1144972881172404}
-2026-09-28 13:56:24.911 [INFO] [PID 8408] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
-2026-09-28 13:56:24.912 [INFO] [PID 8408] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":160833.9715201467,"cz":-88861.93717983895,"mpp":1.6915978304937924}
-2026-09-28 13:56:25.167 [INFO] [PID 8408] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
-2026-09-28 13:56:25.168 [INFO] [PID 8408] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":160848.51926148895,"cz":-88843.03357408318,"mpp":1.353278264395034}
-2026-09-28 13:56:25.189 [INFO] [PID 8408] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
-2026-09-28 13:56:25.189 [INFO] [PID 8408] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":160860.15745456275,"cz":-88827.91068947857,"mpp":1.0826226115160273}
-2026-09-28 13:56:25.200 [INFO] [PID 8408] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
-2026-09-28 13:56:25.200 [INFO] [PID 8408] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":160869.4680090218,"cz":-88815.81238179488,"mpp":0.8660980892128219}
-2026-09-28 13:56:25.222 [INFO] [PID 8408] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
-2026-09-28 13:56:25.223 [INFO] [PID 8408] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":160876.91645258904,"cz":-88806.13373564792,"mpp":0.6928784713702576}
-2026-09-28 13:56:25.984 [INFO] [PID 8408] [TID 2] WebView2: получено действие. | form=Симулятор; action=route_add_waypoint
-2026-09-28 13:56:25.984 [INFO] [PID 8408] [TID 2] SimulatorForm: обработка web action. | json={"action":"route_add_waypoint","x":160914.33189004302,"y":89.5193,"z":-88798.59868227177}
-2026-09-28 13:56:25.993 [INFO] [PID 8408] [TID 2] SimulatorForm: маршрут перестроен. | reason=waypoint added; waypoints=2; routePoints=201; segments=200; target=№1; errors=0
-2026-09-28 13:56:25.997 [INFO] [PID 8408] [TID 2] SimulatorForm: прохождение записано. | reason=автосохранение: waypoint added; gameTime=2026-01-01 00:40; elapsed=00:40:47.6159499
-2026-09-28 13:56:26.005 [INFO] [PID 8408] [TID 2] SimulatorForm: формирование snapshot. | points=5192; selected=<none>; player=WorldCoordinate { X = 165558,09072688135, Y = 89,5193, Z = -78328,25197813266 }
-2026-09-28 13:56:26.017 [INFO] [PID 8408] [TID 2] SimulatorForm: отправляю snapshot в WebView2. | jsonChars=1404053; points=5192
-2026-09-28 13:56:26.066 [INFO] [PID 8408] [TID 2] WEB: Simulator получил snapshot. | {"points":5192,"selectedPointId":null,"player":{"x":165558.09072688135,"y":89.5193,"z":-78328.25197813266},"version":"1.0.40.196-CHARACTER-STATE-10000-R1"}
-2026-09-28 13:56:26.733 [INFO] [PID 8408] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
-2026-09-28 13:56:26.734 [INFO] [PID 8408] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":160867.56259322554,"cz":-88810.78901287745,"mpp":0.866098089212822}
-2026-09-28 13:56:26.755 [INFO] [PID 8408] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
-2026-09-28 13:56:26.756 [INFO] [PID 8408] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":160855.87026902116,"cz":-88816.82463393665,"mpp":1.0826226115160276}
-2026-09-28 13:56:26.772 [INFO] [PID 8408] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
-2026-09-28 13:56:26.773 [INFO] [PID 8408] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":160841.25486376567,"cz":-88824.36916026064,"mpp":1.3532782643950345}
-2026-09-28 13:56:26.794 [INFO] [PID 8408] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
-2026-09-28 13:56:26.795 [INFO] [PID 8408] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":160822.98560719634,"cz":-88833.79981816564,"mpp":1.691597830493793}
-2026-09-28 13:56:26.811 [INFO] [PID 8408] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
-2026-09-28 13:56:26.811 [INFO] [PID 8408] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":160800.14903648468,"cz":-88845.5881405469,"mpp":2.1144972881172412}
-2026-09-28 13:56:33.142 [INFO] [PID 8408] [TID 2] WebView2: получено действие. | form=Симулятор; action=route_delete_waypoint
-2026-09-28 13:56:33.143 [INFO] [PID 8408] [TID 2] SimulatorForm: обработка web action. | json={"action":"route_delete_waypoint","id":"route:3aaaf7e0bcea4ee7a055a6bde2f9afc9"}
-2026-09-28 13:56:33.147 [INFO] [PID 8408] [TID 2] SimulatorForm: маршрут перестроен. | reason=waypoint deleted; waypoints=1; routePoints=11; segments=10; target=№1; errors=0
-2026-09-28 13:56:33.151 [INFO] [PID 8408] [TID 2] SimulatorForm: прохождение записано. | reason=автосохранение: waypoint deleted; gameTime=2026-01-01 00:40; elapsed=00:40:47.6159499
-2026-09-28 13:56:33.151 [INFO] [PID 8408] [TID 2] SimulatorForm: формирование snapshot. | points=5192; selected=<none>; player=WorldCoordinate { X = 165558,09072688135, Y = 89,5193, Z = -78328,25197813266 }
-2026-09-28 13:56:33.157 [INFO] [PID 8408] [TID 2] SimulatorForm: отправляю snapshot в WebView2. | jsonChars=1332604; points=5192
-2026-09-28 13:56:33.205 [INFO] [PID 8408] [TID 2] WEB: Simulator получил snapshot. | {"points":5192,"selectedPointId":null,"player":{"x":165558.09072688135,"y":89.5193,"z":-78328.25197813266},"version":"1.0.40.196-CHARACTER-STATE-10000-R1"}
-2026-09-28 13:56:34.300 [INFO] [PID 8408] [TID 2] WebView2: получено действие. | form=Симулятор; action=route_add_waypoint
-2026-09-28 13:56:34.301 [INFO] [PID 8408] [TID 2] SimulatorForm: обработка web action. | json={"action":"route_add_waypoint","x":160664.8212100452,"y":89.5193,"z":-88706.29563169218}
-2026-09-28 13:56:34.309 [INFO] [PID 8408] [TID 2] SimulatorForm: маршрут перестроен. | reason=waypoint added; waypoints=2; routePoints=201; segments=200; target=№1; errors=0
-2026-09-28 13:56:34.313 [INFO] [PID 8408] [TID 2] SimulatorForm: прохождение записано. | reason=автосохранение: waypoint added; gameTime=2026-01-01 00:40; elapsed=00:40:47.6159499
-2026-09-28 13:56:34.323 [INFO] [PID 8408] [TID 2] SimulatorForm: формирование snapshot. | points=5192; selected=<none>; player=WorldCoordinate { X = 165558,09072688135, Y = 89,5193, Z = -78328,25197813266 }
-2026-09-28 13:56:34.337 [INFO] [PID 8408] [TID 2] SimulatorForm: отправляю snapshot в WebView2. | jsonChars=1404034; points=5192
-2026-09-28 13:56:34.389 [INFO] [PID 8408] [TID 2] WEB: Simulator получил snapshot. | {"points":5192,"selectedPointId":null,"player":{"x":165558.09072688135,"y":89.5193,"z":-78328.25197813266},"version":"1.0.40.196-CHARACTER-STATE-10000-R1"}
-2026-09-28 13:56:36.572 [INFO] [PID 8408] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
-2026-09-28 13:56:36.573 [INFO] [PID 8408] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":160871.51331995864,"cz":-88895.2127487774,"mpp":2.643121610146552}
-2026-09-28 13:56:36.594 [INFO] [PID 8408] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
-2026-09-28 13:56:36.595 [INFO] [PID 8408] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":160960.71867430108,"cz":-88957.24350906553,"mpp":3.3039020126831895}
-2026-09-28 13:56:36.616 [INFO] [PID 8408] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
-2026-09-28 13:56:36.617 [INFO] [PID 8408] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":161072.22536722914,"cz":-89034.78195942569,"mpp":4.129877515853987}
-2026-09-28 13:56:37.925 [INFO] [PID 8408] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
-2026-09-28 13:56:37.926 [INFO] [PID 8408] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":160547.73092271568,"cz":-88208.80645625488,"mpp":4.129877515853987}
-2026-09-28 13:56:38.215 [INFO] [PID 8408] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
-2026-09-28 13:56:38.216 [INFO] [PID 8408] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":160435.39825428443,"cz":-88223.77726224986,"mpp":3.3039020126831895}
-2026-09-28 13:56:38.241 [INFO] [PID 8408] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
-2026-09-28 13:56:38.242 [INFO] [PID 8408] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":160345.53211953945,"cz":-88235.75390704583,"mpp":2.643121610146552}
-2026-09-28 13:56:38.263 [INFO] [PID 8408] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
-2026-09-28 13:56:38.264 [INFO] [PID 8408] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":160273.63921174346,"cz":-88245.33522288261,"mpp":2.1144972881172417}
-2026-09-28 13:56:38.295 [INFO] [PID 8408] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
-2026-09-28 13:56:38.296 [INFO] [PID 8408] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":160216.12488550667,"cz":-88253.00027555204,"mpp":1.6915978304937935}
-2026-09-28 13:56:38.325 [INFO] [PID 8408] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
-2026-09-28 13:56:38.326 [INFO] [PID 8408] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":160170.11342451724,"cz":-88259.13231768757,"mpp":1.353278264395035}
-2026-09-28 13:56:38.711 [INFO] [PID 8408] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
-2026-09-28 13:56:38.712 [INFO] [PID 8408] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":160153.06211838586,"cz":-88265.12057400752,"mpp":1.082622611516028}
-2026-09-28 13:56:38.753 [INFO] [PID 8408] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
-2026-09-28 13:56:38.754 [INFO] [PID 8408] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":160139.42107348077,"cz":-88269.91117906348,"mpp":0.8660980892128225}
-2026-09-28 13:56:38.817 [INFO] [PID 8408] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
-2026-09-28 13:56:38.818 [INFO] [PID 8408] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":160128.50823755667,"cz":-88273.74366310824,"mpp":0.692878471370258}
-2026-09-28 13:56:38.881 [INFO] [PID 8408] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
-2026-09-28 13:56:38.882 [INFO] [PID 8408] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":160119.77796881742,"cz":-88276.80965034406,"mpp":0.5543027770962065}
-2026-09-28 13:56:41.603 [INFO] [PID 8408] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
-2026-09-28 13:56:41.604 [INFO] [PID 8408] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":160088.8755889943,"cz":-88283.30538601315,"mpp":0.692878471370258}
-2026-09-28 13:56:41.627 [INFO] [PID 8408] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
-2026-09-28 13:56:41.628 [INFO] [PID 8408] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":160050.24761421542,"cz":-88291.42505559952,"mpp":0.8660980892128225}
-2026-09-28 13:56:41.661 [INFO] [PID 8408] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
-2026-09-28 13:56:41.662 [INFO] [PID 8408] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":160001.9626457418,"cz":-88301.57464258249,"mpp":1.0826226115160282}
-2026-09-28 13:56:41.693 [INFO] [PID 8408] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
-2026-09-28 13:56:41.694 [INFO] [PID 8408] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":159941.6064351498,"cz":-88314.26162631118,"mpp":1.3532782643950352}
-2026-09-28 13:56:41.982 [INFO] [PID 8408] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
-2026-09-28 13:56:41.983 [INFO] [PID 8408] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":159866.49949147587,"cz":-88330.12035597207,"mpp":1.691597830493794}
-2026-09-28 13:56:42.005 [INFO] [PID 8408] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
-2026-09-28 13:56:42.006 [INFO] [PID 8408] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":159772.61581188347,"cz":-88349.94376804816,"mpp":2.1144972881172426}
-2026-09-28 13:56:42.027 [INFO] [PID 8408] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
-2026-09-28 13:56:42.028 [INFO] [PID 8408] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":159655.26121239297,"cz":-88374.7230331433,"mpp":2.643121610146553}
-2026-09-28 13:56:42.059 [INFO] [PID 8408] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
-2026-09-28 13:56:42.060 [INFO] [PID 8408] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":159508.56796302984,"cz":-88405.6971145122,"mpp":3.3039020126831913}
-2026-09-28 13:56:42.544 [INFO] [PID 8408] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
-2026-09-28 13:56:42.545 [INFO] [PID 8408] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":159725.30393506185,"cz":-88387.93864119402,"mpp":2.643121610146553}
-2026-09-28 13:56:42.567 [INFO] [PID 8408] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
-2026-09-28 13:56:42.568 [INFO] [PID 8408] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":159896.57821539935,"cz":-88373.73186253948,"mpp":2.1144972881172426}
-2026-09-28 13:56:42.605 [INFO] [PID 8408] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
-2026-09-28 13:56:42.606 [INFO] [PID 8408] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":160032.3289412965,"cz":-88362.78933907348,"mpp":1.6915978304937942}
-2026-09-28 13:56:42.671 [INFO] [PID 8408] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
-2026-09-28 13:56:42.672 [INFO] [PID 8408] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":160140.5912024481,"cz":-88354.03532030067,"mpp":1.3532782643950354}
-2026-09-28 13:56:44.677 [INFO] [PID 8408] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
-2026-09-28 13:56:44.678 [INFO] [PID 8408] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":160476.20421201806,"cz":-87895.27398867076,"mpp":1.3532782643950354}
-2026-09-28 13:56:44.955 [INFO] [PID 8408] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
-2026-09-28 13:56:44.956 [INFO] [PID 8408] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":160434.92922495402,"cz":-87841.1005681492,"mpp":1.6915978304937942}
-2026-09-28 13:56:44.967 [INFO] [PID 8408] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
-2026-09-28 13:56:44.968 [INFO] [PID 8408] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":160383.33549112393,"cz":-87773.38379249725,"mpp":2.1144972881172426}
-2026-09-28 13:56:44.989 [INFO] [PID 8408] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
-2026-09-28 13:56:44.989 [INFO] [PID 8408] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":160318.84332383637,"cz":-87688.73782293231,"mpp":2.643121610146553}
-2026-09-28 13:56:45.001 [INFO] [PID 8408] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
-2026-09-28 13:56:45.002 [INFO] [PID 8408] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":160238.2281147269,"cz":-87582.93036097613,"mpp":3.3039020126831913}
-2026-09-28 13:56:45.263 [INFO] [PID 8408] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
-2026-09-28 13:56:45.264 [INFO] [PID 8408] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":160155.6305644098,"cz":-87489.49188217994,"mpp":4.129877515853989}
-2026-09-28 13:56:45.283 [INFO] [PID 8408] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
-2026-09-28 13:56:45.284 [INFO] [PID 8408] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":160052.38362651345,"cz":-87373.72625306365,"mpp":5.162346894817487}
-2026-09-28 13:56:45.305 [INFO] [PID 8408] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
-2026-09-28 13:56:45.306 [INFO] [PID 8408] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":159923.32495414303,"cz":-87229.0192166683,"mpp":6.452933618521859}
-2026-09-28 13:56:45.316 [INFO] [PID 8408] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
-2026-09-28 13:56:45.317 [INFO] [PID 8408] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":159762.00161367998,"cz":-87048.13542117411,"mpp":8.066167023152325}
-2026-09-28 13:56:45.359 [INFO] [PID 8408] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
-2026-09-28 13:56:45.360 [INFO] [PID 8408] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":159560.34743810116,"cz":-86822.03067680637,"mpp":10.082708778940406}
-2026-09-28 13:56:45.905 [INFO] [PID 8408] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
-2026-09-28 13:56:45.906 [INFO] [PID 8408] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":160187.49192415125,"cz":-86560.1323162734,"mpp":8.066167023152325}
-2026-09-28 13:56:45.928 [INFO] [PID 8408] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
-2026-09-28 13:56:45.928 [INFO] [PID 8408] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":160689.20751299133,"cz":-86340.93422741925,"mpp":6.45293361852186}
-2026-09-28 13:56:45.939 [INFO] [PID 8408] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
-2026-09-28 13:56:45.939 [INFO] [PID 8408] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":161090.5799840634,"cz":-86161.7039961648,"mpp":5.162346894817489}
-2026-09-28 13:56:45.955 [INFO] [PID 8408] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
-2026-09-28 13:56:45.956 [INFO] [PID 8408] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":161411.67796092102,"cz":-86012.12499488746,"mpp":4.129877515853991}
-2026-09-28 13:56:45.978 [INFO] [PID 8408] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
-2026-09-28 13:56:45.978 [INFO] [PID 8408] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":161668.55634240716,"cz":-85888.33191634974,"mpp":3.303902012683193}
-2026-09-28 13:56:46.011 [INFO] [PID 8408] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
-2026-09-28 13:56:46.012 [INFO] [PID 8408] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":161873.39826719352,"cz":-85786.6543319094,"mpp":2.6431216101465544}
-2026-09-28 13:56:46.781 [INFO] [PID 8408] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
-2026-09-28 13:56:46.782 [INFO] [PID 8408] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":162531.53554812,"cz":-84359.36866243026,"mpp":2.6431216101465544}
-2026-09-28 13:56:47.022 [INFO] [PID 8408] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
-2026-09-28 13:56:47.023 [INFO] [PID 8408] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":162443.65175458265,"cz":-84284.6178793933,"mpp":3.303902012683193}
-2026-09-28 13:56:47.041 [INFO] [PID 8408] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
-2026-09-28 13:56:47.042 [INFO] [PID 8408] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":162332.97103715778,"cz":-84193.65732710662,"mpp":4.129877515853991}
-2026-09-28 13:56:47.051 [INFO] [PID 8408] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
-2026-09-28 13:56:47.052 [INFO] [PID 8408] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":162194.62014037668,"cz":-84079.95663674826,"mpp":5.162346894817489}
-2026-09-28 13:56:47.072 [INFO] [PID 8408] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
-2026-09-28 13:56:47.072 [INFO] [PID 8408] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":162021.68151940027,"cz":-83937.83077380032,"mpp":6.452933618521861}
-2026-09-28 13:56:47.099 [INFO] [PID 8408] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
-2026-09-28 13:56:47.100 [INFO] [PID 8408] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":161805.5082431798,"cz":-83760.17344511539,"mpp":8.066167023152326}
-2026-09-28 13:56:47.344 [INFO] [PID 8408] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
-2026-09-28 13:56:47.345 [INFO] [PID 8408] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":161498.9938963,"cz":-83586.49878639814,"mpp":10.082708778940408}
-2026-09-28 13:56:47.361 [INFO] [PID 8408] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
-2026-09-28 13:56:47.362 [INFO] [PID 8408] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":161108.28893111605,"cz":-83369.40546300157,"mpp":12.60338597367551}
-2026-09-28 13:56:47.383 [INFO] [PID 8408] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
-2026-09-28 13:56:47.384 [INFO] [PID 8408] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":160613.6060316493,"cz":-83098.03880875587,"mpp":15.754232467094386}
-2026-09-28 13:56:47.414 [INFO] [PID 8408] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
-2026-09-28 13:56:47.414 [INFO] [PID 8408] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":159979.49817484876,"cz":-82758.83049094875,"mpp":19.692790583867982}
-2026-09-28 13:56:48.253 [INFO] [PID 8408] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
-2026-09-28 13:56:48.254 [INFO] [PID 8408] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":163721.12838578367,"cz":-79726.14074103307,"mpp":19.692790583867982}
-2026-09-28 13:56:48.461 [INFO] [PID 8408] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
-2026-09-28 13:56:48.462 [INFO] [PID 8408] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":164142.55410427842,"cz":-79856.60547865121,"mpp":15.754232467094386}
-2026-09-28 13:56:48.484 [INFO] [PID 8408] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
-2026-09-28 13:56:48.484 [INFO] [PID 8408] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":164470.24213959396,"cz":-79951.52472926545,"mpp":12.60338597367551}
-2026-09-28 13:56:48.493 [INFO] [PID 8408] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
-2026-09-28 13:56:48.493 [INFO] [PID 8408] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":164719.78918187274,"cz":-80017.37742097791,"mpp":10.082708778940408}
-2026-09-28 13:56:48.500 [INFO] [PID 8408] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
-2026-09-28 13:56:48.500 [INFO] [PID 8408] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":164913.37719042838,"cz":-80068.04303259209,"mpp":8.066167023152326}
-2026-09-28 13:56:48.521 [INFO] [PID 8408] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
-2026-09-28 13:56:48.522 [INFO] [PID 8408] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":165056.95496344048,"cz":-80108.57552188342,"mpp":6.452933618521861}
-2026-09-28 13:56:48.536 [INFO] [PID 8408] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
-2026-09-28 13:56:48.536 [INFO] [PID 8408] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":165162.78307478427,"cz":-80141.0015133165,"mpp":5.162346894817489}
-2026-09-28 13:56:48.839 [INFO] [PID 8408] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
-2026-09-28 13:56:48.839 [INFO] [PID 8408] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":165259.83519640684,"cz":-80228.89046920076,"mpp":4.129877515853991}
-2026-09-28 13:56:48.850 [INFO] [PID 8408] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
-2026-09-28 13:56:48.851 [INFO] [PID 8408] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":165337.4768937049,"cz":-80299.20163390817,"mpp":3.303902012683193}
-2026-09-28 13:56:48.861 [INFO] [PID 8408] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
-2026-09-28 13:56:48.862 [INFO] [PID 8408] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":165399.59025154333,"cz":-80355.45056567411,"mpp":2.6431216101465544}
-2026-09-28 13:56:48.875 [INFO] [PID 8408] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
-2026-09-28 13:56:48.876 [INFO] [PID 8408] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":165449.2809378141,"cz":-80400.44971108685,"mpp":2.1144972881172435}
-2026-09-28 13:56:48.901 [INFO] [PID 8408] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
-2026-09-28 13:56:48.902 [INFO] [PID 8408] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":165489.0334868307,"cz":-80436.44902741705,"mpp":1.6915978304937949}
-2026-09-28 13:56:48.973 [INFO] [PID 8408] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
-2026-09-28 13:56:48.974 [INFO] [PID 8408] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":165520.835526044,"cz":-80465.24848048121,"mpp":1.353278264395036}
-2026-09-28 13:56:49.368 [INFO] [PID 8408] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
-2026-09-28 13:56:49.368 [INFO] [PID 8408] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":165489.0334868307,"cz":-80436.44902741705,"mpp":1.691597830493795}
-2026-09-28 13:56:49.381 [INFO] [PID 8408] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
-2026-09-28 13:56:49.382 [INFO] [PID 8408] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":165449.2809378141,"cz":-80400.44971108685,"mpp":2.114497288117244}
-2026-09-28 13:56:49.400 [INFO] [PID 8408] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
-2026-09-28 13:56:49.400 [INFO] [PID 8408] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":165399.59025154333,"cz":-80355.45056567411,"mpp":2.643121610146555}
-2026-09-28 13:56:49.405 [INFO] [PID 8408] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
-2026-09-28 13:56:49.406 [INFO] [PID 8408] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":165337.4768937049,"cz":-80299.20163390817,"mpp":3.3039020126831935}
-2026-09-28 13:56:49.419 [INFO] [PID 8408] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
-2026-09-28 13:56:49.420 [INFO] [PID 8408] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":165259.83519640684,"cz":-80228.89046920076,"mpp":4.129877515853992}
-2026-09-28 13:56:49.433 [INFO] [PID 8408] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
-2026-09-28 13:56:49.434 [INFO] [PID 8408] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":165162.78307478427,"cz":-80139.96904393753,"mpp":5.16234689481749}
-2026-09-28 13:56:49.672 [INFO] [PID 8408] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
-2026-09-28 13:56:49.673 [INFO] [PID 8408] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":165117.61253945463,"cz":-80005.5867013318,"mpp":6.452933618521862}
-2026-09-28 13:56:49.683 [INFO] [PID 8408] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
-2026-09-28 13:56:49.684 [INFO] [PID 8408] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":165062.76260369716,"cz":-79837.60877307465,"mpp":8.066167023152328}
-2026-09-28 13:56:49.700 [INFO] [PID 8408] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
-2026-09-28 13:56:49.700 [INFO] [PID 8408] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":164998.23326751194,"cz":-79627.63636275323,"mpp":10.082708778940411}
-2026-09-28 13:56:49.705 [INFO] [PID 8408] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
-2026-09-28 13:56:49.706 [INFO] [PID 8408] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":164920.09227447514,"cz":-79365.17084985143,"mpp":12.603385973675515}
-2026-09-28 13:56:49.727 [INFO] [PID 8408] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
-2026-09-28 13:56:49.727 [INFO] [PID 8408] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":164831.86857265944,"cz":-79033.93811223077,"mpp":15.754232467094393}
-2026-09-28 13:56:49.735 [INFO] [PID 8408] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
-2026-09-28 13:56:49.736 [INFO] [PID 8408] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":164729.46606162333,"cz":-78608.08151585463,"mpp":19.692790583867993}
-2026-09-28 13:56:49.979 [INFO] [PID 8408] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
-2026-09-28 13:56:49.980 [INFO] [PID 8408] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":164724.54286397737,"cz":-77987.14321275704,"mpp":24.61598822983499}
-2026-09-28 13:56:49.993 [INFO] [PID 8408] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
-2026-09-28 13:56:49.994 [INFO] [PID 8408] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":164718.3888669199,"cz":-77210.97033388507,"mpp":30.769985287293736}
-2026-09-28 13:56:50.013 [INFO] [PID 8408] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
-2026-09-28 13:56:50.014 [INFO] [PID 8408] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":164710.6963705981,"cz":-76240.75423529508,"mpp":38.46248160911717}
-2026-09-28 13:56:50.036 [INFO] [PID 8408] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
-2026-09-28 13:56:50.036 [INFO] [PID 8408] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":164701.0807501958,"cz":-75027.9841120576,"mpp":48.07810201139646}
-2026-09-28 13:56:50.074 [INFO] [PID 8408] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
-2026-09-28 13:56:50.075 [INFO] [PID 8408] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":164713.10027569864,"cz":-73500.0019325079,"mpp":60.09762751424557}
-2026-09-28 13:56:50.864 [INFO] [PID 8408] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
-2026-09-28 13:56:50.864 [INFO] [PID 8408] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":162188.99992010032,"cz":-84197.37963004362,"mpp":60.09762751424557}
-2026-09-28 13:56:51.062 [INFO] [PID 8408] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
-2026-09-28 13:56:51.062 [INFO] [PID 8408] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":161792.3555785063,"cz":-85304.6784169936,"mpp":48.07810201139646}
-2026-09-28 13:56:51.108 [INFO] [PID 8408] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
-2026-09-28 13:56:51.109 [INFO] [PID 8408] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":161455.80886442654,"cz":-86142.43934454217,"mpp":38.46248160911717}
-2026-09-28 13:56:51.147 [INFO] [PID 8408] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
-2026-09-28 13:56:51.148 [INFO] [PID 8408] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":161171.18650051908,"cz":-86704.95313807552,"mpp":30.769985287293736}
-2026-09-28 13:56:51.185 [INFO] [PID 8408] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
-2026-09-28 13:56:51.186 [INFO] [PID 8408] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":160943.4886093931,"cz":-87099.57819938505,"mpp":24.61598822983499}
-2026-09-28 13:56:51.420 [INFO] [PID 8408] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
-2026-09-28 13:56:51.420 [INFO] [PID 8408] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":160879.48703999553,"cz":-87228.19673788594,"mpp":19.692790583867993}
-2026-09-28 13:56:51.436 [INFO] [PID 8408] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
-2026-09-28 13:56:51.437 [INFO] [PID 8408] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":160832.22434259424,"cz":-87307.46021998601,"mpp":15.754232467094395}
-2026-09-28 13:56:51.447 [INFO] [PID 8408] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
-2026-09-28 13:56:51.447 [INFO] [PID 8408] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":160797.56503116665,"cz":-87358.26761969239,"mpp":12.603385973675516}
-2026-09-28 13:56:51.462 [INFO] [PID 8408] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
-2026-09-28 13:56:51.462 [INFO] [PID 8408] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":160769.83758202454,"cz":-87383.78947628908,"mpp":10.082708778940415}
-2026-09-28 13:56:51.474 [INFO] [PID 8408] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
-2026-09-28 13:56:51.474 [INFO] [PID 8408] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":160747.65562271088,"cz":-87402.19041981065,"mpp":8.066167023152332}
-2026-09-28 13:56:51.511 [INFO] [PID 8408] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
-2026-09-28 13:56:51.512 [INFO] [PID 8408] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":160729.91005525994,"cz":-87416.91117462791,"mpp":6.4529336185218655}
-2026-09-28 13:56:51.783 [INFO] [PID 8408] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
-2026-09-28 13:56:51.784 [INFO] [PID 8408] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":160666.67130579843,"cz":-87618.40402686625,"mpp":5.162346894817492}
-2026-09-28 13:56:51.800 [INFO] [PID 8408] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
-2026-09-28 13:56:51.801 [INFO] [PID 8408] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":160611.95042871335,"cz":-87789.92300244657,"mpp":4.129877515853994}
-2026-09-28 13:56:51.811 [INFO] [PID 8408] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
-2026-09-28 13:56:51.812 [INFO] [PID 8408] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":160566.52177603895,"cz":-87932.09403592984,"mpp":3.3039020126831953}
-2026-09-28 13:56:51.834 [INFO] [PID 8408] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
-2026-09-28 13:56:51.834 [INFO] [PID 8408] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":160528.19651269182,"cz":-88048.4739843266,"mpp":2.643121610146556}
-2026-09-28 13:56:51.873 [INFO] [PID 8408] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
-2026-09-28 13:56:51.874 [INFO] [PID 8408] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":160497.0076776921,"cz":-88142.63519168807,"mpp":2.1144972881172452}
-2026-09-28 13:56:52.203 [INFO] [PID 8408] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
-2026-09-28 13:56:52.204 [INFO] [PID 8408] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":160461.48412325172,"cz":-88222.6160516111,"mpp":1.6915978304937962}
-2026-09-28 13:56:52.222 [INFO] [PID 8408] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
-2026-09-28 13:56:52.223 [INFO] [PID 8408] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":160432.72696013332,"cz":-88286.26241998342,"mpp":1.353278264395037}
-2026-09-28 13:56:53.372 [INFO] [PID 8408] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
-2026-09-28 13:56:53.373 [INFO] [PID 8408] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":160409.7212296386,"cz":-88336.90885902841,"mpp":1.0826226115160296}
-2026-09-28 13:56:58.564 [INFO] [PID 8408] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
-2026-09-28 13:56:58.564 [INFO] [PID 8408] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":160416.4876209606,"cz":-88286.26241998342,"mpp":1.353278264395037}
-2026-09-28 13:56:59.049 [INFO] [PID 8408] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
-2026-09-28 13:56:59.050 [INFO] [PID 8408] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":160409.7212296386,"cz":-88336.90885902841,"mpp":1.0826226115160296}
-2026-09-28 13:57:02.317 [INFO] [PID 8408] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
-2026-09-28 13:57:02.318 [INFO] [PID 8408] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":160355.5900990628,"cz":-88378.04851826602,"mpp":1.0826226115160296}
-2026-09-28 13:58:43.045 [INFO] [PID 8408] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
-2026-09-28 13:58:43.046 [INFO] [PID 8408] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":160362.0858347319,"cz":-88414.55319944807,"mpp":1.353278264395037}
-2026-09-28 13:58:43.070 [INFO] [PID 8408] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
-2026-09-28 13:58:43.070 [INFO] [PID 8408] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":160370.20550431826,"cz":-88460.18405092564,"mpp":1.6915978304937962}
-2026-09-28 13:58:43.081 [INFO] [PID 8408] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
-2026-09-28 13:58:43.082 [INFO] [PID 8408] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":160380.35509130123,"cz":-88517.2226152726,"mpp":2.1144972881172452}
-2026-09-28 13:58:43.105 [INFO] [PID 8408] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
-2026-09-28 13:58:43.106 [INFO] [PID 8408] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":160393.04207502995,"cz":-88588.52082070631,"mpp":2.6431216101465567}
-2026-09-28 13:58:43.119 [INFO] [PID 8408] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
-2026-09-28 13:58:43.120 [INFO] [PID 8408] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":160408.9008046908,"cz":-88677.64357749844,"mpp":3.3039020126831957}
-2026-09-28 13:58:43.372 [INFO] [PID 8408] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
-2026-09-28 13:58:43.373 [INFO] [PID 8408] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":160428.72421676692,"cz":-88789.0470234886,"mpp":4.129877515853995}
-2026-09-28 13:58:43.394 [INFO] [PID 8408] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
-2026-09-28 13:58:43.395 [INFO] [PID 8408] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":160453.50348186205,"cz":-88928.3013309763,"mpp":5.162346894817493}
-2026-09-28 13:58:43.409 [INFO] [PID 8408] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
-2026-09-28 13:58:43.410 [INFO] [PID 8408] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":160484.47756323096,"cz":-89102.36921533593,"mpp":6.452933618521866}
-2026-09-28 13:58:43.427 [INFO] [PID 8408] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
-2026-09-28 13:58:43.428 [INFO] [PID 8408] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":160523.19516494207,"cz":-89319.95407078546,"mpp":8.066167023152333}
-2026-09-28 13:58:43.742 [INFO] [PID 8408] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
-2026-09-28 13:58:43.742 [INFO] [PID 8408] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":160571.592167081,"cz":-89591.93514009738,"mpp":10.082708778940416}
-2026-09-28 13:58:43.772 [INFO] [PID 8408] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
-2026-09-28 13:58:43.772 [INFO] [PID 8408] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":160632.08841975464,"cz":-89931.91147673728,"mpp":12.60338597367552}
-2026-09-28 13:58:43.794 [INFO] [PID 8408] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
-2026-09-28 13:58:43.795 [INFO] [PID 8408] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":160707.70873559668,"cz":-90356.88189753714,"mpp":15.7542324670944}
-2026-09-28 13:58:43.805 [INFO] [PID 8408] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
-2026-09-28 13:58:43.806 [INFO] [PID 8408] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":160802.23413039924,"cz":-90888.09492353699,"mpp":19.692790583868}
-2026-09-28 13:58:43.824 [INFO] [PID 8408] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
-2026-09-28 13:58:43.824 [INFO] [PID 8408] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":160920.39087390248,"cz":-91552.11120603679,"mpp":24.615988229835}
-2026-09-28 13:58:43.849 [INFO] [PID 8408] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
-2026-09-28 13:58:43.850 [INFO] [PID 8408] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":161068.08680328148,"cz":-92382.13155916153,"mpp":30.76998528729375}
-2026-09-28 13:58:44.850 [INFO] [PID 8408] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
-2026-09-28 13:58:44.850 [INFO] [PID 8408] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":161825.02844134893,"cz":-90782.86157385443,"mpp":24.615988229835}
-2026-09-28 13:58:44.871 [INFO] [PID 8408] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
-2026-09-28 13:58:44.872 [INFO] [PID 8408] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":162420.73535651094,"cz":-89523.13837619263,"mpp":19.692790583868003}
-2026-09-28 13:58:44.899 [INFO] [PID 8408] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
-2026-09-28 13:58:44.900 [INFO] [PID 8408] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":162893.36233052376,"cz":-88519.29837617996,"mpp":15.754232467094404}
-2026-09-28 13:58:44.927 [INFO] [PID 8408] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
-2026-09-28 13:58:44.928 [INFO] [PID 8408] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":163271.46390973404,"cz":-87716.22637616981,"mpp":12.603385973675524}
-2026-09-28 13:58:46.210 [INFO] [PID 8408] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
-2026-09-28 13:58:46.210 [INFO] [PID 8408] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":161002.85443447245,"cz":-85498.03044480292,"mpp":12.603385973675524}
-2026-09-28 13:58:46.383 [INFO] [PID 8408] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
-2026-09-28 13:58:46.384 [INFO] [PID 8408] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":161421.28684879845,"cz":-85359.70828374183,"mpp":10.08270877894042}
-2026-09-28 13:58:46.394 [INFO] [PID 8408] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
-2026-09-28 13:58:46.395 [INFO] [PID 8408] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":161749.9831549919,"cz":-85251.06709664874,"mpp":8.066167023152337}
-2026-09-28 13:58:46.412 [INFO] [PID 8408] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
-2026-09-28 13:58:46.413 [INFO] [PID 8408] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":162009.7137331374,"cz":-85164.15414697428,"mpp":6.45293361852187}
-2026-09-28 13:58:46.433 [INFO] [PID 8408] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
-2026-09-28 13:58:46.434 [INFO] [PID 8408] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":162213.6264354827,"cz":-85094.6237872347,"mpp":5.162346894817496}
-2026-09-28 13:58:46.744 [INFO] [PID 8408] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
-2026-09-28 13:58:46.745 [INFO] [PID 8408] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":162248.73039436748,"cz":-85036.93456068511,"mpp":4.129877515853997}
-2026-09-28 13:58:46.761 [INFO] [PID 8408] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
-2026-09-28 13:58:46.762 [INFO] [PID 8408] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":162272.68368395942,"cz":-84989.95720394226,"mpp":3.303902012683198}
-2026-09-28 13:58:46.777 [INFO] [PID 8408] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
-2026-09-28 13:58:46.778 [INFO] [PID 8408] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":162291.18553523044,"cz":-84952.375318548,"mpp":2.6431216101465584}
-2026-09-28 13:58:46.801 [INFO] [PID 8408] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
-2026-09-28 13:58:46.802 [INFO] [PID 8408] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":162305.98701624724,"cz":-84922.30981023257,"mpp":2.114497288117247}
-2026-09-28 13:58:47.327 [INFO] [PID 8408] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
-2026-09-28 13:58:47.328 [INFO] [PID 8408] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":162317.8282010607,"cz":-84898.25740358024,"mpp":1.6915978304937977}
-2026-09-28 13:58:47.339 [INFO] [PID 8408] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
-2026-09-28 13:58:47.340 [INFO] [PID 8408] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":162327.30114891147,"cz":-84879.01547825838,"mpp":1.3532782643950383}
-2026-09-28 13:58:47.361 [INFO] [PID 8408] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
-2026-09-28 13:58:47.362 [INFO] [PID 8408] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":162334.8795071921,"cz":-84863.62193800088,"mpp":1.0826226115160307}
-2026-09-28 13:58:47.392 [INFO] [PID 8408] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
-2026-09-28 13:58:47.392 [INFO] [PID 8408] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":162340.94219381656,"cz":-84851.30710579488,"mpp":0.8660980892128246}
-2026-09-28 13:58:48.204 [INFO] [PID 8408] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
-2026-09-28 13:58:48.204 [INFO] [PID 8408] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":162334.8795071921,"cz":-84863.62193800088,"mpp":1.0826226115160307}
-2026-09-28 13:58:48.222 [INFO] [PID 8408] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
-2026-09-28 13:58:48.223 [INFO] [PID 8408] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":162327.30114891147,"cz":-84879.01547825838,"mpp":1.3532782643950383}
-2026-09-28 13:58:48.244 [INFO] [PID 8408] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
-2026-09-28 13:58:48.245 [INFO] [PID 8408] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":162317.8282010607,"cz":-84898.25740358024,"mpp":1.691597830493798}
-2026-09-28 13:58:48.257 [INFO] [PID 8408] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
-2026-09-28 13:58:48.258 [INFO] [PID 8408] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":162305.98701624724,"cz":-84922.30981023257,"mpp":2.1144972881172475}
-2026-09-28 13:58:48.532 [INFO] [PID 8408] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
-2026-09-28 13:58:48.532 [INFO] [PID 8408] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":162291.18553523044,"cz":-84952.375318548,"mpp":2.6431216101465593}
-2026-09-28 13:58:48.550 [INFO] [PID 8408] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
-2026-09-28 13:58:48.550 [INFO] [PID 8408] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":162272.68368395942,"cz":-84989.95720394226,"mpp":3.3039020126831993}
-2026-09-28 13:58:48.572 [INFO] [PID 8408] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
-2026-09-28 13:58:48.573 [INFO] [PID 8408] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":162249.5563698706,"cz":-85036.93456068511,"mpp":4.129877515853999}
-2026-09-28 13:58:48.584 [INFO] [PID 8408] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
-2026-09-28 13:58:48.584 [INFO] [PID 8408] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":162220.64722725964,"cz":-85095.65625661366,"mpp":5.162346894817499}
-2026-09-28 13:58:48.851 [INFO] [PID 8408] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
-2026-09-28 13:58:48.852 [INFO] [PID 8408] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":162184.5107989959,"cz":-85169.05837652434,"mpp":6.4529336185218735}
-2026-09-28 13:58:48.866 [INFO] [PID 8408] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
-2026-09-28 13:58:48.866 [INFO] [PID 8408] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":162139.34026366626,"cz":-85260.8110264127,"mpp":8.066167023152342}
-2026-09-28 13:58:48.888 [INFO] [PID 8408] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
-2026-09-28 13:58:48.889 [INFO] [PID 8408] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":162082.8770945042,"cz":-85375.50183877315,"mpp":10.082708778940429}
-2026-09-28 13:58:48.899 [INFO] [PID 8408] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
-2026-09-28 13:58:48.900 [INFO] [PID 8408] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":162012.2981330516,"cz":-85518.8653542237,"mpp":12.603385973675536}
-2026-09-28 13:58:49.216 [INFO] [PID 8408] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
-2026-09-28 13:58:49.216 [INFO] [PID 8408] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":161924.0744312359,"cz":-85698.0697485369,"mpp":15.75423246709442}
-2026-09-28 13:58:49.234 [INFO] [PID 8408] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
-2026-09-28 13:58:49.234 [INFO] [PID 8408] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":161813.79480396622,"cz":-85922.0752414284,"mpp":19.692790583868025}
-2026-09-28 13:58:49.260 [INFO] [PID 8408] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
-2026-09-28 13:58:49.260 [INFO] [PID 8408] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":161675.94526987916,"cz":-86202.08210754278,"mpp":24.615988229835033}
-2026-09-28 13:58:50.507 [INFO] [PID 8408] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
-2026-09-28 13:58:50.508 [INFO] [PID 8408] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":161429.7853875808,"cz":-86631.01570244765,"mpp":19.692790583868028}
-2026-09-28 13:58:50.528 [INFO] [PID 8408] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
-2026-09-28 13:58:50.528 [INFO] [PID 8408] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":161232.85748174213,"cz":-86974.16257837156,"mpp":15.754232467094424}
-2026-09-28 13:58:50.542 [INFO] [PID 8408] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
-2026-09-28 13:58:50.542 [INFO] [PID 8408] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":161075.3151570712,"cz":-87248.68007911068,"mpp":12.60338597367554}
-2026-09-28 13:58:50.566 [INFO] [PID 8408] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
-2026-09-28 13:58:50.567 [INFO] [PID 8408] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":160949.28129733444,"cz":-87468.29407970197,"mpp":10.082708778940432}
-2026-09-28 13:58:50.621 [INFO] [PID 8408] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
-2026-09-28 13:58:50.622 [INFO] [PID 8408] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":160848.45420954502,"cz":-87643.98528017501,"mpp":8.066167023152346}
-2026-09-28 13:58:50.892 [INFO] [PID 8408] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
-2026-09-28 13:58:50.892 [INFO] [PID 8408] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":160782.31163995518,"cz":-87745.8206388423,"mpp":6.452933618521877}
-2026-09-28 13:58:50.903 [INFO] [PID 8408] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
-2026-09-28 13:58:50.904 [INFO] [PID 8408] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":160729.3975842833,"cz":-87827.28892577614,"mpp":5.162346894817502}
-2026-09-28 13:58:50.915 [INFO] [PID 8408] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
-2026-09-28 13:58:50.916 [INFO] [PID 8408] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":160687.0663397458,"cz":-87892.46355532322,"mpp":4.129877515854002}
-2026-09-28 13:58:50.926 [INFO] [PID 8408] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
-2026-09-28 13:58:50.926 [INFO] [PID 8408] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":160653.20134411578,"cz":-87944.60325896087,"mpp":3.3039020126832015}
-2026-09-28 13:58:50.977 [INFO] [PID 8408] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
-2026-09-28 13:58:50.978 [INFO] [PID 8408] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":160627.43090841683,"cz":-87989.61892388368,"mpp":2.6431216101465616}
-2026-09-28 13:58:51.206 [INFO] [PID 8408] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
-2026-09-28 13:58:51.206 [INFO] [PID 8408] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":160612.10080307798,"cz":-88048.89092599122,"mpp":2.1144972881172492}
-2026-09-28 13:58:51.227 [INFO] [PID 8408] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
-2026-09-28 13:58:51.228 [INFO] [PID 8408] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":160599.8367188069,"cz":-88096.30852767725,"mpp":1.6915978304937995}
-2026-09-28 13:58:51.238 [INFO] [PID 8408] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
-2026-09-28 13:58:51.239 [INFO] [PID 8408] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":160590.02545139004,"cz":-88134.24260902607,"mpp":1.3532782643950396}
-2026-09-28 13:58:51.264 [INFO] [PID 8408] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
-2026-09-28 13:58:51.264 [INFO] [PID 8408] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":160582.17643745654,"cz":-88164.58987410514,"mpp":1.0826226115160318}
-2026-09-28 13:58:52.379 [INFO] [PID 8408] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
-2026-09-28 13:58:52.380 [INFO] [PID 8408] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":160515.05383554255,"cz":-88400.60160341563,"mpp":1.0826226115160318}
-2026-09-28 13:58:53.619 [INFO] [PID 8408] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
-2026-09-28 13:58:53.620 [INFO] [PID 8408] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":160516.6777694598,"cz":-88426.28005848253,"mpp":1.3532782643950396}
-2026-09-28 13:58:53.644 [INFO] [PID 8408] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
-2026-09-28 13:58:53.645 [INFO] [PID 8408] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":160518.70768685642,"cz":-88458.37812731614,"mpp":1.6915978304937995}
-2026-09-28 13:58:53.655 [INFO] [PID 8408] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
-2026-09-28 13:58:53.656 [INFO] [PID 8408] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":160521.24508360215,"cz":-88498.50071335817,"mpp":2.1144972881172492}
-2026-09-28 13:58:53.677 [INFO] [PID 8408] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
-2026-09-28 13:58:53.678 [INFO] [PID 8408] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":160524.41682953434,"cz":-88548.6539459107,"mpp":2.6431216101465616}
-2026-09-28 13:58:54.547 [INFO] [PID 8408] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
-2026-09-28 13:58:54.548 [INFO] [PID 8408] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":161174.6247456304,"cz":-87245.59499210844,"mpp":2.6431216101465616}
-2026-09-28 13:58:54.949 [INFO] [PID 8408] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
-2026-09-28 13:58:54.950 [INFO] [PID 8408] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":161105.24280336403,"cz":-87332.73540769296,"mpp":3.303902012683202}
-2026-09-28 13:58:54.977 [INFO] [PID 8408] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
-2026-09-28 13:58:54.978 [INFO] [PID 8408] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":161018.5153755311,"cz":-87442.48690267678,"mpp":4.129877515854003}
-2026-09-28 13:58:54.988 [INFO] [PID 8408] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
-2026-09-28 13:58:54.989 [INFO] [PID 8408] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":160910.10609073992,"cz":-87579.67627140657,"mpp":5.162346894817503}
-2026-09-28 13:58:55.011 [INFO] [PID 8408] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
-2026-09-28 13:58:55.012 [INFO] [PID 8408] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":160774.59448475097,"cz":-87751.16298231878,"mpp":6.452933618521879}
-2026-09-28 13:58:55.283 [INFO] [PID 8408] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
-2026-09-28 13:58:55.283 [INFO] [PID 8408] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":160568.10060895828,"cz":-87996.17280564705,"mpp":8.06616702315235}
-2026-09-28 13:58:55.322 [INFO] [PID 8408] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
-2026-09-28 13:58:55.322 [INFO] [PID 8408] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":160287.80130490373,"cz":-88324.61704412103,"mpp":10.082708778940436}
-2026-09-28 13:58:55.333 [INFO] [PID 8408] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
-2026-09-28 13:58:55.333 [INFO] [PID 8408] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":159932.38582044607,"cz":-88737.69301940825,"mpp":12.603385973675545}
-2026-09-28 13:58:55.351 [INFO] [PID 8408] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
-2026-09-28 13:58:55.352 [INFO] [PID 8408] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":159481.81477188718,"cz":-89260.33968150412,"mpp":15.75423246709443}
-2026-09-28 13:58:55.372 [INFO] [PID 8408] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
-2026-09-28 13:58:55.372 [INFO] [PID 8408] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":158906.78528683822,"cz":-89913.64800912394,"mpp":19.69279058386804}
-2026-09-28 13:58:56.649 [INFO] [PID 8408] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
-2026-09-28 13:58:56.650 [INFO] [PID 8408] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":160797.29318288955,"cz":-81741.1399168187,"mpp":19.69279058386804}
-2026-09-28 13:58:56.991 [INFO] [PID 8408] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
-2026-09-28 13:58:56.992 [INFO] [PID 8408] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":162093.07880330808,"cz":-81375.34633172335,"mpp":15.754232467094432}
-2026-09-28 13:58:57.006 [INFO] [PID 8408] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
-2026-09-28 13:58:57.006 [INFO] [PID 8408] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":163129.70729964288,"cz":-81082.71146364708,"mpp":12.603385973675547}
-2026-09-28 13:58:57.027 [INFO] [PID 8408] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
-2026-09-28 13:58:57.028 [INFO] [PID 8408] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":163959.01009671073,"cz":-80848.60356918606,"mpp":10.082708778940438}
-2026-09-28 13:58:57.043 [INFO] [PID 8408] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
-2026-09-28 13:58:57.044 [INFO] [PID 8408] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":164622.45233436502,"cz":-80661.31725361724,"mpp":8.066167023152351}
-2026-09-28 13:58:57.122 [INFO] [PID 8408] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
-2026-09-28 13:58:57.122 [INFO] [PID 8408] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":165153.20612448844,"cz":-80522.7808349946,"mpp":6.4529336185218815}
-2026-09-28 13:58:57.388 [INFO] [PID 8408] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
-2026-09-28 13:58:57.389 [INFO] [PID 8408] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":165412.61405595302,"cz":-80617.15498916547,"mpp":5.162346894817506}
-2026-09-28 13:58:57.399 [INFO] [PID 8408] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
-2026-09-28 13:58:57.400 [INFO] [PID 8408] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":165612.91311547195,"cz":-80700.91406753389,"mpp":4.129877515854004}
-2026-09-28 13:58:57.422 [INFO] [PID 8408] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
-2026-09-28 13:58:57.422 [INFO] [PID 8408] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":165769.02248557124,"cz":-80772.87718324765,"mpp":3.3039020126832037}
-2026-09-28 13:58:57.450 [INFO] [PID 8408] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
-2026-09-28 13:58:57.451 [INFO] [PID 8408] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":165891.92764044306,"cz":-80833.09079742881,"mpp":2.6431216101465633}
-2026-09-28 13:58:57.761 [INFO] [PID 8408] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
-2026-09-28 13:58:57.761 [INFO] [PID 8408] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":166005.58186967936,"cz":-80837.91449436733,"mpp":2.1144972881172506}
-2026-09-28 13:58:57.788 [INFO] [PID 8408] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
-2026-09-28 13:58:57.789 [INFO] [PID 8408] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":166101.15714710226,"cz":-80838.39025625716,"mpp":1.6915978304938006}
-2026-09-28 13:58:57.831 [INFO] [PID 8408] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
-2026-09-28 13:58:57.832 [INFO] [PID 8408] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":166178.970647305,"cz":-80837.75590707072,"mpp":1.3532782643950405}
-2026-09-28 13:58:59.513 [INFO] [PID 8408] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
-2026-09-28 13:58:59.514 [INFO] [PID 8408] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":166219.56899523683,"cz":-81042.10092499437,"mpp":1.3532782643950405}
-2026-09-28 13:59:00.158 [INFO] [PID 8408] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
-2026-09-28 13:59:00.158 [INFO] [PID 8408] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":166144.4620515629,"cz":-81072.8457155636,"mpp":1.6915978304938006}
-2026-09-28 13:59:00.177 [INFO] [PID 8408] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
-2026-09-28 13:59:00.178 [INFO] [PID 8408] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":166050.5783719705,"cz":-81111.27670377513,"mpp":2.114497288117251}
-2026-09-28 13:59:00.203 [INFO] [PID 8408] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
-2026-09-28 13:59:00.204 [INFO] [PID 8408] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":165933.22377248,"cz":-81159.31543903955,"mpp":2.6431216101465638}
-2026-09-28 13:59:00.237 [INFO] [PID 8408] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
-2026-09-28 13:59:00.238 [INFO] [PID 8408] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":165786.53052311687,"cz":-81219.36385812006,"mpp":3.3039020126832046}
-2026-09-28 13:59:42.055 [INFO] [PID 23288] [TID 2] === Assist Quest Editor START === | Version=1.0.40.196-CHARACTER-STATE-10000-R1; Mode=User; BaseDirectory=F:\repo\assist_quest_editor\src\AssistQuestEditor.App\bin\Release\net10.0-windows\win-x64\; CurrentDirectory=F:\repo\assist_quest_editor\src\AssistQuestEditor.App\bin\Release\net10.0-windows\win-x64; LogPath=F:\repo\assist_quest_editor\MemoryAI\LOGS\assist_quest_editor.log
-2026-09-28 13:59:42.140 [INFO] [PID 23288] [TID 2] === Assist Quest Editor END ===
+2026-09-28 15:58:03.870 [INFO] [PID 17712] [TID 2] === Assist Quest Editor START === | Version=1.0.40.196-CHARACTER-STATE-10000-R1; Mode=User; BaseDirectory=C:\Users\Admin\AppData\Local\Temp\.net\AssistQuestEditor\vGAwrh_FaYQm\; CurrentDirectory=F:\repo\assist_quest_editor; LogPath=F:\repo\assist_quest_editor\MemoryAI\LOGS\assist_quest_editor.log
+2026-09-28 15:58:03.891 [INFO] [PID 17712] [TID 2] Single instance: экземпляр первый. | mutex=Local\AssistQuestEditor.SingleInstance.2
+2026-09-28 15:58:03.895 [INFO] [PID 17712] [TID 2] WebView2: отпечаток сборки прочитан из файла. | path=F:\repo\assist_quest_editor\bin\Release\net10.0-windows\win-x64\publish\web-build.stamp; stamp=31da00eadd2f980d
+2026-09-28 15:58:03.897 [INFO] [PID 17712] [TID 2] WebView2: профиль подготовлен. | stamp=31da00eadd2f980d; path=C:\Users\Admin\AppData\Local\AssistQuestEditor\WebView2\31da00eadd2f980d; removed=0; kept=1
+2026-09-28 15:58:03.898 [INFO] [PID 17712] [TID 2] Splash: подготовка. | path=C:\Users\Admin\AppData\Local\Temp\.net\AssistQuestEditor\vGAwrh_FaYQm\Assets\SplashScreen.png; exists=True
+2026-09-28 15:58:03.954 [INFO] [PID 17712] [TID 2] Splash: прозрачность. | applied=True; size=1056x594; image=800x450
+2026-09-28 15:58:04.035 [INFO] [PID 17712] [TID 2] Ресурсы при запуске проверены. | Ресурсы публикации совпадают с манифестом: файлов 26.
+2026-09-28 15:58:04.098 [INFO] [PID 17712] [TID 2] CampaignInstaller: Campaign актуальна. | campaignId=sibir_map; version=1
+2026-09-28 15:58:04.098 [INFO] [PID 17712] [TID 2] CampaignInstaller: синхронизация завершена. | sourceCampaigns=1; userRoot=C:\Users\Admin\Documents\Assist Quest Editor\worlds; visibleChanges=0
+2026-09-28 15:58:04.111 [INFO] [PID 17712] [TID 2] Splash: завершён. | Перед первичной настройкой.
+2026-09-28 15:58:04.116 [INFO] [PID 17712] [TID 2] WorldStore: каталог миров загружен. | worlds=1; root=C:\Users\Admin\Documents\Assist Quest Editor\worlds; readOnly=False
+2026-09-28 15:58:04.117 [INFO] [PID 17712] [TID 2] Startup: миров найдено. | count=1
+2026-09-28 16:03:00.047 [INFO] [PID 17712] [TID 2] Startup: мир выбран. | world=demo; folder=C:\Users\Admin\Documents\Assist Quest Editor\worlds\Демо Мир; lastCampaign=training
+2026-09-28 16:03:00.047 [INFO] [PID 17712] [TID 2] Загрузка СДО world data.
+2026-09-28 16:03:00.049 [INFO] [PID 17712] [TID 2] SdoWorldDataLoader.Load() | path=F:\repo\assist_quest_editor\bin\Release\net10.0-windows\win-x64\publish\data\world/sdo_points.json; exists=True
+2026-09-28 16:03:00.051 [INFO] [PID 17712] [TID 2] Файл СДО прочитан. | bytes=756275; chars=708222
+2026-09-28 16:03:00.073 [INFO] [PID 17712] [TID 2] Метаданные СДО разобраны. | schema=1; source=zvukoper/ets2_assist:data/editor_static_data; categoryCount=71; pointCount=5115; parsedPoints=5115
+2026-09-28 16:03:00.074 [INFO] [PID 17712] [TID 2] СДО-точки отфильтрованы. | input=5115; valid=5115; invalid=0
+2026-09-28 16:03:00.080 [INFO] [PID 17712] [TID 2] СДО world points готовы. | count=5115; X=[118733,199063]; Y=[-41,7734,220,812]; Z=[-110503,-43350,1]
+2026-09-28 16:03:00.081 [INFO] [PID 17712] [TID 2] CityWorldDataLoader.Load() | path=F:\repo\assist_quest_editor\bin\Release\net10.0-windows\win-x64\publish\data\world/cities.json; exists=True
+2026-09-28 16:03:00.083 [INFO] [PID 17712] [TID 2] Города world points готовы. | input=77; valid=77; invalid=0
+2026-09-28 16:03:00.084 [INFO] [PID 17712] [TID 2] World data загружены. | sdo=5115; cities=77; total=5192
+2026-09-28 16:03:00.085 [INFO] [PID 17712] [TID 2] RoadWorldDataLoader.Load() | path=F:\repo\assist_quest_editor\bin\Release\net10.0-windows\win-x64\publish\data\world/roads.json; exists=True
+2026-09-28 16:03:00.150 [INFO] [PID 17712] [TID 2] Дорожная геометрия готова. | source=zvukoper/ets2_assist:data/GeoJson/roads.geojson; declared=98341; parsed=98341; invalid=0
+2026-09-28 16:03:00.181 [INFO] [PID 17712] [TID 2] Дорожная геометрия загружена. | segments=98341
+2026-09-28 16:03:00.182 [INFO] [PID 17712] [TID 2] JunctionWorldDataLoader.Load() | path=F:\repo\assist_quest_editor\bin\Release\net10.0-windows\win-x64\publish\data\world/junctions.json; exists=True
+2026-09-28 16:03:00.185 [INFO] [PID 17712] [TID 2] Перекрёстки готовы. | source=zvukoper/ets2_assist:data/GeoJson/roads.geojson; declared=3275; parsed=3275; invalid=0; method=gaps:converge10-120m>=3dirs+window35m/20deg+tee4-50m>30deg + noding+snap6m+slack20m+dir30deg
+2026-09-28 16:03:00.186 [INFO] [PID 17712] [TID 2] Перекрёстки загружены. | count=3275
+2026-09-28 16:03:00.189 [INFO] [PID 17712] [TID 2] CityBoundaryStore.Load(): черты прочитаны. | cities=8; rejected=0; path=C:\Users\Admin\AppData\Local\Assist Quest Editor\world\city_boundaries.json
+2026-09-28 16:03:00.190 [INFO] [PID 17712] [TID 2] CityBoundaryFileSource: черты перечитаны. | count=8; path=C:\Users\Admin\AppData\Local\Assist Quest Editor\world\city_boundaries.json
+2026-09-28 16:03:00.190 [INFO] [PID 17712] [TID 2] Черты городов загружены. | count=8; path=C:\Users\Admin\AppData\Local\Assist Quest Editor\world\city_boundaries.json
+2026-09-28 16:03:00.197 [INFO] [PID 17712] [TID 2] Создан SimulatorDataSourceAdapter. | channels=18; points=5192
+2026-09-28 16:03:00.206 [INFO] [PID 17712] [TID 2] WorldStore: каталог миров загружен. | worlds=1; root=C:\Users\Admin\Documents\Assist Quest Editor\worlds; readOnly=False
+2026-09-28 16:03:00.208 [INFO] [PID 17712] [TID 2] CampaignStore: каталог загружен. | campaigns=2; root=C:\Users\Admin\Documents\Assist Quest Editor\worlds; readOnly=False
+2026-09-28 16:03:00.210 [INFO] [PID 17712] [TID 2] CampaignStore: каталог загружен. | campaigns=1; root=C:\Users\Admin\Documents\Assist Quest Editor\worlds\Демо Мир; readOnly=False
+2026-09-28 16:03:00.210 [INFO] [PID 17712] [TID 2] CampaignStore: каталог ограничен миром. | world=C:\Users\Admin\Documents\Assist Quest Editor\worlds\Демо Мир; campaigns=1
+2026-09-28 16:03:00.212 [INFO] [PID 17712] [TID 2] QuestDefinitionLoader.LoadDocumentOrFallback() | path=C:\Users\Admin\Documents\Assist Quest Editor\worlds\SibirMap\quests\tutorial_ruslan_shashlik.aqquest; userExists=True; sourceExists=True
+2026-09-28 16:03:00.213 [INFO] [PID 17712] [TID 2] Учебный Quest Definition загружен. | questId=tutorial_ruslan_shashlik; nodes=21; connections=20
+2026-09-28 16:03:00.214 [INFO] [PID 17712] [TID 2] SceneCatalogLoader.Load() | directory=C:\Users\Admin\Documents\Assist Quest Editor\worlds; exists=True
+2026-09-28 16:03:00.221 [INFO] [PID 17712] [TID 2] Scene Definition загружена. | id=gosha_delivery; path=C:\Users\Admin\Documents\Assist Quest Editor\worlds\SibirMap\scenes\gosha_delivery.aqscene
+2026-09-28 16:03:00.222 [INFO] [PID 17712] [TID 2] Scene Definition загружена. | id=gosha_meat; path=C:\Users\Admin\Documents\Assist Quest Editor\worlds\SibirMap\scenes\gosha_meat.aqscene
+2026-09-28 16:03:00.223 [INFO] [PID 17712] [TID 2] Scene Definition загружена. | id=gosha_shop; path=C:\Users\Admin\Documents\Assist Quest Editor\worlds\SibirMap\scenes\gosha_shop.aqscene
+2026-09-28 16:03:00.224 [INFO] [PID 17712] [TID 2] Scene Definition загружена. | id=ruslan_delivery; path=C:\Users\Admin\Documents\Assist Quest Editor\worlds\SibirMap\scenes\ruslan_delivery.aqscene
+2026-09-28 16:03:00.224 [INFO] [PID 17712] [TID 2] Scene Definition загружена. | id=ruslan_finish; path=C:\Users\Admin\Documents\Assist Quest Editor\worlds\SibirMap\scenes\ruslan_finish.aqscene
+2026-09-28 16:03:00.225 [INFO] [PID 17712] [TID 2] Scene Definition загружена. | id=ruslan_start; path=C:\Users\Admin\Documents\Assist Quest Editor\worlds\SibirMap\scenes\ruslan_start.aqscene
+2026-09-28 16:03:00.225 [INFO] [PID 17712] [TID 2] Scene catalog готов. | sceneCount=6
+2026-09-28 16:03:00.272 [INFO] [PID 17712] [TID 2] LocationStore: библиотека загружена. | root=C:\Users\Admin\Documents\Assist Quest Editor\locations; overlays=1; count=1; readOnly=False
+2026-09-28 16:03:00.280 [INFO] [PID 17712] [TID 2] DynamicEventStore: библиотека загружена. | root=C:\Users\Admin\Documents\Assist Quest Editor\events; overlays=1; count=1; readOnly=False
+2026-09-28 16:03:00.295 [INFO] [PID 17712] [TID 2] MainForm создан. Запуск Application.Run().
+2026-09-28 16:03:00.303 [INFO] [PID 17712] [TID 2] WebView2: начало инициализации. | form=Редактор; page=main.html
+2026-09-28 16:03:00.543 [INFO] [PID 17712] [TID 2] WebView2: CoreWebView2 создан. | browser=153.0.4234.48
+2026-09-28 16:03:00.555 [INFO] [PID 17712] [TID 2] WebView2: Navigate. | form=Редактор; uri=file:///C:/Users/Admin/AppData/Local/Temp/.net/AssistQuestEditor/vGAwrh_FaYQm/Web/main.html?v=1.0.40.196; sourceExists=True; sourceBytes=8823
+2026-09-28 16:03:00.646 [INFO] [PID 17712] [TID 2] WEB: Web document load завершён. | {"title":"Редактор","url":"file:///C:/Users/Admin/AppData/Local/Temp/.net/AssistQuestEditor/vGAwrh_FaYQm/Web/main.html?v=1.0.40.196"}
+2026-09-28 16:03:00.649 [INFO] [PID 17712] [TID 2] WebView2: NavigationCompleted. | form=Редактор; success=True; error=Unknown
+2026-09-28 16:03:00.649 [INFO] [PID 17712] [TID 2] WebView2: browser ready. | form=Редактор; page=main.html
+2026-09-28 16:03:00.658 [INFO] [PID 17712] [TID 2] CampaignStore: каталог загружен. | campaigns=1; root=C:\Users\Admin\Documents\Assist Quest Editor\worlds\Демо Мир; readOnly=False
+2026-09-28 16:03:00.658 [INFO] [PID 17712] [TID 2] CampaignStore: каталог ограничен миром. | world=C:\Users\Admin\Documents\Assist Quest Editor\worlds\Демо Мир; campaigns=1
+2026-09-28 16:03:01.728 [INFO] [PID 17712] [TID 2] WebView2: начало инициализации. | form=Симулятор; page=simulator.html
+2026-09-28 16:03:01.786 [INFO] [PID 17712] [TID 2] WebView2: CoreWebView2 создан. | browser=153.0.4234.48
+2026-09-28 16:03:01.787 [INFO] [PID 17712] [TID 2] WebView2: Navigate. | form=Симулятор; uri=file:///C:/Users/Admin/AppData/Local/Temp/.net/AssistQuestEditor/vGAwrh_FaYQm/Web/simulator.html?v=1.0.40.196; sourceExists=True; sourceBytes=14084
+2026-09-28 16:03:01.831 [INFO] [PID 17712] [TID 2] WEB: Simulator Web UI готов. | {"canvas":true,"side":true,"url":"file:///C:/Users/Admin/AppData/Local/Temp/.net/AssistQuestEditor/vGAwrh_FaYQm/Web/simulator.html?v=1.0.40.196"}
+2026-09-28 16:03:01.833 [INFO] [PID 17712] [TID 2] WEB: Simulator interface layer готов. | {"layer":true,"supportsDialogue":true,"supportsChoice":true}
+2026-09-28 16:03:01.833 [INFO] [PID 17712] [TID 2] WEB: Web document load завершён. | {"title":"Симулятор","url":"file:///C:/Users/Admin/AppData/Local/Temp/.net/AssistQuestEditor/vGAwrh_FaYQm/Web/simulator.html?v=1.0.40.196"}
+2026-09-28 16:03:01.835 [INFO] [PID 17712] [TID 2] WebView2: NavigationCompleted. | form=Симулятор; success=True; error=Unknown
+2026-09-28 16:03:01.835 [INFO] [PID 17712] [TID 2] WebView2: browser ready. | form=Симулятор; page=simulator.html
+2026-09-28 16:03:01.836 [INFO] [PID 17712] [TID 2] SimulatorForm: browser ready, отправляю snapshot.
+2026-09-28 16:03:01.870 [INFO] [PID 17712] [TID 2] Simulator: событие опубликовано. | event=ChannelChanged; source=Загрузка сохранения; payload={"channel":"facts","description":"Изменён факт"}
+2026-09-28 16:03:01.871 [INFO] [PID 17712] [TID 2] Simulator: событие опубликовано. | event=ChannelChanged; source=Загрузка сохранения; payload={"channel":"states","description":"Изменено состояние"}
+2026-09-28 16:03:01.872 [INFO] [PID 17712] [TID 2] Simulator: событие опубликовано. | event=ChannelChanged; source=Загрузка сохранения; payload={"channel":"quest-statuses","description":"Изменён статус квеста"}
+2026-09-28 16:03:01.873 [INFO] [PID 17712] [TID 2] Simulator: событие опубликовано. | event=ChannelChanged; source=Загрузка сохранения; payload={"channel":"inventory","description":"Изменён инвентарь"}
+2026-09-28 16:03:01.875 [INFO] [PID 17712] [TID 2] Simulator: событие опубликовано. | event=ChannelChanged; source=Загрузка сохранения; payload={"channel":"reputation","description":"Изменена репутация"}
+2026-09-28 16:03:01.876 [INFO] [PID 17712] [TID 2] Simulator: событие опубликовано. | event=ChannelChanged; source=Загрузка сохранения; payload={"channel":"player-progress","description":"Изменены деньги/опыт"}
+2026-09-28 16:03:01.878 [INFO] [PID 17712] [TID 2] Simulator: событие опубликовано. | event=ChannelChanged; source=Загрузка сохранения; payload={"channel":"character","description":"Изменены данные персонажа"}
+2026-09-28 16:03:01.879 [INFO] [PID 17712] [TID 2] Simulator: событие опубликовано. | event=ChannelChanged; source=Загрузка сохранения; payload={"channel":"environment","description":"Изменено окружение"}
+2026-09-28 16:03:01.880 [INFO] [PID 17712] [TID 2] Simulator: событие опубликовано. | event=ChannelChanged; source=Загрузка сохранения; payload={"channel":"dynamic-events","description":"Динамических событий: 5"}
+2026-09-28 16:03:01.903 [INFO] [PID 17712] [TID 2] SimulatorForm: мир восстановлен из автосохранения. | createdAt=2026-09-28 09:55:10; gameDate=2026-01-01 00:48; simulationRunning=false
+2026-09-28 16:03:02.016 [INFO] [PID 17712] [TID 2] SimulatorForm: отправляю дорожную геометрию. | segments=98341; jsonChars=6280061
+2026-09-28 16:03:02.128 [INFO] [PID 17712] [TID 2] SimulatorForm: формирование snapshot. | points=5192; selected=<none>; player=WorldCoordinate { X = 166430,13545387387, Y = 89,5193, Z = -81059,34136164283 }
+2026-09-28 16:03:02.209 [INFO] [PID 17712] [TID 2] CityBoundaryStore.Load(): черты прочитаны. | cities=8; rejected=0; path=C:\Users\Admin\AppData\Local\Assist Quest Editor\world\city_boundaries.json
+2026-09-28 16:03:02.210 [INFO] [PID 17712] [TID 2] CityBoundaryFileSource: черты перечитаны. | count=8; path=C:\Users\Admin\AppData\Local\Assist Quest Editor\world\city_boundaries.json
+2026-09-28 16:03:02.295 [INFO] [PID 17712] [TID 2] SimulatorForm: отправляю snapshot в WebView2. | jsonChars=1439256; points=5192
+2026-09-28 16:03:02.377 [INFO] [PID 17712] [TID 2] SimulatorForm: формирование snapshot. | points=5192; selected=<none>; player=WorldCoordinate { X = 166430,13545387387, Y = 89,5193, Z = -81059,34136164283 }
+2026-09-28 16:03:02.454 [INFO] [PID 17712] [TID 2] SimulatorForm: отправляю snapshot в WebView2. | jsonChars=1439256; points=5192
+2026-09-28 16:03:02.481 [ERROR] [PID 17712] [TID 2] WEB: window.error | {"message":"Script error.","filename":"","line":0,"column":0}
+2026-09-28 16:03:02.482 [INFO] [PID 17712] [TID 2] WEB: Дорожная геометрия получена. | {"segments":98341,"graphNodes":139005}
+2026-09-28 16:03:02.484 [INFO] [PID 17712] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
+2026-09-28 16:03:02.486 [INFO] [PID 17712] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":165466.35063775495,"cz":-81088.26179184436,"mpp":10.082708778940438}
+2026-09-28 16:03:02.487 [INFO] [PID 17712] [TID 2] WEB: Simulator получил snapshot. | {"points":5192,"selectedPointId":null,"player":{"x":166430.13545387387,"y":89.5193,"z":-81059.34136164283},"version":"1.0.40.196-CHARACTER-STATE-10000-R1"}
+2026-09-28 16:03:02.492 [INFO] [PID 17712] [TID 2] WEB: Simulator получил snapshot. | {"points":5192,"selectedPointId":null,"player":{"x":166430.13545387387,"y":89.5193,"z":-81059.34136164283},"version":"1.0.40.196-CHARACTER-STATE-10000-R1"}
+2026-09-28 16:03:09.651 [INFO] [PID 17712] [TID 2] WebView2: получено действие. | form=Симулятор; action=open_indicators
+2026-09-28 16:03:09.652 [INFO] [PID 17712] [TID 2] SimulatorForm: обработка web action. | json={"action":"open_indicators"}
+2026-09-28 16:03:09.656 [INFO] [PID 17712] [TID 2] WebView2: начало инициализации. | form=Монитор показателей; page=indicators.html
+2026-09-28 16:03:09.688 [INFO] [PID 17712] [TID 2] SimulatorForm: формирование snapshot. | points=5192; selected=<none>; player=WorldCoordinate { X = 166430,13545387387, Y = 89,5193, Z = -81059,34136164283 }
+2026-09-28 16:03:09.756 [INFO] [PID 17712] [TID 2] SimulatorForm: отправляю snapshot в WebView2. | jsonChars=1439256; points=5192
+2026-09-28 16:03:09.780 [INFO] [PID 17712] [TID 2] SimulatorForm: окно монитора показателей открыто. | size=940x720
+2026-09-28 16:03:09.780 [INFO] [PID 17712] [TID 2] SimulatorForm: формирование snapshot. | points=5192; selected=<none>; player=WorldCoordinate { X = 166430,13545387387, Y = 89,5193, Z = -81059,34136164283 }
+2026-09-28 16:03:09.847 [INFO] [PID 17712] [TID 2] SimulatorForm: отправляю snapshot в WebView2. | jsonChars=1439256; points=5192
+2026-09-28 16:03:09.878 [INFO] [PID 17712] [TID 2] WebView2: CoreWebView2 создан. | browser=153.0.4234.48
+2026-09-28 16:03:09.879 [INFO] [PID 17712] [TID 2] WebView2: Navigate. | form=Монитор показателей; uri=file:///C:/Users/Admin/AppData/Local/Temp/.net/AssistQuestEditor/vGAwrh_FaYQm/Web/indicators.html?v=1.0.40.196; sourceExists=True; sourceBytes=1536
+2026-09-28 16:03:09.883 [INFO] [PID 17712] [TID 2] WEB: Simulator получил snapshot. | {"points":5192,"selectedPointId":null,"player":{"x":166430.13545387387,"y":89.5193,"z":-81059.34136164283},"version":"1.0.40.196-CHARACTER-STATE-10000-R1"}
+2026-09-28 16:03:09.884 [INFO] [PID 17712] [TID 2] WEB: Simulator получил snapshot. | {"points":5192,"selectedPointId":null,"player":{"x":166430.13545387387,"y":89.5193,"z":-81059.34136164283},"version":"1.0.40.196-CHARACTER-STATE-10000-R1"}
+2026-09-28 16:03:09.901 [INFO] [PID 17712] [TID 2] WebView2: получено действие. | form=Монитор показателей; action=indicators_ready
+2026-09-28 16:03:09.928 [INFO] [PID 17712] [TID 2] WEB: Web document load завершён. | {"title":"Монитор показателей","url":"file:///C:/Users/Admin/AppData/Local/Temp/.net/AssistQuestEditor/vGAwrh_FaYQm/Web/indicators.html?v=1.0.40.196"}
+2026-09-28 16:03:09.928 [INFO] [PID 17712] [TID 2] WebView2: NavigationCompleted. | form=Монитор показателей; success=True; error=Unknown
+2026-09-28 16:03:09.928 [INFO] [PID 17712] [TID 2] WebView2: browser ready. | form=Монитор показателей; page=indicators.html
+2026-09-28 16:03:09.953 [INFO] [PID 17712] [TID 2] IndicatorsForm: окно монитора показателей готово. | hasSnapshot=True; size=940x720
+2026-09-28 16:03:21.047 [INFO] [PID 17712] [TID 2] WebView2: получено действие. | form=Симулятор; action=simulation_start
+2026-09-28 16:03:21.047 [INFO] [PID 17712] [TID 2] SimulatorForm: обработка web action. | json={"action":"simulation_start"}
+2026-09-28 16:03:21.051 [INFO] [PID 17712] [TID 2] Quest Runtime: событие. | event=SimulationStarted; source=QuestRuntimeCoordinator; node=<none>; status=Stopped; waiting=<none>; transition=; message=Симуляция запущена.
+2026-09-28 16:03:21.053 [INFO] [PID 17712] [TID 2] Simulator: событие опубликовано. | event=ChannelChanged; source=DynamicEventDispatcher.Initialize; payload={"channel":"dynamic-events","description":"Динамических событий: 5"}
+2026-09-28 16:03:21.055 [INFO] [PID 17712] [TID 2] Simulator: событие опубликовано. | event=DynamicEventDispatcherStarted; source=DynamicEventDispatcher; payload={}
+2026-09-28 16:03:21.055 [INFO] [PID 17712] [TID 2] SimulatorForm: симуляция запущена.
+2026-09-28 16:03:21.083 [INFO] [PID 17712] [TID 2] SimulatorForm: формирование snapshot. | points=5192; selected=<none>; player=WorldCoordinate { X = 166430,13545387387, Y = 89,5193, Z = -81059,34136164283 }
+2026-09-28 16:03:21.140 [INFO] [PID 17712] [TID 2] SimulatorForm: отправляю snapshot в WebView2. | jsonChars=1440188; points=5192
+2026-09-28 16:03:21.212 [INFO] [PID 17712] [TID 2] WEB: Simulator получил snapshot. | {"points":5192,"selectedPointId":null,"player":{"x":166430.13545387387,"y":89.5193,"z":-81059.34136164283},"version":"1.0.40.196-CHARACTER-STATE-10000-R1"}
+2026-09-28 16:03:24.293 [INFO] [PID 17712] [TID 2] WebView2: получено действие. | form=Симулятор; action=simulation_set_speed
+2026-09-28 16:03:24.293 [INFO] [PID 17712] [TID 2] SimulatorForm: обработка web action. | json={"action":"simulation_set_speed","speed":2}
+2026-09-28 16:03:24.294 [INFO] [PID 17712] [TID 2] SimulatorForm: кратность игрового времени изменена. | speed=2
+2026-09-28 16:03:24.294 [INFO] [PID 17712] [TID 2] SimulatorForm: формирование snapshot. | points=5192; selected=<none>; player=WorldCoordinate { X = 166440,39495863408, Y = 89,5193, Z = -81107,92698840404 }
+2026-09-28 16:03:24.314 [INFO] [PID 17712] [TID 2] SimulatorForm: отправляю snapshot в WebView2. | jsonChars=1440205; points=5192
+2026-09-28 16:03:24.367 [INFO] [PID 17712] [TID 2] WEB: Simulator получил snapshot. | {"points":5192,"selectedPointId":null,"player":{"x":166440.39495863408,"y":89.5193,"z":-81107.92698840404},"version":"1.0.40.196-CHARACTER-STATE-10000-R1"}
+2026-09-28 16:03:39.641 [INFO] [PID 17712] [TID 2] WebView2: получено действие. | form=Симулятор; action=simulation_pause
+2026-09-28 16:03:39.642 [INFO] [PID 17712] [TID 2] SimulatorForm: обработка web action. | json={"action":"simulation_pause"}
+2026-09-28 16:03:39.643 [INFO] [PID 17712] [TID 2] Quest Runtime: событие. | event=SimulationPaused; source=QuestRuntimeCoordinator; node=<none>; status=Stopped; waiting=<none>; transition=; message=Симуляция на паузе.
+2026-09-28 16:03:39.644 [INFO] [PID 17712] [TID 2] Simulator: событие опубликовано. | event=ChannelChanged; source=DynamicEventDispatcher.Initialize; payload={"channel":"dynamic-events","description":"Динамических событий: 5"}
+2026-09-28 16:03:39.645 [INFO] [PID 17712] [TID 2] Simulator: событие опубликовано. | event=DynamicEventDispatcherStopped; source=DynamicEventDispatcher; payload={}
+2026-09-28 16:03:39.646 [INFO] [PID 17712] [TID 2] SimulatorForm: симуляция поставлена на паузу.
+2026-09-28 16:03:39.679 [INFO] [PID 17712] [TID 2] SimulatorForm: формирование snapshot. | points=5192; selected=<none>; player=WorldCoordinate { X = 166354,26567718823, Y = 89,5193, Z = -81523,97485633579 }
+2026-09-28 16:03:39.696 [INFO] [PID 17712] [TID 2] SimulatorForm: отправляю snapshot в WebView2. | jsonChars=1441136; points=5192
+2026-09-28 16:03:39.756 [INFO] [PID 17712] [TID 2] WEB: Simulator получил snapshot. | {"points":5192,"selectedPointId":null,"player":{"x":166354.26567718823,"y":89.5193,"z":-81523.97485633579},"version":"1.0.40.196-CHARACTER-STATE-10000-R1"}
+2026-09-28 16:04:20.657 [INFO] [PID 17712] [TID 2] WebView2: получено действие. | form=Симулятор; action=simulation_start
+2026-09-28 16:04:20.657 [INFO] [PID 17712] [TID 2] SimulatorForm: обработка web action. | json={"action":"simulation_start"}
+2026-09-28 16:04:20.658 [INFO] [PID 17712] [TID 2] Quest Runtime: событие. | event=SimulationResumed; source=QuestRuntimeCoordinator; node=<none>; status=Stopped; waiting=<none>; transition=; message=Симуляция продолжена.
+2026-09-28 16:04:20.659 [INFO] [PID 17712] [TID 2] Simulator: событие опубликовано. | event=ChannelChanged; source=DynamicEventDispatcher.Initialize; payload={"channel":"dynamic-events","description":"Динамических событий: 5"}
+2026-09-28 16:04:20.660 [INFO] [PID 17712] [TID 2] Simulator: событие опубликовано. | event=DynamicEventDispatcherStarted; source=DynamicEventDispatcher; payload={}
+2026-09-28 16:04:20.660 [INFO] [PID 17712] [TID 2] SimulatorForm: симуляция продолжена после паузы. | target=№1
+2026-09-28 16:04:20.697 [INFO] [PID 17712] [TID 2] SimulatorForm: формирование snapshot. | points=5192; selected=<none>; player=WorldCoordinate { X = 166354,26567718823, Y = 89,5193, Z = -81523,97485633579 }
+2026-09-28 16:04:20.714 [INFO] [PID 17712] [TID 2] SimulatorForm: отправляю snapshot в WebView2. | jsonChars=1442080; points=5192
+2026-09-28 16:04:20.810 [INFO] [PID 17712] [TID 2] WEB: Simulator получил snapshot. | {"points":5192,"selectedPointId":null,"player":{"x":166354.26567718823,"y":89.5193,"z":-81523.97485633579},"version":"1.0.40.196-CHARACTER-STATE-10000-R1"}
+2026-09-28 16:04:29.298 [INFO] [PID 17712] [TID 2] WebView2: получено действие. | form=Симулятор; action=simulation_set_speed
+2026-09-28 16:04:29.299 [INFO] [PID 17712] [TID 2] SimulatorForm: обработка web action. | json={"action":"simulation_set_speed","speed":5}
+2026-09-28 16:04:29.299 [INFO] [PID 17712] [TID 2] SimulatorForm: кратность игрового времени изменена. | speed=5
+2026-09-28 16:04:29.299 [INFO] [PID 17712] [TID 2] SimulatorForm: формирование snapshot. | points=5192; selected=<none>; player=WorldCoordinate { X = 166193,14971703725, Y = 89,5193, Z = -81646,95857463515 }
+2026-09-28 16:04:29.317 [INFO] [PID 17712] [TID 2] SimulatorForm: отправляю snapshot в WebView2. | jsonChars=1442085; points=5192
+2026-09-28 16:04:29.370 [INFO] [PID 17712] [TID 2] WEB: Simulator получил snapshot. | {"points":5192,"selectedPointId":null,"player":{"x":166193.14971703725,"y":89.5193,"z":-81646.95857463515},"version":"1.0.40.196-CHARACTER-STATE-10000-R1"}
+2026-09-28 16:04:45.982 [INFO] [PID 17712] [TID 2] Simulator: событие опубликовано. | event=DynamicEventExpired; source=DynamicEventDispatcher; payload={"definitionId":"test_dynamic_cache","instanceId":"test_dynamic_cache#5","pointId":"sdo:forest_fire:0x4774f6a8c0800000","x":"168753","y":"96.3164","z":"-81434.2"}
+2026-09-28 16:04:45.983 [INFO] [PID 17712] [TID 2] Simulator: событие опубликовано. | event=ChannelChanged; source=DynamicEventDispatcher.Expire; payload={"channel":"dynamic-events","description":"Динамических событий: 5"}
+2026-09-28 16:04:46.049 [INFO] [PID 17712] [TID 2] Simulator: событие опубликовано. | event=ChannelChanged; source=DynamicEventDispatcher.Spawn; payload={"channel":"dynamic-events","description":"Динамических событий: 6"}
+2026-09-28 16:04:46.050 [INFO] [PID 17712] [TID 2] Simulator: событие опубликовано. | event=DynamicEventSpawned; source=DynamicEventDispatcher; payload={"definitionId":"test_dynamic_cache","instanceId":"test_dynamic_cache#6","pointId":"sdo:forest_fire:0x4774f62c86c00000","x":"166488","y":"97.2695","z":"-81260.3"}
+2026-09-28 16:04:46.051 [INFO] [PID 17712] [TID 2] Simulator: событие опубликовано. | event=ChannelChanged; source=DynamicEventDispatcher.Tick; payload={"channel":"dynamic-events","description":"Динамических событий: 6"}
+2026-09-28 16:04:46.132 [INFO] [PID 17712] [TID 2] SimulatorForm: формирование snapshot. | points=5192; selected=<none>; player=WorldCoordinate { X = 165315,4432424343, Y = 89,5193, Z = -82356,91968481772 }
+2026-09-28 16:04:46.148 [INFO] [PID 17712] [TID 2] SimulatorForm: отправляю snapshot в WebView2. | jsonChars=1444989; points=5192
+2026-09-28 16:04:46.207 [INFO] [PID 17712] [TID 2] WEB: Simulator получил snapshot. | {"points":5192,"selectedPointId":null,"player":{"x":165315.4432424343,"y":89.5193,"z":-82356.91968481772},"version":"1.0.40.196-CHARACTER-STATE-10000-R1"}
+2026-09-28 16:04:53.594 [INFO] [PID 17712] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
+2026-09-28 16:04:53.595 [INFO] [PID 17712] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":162764.1846849989,"cz":-83921.50295872662,"mpp":10.082708778940438}
+2026-09-28 16:04:58.485 [INFO] [PID 17712] [TID 2] SimulatorForm: маршрут перестроен. | reason=waypoint(s) passed; waypoints=1; routePoints=203; segments=202; target=№2; errors=0
+2026-09-28 16:05:02.527 [INFO] [PID 17712] [TID 2] WebView2: получено действие. | form=Симулятор; action=simulation_set_speed
+2026-09-28 16:05:02.528 [INFO] [PID 17712] [TID 2] SimulatorForm: обработка web action. | json={"action":"simulation_set_speed","speed":12}
+2026-09-28 16:05:02.528 [INFO] [PID 17712] [TID 2] SimulatorForm: кратность игрового времени изменена. | speed=12
+2026-09-28 16:05:02.529 [INFO] [PID 17712] [TID 2] SimulatorForm: формирование snapshot. | points=5192; selected=<none>; player=WorldCoordinate { X = 164212,8834718001, Y = 89,5193, Z = -82793,81595407687 }
+2026-09-28 16:05:02.540 [INFO] [PID 17712] [TID 2] SimulatorForm: отправляю snapshot в WebView2. | jsonChars=1421922; points=5192
+2026-09-28 16:05:02.596 [INFO] [PID 17712] [TID 2] WEB: Simulator получил snapshot. | {"points":5192,"selectedPointId":null,"player":{"x":164212.8834718001,"y":89.5193,"z":-82793.81595407687},"version":"1.0.40.196-CHARACTER-STATE-10000-R1"}
+2026-09-28 16:05:08.130 [INFO] [PID 17712] [TID 2] WebView2: получено действие. | form=Симулятор; action=simulation_set_speed
+2026-09-28 16:05:08.131 [INFO] [PID 17712] [TID 2] SimulatorForm: обработка web action. | json={"action":"simulation_set_speed","speed":18}
+2026-09-28 16:05:08.131 [INFO] [PID 17712] [TID 2] SimulatorForm: кратность игрового времени изменена. | speed=18
+2026-09-28 16:05:08.132 [INFO] [PID 17712] [TID 2] SimulatorForm: формирование snapshot. | points=5192; selected=<none>; player=WorldCoordinate { X = 163326,89119081188, Y = 89,5193, Z = -83353,1818142352 }
+2026-09-28 16:05:08.143 [INFO] [PID 17712] [TID 2] SimulatorForm: отправляю snapshot в WebView2. | jsonChars=1421924; points=5192
+2026-09-28 16:05:08.197 [INFO] [PID 17712] [TID 2] WEB: Simulator получил snapshot. | {"points":5192,"selectedPointId":null,"player":{"x":163326.89119081188,"y":89.5193,"z":-83353.1818142352},"version":"1.0.40.196-CHARACTER-STATE-10000-R1"}
+2026-09-28 16:05:13.417 [INFO] [PID 17712] [TID 2] WebView2: получено действие. | form=Симулятор; action=simulation_set_speed
+2026-09-28 16:05:13.417 [INFO] [PID 17712] [TID 2] SimulatorForm: обработка web action. | json={"action":"simulation_set_speed","speed":1}
+2026-09-28 16:05:13.418 [INFO] [PID 17712] [TID 2] SimulatorForm: кратность игрового времени изменена. | speed=1
+2026-09-28 16:05:13.418 [INFO] [PID 17712] [TID 2] SimulatorForm: формирование snapshot. | points=5192; selected=<none>; player=WorldCoordinate { X = 162703,01007291453, Y = 89,5193, Z = -84632,01674110822 }
+2026-09-28 16:05:13.428 [INFO] [PID 17712] [TID 2] SimulatorForm: отправляю snapshot в WebView2. | jsonChars=1421930; points=5192
+2026-09-28 16:05:13.481 [INFO] [PID 17712] [TID 2] WEB: Simulator получил snapshot. | {"points":5192,"selectedPointId":null,"player":{"x":162703.01007291453,"y":89.5193,"z":-84632.01674110822},"version":"1.0.40.196-CHARACTER-STATE-10000-R1"}
+2026-09-28 16:05:49.915 [INFO] [PID 17712] [TID 2] WebView2: получено действие. | form=Симулятор; action=simulation_set_speed
+2026-09-28 16:05:49.916 [INFO] [PID 17712] [TID 2] SimulatorForm: обработка web action. | json={"action":"simulation_set_speed","speed":2}
+2026-09-28 16:05:49.916 [INFO] [PID 17712] [TID 2] SimulatorForm: кратность игрового времени изменена. | speed=2
+2026-09-28 16:05:49.916 [INFO] [PID 17712] [TID 2] SimulatorForm: формирование snapshot. | points=5192; selected=<none>; player=WorldCoordinate { X = 163000,0839676228, Y = 89,5193, Z = -85141,8863533821 }
+2026-09-28 16:05:49.927 [INFO] [PID 17712] [TID 2] SimulatorForm: отправляю snapshot в WebView2. | jsonChars=1421925; points=5192
+2026-09-28 16:05:49.978 [INFO] [PID 17712] [TID 2] WEB: Simulator получил snapshot. | {"points":5192,"selectedPointId":null,"player":{"x":163000.0839676228,"y":89.5193,"z":-85141.8863533821},"version":"1.0.40.196-CHARACTER-STATE-10000-R1"}
+2026-09-28 16:05:51.391 [INFO] [PID 17712] [TID 2] WebView2: получено действие. | form=Симулятор; action=simulation_set_speed
+2026-09-28 16:05:51.392 [INFO] [PID 17712] [TID 2] SimulatorForm: обработка web action. | json={"action":"simulation_set_speed","speed":5}
+2026-09-28 16:05:51.392 [INFO] [PID 17712] [TID 2] SimulatorForm: кратность игрового времени изменена. | speed=5
+2026-09-28 16:05:51.393 [INFO] [PID 17712] [TID 2] SimulatorForm: формирование snapshot. | points=5192; selected=<none>; player=WorldCoordinate { X = 163024,05815479325, Y = 89,5193, Z = -85185,48024818482 }
+2026-09-28 16:05:51.404 [INFO] [PID 17712] [TID 2] SimulatorForm: отправляю snapshot в WebView2. | jsonChars=1421929; points=5192
+2026-09-28 16:05:51.454 [INFO] [PID 17712] [TID 2] WEB: Simulator получил snapshot. | {"points":5192,"selectedPointId":null,"player":{"x":163024.05815479325,"y":89.5193,"z":-85185.48024818482},"version":"1.0.40.196-CHARACTER-STATE-10000-R1"}
+2026-09-28 16:06:01.720 [INFO] [PID 17712] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
+2026-09-28 16:06:01.721 [INFO] [PID 17712] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":163074.73211539027,"cz":-84262.55058317428,"mpp":8.066167023152351}
+2026-09-28 16:06:01.748 [INFO] [PID 17712] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
+2026-09-28 16:06:01.749 [INFO] [PID 17712] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":163323.17005970338,"cz":-84535.3886827324,"mpp":6.4529336185218815}
+2026-09-28 16:06:01.768 [INFO] [PID 17712] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
+2026-09-28 16:06:01.769 [INFO] [PID 17712] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":163521.92041515384,"cz":-84753.6591623789,"mpp":5.162346894817506}
+2026-09-28 16:06:02.160 [INFO] [PID 17712] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
+2026-09-28 16:06:02.161 [INFO] [PID 17712] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":163679.88823013526,"cz":-84928.2755460961,"mpp":4.129877515854004}
+2026-09-28 16:06:02.196 [INFO] [PID 17712] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
+2026-09-28 16:06:02.197 [INFO] [PID 17712] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":163805.43650661723,"cz":-85068.79462857303,"mpp":3.3039020126832037}
+2026-09-28 16:06:03.183 [INFO] [PID 17712] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
+2026-09-28 16:06:03.183 [INFO] [PID 17712] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":163544.42824761526,"cz":-86373.8359235829,"mpp":3.3039020126832037}
+2026-09-28 16:06:04.485 [INFO] [PID 17712] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
+2026-09-28 16:06:04.486 [INFO] [PID 17712] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":163358.5837594018,"cz":-86486.8913205794,"mpp":4.129877515854004}
+2026-09-28 16:06:04.852 [INFO] [PID 17712] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
+2026-09-28 16:06:04.853 [INFO] [PID 17712] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":163126.27814913503,"cz":-86628.21056682503,"mpp":5.162346894817506}
+2026-09-28 16:06:04.885 [INFO] [PID 17712] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
+2026-09-28 16:06:04.886 [INFO] [PID 17712] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":162835.89613630154,"cz":-86804.85962463207,"mpp":6.452933618521882}
+2026-09-28 16:06:04.936 [INFO] [PID 17712] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
+2026-09-28 16:06:04.937 [INFO] [PID 17712] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":162472.9186202597,"cz":-87025.67094689087,"mpp":8.066167023152353}
+2026-09-28 16:06:05.289 [INFO] [PID 17712] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
+2026-09-28 16:06:05.290 [INFO] [PID 17712] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":162019.19672520738,"cz":-87301.68509971435,"mpp":10.082708778940441}
+2026-09-28 16:06:05.346 [INFO] [PID 17712] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
+2026-09-28 16:06:05.347 [INFO] [PID 17712] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":161452.04435639197,"cz":-87646.70279074373,"mpp":12.603385973675552}
+2026-09-28 16:06:05.909 [INFO] [PID 17712] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
+2026-09-28 16:06:05.909 [INFO] [PID 17712] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":162019.19672520738,"cz":-87301.68509971435,"mpp":10.082708778940443}
+2026-09-28 16:06:05.939 [INFO] [PID 17712] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
+2026-09-28 16:06:05.939 [INFO] [PID 17712] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":162472.9186202597,"cz":-87025.67094689087,"mpp":8.066167023152355}
+2026-09-28 16:06:05.967 [INFO] [PID 17712] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
+2026-09-28 16:06:05.967 [INFO] [PID 17712] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":162835.89613630154,"cz":-86804.85962463207,"mpp":6.452933618521884}
+2026-09-28 16:06:06.024 [INFO] [PID 17712] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
+2026-09-28 16:06:06.024 [INFO] [PID 17712] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":163126.27814913503,"cz":-86629.50115354873,"mpp":5.1623468948175075}
+2026-09-28 16:06:08.141 [INFO] [PID 17712] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
+2026-09-28 16:06:08.142 [INFO] [PID 17712] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":163327.60967803292,"cz":-87047.65125202894,"mpp":5.1623468948175075}
+2026-09-28 16:06:08.497 [INFO] [PID 17712] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
+2026-09-28 16:06:08.498 [INFO] [PID 17712] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":163007.54417055423,"cz":-87198.4885753619,"mpp":6.452933618521884}
+2026-09-28 16:06:33.907 [INFO] [PID 17712] [TID 2] WebView2: получено действие. | form=Симулятор; action=simulation_set_speed
+2026-09-28 16:06:33.908 [INFO] [PID 17712] [TID 2] SimulatorForm: обработка web action. | json={"action":"simulation_set_speed","speed":12}
+2026-09-28 16:06:33.908 [INFO] [PID 17712] [TID 2] SimulatorForm: кратность игрового времени изменена. | speed=12
+2026-09-28 16:06:33.908 [INFO] [PID 17712] [TID 2] SimulatorForm: формирование snapshot. | points=5192; selected=<none>; player=WorldCoordinate { X = 163769,38438677927, Y = 89,5193, Z = -87817,81560691187 }
+2026-09-28 16:06:33.919 [INFO] [PID 17712] [TID 2] SimulatorForm: отправляю snapshot в WebView2. | jsonChars=1421930; points=5192
+2026-09-28 16:06:33.969 [INFO] [PID 17712] [TID 2] WEB: Simulator получил snapshot. | {"points":5192,"selectedPointId":null,"player":{"x":163769.38438677927,"y":89.5193,"z":-87817.81560691187},"version":"1.0.40.196-CHARACTER-STATE-10000-R1"}
+2026-09-28 16:06:42.483 [INFO] [PID 17712] [TID 2] Simulator: событие опубликовано. | event=DynamicEventExpired; source=DynamicEventDispatcher; payload={"definitionId":"test_dynamic_cache","instanceId":"test_dynamic_cache#6","pointId":"sdo:forest_fire:0x4774f62c86c00000","x":"166488","y":"97.2695","z":"-81260.3"}
+2026-09-28 16:06:42.484 [INFO] [PID 17712] [TID 2] Simulator: событие опубликовано. | event=ChannelChanged; source=DynamicEventDispatcher.Expire; payload={"channel":"dynamic-events","description":"Динамических событий: 6"}
+2026-09-28 16:06:42.502 [INFO] [PID 17712] [TID 2] Simulator: событие опубликовано. | event=ChannelChanged; source=DynamicEventDispatcher.Spawn; payload={"channel":"dynamic-events","description":"Динамических событий: 7"}
+2026-09-28 16:06:42.503 [INFO] [PID 17712] [TID 2] Simulator: событие опубликовано. | event=DynamicEventSpawned; source=DynamicEventDispatcher; payload={"definitionId":"test_dynamic_cache","instanceId":"test_dynamic_cache#7","pointId":"sdo:forest_fire:0x55eba76ee1000001","x":"164283","y":"99.2773","z":"-87149.5"}
+2026-09-28 16:06:42.503 [INFO] [PID 17712] [TID 2] Simulator: событие опубликовано. | event=ChannelChanged; source=DynamicEventDispatcher.Tick; payload={"channel":"dynamic-events","description":"Динамических событий: 7"}
+2026-09-28 16:06:42.618 [INFO] [PID 17712] [TID 2] SimulatorForm: формирование snapshot. | points=5192; selected=<none>; player=WorldCoordinate { X = 163600,05056502207, Y = 89,5193, Z = -88557,10282377203 }
+2026-09-28 16:06:42.628 [INFO] [PID 17712] [TID 2] SimulatorForm: отправляю snapshot в WebView2. | jsonChars=1424842; points=5192
+2026-09-28 16:06:42.679 [INFO] [PID 17712] [TID 2] WEB: Simulator получил snapshot. | {"points":5192,"selectedPointId":null,"player":{"x":163600.05056502207,"y":89.5193,"z":-88557.10282377203},"version":"1.0.40.196-CHARACTER-STATE-10000-R1"}
+2026-09-28 16:06:49.663 [INFO] [PID 17712] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
+2026-09-28 16:06:49.663 [INFO] [PID 17712] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":161549.1811727683,"cz":-87947.02887511044,"mpp":6.452933618521884}
+2026-09-28 16:06:55.518 [INFO] [PID 17712] [TID 2] WebView2: получено действие. | form=Симулятор; action=simulation_stop
+2026-09-28 16:06:55.519 [INFO] [PID 17712] [TID 2] SimulatorForm: обработка web action. | json={"action":"simulation_stop"}
+2026-09-28 16:06:55.520 [INFO] [PID 17712] [TID 2] Quest Runtime: событие. | event=SimulationStopped; source=QuestRuntimeCoordinator; node=<none>; status=Stopped; waiting=<none>; transition=; message=Симуляция остановлена.
+2026-09-28 16:06:55.521 [INFO] [PID 17712] [TID 2] Simulator: событие опубликовано. | event=ChannelChanged; source=DynamicEventDispatcher.Initialize; payload={"channel":"dynamic-events","description":"Динамических событий: 7"}
+2026-09-28 16:06:55.522 [INFO] [PID 17712] [TID 2] Simulator: событие опубликовано. | event=DynamicEventDispatcherStopped; source=DynamicEventDispatcher; payload={}
+2026-09-28 16:06:55.544 [INFO] [PID 17712] [TID 2] SimulatorForm: прохождение записано. | reason=автосохранение: симуляция остановлена вручную; gameTime=2026-01-01 01:02; elapsed=01:02:59.6765777
+2026-09-28 16:06:55.679 [INFO] [PID 17712] [TID 2] SimulatorForm: формирование snapshot. | points=5192; selected=<none>; player=WorldCoordinate { X = 161280,99331260464, Y = 89,5193, Z = -88791,2390781299 }
+2026-09-28 16:06:55.688 [INFO] [PID 17712] [TID 2] SimulatorForm: отправляю snapshot в WebView2. | jsonChars=1425827; points=5192
+2026-09-28 16:06:55.746 [INFO] [PID 17712] [TID 2] WEB: Simulator получил snapshot. | {"points":5192,"selectedPointId":null,"player":{"x":161280.99331260464,"y":89.5193,"z":-88791.2390781299},"version":"1.0.40.196-CHARACTER-STATE-10000-R1"}
+2026-09-28 16:07:00.893 [INFO] [PID 17712] [TID 2] WebView2: получено действие. | form=Симулятор; action=route_toggle
+2026-09-28 16:07:00.893 [INFO] [PID 17712] [TID 2] SimulatorForm: обработка web action. | json={"action":"route_toggle","enabled":false}
+2026-09-28 16:07:00.894 [INFO] [PID 17712] [TID 2] SimulatorForm: движение по маршруту выключено.
+2026-09-28 16:07:00.898 [INFO] [PID 17712] [TID 2] SimulatorForm: прохождение записано. | reason=автосохранение: движение по маршруту выключено; gameTime=2026-01-01 01:02; elapsed=01:02:59.6765777
+2026-09-28 16:07:00.898 [INFO] [PID 17712] [TID 2] SimulatorForm: формирование snapshot. | points=5192; selected=<none>; player=WorldCoordinate { X = 161280,99331260464, Y = 89,5193, Z = -88791,2390781299 }
+2026-09-28 16:07:00.906 [INFO] [PID 17712] [TID 2] SimulatorForm: отправляю snapshot в WebView2. | jsonChars=1425829; points=5192
+2026-09-28 16:07:00.956 [INFO] [PID 17712] [TID 2] WEB: Simulator получил snapshot. | {"points":5192,"selectedPointId":null,"player":{"x":161280.99331260464,"y":89.5193,"z":-88791.2390781299},"version":"1.0.40.196-CHARACTER-STATE-10000-R1"}
+2026-09-28 16:07:02.115 [INFO] [PID 17712] [TID 2] WebView2: получено действие. | form=Симулятор; action=simulation_start
+2026-09-28 16:07:02.115 [INFO] [PID 17712] [TID 2] SimulatorForm: обработка web action. | json={"action":"simulation_start"}
+2026-09-28 16:07:02.116 [INFO] [PID 17712] [TID 2] Quest Runtime: событие. | event=SimulationStarted; source=QuestRuntimeCoordinator; node=<none>; status=Stopped; waiting=<none>; transition=; message=Симуляция запущена.
+2026-09-28 16:07:02.118 [INFO] [PID 17712] [TID 2] Simulator: событие опубликовано. | event=ChannelChanged; source=DynamicEventDispatcher.Initialize; payload={"channel":"dynamic-events","description":"Динамических событий: 7"}
+2026-09-28 16:07:02.119 [INFO] [PID 17712] [TID 2] Simulator: событие опубликовано. | event=DynamicEventDispatcherStarted; source=DynamicEventDispatcher; payload={}
+2026-09-28 16:07:02.119 [INFO] [PID 17712] [TID 2] SimulatorForm: симуляция запущена.
+2026-09-28 16:07:02.240 [INFO] [PID 17712] [TID 2] SimulatorForm: формирование snapshot. | points=5192; selected=<none>; player=WorldCoordinate { X = 161280,99331260464, Y = 89,5193, Z = -88791,2390781299 }
+2026-09-28 16:07:02.253 [INFO] [PID 17712] [TID 2] SimulatorForm: отправляю snapshot в WebView2. | jsonChars=1426758; points=5192
+2026-09-28 16:07:02.317 [INFO] [PID 17712] [TID 2] WEB: Simulator получил snapshot. | {"points":5192,"selectedPointId":null,"player":{"x":161280.99331260464,"y":89.5193,"z":-88791.2390781299},"version":"1.0.40.196-CHARACTER-STATE-10000-R1"}
+2026-09-28 16:08:25.171 [INFO] [PID 17712] [TID 2] WebView2: получено действие. | form=Симулятор; action=simulation_stop
+2026-09-28 16:08:25.171 [INFO] [PID 17712] [TID 2] SimulatorForm: обработка web action. | json={"action":"simulation_stop"}
+2026-09-28 16:08:25.172 [INFO] [PID 17712] [TID 2] Quest Runtime: событие. | event=SimulationStopped; source=QuestRuntimeCoordinator; node=<none>; status=Stopped; waiting=<none>; transition=; message=Симуляция остановлена.
+2026-09-28 16:08:25.173 [INFO] [PID 17712] [TID 2] Simulator: событие опубликовано. | event=ChannelChanged; source=DynamicEventDispatcher.Initialize; payload={"channel":"dynamic-events","description":"Динамических событий: 7"}
+2026-09-28 16:08:25.174 [INFO] [PID 17712] [TID 2] Simulator: событие опубликовано. | event=DynamicEventDispatcherStopped; source=DynamicEventDispatcher; payload={}
+2026-09-28 16:08:25.178 [INFO] [PID 17712] [TID 2] SimulatorForm: прохождение записано. | reason=автосохранение: симуляция остановлена вручную; gameTime=2026-01-01 01:04; elapsed=01:04:29.1811501
+2026-09-28 16:08:25.304 [INFO] [PID 17712] [TID 2] SimulatorForm: формирование snapshot. | points=5192; selected=<none>; player=WorldCoordinate { X = 161280,99331260464, Y = 89,5193, Z = -88791,2390781299 }
+2026-09-28 16:08:25.312 [INFO] [PID 17712] [TID 2] SimulatorForm: отправляю snapshot в WebView2. | jsonChars=1427707; points=5192
+2026-09-28 16:08:25.366 [INFO] [PID 17712] [TID 2] WEB: Simulator получил snapshot. | {"points":5192,"selectedPointId":null,"player":{"x":161280.99331260464,"y":89.5193,"z":-88791.2390781299},"version":"1.0.40.196-CHARACTER-STATE-10000-R1"}
+2026-09-28 16:08:26.675 [INFO] [PID 17712] [TID 2] WebView2: получено действие. | form=Симулятор; action=route_edit_toggle
+2026-09-28 16:08:26.675 [INFO] [PID 17712] [TID 2] SimulatorForm: обработка web action. | json={"action":"route_edit_toggle","enabled":true}
+2026-09-28 16:08:26.676 [INFO] [PID 17712] [TID 2] SimulatorForm: режим редактирования маршрута изменён. | enabled=True
+2026-09-28 16:08:26.676 [INFO] [PID 17712] [TID 2] SimulatorForm: формирование snapshot. | points=5192; selected=<none>; player=WorldCoordinate { X = 161280,99331260464, Y = 89,5193, Z = -88791,2390781299 }
+2026-09-28 16:08:26.685 [INFO] [PID 17712] [TID 2] SimulatorForm: отправляю snapshot в WebView2. | jsonChars=1427706; points=5192
+2026-09-28 16:08:26.735 [INFO] [PID 17712] [TID 2] WEB: Simulator получил snapshot. | {"points":5192,"selectedPointId":null,"player":{"x":161280.99331260464,"y":89.5193,"z":-88791.2390781299},"version":"1.0.40.196-CHARACTER-STATE-10000-R1"}
+2026-09-28 16:08:27.477 [INFO] [PID 17712] [TID 2] WebView2: получено действие. | form=Симулятор; action=route_clear
+2026-09-28 16:08:27.477 [INFO] [PID 17712] [TID 2] SimulatorForm: обработка web action. | json={"action":"route_clear"}
+2026-09-28 16:08:27.482 [INFO] [PID 17712] [TID 2] SimulatorForm: прохождение записано. | reason=автосохранение: route cleared; gameTime=2026-01-01 01:04; elapsed=01:04:29.1811501
+2026-09-28 16:08:27.483 [INFO] [PID 17712] [TID 2] SimulatorForm: формирование snapshot. | points=5192; selected=<none>; player=WorldCoordinate { X = 161280,99331260464, Y = 89,5193, Z = -88791,2390781299 }
+2026-09-28 16:08:27.488 [INFO] [PID 17712] [TID 2] SimulatorForm: отправляю snapshot в WebView2. | jsonChars=1351437; points=5192
+2026-09-28 16:08:27.536 [INFO] [PID 17712] [TID 2] WEB: Simulator получил snapshot. | {"points":5192,"selectedPointId":null,"player":{"x":161280.99331260464,"y":89.5193,"z":-88791.2390781299},"version":"1.0.40.196-CHARACTER-STATE-10000-R1"}
+2026-09-28 16:08:28.046 [INFO] [PID 17712] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
+2026-09-28 16:08:28.047 [INFO] [PID 17712] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":161466.90626913216,"cz":-87943.60075412561,"mpp":8.066167023152355}
+2026-09-28 16:08:28.085 [INFO] [PID 17712] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
+2026-09-28 16:08:28.085 [INFO] [PID 17712] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":161398.3438494354,"cz":-87957.46447869667,"mpp":10.082708778940443}
+2026-09-28 16:08:28.118 [INFO] [PID 17712] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
+2026-09-28 16:08:28.119 [INFO] [PID 17712] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":161322.72353359335,"cz":-87977.3148116052,"mpp":12.603385973675554}
+2026-09-28 16:08:28.174 [INFO] [PID 17712] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
+2026-09-28 16:08:28.174 [INFO] [PID 17712] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":161228.1981387908,"cz":-88002.12772774088,"mpp":15.754232467094443}
+2026-09-28 16:08:29.543 [INFO] [PID 17712] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
+2026-09-28 16:08:29.543 [INFO] [PID 17712] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":155603.93714803807,"cz":-84662.23044471686,"mpp":15.754232467094443}
+2026-09-28 16:08:29.795 [INFO] [PID 17712] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
+2026-09-28 16:08:29.795 [INFO] [PID 17712] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":156505.07924515588,"cz":-85006.06656831119,"mpp":12.603385973675556}
+2026-09-28 16:08:29.809 [INFO] [PID 17712] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
+2026-09-28 16:08:29.809 [INFO] [PID 17712] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":157225.99292285013,"cz":-85281.13546718666,"mpp":10.082708778940445}
+2026-09-28 16:08:29.835 [INFO] [PID 17712] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
+2026-09-28 16:08:29.835 [INFO] [PID 17712] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":157802.7238650055,"cz":-85501.19058628703,"mpp":8.066167023152357}
+2026-09-28 16:08:29.879 [INFO] [PID 17712] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
+2026-09-28 16:08:29.879 [INFO] [PID 17712] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":158264.10861872984,"cz":-85677.23468156734,"mpp":6.452933618521886}
+2026-09-28 16:08:30.687 [INFO] [PID 17712] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
+2026-09-28 16:08:30.687 [INFO] [PID 17712] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":159541.78947519718,"cz":-87858.32624462774,"mpp":6.452933618521886}
+2026-09-28 16:08:31.335 [INFO] [PID 17712] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
+2026-09-28 16:08:31.336 [INFO] [PID 17712] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":159777.96684563506,"cz":-87942.37570500898,"mpp":5.162346894817509}
+2026-09-28 16:08:31.375 [INFO] [PID 17712] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
+2026-09-28 16:08:31.375 [INFO] [PID 17712] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":159966.9087419854,"cz":-88009.61527331398,"mpp":4.129877515854008}
+2026-09-28 16:08:31.735 [INFO] [PID 17712] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
+2026-09-28 16:08:31.735 [INFO] [PID 17712] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":160118.88823456882,"cz":-88063.40692795797,"mpp":3.3039020126832064}
+2026-09-28 16:08:31.791 [INFO] [PID 17712] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
+2026-09-28 16:08:31.792 [INFO] [PID 17712] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":160240.47182863558,"cz":-88106.44025167318,"mpp":2.643121610146565}
+2026-09-28 16:08:32.599 [INFO] [PID 17712] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_map_view
+2026-09-28 16:08:32.599 [INFO] [PID 17712] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_map_view","cx":160465.13716549805,"cz":-88756.64816776924,"mpp":2.643121610146565}
+2026-09-28 16:08:36.263 [INFO] [PID 17712] [TID 2] WebView2: получено действие. | form=Симулятор; action=route_add_waypoint
+2026-09-28 16:08:36.264 [INFO] [PID 17712] [TID 2] SimulatorForm: обработка web action. | json={"action":"route_add_waypoint","x":160560.28954346332,"y":89.5193,"z":-89010.71823254458}
+2026-09-28 16:08:36.268 [INFO] [PID 17712] [TID 2] SimulatorForm: маршрут перестроен. | reason=waypoint added; waypoints=1; routePoints=41; segments=40; target=№1; errors=0
+2026-09-28 16:08:36.272 [INFO] [PID 17712] [TID 2] SimulatorForm: прохождение записано. | reason=автосохранение: waypoint added; gameTime=2026-01-01 01:04; elapsed=01:04:29.1811501
+2026-09-28 16:08:36.273 [INFO] [PID 17712] [TID 2] SimulatorForm: формирование snapshot. | points=5192; selected=<none>; player=WorldCoordinate { X = 161280,99331260464, Y = 89,5193, Z = -88791,2390781299 }
+2026-09-28 16:08:36.279 [INFO] [PID 17712] [TID 2] SimulatorForm: отправляю snapshot в WebView2. | jsonChars=1367207; points=5192
+2026-09-28 16:08:36.325 [INFO] [PID 17712] [TID 2] WEB: Simulator получил snapshot. | {"points":5192,"selectedPointId":null,"player":{"x":161280.99331260464,"y":89.5193,"z":-88791.2390781299},"version":"1.0.40.196-CHARACTER-STATE-10000-R1"}
+2026-09-28 16:08:38.065 [INFO] [PID 17712] [TID 2] WebView2: получено действие. | form=Симулятор; action=route_toggle
+2026-09-28 16:08:38.065 [INFO] [PID 17712] [TID 2] SimulatorForm: обработка web action. | json={"action":"route_toggle","enabled":true}
+2026-09-28 16:08:38.070 [INFO] [PID 17712] [TID 2] SimulatorForm: маршрут перестроен. | reason=route movement enabled; waypoints=1; routePoints=41; segments=40; target=№1; errors=0
+2026-09-28 16:08:38.072 [INFO] [PID 17712] [TID 2] SimulatorForm: движение по маршруту включено. | waypoints=1; target=№1; resumed=False
+2026-09-28 16:08:38.076 [INFO] [PID 17712] [TID 2] SimulatorForm: прохождение записано. | reason=автосохранение: движение по маршруту включено; gameTime=2026-01-01 01:04; elapsed=01:04:29.1811501
+2026-09-28 16:08:38.276 [INFO] [PID 17712] [TID 2] SimulatorForm: формирование snapshot. | points=5192; selected=<none>; player=WorldCoordinate { X = 161280,99331260464, Y = 89,5193, Z = -88791,2390781299 }
+2026-09-28 16:08:38.281 [INFO] [PID 17712] [TID 2] SimulatorForm: отправляю snapshot в WebView2. | jsonChars=1368336; points=5192
+2026-09-28 16:08:38.332 [INFO] [PID 17712] [TID 2] WEB: Simulator получил snapshot. | {"points":5192,"selectedPointId":null,"player":{"x":161280.99331260464,"y":89.5193,"z":-88791.2390781299},"version":"1.0.40.196-CHARACTER-STATE-10000-R1"}
+2026-09-28 16:08:39.102 [INFO] [PID 17712] [TID 2] WebView2: получено действие. | form=Симулятор; action=simulation_start
+2026-09-28 16:08:39.103 [INFO] [PID 17712] [TID 2] SimulatorForm: обработка web action. | json={"action":"simulation_start"}
+2026-09-28 16:08:39.104 [INFO] [PID 17712] [TID 2] Quest Runtime: событие. | event=SimulationStarted; source=QuestRuntimeCoordinator; node=<none>; status=Stopped; waiting=<none>; transition=; message=Симуляция запущена.
+2026-09-28 16:08:39.105 [INFO] [PID 17712] [TID 2] Simulator: событие опубликовано. | event=ChannelChanged; source=DynamicEventDispatcher.Initialize; payload={"channel":"dynamic-events","description":"Динамических событий: 7"}
+2026-09-28 16:08:39.106 [INFO] [PID 17712] [TID 2] Simulator: событие опубликовано. | event=DynamicEventDispatcherStarted; source=DynamicEventDispatcher; payload={}
+2026-09-28 16:08:39.106 [INFO] [PID 17712] [TID 2] SimulatorForm: симуляция запущена.
+2026-09-28 16:08:39.315 [INFO] [PID 17712] [TID 2] SimulatorForm: формирование snapshot. | points=5192; selected=<none>; player=WorldCoordinate { X = 161280,99331260464, Y = 89,5193, Z = -88791,2390781299 }
+2026-09-28 16:08:39.321 [INFO] [PID 17712] [TID 2] SimulatorForm: отправляю snapshot в WebView2. | jsonChars=1369264; points=5192
+2026-09-28 16:08:39.369 [INFO] [PID 17712] [TID 2] WEB: Simulator получил snapshot. | {"points":5192,"selectedPointId":null,"player":{"x":161280.99331260464,"y":89.5193,"z":-88791.2390781299},"version":"1.0.40.196-CHARACTER-STATE-10000-R1"}
+2026-09-28 16:08:45.133 [INFO] [PID 17712] [TID 2] WebView2: получено действие. | form=Симулятор; action=simulation_set_speed
+2026-09-28 16:08:45.134 [INFO] [PID 17712] [TID 2] SimulatorForm: обработка web action. | json={"action":"simulation_set_speed","speed":2}
+2026-09-28 16:08:45.134 [INFO] [PID 17712] [TID 2] SimulatorForm: кратность игрового времени изменена. | speed=2
+2026-09-28 16:08:45.135 [INFO] [PID 17712] [TID 2] SimulatorForm: формирование snapshot. | points=5192; selected=<none>; player=WorldCoordinate { X = 161292,8594016234, Y = 89,5193, Z = -88790,56568316031 }
+2026-09-28 16:08:45.141 [INFO] [PID 17712] [TID 2] SimulatorForm: отправляю snapshot в WebView2. | jsonChars=1369299; points=5192
+2026-09-28 16:08:45.195 [INFO] [PID 17712] [TID 2] WEB: Simulator получил snapshot. | {"points":5192,"selectedPointId":null,"player":{"x":161292.8594016234,"y":89.5193,"z":-88790.56568316031},"version":"1.0.40.196-CHARACTER-STATE-10000-R1"}
+2026-09-28 16:08:46.471 [INFO] [PID 17712] [TID 2] WebView2: получено действие. | form=Симулятор; action=simulation_set_speed
+2026-09-28 16:08:46.472 [INFO] [PID 17712] [TID 2] SimulatorForm: обработка web action. | json={"action":"simulation_set_speed","speed":5}
+2026-09-28 16:08:46.472 [INFO] [PID 17712] [TID 2] SimulatorForm: кратность игрового времени изменена. | speed=5
+2026-09-28 16:08:46.472 [INFO] [PID 17712] [TID 2] SimulatorForm: формирование snapshot. | points=5192; selected=<none>; player=WorldCoordinate { X = 161251,3718301404, Y = 89,5193, Z = -88792,9200833247 }
+2026-09-28 16:08:46.478 [INFO] [PID 17712] [TID 2] SimulatorForm: отправляю snapshot в WebView2. | jsonChars=1369295; points=5192
+2026-09-28 16:08:46.527 [INFO] [PID 17712] [TID 2] WEB: Simulator получил snapshot. | {"points":5192,"selectedPointId":null,"player":{"x":161251.3718301404,"y":89.5193,"z":-88792.9200833247},"version":"1.0.40.196-CHARACTER-STATE-10000-R1"}
+2026-09-28 16:08:55.717 [INFO] [PID 17712] [TID 2] WebView2: получено действие. | form=Симулятор; action=route_toggle
+2026-09-28 16:08:55.717 [INFO] [PID 17712] [TID 2] SimulatorForm: обработка web action. | json={"action":"route_toggle","enabled":false}
+2026-09-28 16:08:55.718 [INFO] [PID 17712] [TID 2] SimulatorForm: движение по маршруту выключено.
+2026-09-28 16:08:55.722 [INFO] [PID 17712] [TID 2] SimulatorForm: прохождение записано. | reason=автосохранение: движение по маршруту выключено; gameTime=2026-01-01 01:05; elapsed=01:05:37.9173916
+2026-09-28 16:08:55.722 [INFO] [PID 17712] [TID 2] SimulatorForm: формирование snapshot. | points=5192; selected=<none>; player=WorldCoordinate { X = 160647,5326195204, Y = 89,5193, Z = -88730,94268501566 }
+2026-09-28 16:08:55.728 [INFO] [PID 17712] [TID 2] SimulatorForm: отправляю snapshot в WebView2. | jsonChars=1369311; points=5192
+2026-09-28 16:08:55.783 [INFO] [PID 17712] [TID 2] WEB: Simulator получил snapshot. | {"points":5192,"selectedPointId":null,"player":{"x":160647.5326195204,"y":89.5193,"z":-88730.94268501566},"version":"1.0.40.196-CHARACTER-STATE-10000-R1"}
+2026-09-28 16:09:07.605 [INFO] [PID 17712] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_sidebar_sections
+2026-09-28 16:09:07.605 [INFO] [PID 17712] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_sidebar_sections","sections":["player","route","vitals","effects","progress"]}
+2026-09-28 16:09:07.607 [INFO] [PID 17712] [TID 2] SimulatorForm: раскрытые разделы сайдбара сохранены. | sections=5
+2026-09-28 16:09:07.608 [INFO] [PID 17712] [TID 2] SimulatorForm: формирование snapshot. | points=5192; selected=<none>; player=WorldCoordinate { X = 160647,5326195204, Y = 89,5193, Z = -88730,94268501566 }
+2026-09-28 16:09:07.616 [INFO] [PID 17712] [TID 2] SimulatorForm: отправляю snapshot в WebView2. | jsonChars=1369322; points=5192
+2026-09-28 16:09:07.667 [INFO] [PID 17712] [TID 2] WEB: Simulator получил snapshot. | {"points":5192,"selectedPointId":null,"player":{"x":160647.5326195204,"y":89.5193,"z":-88730.94268501566},"version":"1.0.40.196-CHARACTER-STATE-10000-R1"}
+2026-09-28 16:09:15.071 [INFO] [PID 17712] [TID 2] WebView2: получено действие. | form=Симулятор; action=simulation_stop
+2026-09-28 16:09:15.071 [INFO] [PID 17712] [TID 2] SimulatorForm: обработка web action. | json={"action":"simulation_stop"}
+2026-09-28 16:09:15.072 [INFO] [PID 17712] [TID 2] Quest Runtime: событие. | event=SimulationStopped; source=QuestRuntimeCoordinator; node=<none>; status=Stopped; waiting=<none>; transition=; message=Симуляция остановлена.
+2026-09-28 16:09:15.073 [INFO] [PID 17712] [TID 2] Simulator: событие опубликовано. | event=ChannelChanged; source=DynamicEventDispatcher.Initialize; payload={"channel":"dynamic-events","description":"Динамических событий: 7"}
+2026-09-28 16:09:15.074 [INFO] [PID 17712] [TID 2] Simulator: событие опубликовано. | event=DynamicEventDispatcherStopped; source=DynamicEventDispatcher; payload={}
+2026-09-28 16:09:15.078 [INFO] [PID 17712] [TID 2] SimulatorForm: прохождение записано. | reason=автосохранение: симуляция остановлена вручную; gameTime=2026-01-01 01:07; elapsed=01:07:15.4103676
+2026-09-28 16:09:15.288 [INFO] [PID 17712] [TID 2] SimulatorForm: формирование snapshot. | points=5192; selected=<none>; player=WorldCoordinate { X = 160647,5326195204, Y = 89,5193, Z = -88730,94268501566 }
+2026-09-28 16:09:15.294 [INFO] [PID 17712] [TID 2] SimulatorForm: отправляю snapshot в WebView2. | jsonChars=1370268; points=5192
+2026-09-28 16:09:15.347 [INFO] [PID 17712] [TID 2] WEB: Simulator получил snapshot. | {"points":5192,"selectedPointId":null,"player":{"x":160647.5326195204,"y":89.5193,"z":-88730.94268501566},"version":"1.0.40.196-CHARACTER-STATE-10000-R1"}
+2026-09-28 16:09:22.633 [INFO] [PID 17712] [TID 2] WebView2: получено действие. | form=Симулятор; action=set_progress
+2026-09-28 16:09:22.634 [INFO] [PID 17712] [TID 2] SimulatorForm: обработка web action. | json={"action":"set_progress","money":8000,"experience":0,"reserve":0}
+2026-09-28 16:09:22.635 [INFO] [PID 17712] [TID 2] Simulator: событие опубликовано. | event=ChannelChanged; source=Редактор прогресса; payload={"channel":"player-progress","description":"Изменены деньги/опыт"}
+2026-09-28 16:09:22.863 [INFO] [PID 17712] [TID 2] SimulatorForm: формирование snapshot. | points=5192; selected=<none>; player=WorldCoordinate { X = 160647,5326195204, Y = 89,5193, Z = -88730,94268501566 }
+2026-09-28 16:09:22.870 [INFO] [PID 17712] [TID 2] SimulatorForm: отправляю snapshot в WebView2. | jsonChars=1370742; points=5192
+2026-09-28 16:09:22.925 [INFO] [PID 17712] [TID 2] WEB: Simulator получил snapshot. | {"points":5192,"selectedPointId":null,"player":{"x":160647.5326195204,"y":89.5193,"z":-88730.94268501566},"version":"1.0.40.196-CHARACTER-STATE-10000-R1"}
+2026-09-28 16:09:25.493 [INFO] [PID 17712] [TID 2] WebView2: получено действие. | form=Симулятор; action=simulation_start
+2026-09-28 16:09:25.493 [INFO] [PID 17712] [TID 2] SimulatorForm: обработка web action. | json={"action":"simulation_start"}
+2026-09-28 16:09:25.494 [INFO] [PID 17712] [TID 2] Quest Runtime: событие. | event=SimulationStarted; source=QuestRuntimeCoordinator; node=<none>; status=Stopped; waiting=<none>; transition=; message=Симуляция запущена.
+2026-09-28 16:09:25.495 [INFO] [PID 17712] [TID 2] Simulator: событие опубликовано. | event=ChannelChanged; source=DynamicEventDispatcher.Initialize; payload={"channel":"dynamic-events","description":"Динамических событий: 7"}
+2026-09-28 16:09:25.496 [INFO] [PID 17712] [TID 2] Simulator: событие опубликовано. | event=DynamicEventDispatcherStarted; source=DynamicEventDispatcher; payload={}
+2026-09-28 16:09:25.496 [INFO] [PID 17712] [TID 2] SimulatorForm: симуляция запущена.
+2026-09-28 16:09:25.725 [INFO] [PID 17712] [TID 2] SimulatorForm: формирование snapshot. | points=5192; selected=<none>; player=WorldCoordinate { X = 160647,5326195204, Y = 89,5193, Z = -88730,94268501566 }
+2026-09-28 16:09:25.731 [INFO] [PID 17712] [TID 2] SimulatorForm: отправляю snapshot в WebView2. | jsonChars=1371671; points=5192
+2026-09-28 16:09:25.795 [INFO] [PID 17712] [TID 2] WEB: Simulator получил snapshot. | {"points":5192,"selectedPointId":null,"player":{"x":160647.5326195204,"y":89.5193,"z":-88730.94268501566},"version":"1.0.40.196-CHARACTER-STATE-10000-R1"}
+2026-09-28 16:09:28.111 [ERROR] [PID 17712] [TID 2] WebView2: ошибка разбора web message. | System.InvalidOperationException: The requested operation requires an element of type 'Object', but the target element has type 'String'. \n    at System.Text.Json.ThrowHelper.ThrowJsonElementWrongTypeException(JsonTokenType expectedType, JsonTokenType actualType) \n    at System.Text.Json.JsonDocument.TryGetNamedPropertyValue(Int32 index, ReadOnlySpan`1 propertyName, JsonElement& value) \n    at AssistQuestEditor.App.WebViewForm.Browser_WebMessageReceived(Object sender, CoreWebView2WebMessageReceivedEventArgs e)
+2026-09-28 16:09:28.112 [INFO] [PID 17712] [TID 2] SimulatorForm: обработка web action. | json="{\"action\":\"find_full_lodging\"}"
+2026-09-28 16:09:46.369 [ERROR] [PID 17712] [TID 2] WebView2: ошибка разбора web message. | System.InvalidOperationException: The requested operation requires an element of type 'Object', but the target element has type 'String'. \n    at System.Text.Json.ThrowHelper.ThrowJsonElementWrongTypeException(JsonTokenType expectedType, JsonTokenType actualType) \n    at System.Text.Json.JsonDocument.TryGetNamedPropertyValue(Int32 index, ReadOnlySpan`1 propertyName, JsonElement& value) \n    at AssistQuestEditor.App.WebViewForm.Browser_WebMessageReceived(Object sender, CoreWebView2WebMessageReceivedEventArgs e)
+2026-09-28 16:09:46.390 [INFO] [PID 17712] [TID 2] SimulatorForm: обработка web action. | json="{\"action\":\"find_full_lodging\"}"
+2026-09-28 16:09:58.485 [INFO] [PID 17712] [TID 2] Quest Runtime: событие. | event=SimulationStopped; source=QuestRuntimeCoordinator; node=<none>; status=Stopped; waiting=<none>; transition=; message=Симуляция остановлена.
+2026-09-28 16:09:58.487 [INFO] [PID 17712] [TID 2] Simulator: событие опубликовано. | event=ChannelChanged; source=DynamicEventDispatcher.Initialize; payload={"channel":"dynamic-events","description":"Динамических событий: 7"}
+2026-09-28 16:09:58.487 [INFO] [PID 17712] [TID 2] Simulator: событие опубликовано. | event=DynamicEventDispatcherStopped; source=DynamicEventDispatcher; payload={}
+2026-09-28 16:09:58.491 [INFO] [PID 17712] [TID 2] SimulatorForm: прохождение записано. | reason=автосохранение: закрытие симулятора; gameTime=2026-01-01 01:07; elapsed=01:07:57.4250583
+2026-09-28 16:09:58.541 [INFO] [PID 17712] [TID 2] Application.Run завершён.
+2026-09-28 16:09:58.543 [INFO] [PID 17712] [TID 2] === Assist Quest Editor END ===

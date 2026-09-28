@@ -313,11 +313,16 @@ check(/id="simAutoSave"/.test(simulatorHtml),
   "Под кнопкой запуска должна быть подпись «Автосохранение: дата и время».");
 check(/autoSaveLabel/.test(simulatorForm) && /autoSaveLabel/.test(simulatorJs),
   "Подпись автосохранения должна приходить в снимке (Host → Web).");
-// Подпись в плашке НЕ должна меняться по состояниям: именно смена подписи
-// оставляла «На паузе» висеть после остановки. Проверяется ТЕЛО функции
-// отрисовки транспорта — и БЕЗ КОММЕНТАРИЕВ: пояснение, описывающее дефект,
-// само содержит те же слова, и поиск по тексту с комментариями ловил бы
-// объяснение вместо кода (это уже случалось в этом проекте).
+// Подпись в плашке называет СОСТОЯНИЕ и обязана меняться вместе с ним.
+//
+// Прежде подпись делали статической из-за ДРУГОГО дефекта: стоп не сбрасывал
+// признак паузы (ранний выход в SetSimulationRunning), поэтому состояние
+// оставалось paused и подпись честно повторяла «На паузе». Причина устранена,
+// поэтому текст снова сообщает состояние — и проверяется именно это.
+//
+// Проверяется ТЕЛО функции отрисовки транспорта и БЕЗ КОММЕНТАРИЕВ: пояснение,
+// описывающее дефект, само содержит те же слова, и поиск по тексту с
+// комментариями ловил бы объяснение вместо кода (это уже случалось здесь).
 const stripComments = source => source
   .replace(/\/\*[\s\S]*?\*\//g, " ")
   .replace(/\/\/[^\n]*/g, " ");
@@ -327,10 +332,12 @@ const transportBody = stripComments(simulatorJs.slice(
 ));
 check(transportBody.length > 0,
   "В simulator.js должна быть функция renderSimulationTransport().");
-check(!/simStatusText/.test(transportBody),
-  "Отрисовка транспорта не должна переписывать текст плашки.");
-check(!/На паузе|Идет симуляция|не запущена/.test(transportBody),
-  "Отрисовка транспорта не должна подставлять текст состояния: состояние — это цвет.");
+check(/simStatusText/.test(transportBody),
+  "Отрисовка транспорта должна подставлять ТЕКСТ состояния в плашку.");
+check(/Идёт симуляция/.test(transportBody) &&
+      /На паузе/.test(transportBody) &&
+      /Симуляция не запущена/.test(transportBody),
+  "Подписи плашки должны называть все три состояния симуляции.");
 
 // Вспышка автосохранения: LIME, ОДИН раз, 2 секунды.
 const autoSaveStyle = themeCss.slice(
@@ -494,7 +501,7 @@ try {
         </div>
         <div class="simTopRow simTopStatus">
           <div class="simStatusPlate" id="simStatusPlate" data-sim-state="stopped">
-            <span class="simStatusText" id="simStatusText">Игровое время</span>
+            <span class="simStatusText" id="simStatusText">Симуляция не запущена</span>
           </div>
           <div class="hud" id="hud"><span class="badge">Симуляция: ВЫКЛ</span><span class="badge">День 1 · 08:00</span></div>
         </div>
@@ -730,7 +737,7 @@ try {
           </div>
           <div class="simTopRow simTopStatus">
             <div class="simStatusPlate" id="simStatusPlate" data-sim-state="stopped">
-              <span class="simStatusText" id="simStatusText">Игровое время</span>
+              <span class="simStatusText" id="simStatusText">Симуляция не запущена</span>
             </div>
             <div class="hud" id="hud"></div>
           </div>
@@ -843,9 +850,8 @@ try {
     "Часы в шапке должны показывать время с секундами (чч:мм:сс): " + runningState.hud);
   check(runningState.state === "running",
     "При идущей симуляции плашка должна быть в состоянии running: " + runningState.state);
-  // Подпись СТАТИЧЕСКАЯ и не сообщает состояние: состояние — цвет и значок.
-  check(/Игровое время/.test(runningState.text),
-    "Подпись плашки должна быть нейтральной («Игровое время»): " + runningState.text);
+  check(/Идёт симуляция/.test(runningState.text),
+    "Подпись плашки при идущей симуляции должна быть «Идёт симуляция»: " + runningState.text);
   check(runningState.play === "⏸️",
     "Иконка play при идущей симуляции должна стать ⏸️ (следующее действие — пауза): " + runningState.play);
   // Требование автора: идёт симуляция — оранжевая. Проверяем вычисленный
@@ -877,8 +883,8 @@ try {
   });
   check(pausedState.state === "paused",
     "Плашка должна быть в состоянии paused: " + pausedState.state);
-  check(/Игровое время/.test(pausedState.text),
-    "Подпись плашки не должна меняться на паузе: " + pausedState.text);
+  check(/На паузе/.test(pausedState.text),
+    "Подпись плашки на паузе должна быть «На паузе»: " + pausedState.text);
   check(pausedState.play === "▶️",
     "Иконка play на паузе должна быть ▶️ (следующее действие — продолжить): " + pausedState.play);
   // Метка «(пауза)» принадлежит ИМЕННО паузе: раньше она висела при
@@ -903,8 +909,10 @@ try {
     "У выключенной симуляции метки «(пауза)» быть не должно: " + stoppedState.hud);
   check(stoppedState.state === "stopped",
     "Плашка должна быть в состоянии stopped: " + stoppedState.state);
-  check(/Игровое время/.test(stoppedState.text),
-    "Подпись плашки должна остаться нейтральной после остановки: " + stoppedState.text);
+  // Именно этот дефект («На паузе» после остановки) и был причиной статичной
+  // подписи: после остановки текст обязан вернуться к «не запущена».
+  check(/Симуляция не запущена/.test(stoppedState.text),
+    "После остановки подпись плашки должна быть «Симуляция не запущена»: " + stoppedState.text);
   check(/rgb\(\s*18,\s*171,\s*229\s*\)/.test(stoppedComputed.color),
     "Состояние «симуляции нет» должно быть СИНИМ (#12abe5): " + stoppedComputed.color);
   check(!/simPausePulse/.test(stoppedComputed.animationName),

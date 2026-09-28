@@ -101,6 +101,9 @@ public sealed class SimulatorForm : WebViewForm
     /// </summary>
     private InventoryForm? _inventoryForm;
 
+    /// <summary>Окно «Монитор показателей» (кнопка под шкалами в сайдбаре).</summary>
+    private IndicatorsForm? _indicatorsForm;
+
     /// <summary>Мир, которому принадлежит окно. Null — режим без выбранного мира (CI).</summary>
     private readonly WorldRecord? _world;
 
@@ -222,6 +225,14 @@ public sealed class SimulatorForm : WebViewForm
             {
                 _inventoryForm.Close();
                 _inventoryForm = null;
+            }
+
+            // Монитор показателей живёт вместе с Симулятором: без хозяина он
+            // остался бы с устаревшими данными, обновлять которые некому.
+            if (_indicatorsForm is not null)
+            {
+                _indicatorsForm.Close();
+                _indicatorsForm = null;
             }
 
             if (_campaignsForm is not null)
@@ -432,6 +443,11 @@ public sealed class SimulatorForm : WebViewForm
         // одного поля в Симуляторе молча ломала бы инвентарь.
         if (_inventoryForm is not null && !_inventoryForm.IsDisposed)
             _inventoryForm.SetSnapshotJson(payload);
+
+        // Монитор показателей получает тот же json: он читает те же шкалы,
+        // условия и скорости изменения.
+        if (_indicatorsForm is not null && !_indicatorsForm.IsDisposed)
+            _indicatorsForm.SetSnapshotJson(payload);
     }
 
     /// <summary>
@@ -541,6 +557,51 @@ public sealed class SimulatorForm : WebViewForm
             return;
 
         _inventoryForm.Close();
+    }
+
+    /// <summary>
+    /// Открывает окно «Монитор показателей».
+    ///
+    /// Окно ОДНО: повторный запрос поднимает уже открытое. Симуляцию оно НЕ
+    /// ставит на паузу (в отличие от инвентаря): монитор нужен именно во время
+    /// хода, чтобы наблюдать, как меняются шкалы.
+    /// </summary>
+    private void OpenIndicatorsWindow()
+    {
+        if (_indicatorsForm is not null && !_indicatorsForm.IsDisposed)
+        {
+            _indicatorsForm.WindowState = FormWindowState.Normal;
+            _indicatorsForm.BringToFront();
+            _indicatorsForm.Activate();
+            return;
+        }
+
+        _indicatorsForm = new IndicatorsForm();
+        _indicatorsForm.GlobalHotKeyPressed += SimulatorForm_GlobalHotKeyPressed;
+        _indicatorsForm.CloseRequested += (_, _) => CloseIndicatorsWindow();
+        _indicatorsForm.FormClosed += (_, _) =>
+        {
+            _indicatorsForm.GlobalHotKeyPressed -= SimulatorForm_GlobalHotKeyPressed;
+            _indicatorsForm = null;
+        };
+
+        _indicatorsForm.Show(this);
+
+        // Снимок отправляется сразу: окно, открытое после последнего обновления
+        // мира, иначе показывало бы пустой список.
+        PushSnapshot();
+
+        AppLogger.Info("SimulatorForm: окно монитора показателей открыто.",
+            $"size={_indicatorsForm.Width}x{_indicatorsForm.Height}");
+    }
+
+    /// <summary>Закрывает окно монитора показателей, если оно открыто.</summary>
+    private void CloseIndicatorsWindow()
+    {
+        if (_indicatorsForm is null || _indicatorsForm.IsDisposed)
+            return;
+
+        _indicatorsForm.Close();
     }
 
     private void SimulatorForm_GlobalHotKeyPressed(object? sender, WebViewHotKeyEventArgs e)
@@ -754,6 +815,10 @@ public sealed class SimulatorForm : WebViewForm
 
                 case "find_full_lodging":
                     FindFullLodging();
+                    break;
+
+                case "open_indicators":
+                    OpenIndicatorsWindow();
                     break;
 
                 case "set_vitals":
@@ -2508,6 +2573,12 @@ public sealed class SimulatorForm : WebViewForm
         }, SnapshotJsonOptions);
 
         PostJson(payload);
+
+        // Монитор показателей обновляется ТЕМ ЖЕ live_state, что и карта:
+        // он показывает текущие значения и скорости, а живое обновление ему
+        // нужнее, чем карте — именно за изменениями он и наблюдает.
+        if (_indicatorsForm is not null && !_indicatorsForm.IsDisposed)
+            _indicatorsForm.SetSnapshotJson(payload);
     }
 
     private void SetFact(JsonElement root)

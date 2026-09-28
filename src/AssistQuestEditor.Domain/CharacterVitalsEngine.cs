@@ -37,6 +37,19 @@ public static class CharacterVitalsEngine
     public const double FatigueBuildKilometers = 900d;
     public const double StressCriticalPercent = 50d;
 
+    /// <summary>
+    /// Базовый множитель накопления КУМУЛЯТИВНОЙ усталости.
+    /// Задано автором: накопление увеличено вдвое относительно «1 единица
+    /// истощения на 1% критического перерасхода».
+    /// </summary>
+    public const double CumulativeFatigueAccrualBaseMultiplier = 2d;
+
+    /// <summary>За каждые накопленные 5% кумулятивной усталости коэффициент растёт.</summary>
+    public const double CumulativeFatigueAccrualStepPercent = 5d;
+
+    /// <summary>Прирост коэффициента за каждые накопленные 5% (задано автором).</summary>
+    public const double CumulativeFatigueAccrualStepBonus = 0.25d;
+
     public const double HydrationConsumptionHours = 2d;
     public const double EnergyConsumptionHours = 4d;
     public const double SleepConsumptionMultiplier = 1d / 3d;
@@ -453,9 +466,12 @@ public static class CharacterVitalsEngine
 
                     if (wholeHours > 0d)
                     {
+                        // Накопление усталости ускоряется по мере роста её
+                        // кумулятивной шкалы (см. CumulativeFatigueAccrualMultiplier).
                         var cumulativeGain =
                             UnitsFromPercentExact(
-                                wholeHours);
+                                wholeHours) *
+                            CumulativeFatigueAccrualMultiplier(state);
 
                         // «Бык» прекращает ЛЮБОЕ негативное накопление, поэтому
                         // почасовое истощение усталости не должно его обходить:
@@ -1064,18 +1080,6 @@ public static class CharacterVitalsEngine
                 ChangeResilience(ref vitals, 2d);
                 break;
 
-            case "painkiller":
-                AddResource(ref vitals, "health", 5d);
-                ReduceStress(ref conditions, 3d);
-                conditions = AddOrReplaceEffect(
-                    conditions,
-                    new ActivePlayerEffectState(
-                        "analgesia",
-                        "Обезболивание",
-                        2d * 3600d,
-                        false));
-                break;
-
             case "smoke.cigarette":
                 ReduceStress(ref conditions, 2d);
                 AddOvercharge(ref conditions, "energy", 3d);
@@ -1317,13 +1321,38 @@ public static class CharacterVitalsEngine
 
     }
 
+    /// <summary>
+    /// Коэффициент ускорения накопления кумулятивной усталости.
+    ///
+    /// База — <see cref="CumulativeFatigueAccrualBaseMultiplier"/> (задано
+    /// автором: «увеличить в 2 раза»), плюс
+    /// <see cref="CumulativeFatigueAccrualStepBonus"/> за каждые ЦЕЛЫЕ
+    /// <see cref="CumulativeFatigueAccrualStepPercent"/> уже накопленной
+    /// кумулятивной усталости. Чем сильнее истощение, тем быстрее оно растёт —
+    /// это «лавина», а не линейный рост.
+    /// </summary>
+    public static double CumulativeFatigueAccrualMultiplier(
+        PlayerConditionState state)
+    {
+        var percent =
+            PlayerConditionScale.ToPercent(
+                state.CumulativeFatigue);
+        var steps =
+            Math.Floor(
+                percent /
+                CumulativeFatigueAccrualStepPercent);
+
+        return CumulativeFatigueAccrualBaseMultiplier +
+            steps *
+            CumulativeFatigueAccrualStepBonus;
+    }
+
     private static void AddFatigueExhaustion(
         ref PlayerConditionState state,
         double fatigueGainUnits,
         double currentSoftFatigue,
         double resiliencePercent)
-    {
-        if (fatigueGainUnits <= 0d)
+    {        if (fatigueGainUnits <= 0d)
             return;
 
         var before =
@@ -1354,7 +1383,8 @@ public static class CharacterVitalsEngine
                 : 0.25d;
         var units =
             UnitsFromPercentExact(
-                critical * multiplier);
+                critical * multiplier) *
+            CumulativeFatigueAccrualMultiplier(state);
 
         if (!HasEffect(state, "bull") &&
             !SkipNegativeRoll(

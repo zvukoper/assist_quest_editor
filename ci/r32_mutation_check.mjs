@@ -59,12 +59,14 @@ const mutations = [
     why: "идёт симуляция — оранжевая, а не зелёная"
   },
   {
-    name: "плашка времени с текстом состояния",
+    name: "плашка времени с подписью без состояния",
     file: "src/AssistQuestEditor.App/Web/simulator.js",
     probe: "environment",
-    from: '    const autoSave = document.getElementById("simAutoSave");',
-    to: '    const autoSave = document.getElementById("simAutoSave");\n    document.getElementById("simStatusText").textContent = simulationPaused ? "На паузе" : "Идет симуляция";',
-    why: "подпись плашки не должна меняться по состояниям"
+    // Возвращается прежняя НЕЙТРАЛЬНАЯ подпись «Игровое время»: текст перестаёт
+    // называть состояние, и проверки обязаны это поймать.
+    from: '          : "Симуляция не запущена";',
+    to: '          : "Игровое время";',
+    why: "подпись плашки обязана называть состояние симуляции"
   },
   {
     name: "плашка паузы без пульсации",

@@ -2108,12 +2108,18 @@
   const MARKER_SMOOTH = {
     // Отставание картинки: 35 мс при рывке в 250 мс — незаметно.
     positionTauSeconds: 0.035,
-    // Больше этого скачка — телепорт, а не движение.
+    // Больше этого скачка — телепорт, а не движение. Порог задан для ×1 и
+    // масштабируется кратностью ускорения (см. smoothedMarkerPosition): при ×5
+    // пакет приходит раз в 250 мс, а игрок за это время честно проходит 25 м —
+    // ровно прежний порог. Порог не масштабировался, поэтому на ×5 пакеты
+    // попадали то «до», то «за» границу: одни сглаживались, другие принимались
+    // как телепорт — снаружи это и было «метка начинает двигаться рывками».
     snapDistanceMeters: 25,
     // Предел экстраполяции: пакет приходит раз в 250 мс, поэтому окно чуть
     // больше этого интервала — тогда маркер едет ровно весь промежуток между
     // пакетами, а не «доходит и ждёт». Если пакеты прекратятся совсем, вперёд
     // улететь не даст: окно ограничено, а остановка симуляции гасит цикл.
+    // Окно — в РЕАЛЬНЫХ секундах, путь внутри уже умножен на кратность.
     maxExtrapolationSeconds: 0.3
   };
 
@@ -2182,7 +2188,14 @@
 
     const jump = Math.hypot(x - markerSmooth.x, z - markerSmooth.z);
 
-    if (jump > MARKER_SMOOTH.snapDistanceMeters) {
+    // Порог телепорта масштабируется кратностью ускорения: при ×5 игрок за
+    // интервал пакета (250 мс) честно проходит впятеро больше пути, и жёсткие
+    // 25 м делали обычный шаг похожим на телепорт. Из-за этого одни пакеты
+    // сглаживались, а другие принимались скачком — движение выглядело рваным.
+    const speedScale = Math.max(1, Number(simulationSpeed) || 1);
+    const snapDistance = MARKER_SMOOTH.snapDistanceMeters * speedScale;
+
+    if (jump > snapDistance) {
       markerSmooth.x = x;
       markerSmooth.z = z;
       return { x: markerSmooth.x, z: markerSmooth.z };
@@ -3621,13 +3634,17 @@
       state = "stopped";
     }
 
-    // Текст плашки СТАТИЧЕСКИЙ — «Игровое время», из разметки.
+    // Текст плашки называет СОСТОЯНИЕ симуляции.
     //
-    // Прежде JS подставлял «Идет симуляция» и «На паузе», и после остановки
-    // оставалось «На паузе» — мир показывался приостановленным, хотя статус уже
-    // другой. Подпись называет ЭЛЕМЕНТ (игровое время), а состояние выражается
-    // ЦВЕТОМ: синий — симуляции нет, оранжевый — идёт или пауза; пауза
-    // дополнительно пульсирует, иначе ход и пауза выглядели бы одинаково.
+    // Прежде подпись делали статической («Игровое время»), потому что после
+    // остановки в ней оставалось «На паузе». Настоящая причина была не в
+    // подписи, а в `SetSimulationRunning`: ранний выход не сбрасывал признак
+    // паузы, поэтому состояние оставалось paused, и текст честно повторял его.
+    // Причина устранена, поэтому подпись снова сообщает состояние — так игрок
+    // читает плашку без расшифровки цветов.
+    //
+    // Цвет остаётся носителем того же смысла (синий — симуляции нет, оранжевый —
+    // идёт или пауза), а паузу дополнительно отличает пульсация.
     //
     // Иконка play отражает ДЕЙСТВИЕ кнопки: идёт симуляция — нажатие поставит
     // паузу (⏸️), иначе нажатие запустит или продолжит (▶️). Во время паузы
@@ -3656,6 +3673,17 @@
 
     if (plate) {
       plate.dataset.simState = state;
+    }
+
+    // Подпись состояния: текст и цвет говорят одно и то же, поэтому плашка
+    // читается и по цвету, и словами.
+    const statusText = document.getElementById("simStatusText");
+    if (statusText) {
+      statusText.textContent = simulationRunning
+        ? "Идёт симуляция"
+        : simulationPaused
+          ? "На паузе"
+          : "Симуляция не запущена";
     }
 
     // Оранжевые часы при ускоренном времени задаются классом на самом HUD, а не
@@ -4253,11 +4281,14 @@
         fields,
         "<div class='field notice' style='font-size:9px;margin-top:6px'>" +
           "Кумулятивное значение правится только механиками (недостаток сна, стресс); " +
-          "в поле вводится обычное значение шкалы." +
+          "в поле вводится обычное значение шкалы. Кнопка ← у поля применяет " +
+          "ТОЛЬКО это значение." +
         "</div>",
         "<div class='conditionEditActions'>" +
-          "<button class='smallButton primary' id='applyVitals'>Применить</button>" +
           "<button class='smallButton' id='resetStress'>Снять стресс</button>" +
+          // Монитор показателей стоит сразу под шкалами: он объясняет их
+          // значения, поэтому логично живёт там же, где сами шкалы.
+          "<button class='smallButton' id='openIndicators'>Монитор показателей</button>" +
         "</div>",
         "<div class='sleepActions'>" +
           "<button class='smallButton' id='fieldSleep'>Полевой сон · 6 ч</button>" +
@@ -4280,12 +4311,20 @@
 
     if (id === "effects") {
       const effects = Array.isArray(snapshot.conditions?.effects) ? snapshot.conditions.effects : [];
+      // Описание эффекта показывается подсказкой при наведении: список баффов
+      // обязан оставаться компактным, но игрок должен видеть, что эффект делает.
       const rows = (items, emptyText, cls) => items.length
-        ? items.map(effect =>
-            "<div class='effectRow " + cls + "'><span>" +
-            escapeHtml(effect.name || effect.id || "Эффект") +
-            "</span><span>" + formatEffectTimer(effect.remainingRealSeconds) + "</span></div>"
-          ).join("")
+        ? items.map(effect => {
+            const name = effect.name || effect.id || "Эффект";
+            const description =
+              window.AssistVitals?.effectDescription(effect.id) || "";
+            const tooltip = description
+              ? " data-game-tooltip=\"" + escapeHtml(name + " — " + description) + "\""
+              : "";
+            return "<div class='effectRow " + cls + "'" + tooltip + "><span>" +
+              escapeHtml(name) +
+              "</span><span>" + formatEffectTimer(effect.remainingRealSeconds) + "</span></div>";
+          }).join("")
         : "<div class='miniLabel'>" + emptyText + "</div>";
       return [
         rows(effects.filter(effect => !effect.isDebuff), "Нет активных баффов", "buff"),
@@ -4608,22 +4647,26 @@
       input.addEventListener("change", () => send({ action: "set_inventory", key: input.dataset.item, amount: Number(input.value) }));
     });
 
-    side.querySelector("#applyVitals")?.addEventListener("click", () => {
-      const stressField = side.querySelector("[data-t='stress']");
+    // Одна кнопка у КАЖДОГО поля: она отправляет только это значение, а
+    // остальные Host оставляет как есть (set_vitals принимает частичный набор).
+    side.querySelectorAll("[data-apply-t]").forEach(button => {
+      button.addEventListener("click", () => {
+        const key = button.dataset.applyT;
+        const field = side.querySelector("[data-t='" + key + "']");
+        const value = Number(field?.value);
+        if (!Number.isFinite(value)) return;
 
-      send({
-        action: "set_vitals",
-        health: Number(side.querySelector("[data-t='health']").value),
-        energy: Number(side.querySelector("[data-t='energy']").value),
-        hydration: Number(side.querySelector("[data-t='hydration']").value),
-        fatigue: Number(side.querySelector("[data-t='fatigue']").value),
-        // Стресс живёт в условиях, а не в потребностях, но правится из того же
-        // блока: пустое поле означает «не трогать», иначе каждое применение
-        // потребностей сбрасывало бы накопленный стресс вводом по умолчанию.
-        stress: stressField && stressField.value.trim() !== ""
-          ? Number(stressField.value)
-          : null
+        if (key === "stress") {
+          send({ action: "set_stress", stress: value });
+          return;
+        }
+
+        send({ action: "set_vitals", [key]: value });
       });
+    });
+
+    side.querySelector("#openIndicators")?.addEventListener("click", () => {
+      send({ action: "open_indicators" });
     });
 
     side.querySelector("#resetStress")?.addEventListener("click", () => {
