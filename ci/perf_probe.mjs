@@ -91,7 +91,7 @@ const snapshot = {
   selection: { point: null, source: "" },
   facts: { values: {} }, questStatuses: { quests: [] },
   states: { flags: {}, variables: {}, dialogueId: null, dialogueAnchor: null },
-  playerVitals: { health: 100, maxHealth: 100, energy: 100, maxEnergy: 100, hydration: 100, maxHydration: 100, fatigue: 0, maxFatigue: 100 },
+  playerVitals: { health: 10000, maxHealth: 10000, energy: 10000, maxEnergy: 10000, hydration: 10000, maxHydration: 10000, fatigue: 0, maxFatigue: 10000 },
   playerProgress: { money: 0, experience: 0, reserve: 0 },
   character: { stats: { strength: 5 }, skills: [] },
   inventory: { items: {}, newItemIds: [] },
@@ -207,8 +207,8 @@ try {
         window.chrome.webview.dispatch("message", {
           type: "live_state",
           player: { position: { x: index * 3, y: 0, z: index * 2 }, speedKmh: 42, heading: 90, paused: false, inCab: true },
-          playerVitals: { health: 100, maxHealth: 100, energy: 80, maxEnergy: 100, hydration: 70, maxHydration: 100, fatigue: 12, maxFatigue: 100 },
-          conditions: { cumulativeHealth: 0, cumulativeEnergy: 0, cumulativeHydration: 0, stress: 4, cumulativeStress: 4, cumulativeFatigue: 0, criticalFatigueGameSeconds: 0, criticalStressGameSeconds: 0, effects: [] },
+          playerVitals: { health: 10000, maxHealth: 10000, energy: 8000, maxEnergy: 10000, hydration: 7000, maxHydration: 10000, fatigue: 1200, maxFatigue: 10000 },
+          conditions: { cumulativeHealth: 0, cumulativeEnergy: 0, cumulativeHydration: 0, stress: 400, cumulativeStress: 400, cumulativeFatigue: 0, criticalFatigueGameSeconds: 0, criticalStressGameSeconds: 0, effects: [] },
           runtime: { status: "Waiting", currentNodeId: "n1" },
           simulationRunning: true, simulationPaused: false, simulationSpeed: 1,
           route

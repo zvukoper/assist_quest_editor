@@ -15,12 +15,23 @@
  *     у расходуемых — с конца, у наполняемых — с начала.
  *   • Цвета мягких шкал: здоровье lime, энергия тёмно-оранжевая, жидкость
  *     синяя, усталость красная, стресс фиолетовый.
- *   • Подсказка при наведении обязана называть три вещи: что это за шкала,
- *     реальное значение и ОТДЕЛЬНО кумулятивное.
+ *   • Подсказка при наведении обязана называть четыре вещи: что это за шкала,
+ *     реальное значение, скорость изменения и ОТДЕЛЬНО кумулятивное.
+ *
+ * ЕДИНИЦЫ И ПРОЦЕНТЫ. В снимке состояние приходит в ЕДИНИЦАХ шкалы 0..10000
+ * (домен хранит именно их), а игроку показывается процент: одна сотая шкалы —
+ * это ровно 100 единиц. Проценты выводятся делением на 100, поэтому округление
+ * не «съедает» движение — скорость изменения шкалы измеряется единицами за
+ * игровую минуту, и её видно целиком, а не как 0%.
  */
 (function (global) {
   "use strict";
 
+  /** Максимум любой шкалы в единицах: совпадает с PlayerConditionScale.Maximum. */
+  var SCALE_MAXIMUM = 10000;
+
+  /** Единиц в одном проценте: показ процентов не должен дублировать домен. */
+  var UNITS_PER_PERCENT = SCALE_MAXIMUM / 100;
   /** Кумулятивная часть всегда одного цвета — так её видно на любой шкале. */
   var CUMULATIVE_COLOR = "#ffd400";
 
@@ -101,46 +112,60 @@
     return Math.max(0, Math.min(100, Number(value) || 0));
   }
 
+  /** Единицы → проценты: шкала ведётся целочисленно, поэтому деление точное. */
+  function unitsToPercent(units) {
+    return clampPercent((Number(units) || 0) / UNITS_PER_PERCENT);
+  }
+
   /**
    * Значения одной шкалы из снимка.
    *
-   * Возвращает проценты для отрисовки и ЧИСЛА для подсказки: процент без
-   * абсолютного значения не объясняет, почему шкала стоит на месте, — при
-   * закреплённом кумулятивом максимуме 80 из 100 и 80 из 80 выглядят одинаково.
+   * Возвращает единицы для подсказки и проценты для отрисовки. Единицы нужны
+   * потому, что процент слишком груб: скорость изменения шкалы (единицы за
+   * игровую минуту) при показе процентов округлялась бы до нуля, и игрок не
+   * видел бы, что шкала вообще движется.
    */
   function read(snapshot, scale) {
     var vitals = (snapshot && snapshot.playerVitals) || {};
     var conditions = (snapshot && snapshot.conditions) || {};
 
-    var cumulative = Number(conditions["cumulative" + capitalize(scale.key)]);
-    var cumulativePercent = Number.isFinite(cumulative) ? clampPercent(cumulative) : 0;
+    var cumulativeUnits = Number(conditions["cumulative" + capitalize(scale.key)]);
+    cumulativeUnits = Number.isFinite(cumulativeUnits) ? Math.max(0, cumulativeUnits) : 0;
+    var cumulativePercent = unitsToPercent(cumulativeUnits);
 
     if (scale.key === "stress") {
-      var stress = Number(conditions.stress);
-      var percent = Number.isFinite(stress) ? clampPercent(stress) : 0;
+      var stressUnits = Number(conditions.stress);
+      stressUnits = Number.isFinite(stressUnits) ? Math.max(0, stressUnits) : 0;
+      var stressPercent = unitsToPercent(stressUnits);
       return {
-        soft: percent,
+        soft: stressPercent,
         cumulative: cumulativePercent,
-        actual: percent,
-        maximum: 100,
-        maximumLabel: null,
-        percent: percent
+        actual: stressUnits,
+        cumulativeUnits: cumulativeUnits,
+        maximum: SCALE_MAXIMUM,
+        percent: stressPercent
       };
     }
 
-    var maximum = Number(vitals[scale.maxKey]);
-    maximum = Number.isFinite(maximum) && maximum > 0 ? maximum : 100;
+    var maximumUnits = Number(vitals[scale.maxKey]);
+    maximumUnits = Number.isFinite(maximumUnits) && maximumUnits > 0
+      ? maximumUnits
+      : SCALE_MAXIMUM;
 
-    var actual = Number(vitals[scale.key]);
-    actual = Number.isFinite(actual) ? Math.max(0, Math.min(maximum, actual)) : 0;
+    var actualUnits = Number(vitals[scale.key]);
+    actualUnits = Number.isFinite(actualUnits)
+      ? Math.max(0, Math.min(maximumUnits, actualUnits))
+      : 0;
+
+    var percent = unitsToPercent(actualUnits);
 
     return {
-      soft: clampPercent(actual / maximum * 100),
+      soft: percent,
       cumulative: cumulativePercent,
-      actual: actual,
-      maximum: maximum,
-      maximumLabel: null,
-      percent: clampPercent(actual / maximum * 100)
+      actual: actualUnits,
+      cumulativeUnits: cumulativeUnits,
+      maximum: maximumUnits,
+      percent: percent
     };
   }
 
@@ -148,27 +173,53 @@
     return String(value || "").charAt(0).toUpperCase() + String(value || "").slice(1);
   }
 
-  /** Итоговая подпись значения: у стресса это проценты, у остальных — проценты. */
+  /** Итоговая подпись значения: игрок всегда видит проценты. */
   function valueLabel(scale, values) {
     return Math.round(values.percent) + "%";
   }
 
   /**
-   * Расшифровка для наведения: что за шкала, реальное значение и ОТДЕЛЬНО
-   * кумулятивное. Три части идут именно в этом порядке: сначала игрок
-   * понимает, на что смотрит, потом видит текущее число, и только потом —
-   * почему на шкале есть жёлтая часть.
+   * Скорость изменения шкалы в ЕДИНИЦАХ за игровую минуту.
+   *
+   * Знак важен: «+55» — шкала растёт, «-55» — восстанавливается, «0» — стоит.
+   * Округление до целого делается здесь, потому что в снимке скорость приходит
+   * дробной и её точность нужна только расчёту, а не подписи.
    */
-  function tooltip(scale, values) {
-    // Абсолютные числа берутся из снимка, а не из процентов: при закреплённом
-    // кумулятивом максимум у расходуемых шкал УМЕНЬШАЕТСЯ, и «80%» без «80 из 80»
-    // читалось бы как «ещё есть запас».
-    var actualText = Math.round(values.actual) + " из " + Math.round(values.maximum);
+  function formatRate(unitsPerMinute) {
+    var value = Number(unitsPerMinute);
+    if (!Number.isFinite(value)) return "0 ед./мин";
+    var rounded = Math.round(value);
+    var sign = rounded > 0 ? "+" : "";
+    return sign + rounded + " ед./мин";
+  }
+
+  /** Скорость шкалы из снимка: домен считает её, Web только показывает. */
+  function rateFor(snapshot, scale) {
+    var rates = (snapshot && snapshot.conditionRates) || {};
+    return rates[scale.key];
+  }
+
+  /**
+   * Расшифровка для наведения: что за шкала, реальное значение, скорость
+   * изменения и ОТДЕЛЬНО кумулятивное.
+   *
+   * Порядок частей именно такой: сначала игрок понимает, на что смотрит, потом
+   * видит текущее число, затем — куда шкала движется и с какой скоростью, и
+   * только потом узнаёт, почему на полосе есть жёлтая часть.
+   */
+  function tooltip(scale, values, snapshot) {
+    // Абсолютные числа берутся из снимка в ЕДИНИЦАХ шкалы, а не из процентов:
+    // при закреплённом кумулятивом максимум у расходуемых шкал УМЕНЬШАЕТСЯ, и
+    // «80%» без «8000 из 8000» читалось бы как «ещё есть запас».
+    var actualText = Math.round(values.actual) + "/" + Math.round(values.maximum);
 
     var lines = [
       scale.label,
       "Реальное значение: " + actualText + " (" + Math.round(values.percent) + "%)",
-      "Кумулятивное значение: " + Math.round(values.cumulative) + "%",
+      "Скорость: " + formatRate(rateFor(snapshot, scale)),
+      "Кумулятивное значение: " +
+        Math.round(values.cumulativeUnits) + "/" + SCALE_MAXIMUM +
+        " (" + Math.round(values.cumulative) + "%)",
       scale.desc
     ];
 
@@ -176,10 +227,10 @@
   }
 
   /** Одна шкала: заголовок со значением и полоса из мягкой и кумулятивной части. */
-  function barMarkup(scale, values) {
+  function barMarkup(scale, values, snapshot) {
     // Кумулятив у расходуемых шкал растёт с конца, у наполняемых — с начала.
     var cumulativeClass = scale.fill === "fill" ? "fromStart" : "fromEnd";
-    var text = escapeHtml(tooltip(scale, values));
+    var text = escapeHtml(tooltip(scale, values, snapshot));
 
     // Подсказка навешена на всю плитку, а не только на полосу: у 8-пиксельной
     // полосы цель слишком мелкая, и подсказку было почти невозможно вызвать.
@@ -209,7 +260,7 @@
       var cells = rowKeys.map(function (key) {
         var scale = scaleByKey(key);
         if (!scale) return "";
-        return barMarkup(scale, read(snapshot, scale));
+        return barMarkup(scale, read(snapshot, scale), snapshot);
       }).join("");
 
       var className = rowKeys.length > 1 ? "conditionTopGrid" : "conditionRow";
@@ -220,14 +271,22 @@
     return "<div class='conditionBars'>" + rows + "</div>";
   }
 
-  /** Поля ввода значений — общие для сайдбара; стресс правится отдельно. */
+  /**
+   * Поля ввода значений — общие для сайдбара; стресс правится отдельно.
+   *
+   * Поля показывают ПРОЦЕНТЫ: автору привычнее править «80», а не «8000», и
+   * перевод в единицы делает Хост (SetPlayerVitals/SetStress). Здесь единицы
+   * делятся на 100 — иначе поле показывало бы «8000» и правка уводила бы шкалу
+   * за максимум.
+   */
   function fieldsMarkup(snapshot) {
     var vitals = (snapshot && snapshot.playerVitals) || {};
     var conditions = (snapshot && snapshot.conditions) || {};
 
-    function field(key, label, value) {
+    function field(key, label, units) {
       return "<div class='field'><label>" + label + "</label>" +
-        "<input data-t='" + key + "' value='" + Math.round(Number(value) || 0) + "'></div>";
+        "<input data-t='" + key + "' value='" +
+        Math.round(unitsToPercent(units)) + "'></div>";
     }
 
     return "<div class='fieldGrid' style='margin-top:8px'>" +
@@ -295,10 +354,16 @@
 
   global.AssistVitals = {
     CUMULATIVE_COLOR: CUMULATIVE_COLOR,
+    /** Максимум шкалы в единицах — для сверки с доменом и тестов. */
+    SCALE_MAXIMUM: SCALE_MAXIMUM,
+    UNITS_PER_PERCENT: UNITS_PER_PERCENT,
     SCALES: SCALES,
     LAYOUT: LAYOUT,
     escapeHtml: escapeHtml,
     scaleByKey: scaleByKey,
+    unitsToPercent: unitsToPercent,
+    formatRate: formatRate,
+    rateFor: rateFor,
     read: read,
     tooltip: tooltip,
     barMarkup: barMarkup,

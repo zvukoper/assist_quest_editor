@@ -7,7 +7,7 @@ namespace AssistQuestEditor.Domain.Tests;
 /// Правило журнала событий Симулятора.
 ///
 /// Проверка появилась после того, как журнал заполнился техническими строками
-/// «ChannelChanged [Состояние игрока] Изменены потребности игрока» — по одной
+/// «ChannelChanged [Состояние игрока] Изменено состояние персонажа» — по одной
 /// на каждый тик накопления усталости (4 раза в секунду игровых). Журнал — это
 /// список событий мира, а не поток внутренних значений.
 /// </summary>
@@ -75,7 +75,7 @@ public sealed class SimulatorJournalPolicyTests
         var payload = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
         {
             ["channel"] = "player-vitals",
-            ["description"] = "Изменены потребности игрока"
+            ["description"] = "Изменено состояние персонажа"
         };
 
         Assert.False(SimulatorJournalPolicy.ShouldJournal("ChannelChanged", payload));

@@ -116,7 +116,8 @@ public sealed class RouteTests
         Assert.Equal(0, plan.Points[0].DestinationWaypointIndex);
 
         var offRoadPoint = Assert.Single(
-            plan.Points.Where(point => point.WaypointIndex == 0));
+            plan.Points,
+            point => point.WaypointIndex == 0);
         Assert.Equal(new WorldCoordinate(80, 0, 40), offRoadPoint.Position);
     }
 
@@ -380,7 +381,10 @@ public sealed class RouteTests
         var plan = planner.Build(route, new WorldCoordinate(0, 0, 0));
         var cursor = RouteMovementEngine.CreateResumeCursor(plan, 0, 0);
 
-        Assert.Equal(1, cursor.LegIndex);
+        // Точка 0 — динамический road anchor игрока (WaypointIndex = null),
+        // поэтому продолжение после остановки на точке «a» начинается не с
+        // индекса 1, а со следующей fixed-точки дороги после неё.
+        Assert.Equal(2, cursor.NextRoutePointIndex);
         var result = RouteMovementEngine.Advance(
             route,
             plan,
@@ -419,7 +423,11 @@ public sealed class RouteTests
         Assert.False(result.Enabled);
         Assert.True(result.StoppedAtWaypoint);
         Assert.Equal(1, result.Cursor.StoppedAtWaypointIndex);
-        Assert.Equal(1, result.Cursor.NextRoutePointIndex);
+
+        // Курсор остаётся на самой точке остановки, чтобы продолжение читало
+        // скорость следующего участка. Индекс 1 — это road anchor игрока
+        // (WaypointIndex = null), поэтому точка «b» лежит в индексе 2.
+        Assert.Equal(2, result.Cursor.NextRoutePointIndex);
         Assert.Equal(100, result.Position.X, 6);
     }
 
@@ -773,10 +781,16 @@ public sealed class RouteTests
 
         var plan = planner.Build(route, new WorldCoordinate(0, 0, 0));
 
-        Assert.Equal(0, plan.Legs[0].StartWaypointIndex);
+        // Игрок стоит в начале дороги, поэтому якорь совпадает с точкой 0
+        // координатно, но остаётся ОТДЕЛЬНОЙ первой точкой: игрок не попадает
+        // в fixed-геометрию, а подъезд к нему идёт динамическим сегментом.
+        Assert.Equal(-1, plan.Legs[0].StartWaypointIndex);
         Assert.Equal(0, plan.Legs[0].EndWaypointIndex);
-        Assert.Single(plan.Points);
-        Assert.Equal(new WorldCoordinate(100, 0, 0), plan.Points[0].Position);
+        Assert.Equal(2, plan.Points.Count);
+        Assert.Null(plan.Points[0].WaypointIndex);
+        Assert.Equal(new WorldCoordinate(0, 0, 0), plan.Points[0].Position);
+        Assert.Equal(new WorldCoordinate(100, 0, 0), plan.Points[^1].Position);
+        Assert.Equal(0, plan.Points[^1].WaypointIndex);
     }
 
     [Fact]
@@ -814,10 +828,15 @@ public sealed class RouteTests
         var plan = planner.Build(route, new WorldCoordinate(10, 0, 0));
 
         Assert.True(plan.IsUsable);
-        Assert.Equal(2, plan.Legs.Count);
-        Assert.True(plan.Legs[1].Polyline.Count >= 2);
-        Assert.Equal(new WorldCoordinate(100, 0, 100), plan.Legs[1].Polyline[0]);
-        Assert.Equal(new WorldCoordinate(140, 0, 100), plan.Legs[1].Polyline[^1]);
+
+        // leg0/leg1 идут от road anchor игрока к p1 и дальше к p2. p2 помечена
+        // бездорожной, поэтому прямой участок p2 → p3 — это leg2, и он обязан
+        // начинаться ровно в p2, не привязываясь к дороге.
+        Assert.Equal(3, plan.Legs.Count);
+        Assert.Equal(-1, plan.Legs[0].StartWaypointIndex);
+        Assert.True(plan.Legs[^1].Polyline.Count >= 2);
+        Assert.Equal(new WorldCoordinate(100, 0, 100), plan.Legs[^1].Polyline[0]);
+        Assert.Equal(new WorldCoordinate(140, 0, 100), plan.Legs[^1].Polyline[^1]);
     }
 
     [Fact]

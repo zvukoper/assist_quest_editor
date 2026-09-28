@@ -156,21 +156,28 @@ const rebuildBody = simulatorForm.slice(
   simulatorForm.indexOf("private void RebuildRoute("),
   simulatorForm.indexOf("private void SetRouteStateAfterLoad(")
 );
+// Первой точкой плана является ДИНАМИЧЕСКИЙ дорожный якорь игрока
+// (StartWaypointIndex = -1, WaypointIndex = null), поэтому позиция игрока
+// обязана передаваться в планировщик: без неё привязка шла бы от начала
+// координат. Это не «игрок внутри плана» — сам игрок в план не попадает.
 check(
-  /_routePlanner\.Build\(_routeState\)/.test(rebuildBody),
-  "Построение маршрута обязано собирать только фиксированную геометрию: " +
-  "подъезд от игрока — динамический сегмент, а не часть плана."
+  /_routePlanner\.Build\(\s*_routeState\s*,\s*playerPosition\s*\)/.test(rebuildBody),
+  "Построение маршрута обязано якорить первую fixed-точку от позиции игрока: " +
+  "иначе подъезд привязывался бы к началу координат, а не к дороге рядом с игроком."
 );
 check(
   /NextRoutePointForPlayer\(\s*_routePlan,\s*playerPosition\)/.test(rebuildBody),
   "Построение маршрута обязано выбирать точку продолжения по позиции игрока: " +
   "иначе после загрузки маршрут пойдёт назад по уже пройденным дорогам."
 );
+// Доменный выбор следующей точки больше НЕ фильтрует точки по евклидову
+// расстоянию до destination: это правило отбрасывало легальные объезды.
+// Решает порядок точек на маршруте (проекция игрока на сегменты плана).
 check(
-  /candidateStart[\s\S]{0,2000}?destinationDistance < playerDestinationDistance/.test(
-    read("src/AssistQuestEditor.Domain/RouteModels.cs")),
-  "Доменный выбор следующей точки обязан исключать движение к точке, " +
-  "увеличивающей расстояние до пункта назначения."
+  /NextRoutePointForPlayer\(/.test(read("src/AssistQuestEditor.Domain/RouteModels.cs")) &&
+  !/destinationDistance/.test(read("src/AssistQuestEditor.Domain/RouteModels.cs")),
+  "Доменный выбор следующей точки обязан идти по порядку маршрута, а не " +
+  "отбрасывать точки по расстоянию до пункта назначения."
 );
 const loadRouteBody = simulatorForm.slice(
   simulatorForm.indexOf("private void SetRouteStateAfterLoad("),

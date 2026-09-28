@@ -305,7 +305,7 @@ try {
         snapshot: {
           player: { position: { x: 0, y: 0, z: 0 } },
           inventory: { items: { "ruslan.raw_meat": 3, "gosha.sausage": 7 }, newItemIds: ["gosha.sausage"] },
-          playerVitals: { health: 80, maxHealth: 100, energy: 50, maxEnergy: 100, hydration: 60, maxHydration: 100, fatigue: 20, maxFatigue: 100 },
+          playerVitals: { health: 8000, maxHealth: 10000, energy: 5000, maxEnergy: 10000, hydration: 6000, maxHydration: 10000, fatigue: 2000, maxFatigue: 10000 },
           playerProgress: { money: 12345, experience: 678, reserve: 9 }
         },
         itemCatalog: [

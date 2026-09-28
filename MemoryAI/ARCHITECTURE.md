@@ -505,6 +505,36 @@ Simulator gameplay state is divided by responsibility:
 - `PlayerProgressState` stores money, experience and a reserved third resource.
 - `CharacterState` stores SPECIAL-like stats, skills and reserved Buffs/Debuffs.
 
+### 20.1 Состояние персонажа: проценты для показа, единицы внутри
+
+Шкалы состояния (здоровье, стресс, энергия, жидкость, усталость) показываются
+игроку В ПРОЦЕНТАХ, но внутри системы измеряются ЕДИНИЦАМИ 0..10000.
+Единственный источник пересчёта — `PlayerConditionScale` (Domain): 100 единиц
+равны одному проценту, поэтому процент всегда целый и обратный пересчёт не
+накапливает погрешность.
+
+Причина разделения — скорость изменения шкалы. Начисление измеряется за игровую
+МИНУТУ, и в процентах типичная скорость («100% за 18 часов») равна 0.09, то есть
+при показе целым числом округлялась бы до нуля: игрок видел «шкала не
+движется». В единицах та же скорость — 55.6 ед./мин, её видно и можно назвать
+словами.
+
+Границы пересчёта:
+
+| Граница | Кто переводит | Направление |
+| --- | --- | --- |
+| Ноды квестов (`SetHealth`, `SetFatigue`, …) | `QuestRuntime.ApplyVital` | проценты → единицы |
+| Редактор состояния в сайдбаре | `SimulatorForm.SetPlayerVitals` / `SetStress` | проценты → единицы |
+| Сохранение (формат v10+) | `SimulationSaveCodec` | единицы как есть; v1..v9 на чтении ×100 |
+| Подсказка и полосы шкал | `vitals.js` | единицы → проценты |
+
+`PlayerConditionEngine` хранит свои ПОРОГИ в процентах (`FatigueCriticalPercent`
+= 80, «100% за 18 часов», «100% за 900 км»): так правила остаются читаемыми, а
+перевод в единицы делает только на границе движка. Скорости для подсказки
+считает `PlayerConditionRates.From(...)` в Domain по тем же константам, а Хост
+передаёт их в снимок (`conditionRates`): вторая версия правил в JavaScript
+разошлась бы с движком.
+
 Quest-driven inventory changes are published as a dedicated `InventoryChanged` event. Simulator presentation shows acquisition/removal notifications only when the event source is `QuestRuntime`. Manual simulator inventory edits therefore remain silent.
 
 The current starter item catalog is intentionally tiny and code-backed. The intended future direction is a resource-centric Item Editor and item definition files; the gameplay inventory must continue to refer to stable ItemIds.

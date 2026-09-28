@@ -9,8 +9,126 @@ public sealed record PlayerConditionUpdate(
     IReadOnlyList<PlayerConditionEvent> Events);
 
 /// <summary>
+/// Скорость изменения шкал: сколько ЕДИНИЦ шкалы (0..10000) прибывает или
+/// убывает за одну игровую минуту. UI показывает это в подсказке шкалы.
+///
+/// Величины считаются из ТЕХ ЖЕ констант, что и начисление, поэтому вторая
+/// таблица скоростей не заводится: подсказка не может разойтись с правилами.
+/// </summary>
+public sealed record PlayerConditionRates(
+    double HealthPerGameMinute,
+    double EnergyPerGameMinute,
+    double HydrationPerGameMinute,
+    double FatiguePerGameMinute,
+    double StressPerGameMinute)
+{
+    public static PlayerConditionRates Zero => new(0d, 0d, 0d, 0d, 0d);
+
+    /// <summary>
+    /// Скорость изменения шкал из текущего состояния и режима игрока.
+    ///
+    /// Движение утомляет, отдых восстанавливает, а кумулятивная усталость
+    /// повышает стресс — те же три правила, что в <see cref="PlayerConditionEngine"/>.
+    /// Внутренние единицы (0..10000) получаются домножением процентов на 100,
+    /// поэтому значение за минуту остаётся заметным даже когда в процентах оно
+    /// было бы нулём.
+    /// </summary>
+    public static PlayerConditionRates From(
+        PlayerVitalsState vitals,
+        PlayerConditionState conditions,
+        bool playerMoving,
+        bool sleeping)
+    {
+        var state = (conditions ?? PlayerConditionState.Empty).Normalize();
+        var currentVitals = (vitals ?? PlayerVitalsState.Default).Normalize();
+
+        if (sleeping)
+        {
+            // Сон снимает усталость в разы быстрее, чем отдых на месте: он
+            // выводит усталость на ноль за считанные игровые часы.
+            var sleepPerHour = -100d / PlayerConditionEngine.FatigueRestHours *
+                PlayerConditionEngine.SleepFatigueRecoveryMultiplier;
+
+            return new PlayerConditionRates(
+                0d,
+                0d,
+                0d,
+                PlayerConditionScale.RateFromPercent(sleepPerHour / 60d),
+                0d);
+        }
+
+        if (!playerMoving)
+        {
+            var recoveryFactor = Math.Clamp(
+                1d - PlayerConditionEngine.TotalStressPercent(state) / 100d,
+                0d,
+                1d);
+
+            var recoveryPerHour = -100d / PlayerConditionEngine.FatigueRestHours *
+                recoveryFactor *
+                (currentVitals.Fatigue > 0d ? 1d : 0d);
+
+            return new PlayerConditionRates(
+                0d,
+                0d,
+                0d,
+                PlayerConditionScale.RateFromPercent(recoveryPerHour / 60d),
+                ComputeStressPerGameMinute(state));
+        }
+
+        var fatigueMultiplier = HasEffect(state, "burnout")
+            ? PlayerConditionEngine.BurnoutFatigueBuildMultiplier
+            : 1d;
+
+        var buildPerHour = 100d / PlayerConditionEngine.FatigueBuildHours *
+            fatigueMultiplier;
+
+        return new PlayerConditionRates(
+            0d,
+            0d,
+            0d,
+            PlayerConditionScale.RateFromPercent(buildPerHour / 60d),
+            ComputeStressPerGameMinute(state));
+    }
+
+    /// <summary>
+    /// Стресс прибывает от КУМУЛИТИВНОЙ усталости, а не от мгновенной: правило
+    /// то же, что в <c>Advance</c>. Ноль, пока кумулятивной усталости нет.
+    /// </summary>
+    private static double ComputeStressPerGameMinute(PlayerConditionState state)
+    {
+        if (state.CumulativeFatigue <= 0d)
+            return 0d;
+
+        var slowdown = state.Effects
+            .Where(effect => !effect.IsDebuff && effect.RemainingRealSeconds > 0d)
+            .Select(effect => effect.StressAccumulationSlowdownPercent)
+            .DefaultIfEmpty(0d)
+            .Max();
+
+        // Кумулятивная усталость уже в единицах, поэтому и прирост стресса
+        // получается в единицах: пересчёт процентов здесь не нужен.
+        var perHour = state.CumulativeFatigue *
+            PlayerConditionEngine.StressPerCumulativeFatiguePerHour *
+            Math.Clamp(1d - slowdown / 100d, 0d, 1d);
+
+        return perHour / 60d;
+    }
+
+    private static bool HasEffect(PlayerConditionState state, string id) =>
+        state.Effects.Any(effect =>
+            effect.Id.Equals(id, StringComparison.OrdinalIgnoreCase) &&
+            effect.RemainingRealSeconds > 0d);
+}
+
+/// <summary>
 /// Чистые правила мягкой/кумулятивной усталости и стресса и временных эффектов.
-/// Проценты состояний — процентные пункты 0..100.
+///
+/// ВНУТРЕННИЕ ПОРОГИ — ПРОЦЕНТЫ (0..100): «усталость 80% критична», «100% за
+/// 18 часов» — читаемые правила, и переписывать их в 0..10000 значило бы
+/// потерять смысл. На ГРАНИЦЕ движка значения переводятся в единицы шкалы
+/// (<see cref="PlayerConditionScale"/>): на входе проценты → единицы, на выходе
+/// единицы храним, а проценты нужны только для сравнения с порогами.
 /// </summary>
 public static class PlayerConditionEngine
 {
@@ -18,6 +136,13 @@ public static class PlayerConditionEngine
     public const double StressCriticalPercent = 50d;
     public const double FatigueBuildHours = 18d;
     public const double FatigueRestHours = 9d;
+    /// <summary>
+    /// Во сколько раз сон снимает усталость быстрее обычного отдыха на месте.
+    /// Множитель нужен только подсказке о скорости изменения: сам сон считает
+    /// восстановление по шагам, но игрок должен видеть, что во сне шкала уходит
+    /// вниз быстрее.
+    /// </summary>
+    public const double SleepFatigueRecoveryMultiplier = 3d;
     /// <summary>
     /// Дистанция, за которую усталость набирается на 100%.
     ///
@@ -105,7 +230,7 @@ public static class PlayerConditionEngine
         {
             var hours = Math.Min(1d, remainingHours);
             remainingHours -= hours;
-            var totalStressBefore = TotalStress(state);
+            var totalStressBefore = TotalStressPercent(state);
 
             var stepMeters = totalHours > 0d
                 ? remainingMeters * hours / totalHours
@@ -117,9 +242,13 @@ public static class PlayerConditionEngine
                     ? BurnoutFatigueBuildMultiplier
                     : 1d;
 
+                // Проценты переводятся в единицы сразу: 100% за 18 часов — это
+                // 55.6 единицы за игровую минуту, а не 0.09, которое при показе
+                // процентов округлялось бы до нуля.
                 var fatigueGain =
-                    100d / FatigueBuildHours * hours +
-                    100d / FatigueBuildKilometers * stepMeters / 1000d;
+                    PlayerConditionScale.FromPercent(
+                        100d / FatigueBuildHours * hours +
+                        100d / FatigueBuildKilometers * stepMeters / 1000d);
 
                 vitals = vitals with
                 {
@@ -129,21 +258,22 @@ public static class PlayerConditionEngine
             else if (!playerMoving && !sleeping)
             {
                 var recoveryFactor = Math.Clamp(
-                    1d - TotalStress(state) / 100d,
+                    1d - TotalStress(state) / PlayerConditionScale.Maximum,
                     0d,
                     1d);
 
                 vitals = vitals with
                 {
                     Fatigue = vitals.Fatigue -
-                              100d / FatigueRestHours * hours * recoveryFactor
+                              PlayerConditionScale.FromPercent(
+                                  100d / FatigueRestHours * hours) * recoveryFactor
                 };
             }
 
             vitals = ClampSoft(vitals, state);
 
-            var totalFatigue = TotalFatigue(vitals, state);
-            if (totalFatigue > FatigueCriticalPercent)
+            var totalFatiguePercent = TotalFatiguePercent(vitals, state);
+            if (totalFatiguePercent > FatigueCriticalPercent)
             {
                 var counter = state.CriticalFatigueGameSeconds + hours * SecondsPerGameHour;
                 var wholeHours = Math.Floor(counter / SecondsPerGameHour);
@@ -152,9 +282,10 @@ public static class PlayerConditionEngine
                     ? state with
                     {
                         CumulativeFatigue = Math.Clamp(
-                            state.CumulativeFatigue + wholeHours * CumulativeFatiguePerCriticalHour,
+                            state.CumulativeFatigue + PlayerConditionScale.FromPercent(
+                                wholeHours * CumulativeFatiguePerCriticalHour),
                             0d,
-                            100d),
+                            PlayerConditionScale.Maximum),
                         CriticalFatigueGameSeconds = counter - wholeHours * SecondsPerGameHour
                     }
                     : state with { CriticalFatigueGameSeconds = counter };
@@ -174,7 +305,7 @@ public static class PlayerConditionEngine
 
             state = state with { Stress = state.Stress + stressGain };
 
-            if (TotalStress(state) > StressCriticalPercent)
+            if (TotalStressPercent(state) > StressCriticalPercent)
             {
                 var counter = state.CriticalStressGameSeconds + hours * SecondsPerGameHour;
                 var wholeHours = Math.Floor(counter / SecondsPerGameHour);
@@ -182,9 +313,10 @@ public static class PlayerConditionEngine
                     ? state with
                     {
                         CumulativeStress = Math.Clamp(
-                            state.CumulativeStress + wholeHours * CumulativeStressPerCriticalHour,
+                            state.CumulativeStress + PlayerConditionScale.FromPercent(
+                                wholeHours * CumulativeStressPerCriticalHour),
                             0d,
-                            100d),
+                            PlayerConditionScale.Maximum),
                         CriticalStressGameSeconds = counter - wholeHours * SecondsPerGameHour
                     }
                     : state with { CriticalStressGameSeconds = counter };
@@ -199,10 +331,10 @@ public static class PlayerConditionEngine
                 Stress = Math.Clamp(
                     state.Stress,
                     0d,
-                    Math.Max(0d, 100d - state.CumulativeStress))
+                    Math.Max(0d, PlayerConditionScale.Maximum - state.CumulativeStress))
             };
 
-            var totalStressAfter = TotalStress(state);
+            var totalStressAfter = TotalStressPercent(state);
             if (totalStressBefore <= StressCriticalPercent &&
                 totalStressAfter > StressCriticalPercent &&
                 !HasEffect(state, "burnout"))
@@ -271,8 +403,10 @@ public static class PlayerConditionEngine
         {
             CumulativeFatigue = fullSleep
                 ? 0d
-                : state.CumulativeFatigue > 10d
-                    ? Math.Max(10d, state.CumulativeFatigue - 6d)
+                : state.CumulativeFatigue > PlayerConditionScale.FromPercent(10d)
+                    ? Math.Max(
+                        PlayerConditionScale.FromPercent(10d),
+                        state.CumulativeFatigue - PlayerConditionScale.FromPercent(6d))
                     : state.CumulativeFatigue,
             CriticalFatigueGameSeconds = 0d
         };
@@ -306,17 +440,7 @@ public static class PlayerConditionEngine
             .Max();
 
     private static PlayerVitalsState NormalizeVitals(PlayerVitalsState value) =>
-        value with
-        {
-            MaxHealth = Math.Max(0d, value.MaxHealth),
-            MaxEnergy = Math.Max(0d, value.MaxEnergy),
-            MaxHydration = Math.Max(0d, value.MaxHydration),
-            MaxFatigue = Math.Max(0d, value.MaxFatigue),
-            Health = Math.Clamp(value.Health, 0d, Math.Max(0d, value.MaxHealth)),
-            Energy = Math.Clamp(value.Energy, 0d, Math.Max(0d, value.MaxEnergy)),
-            Hydration = Math.Clamp(value.Hydration, 0d, Math.Max(0d, value.MaxHydration)),
-            Fatigue = Math.Clamp(value.Fatigue, 0d, Math.Max(0d, value.MaxFatigue))
-        };
+        (value ?? PlayerVitalsState.Default).Normalize();
 
     private static PlayerConditionState TickEffects(PlayerConditionState state, double realSeconds)
     {
@@ -367,8 +491,14 @@ public static class PlayerConditionEngine
             Fatigue = Math.Clamp(vitals.Fatigue, 0d, Math.Max(0d, vitals.MaxFatigue - state.CumulativeFatigue))
         };
 
-    private static double EffectiveConsumableMax(double maximum, double cumulative) =>
-        Math.Max(0d, maximum * (1d - Math.Clamp(cumulative, 0d, 100d) / 100d));
+    private static double EffectiveConsumableMax(double maximum, double cumulativeUnits) =>
+        Math.Max(
+            0d,
+            maximum *
+            (1d - Math.Clamp(
+                PlayerConditionScale.ToPercent(cumulativeUnits),
+                0d,
+                100d) / 100d));
 
     private static PlayerVitalsState ApplyBurnoutPenalty(
         PlayerVitalsState vitals,
@@ -388,11 +518,27 @@ public static class PlayerConditionEngine
         };
     }
 
+    /// <summary>Стресс в ЕДИНИЦАХ шкалы (мгновенный + кумулятивный).</summary>
     private static double TotalStress(PlayerConditionState state) =>
-        Math.Clamp(state.Stress + state.CumulativeStress, 0d, 100d);
+        Math.Clamp(
+            state.Stress + state.CumulativeStress,
+            0d,
+            PlayerConditionScale.Maximum);
 
+    /// <summary>Стресс в ПРОЦЕНТАХ — для сравнения с <see cref="StressCriticalPercent"/>.</summary>
+    public static double TotalStressPercent(PlayerConditionState state) =>
+        PlayerConditionScale.ToPercent(TotalStress(state));
+
+    /// <summary>Усталость в ЕДИНИЦАХ шкалы (мгновенная + кумулятивная).</summary>
     private static double TotalFatigue(PlayerVitalsState vitals, PlayerConditionState state) =>
-        Math.Clamp(vitals.Fatigue + state.CumulativeFatigue, 0d, 100d);
+        Math.Clamp(
+            vitals.Fatigue + state.CumulativeFatigue,
+            0d,
+            PlayerConditionScale.Maximum);
+
+    /// <summary>Усталость в ПРОЦЕНТАХ — для сравнения с <see cref="FatigueCriticalPercent"/>.</summary>
+    private static double TotalFatiguePercent(PlayerVitalsState vitals, PlayerConditionState state) =>
+        PlayerConditionScale.ToPercent(TotalFatigue(vitals, state));
 
     private static double ActiveStressSlowdownPercent(PlayerConditionState state) =>
         state.Effects

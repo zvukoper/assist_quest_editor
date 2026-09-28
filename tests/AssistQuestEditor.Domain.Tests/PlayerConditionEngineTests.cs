@@ -8,13 +8,18 @@ namespace AssistQuestEditor.Domain.Tests;
 /// идёт 1:1 с реальным: 100% за 18 часов — это 5.6% в час, то есть в пределах
 /// сессии незаметно (значение показывается целым числом). Пользователь видел
 /// «усталость не изменяется со временем и движением».
+///
+/// Ожидаемые значения записаны В ПРОЦЕНТАХ и переводятся в единицы шкалы
+/// (<see cref="PlayerConditionScale"/>) тем же методом, что и сам движок: тест
+/// проверяет правила («100% за 18 часов», «100% за 900 км»), а не арифметику
+/// пересчёта шкалы, иначе при изменении размера шкалы пришлось бы править все
+/// ожидания вместо одной константы.
 /// </summary>
 public sealed class PlayerConditionEngineTests
 {
     private const double OneGameHourSeconds = 3600d;
 
-    private static PlayerVitalsState Vitals() =>
-        new(100, 100, 100, 100, 100, 100, 0, 100);
+    private static PlayerVitalsState Vitals() => PlayerVitalsState.Default;
 
     private static PlayerConditionUpdate Advance(
         double hours,
@@ -40,7 +45,7 @@ public sealed class PlayerConditionEngineTests
     [Fact]
     public void AcceleratedGameTimeIncreasesTimeBasedFatigue()
     {
-        var vitals = new PlayerVitalsState(100, 100, 100, 100, 100, 100, 0, 100);
+        var vitals = PlayerVitalsState.Default;
         var conditions = PlayerConditionState.Empty;
         var normal = PlayerConditionEngine.Advance(
             vitals,
@@ -61,12 +66,17 @@ public sealed class PlayerConditionEngineTests
             traveledMeters: 0);
 
         Assert.Equal(
-            100d / PlayerConditionEngine.FatigueBuildHours,
+            PlayerConditionScale.FromPercent(100d / PlayerConditionEngine.FatigueBuildHours),
             normal.Vitals.Fatigue,
             6);
 
+        // Движок начисляет ЧАСОВЫМИ шагами, и каждый шаг округляется до целой
+        // единицы шкалы. Восемь шагов дают восемь округлённых слагаемых, а не одно
+        // округление от суммы: шкала целочисленная, и шаг — её естественная
+        // гранулярность. Расхождение — единицы из 10000, то есть 0.04%.
         Assert.Equal(
-            8d * 100d / PlayerConditionEngine.FatigueBuildHours,
+            8d * PlayerConditionScale.FromPercent(
+                100d / PlayerConditionEngine.FatigueBuildHours),
             accelerated.Vitals.Fatigue,
             6);
     }
@@ -78,12 +88,15 @@ public sealed class PlayerConditionEngineTests
         var withDistance = Advance(hours: 1, traveledMeters: 450_000);
 
         Assert.True(
-            withDistance.Vitals.Fatigue > timeOnly.Vitals.Fatigue + 40d,
+            withDistance.Vitals.Fatigue > timeOnly.Vitals.Fatigue + 4000d,
             $"дистанция должна давать прирост: время={timeOnly.Vitals.Fatigue:0.##}; " +
             $"с дистанцией={withDistance.Vitals.Fatigue:0.##}");
 
         // 450 км — половина пути до 100%: вместе с часом езды получается 5.6 + 50.
-        Assert.Equal(100d / 18d + 50d, withDistance.Vitals.Fatigue, 3);
+        Assert.Equal(
+            PlayerConditionScale.FromPercent(100d / 18d + 50d),
+            withDistance.Vitals.Fatigue,
+            3);
     }
 
     /// <summary>
@@ -156,8 +169,12 @@ public sealed class PlayerConditionEngineTests
             conditions = update.Conditions;
         }
 
-        // 450 км из 900 = 50%; три часа из восемнадцати = 16.7%.
-        Assert.Equal(50d + 100d / 18d * 3d, vitals.Fatigue, 3);
+        // 450 км из 900 = 50%; три часа из восемнадцати = 16.7%. Каждый из трёх
+        // часовых шагов округляется до целой единицы шкалы — отсюда множитель.
+        Assert.Equal(
+            3d * PlayerConditionScale.FromPercent(100d / 18d + 100d / 900d * 150d),
+            vitals.Fatigue,
+            3);
     }
 
     /// <summary>
@@ -169,7 +186,9 @@ public sealed class PlayerConditionEngineTests
     {
         var tired = Advance(hours: 3, traveledMeters: 600_000).Vitals;
 
-        Assert.True(tired.Fatigue > 50d, "подготовка теста: ожидалась заметная усталость");
+        Assert.True(
+            tired.Fatigue > PlayerConditionScale.FromPercent(50d),
+            "подготовка теста: ожидалась заметная усталость");
 
         var sleep = PlayerConditionEngine.Sleep(
             tired,
@@ -178,5 +197,77 @@ public sealed class PlayerConditionEngineTests
             fullSleep: true);
 
         Assert.Equal(0d, sleep.Vitals.Fatigue, 3);
+    }
+
+    /// <summary>
+    /// Подсказка шкалы показывает скорость изменения за ИГРОВУЮ МИНУТУ, и она
+    /// обязана быть целыми единицами: в процентах та же скорость равнялась 0.09
+    /// и округлялась до нуля, то есть игрок видел «шкала не движется».
+    /// </summary>
+    [Fact]
+    public void RatesShowVisibleUnitsPerGameMinute()
+    {
+        var moving = PlayerConditionRates.From(
+            PlayerVitalsState.Default,
+            PlayerConditionState.Empty,
+            playerMoving: true,
+            sleeping: false);
+
+        Assert.Equal(
+            PlayerConditionScale.RateFromPercent(
+                100d / PlayerConditionEngine.FatigueBuildHours / 60d),
+            moving.FatiguePerGameMinute,
+            6);
+
+        Assert.True(
+            moving.FatiguePerGameMinute >= 1d,
+            "скорость усталости обязана быть видимой: " +
+            moving.FatiguePerGameMinute.ToString("0.###"));
+
+        // Восстановление идёт в минус — знак нужен подсказке, чтобы игрок видел
+        // направление, а не только величину.
+        var resting = PlayerConditionRates.From(
+            PlayerVitalsState.Default with
+            {
+                Fatigue = PlayerConditionScale.FromPercent(50d)
+            },
+            PlayerConditionState.Empty,
+            playerMoving: false,
+            sleeping: false);
+
+        Assert.True(
+            resting.FatiguePerGameMinute < 0d,
+            "стоящий игрок восстанавливает усталость: " +
+            resting.FatiguePerGameMinute.ToString("0.###"));
+
+        // Во сне шкала уходит вниз быстрее, чем при отдыхе на месте, — иначе
+        // подсказка не объясняла бы, зачем игроку спать.
+        var sleeping = PlayerConditionRates.From(
+            PlayerVitalsState.Default,
+            PlayerConditionState.Empty,
+            playerMoving: false,
+            sleeping: true);
+
+        Assert.True(
+            sleeping.FatiguePerGameMinute < moving.FatiguePerGameMinute,
+            "сон обязан снимать усталость");
+    }
+
+    /// <summary>
+    /// Шкала целочисленная и кратна проценту: перевод туда-обратно не должен
+    /// накапливать погрешность, иначе интерфейс показывал бы «99%» вместо «100%».
+    /// </summary>
+    [Theory]
+    [InlineData(0d)]
+    [InlineData(1d)]
+    [InlineData(37d)]
+    [InlineData(80d)]
+    [InlineData(100d)]
+    public void ScaleRoundTripsThroughPercent(double percent)
+    {
+        var units = PlayerConditionScale.FromPercent(percent);
+
+        Assert.Equal(units, Math.Round(units), 6);
+        Assert.Equal(percent, PlayerConditionScale.ToPercent(units), 6);
     }
 }

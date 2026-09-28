@@ -86,6 +86,10 @@
   // Кратность игрового времени приходит из Host: скорость — свойство Runtime,
   // а не оформление, и UI только отражает её.
   let simulationSpeed = 1;
+  // Скорости изменения шкал состояния (единиц за игровую минуту) считает ДОМЕН
+  // и присылает Хост: снимок кладёт их рядом с самим снимком, а live_state —
+  // отдельным полем. Web их не вычисляет: вторая версия правил усталости
+  // разошлась бы с движком, и подсказка врала бы в момент решения.
   // Подпись «Автосохранение: дата и время» приходит в снимке.
   let autoSaveLabel = null;
   let worldSelection = { worlds: [], campaigns: [], worldId: "", campaignId: "" };
@@ -306,9 +310,9 @@
     ["facts", "Факты"],
     ["statuses", "Статусы"],
     ["states", "Состояния"],
-    ["vitals", "Потребности"],
-    ["progress", "Деньги / опыт"],
+    ["vitals", "Состояние персонажа"],
     ["effects", "Баффы и дебаффы"],
+    ["progress", "Деньги / опыт"],
     ["character", "Персонаж"],
     ["inventory", "Инвентарь"],
     ["reputation", "Репутация"],
@@ -2030,7 +2034,9 @@
         route.enabled &&
         simulationRunning &&
         targetIsAfterFirst
-          ? (Math.max(0, Number(snapshot.player.speedKmh) || 0) / 3.6) * routeRenderDeltaSeconds()
+          ? (Math.max(0, Number(snapshot.player.speedKmh) || 0) / 3.6) *
+            routeRenderDeltaSeconds() *
+            Math.max(0, Number(simulationSpeed) || 1)
           : 0;
 
       drawRouteText(
@@ -2175,7 +2181,13 @@
 
     const speedKmh = Math.max(0, Number(player.speedKmh) || 0);
     const heading = Number(player.heading || 0) * Math.PI / 180;
-    const ahead = speedKmh / 3.6 * age;
+    // Пройденный путь считается в ИГРОВОМ времени: при ускорении времени
+    // (×2/×4/×8) игрок едет по маршруту быстрее, и покадровая экстраполяция
+    // обязана это повторять — иначе между пакетами маркер «отстаёт» от
+    // авторитетной позиции и движение выглядит рваным. Отображаемая скорость
+    // (спидометр) при этом не меняется: масштабируется только путь.
+    const timeScale = Math.max(0, Number(simulationSpeed) || 1);
+    const ahead = speedKmh / 3.6 * age * timeScale;
 
     const targetX = x + Math.cos(heading) * ahead;
     const targetZ = z + Math.sin(heading) * ahead;
@@ -3691,10 +3703,11 @@
   /**
    * Следующая кратность при нажатии ff.
    *
-   * Набор фиксированный: 1 → 2 → 4 → 8 → 1. Четвёртое нажатие возвращает
-   * обычную скорость, поэтому ускорение не «залипает».
+   * Набор фиксированный и идёт по кругу: ×2 → ×5 → ×12 → ×18 → ×1 → ×2. Мелкая
+   * сетка 1/2/4/8 слишком долго шла до нужного ускорения, а последнее деление
+   * возвращает обычную скорость, поэтому ускорение не «залипает».
    */
-  const SIMULATION_SPEEDS = [1, 2, 4, 8];
+  const SIMULATION_SPEEDS = [2, 5, 12, 18, 1];
 
   function nextSimulationSpeed() {
     const current = SIMULATION_SPEEDS.findIndex(value => Math.abs(value - Number(simulationSpeed)) < 0.001);
@@ -4850,6 +4863,10 @@
         if (message.playerVitals) snapshot.playerVitals = message.playerVitals;
         if (message.playerProgress) snapshot.playerProgress = message.playerProgress;
         if (message.conditions) snapshot.conditions = message.conditions;
+        // Скорости шкал считает домен и присылает Хост: подсказка шкалы должна
+        // показывать скорость и в live_state, иначе она обнулялась бы между
+        // полными снимками (они приходят заметно реже).
+        if (message.conditionRates) snapshot.conditionRates = message.conditionRates;
         if (message.runtime) runtime = message.runtime;
         if (typeof message.simulationRunning === "boolean") simulationRunning = message.simulationRunning;
         if (typeof message.simulationPaused === "boolean") simulationPaused = message.simulationPaused;
@@ -4869,6 +4886,9 @@
       snapshot = message.snapshot;
       window.__assistItemCatalog = Array.isArray(message.itemCatalog) ? message.itemCatalog : [];
       runtime = message.runtime || null;
+      // Скорости шкал приходят РЯДОМ с снимком, а не внутри него: подсказка
+      // шкалы показывает «ед./мин», и их считает домен.
+      if (snapshot && message.conditionRates) snapshot.conditionRates = message.conditionRates;
       simulationRunning = !!message.simulationRunning;
       simulationPaused = !!message.simulationPaused;
       if (typeof message.simulationSpeed === "number") simulationSpeed = message.simulationSpeed;

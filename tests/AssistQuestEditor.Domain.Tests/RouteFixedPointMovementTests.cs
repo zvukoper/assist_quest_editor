@@ -164,11 +164,15 @@ public sealed class RouteFixedPointMovementTests
         // Игрок находится ближе к destination по прямой, но fixed-маршрут сначала
         // обязан пройти через дорожную точку (-80, 0). Евклидова дальность до
         // destination здесь не имеет права выкинуть этот участок маршрута.
+        //
+        // Игрок проецируется внутрь участка start(-0) → bend(-80), поэтому
+        // следующей целью становится КОНЕЦ этого участка — bend с индексом 1.
         var nextPoint = RouteMovementEngine.NextRoutePointForPlayer(
             plan,
             new WorldCoordinate(-40, 0, 20));
 
-        Assert.Equal(2, nextPoint);
+        Assert.Equal(1, nextPoint);
+        Assert.Equal(new WorldCoordinate(-80, 0, 0), plan.Points[nextPoint].Position);
     }
 
     [Fact]

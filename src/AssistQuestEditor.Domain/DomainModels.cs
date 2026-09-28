@@ -66,6 +66,12 @@ public sealed record PlayerState(
     bool Paused,
     bool InCab);
 
+/// <summary>
+/// Потребности игрока. Все значения — в ЕДИНИЦАХ шкалы 0..10000
+/// (<see cref="PlayerConditionScale"/>), а не в процентах: интерфейс делит их
+/// на 100 и показывает проценты, но начисление ведётся единицами, иначе шаг за
+/// игровую минуту был бы меньше процента и терялся бы при показе.
+/// </summary>
 public sealed record PlayerVitalsState(
     double Health,
     double MaxHealth,
@@ -74,7 +80,42 @@ public sealed record PlayerVitalsState(
     double Hydration,
     double MaxHydration,
     double Fatigue,
-    double MaxFatigue);
+    double MaxFatigue)
+{
+    /// <summary>Полные шкалы и нулевая усталость — стартовое состояние мира.</summary>
+    public static PlayerVitalsState Default => new(
+        PlayerConditionScale.Maximum,
+        PlayerConditionScale.Maximum,
+        PlayerConditionScale.Maximum,
+        PlayerConditionScale.Maximum,
+        PlayerConditionScale.Maximum,
+        PlayerConditionScale.Maximum,
+        0d,
+        PlayerConditionScale.Maximum);
+
+    /// <summary>
+    /// Приводит границы и значения к диапазону 0..10000. Одно место для
+    /// ограничения: состояние приходит из редактора, нод квестов и сохранений,
+    /// и каждый источник обязан получить одинаковый отпор.
+    /// </summary>
+    public PlayerVitalsState Normalize() => this with
+    {
+        MaxHealth = ClampMaximum(MaxHealth),
+        MaxEnergy = ClampMaximum(MaxEnergy),
+        MaxHydration = ClampMaximum(MaxHydration),
+        MaxFatigue = ClampMaximum(MaxFatigue),
+        Health = ClampValue(Health, MaxHealth),
+        Energy = ClampValue(Energy, MaxEnergy),
+        Hydration = ClampValue(Hydration, MaxHydration),
+        Fatigue = ClampValue(Fatigue, MaxFatigue)
+    };
+
+    private static double ClampMaximum(double value) =>
+        double.IsFinite(value) ? Math.Clamp(value, 0d, PlayerConditionScale.Maximum) : 0d;
+
+    private static double ClampValue(double value, double maximum) =>
+        double.IsFinite(value) ? Math.Clamp(value, 0d, ClampMaximum(maximum)) : 0d;
+}
 
 public sealed record PlayerProgressState(
     int Money,
@@ -203,17 +244,27 @@ public sealed record PlayerConditionState(
     double CriticalStressGameSeconds,
     IReadOnlyList<ActivePlayerEffectState> Effects)
 {
+    /// <summary>
+    /// Кумулятивные шкалы и стресс — в ЕДИНИЦАХ (<see cref="PlayerConditionScale"/>),
+    /// как и <see cref="PlayerVitalsState"/>. Исключение — критические счётчики
+    /// `Critical*GameSeconds`: это ИГРОВЫЕ СЕКУНДЫ, а не шкала, и они не
+    /// переводятся в единицы (иначе час критической усталости стал бы ста часами).
+    /// </summary>
     public static PlayerConditionState Empty =>
         new(0d, 0d, 0d, 0d, 0d, 0d, 0d, 0d, Array.Empty<ActivePlayerEffectState>());
 
     public PlayerConditionState Normalize() => this with
     {
-        CumulativeHealth = Math.Clamp(CumulativeHealth, 0d, 100d),
-        CumulativeEnergy = Math.Clamp(CumulativeEnergy, 0d, 100d),
-        CumulativeHydration = Math.Clamp(CumulativeHydration, 0d, 100d),
-        Stress = Math.Clamp(Stress, 0d, 100d - Math.Clamp(CumulativeStress, 0d, 100d)),
-        CumulativeStress = Math.Clamp(CumulativeStress, 0d, 100d),
-        CumulativeFatigue = Math.Clamp(CumulativeFatigue, 0d, 100d),
+        CumulativeHealth = Math.Clamp(CumulativeHealth, 0d, PlayerConditionScale.Maximum),
+        CumulativeEnergy = Math.Clamp(CumulativeEnergy, 0d, PlayerConditionScale.Maximum),
+        CumulativeHydration = Math.Clamp(CumulativeHydration, 0d, PlayerConditionScale.Maximum),
+        Stress = Math.Clamp(
+            Stress,
+            0d,
+            PlayerConditionScale.Maximum -
+                Math.Clamp(CumulativeStress, 0d, PlayerConditionScale.Maximum)),
+        CumulativeStress = Math.Clamp(CumulativeStress, 0d, PlayerConditionScale.Maximum),
+        CumulativeFatigue = Math.Clamp(CumulativeFatigue, 0d, PlayerConditionScale.Maximum),
         CriticalFatigueGameSeconds = Math.Max(
             0d,
             double.IsFinite(CriticalFatigueGameSeconds) ? CriticalFatigueGameSeconds : 0d),

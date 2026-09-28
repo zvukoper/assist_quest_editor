@@ -613,8 +613,14 @@ public sealed class QuestRuntimeTests
 
         new QuestRuntime(new QuestGraphStore(graph), hub).Start();
 
-        Assert.Equal(72, hub.Get<PlayerVitalsState>("player-vitals").Value.Health);
-        Assert.Equal(18, hub.Get<PlayerVitalsState>("player-vitals").Value.Fatigue);
+        // Ноды квестов задают значения В ПРОЦЕНТАХ, а канал ведёт ЕДИНИЦЫ шкалы:
+        // проверяется именно результат перевода на границе «нода → состояние».
+        Assert.Equal(
+            PlayerConditionScale.FromPercent(72d),
+            hub.Get<PlayerVitalsState>("player-vitals").Value.Health);
+        Assert.Equal(
+            PlayerConditionScale.FromPercent(18d),
+            hub.Get<PlayerVitalsState>("player-vitals").Value.Fatigue);
         Assert.Equal(25, hub.Get<PlayerProgressState>("player-progress").Value.Experience);
         Assert.Equal(1850, hub.Get<PlayerProgressState>("player-progress").Value.Money);
     }

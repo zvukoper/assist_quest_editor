@@ -330,6 +330,12 @@ public static class SimulationSaveCodec
             ReadDouble(reader), ReadDouble(reader),
             ReadDouble(reader), ReadDouble(reader));
 
+        // До v10 состояние персонажа писалось в процентах (0..100). Единицы шкалы
+        // вводятся без изменения раскладки байтов: снимок v9 читается тем же кодом,
+        // а проценты превращаются в единицы здесь, на границе чтения.
+        if (formatVersion < 10)
+            vitals = ScaleVitalsFromPercent(vitals);
+
         var progress = new PlayerProgressState(
             (int)UnZigZag(ReadVarint(reader)),
             (int)UnZigZag(ReadVarint(reader)),
@@ -363,7 +369,7 @@ public static class SimulationSaveCodec
             ? ReadMapView(reader)
             : null;
         var conditions = formatVersion >= 8
-            ? ReadConditions(reader)
+            ? ReadConditions(reader, formatVersion)
             : PlayerConditionState.Empty;
 
         return new SimulationSaveState(
@@ -431,7 +437,7 @@ public static class SimulationSaveCodec
         }
     }
 
-    private static PlayerConditionState ReadConditions(BinaryReader reader)
+    private static PlayerConditionState ReadConditions(BinaryReader reader, int formatVersion)
     {
         var state = new PlayerConditionState(
             ReadDouble(reader),
@@ -457,8 +463,41 @@ public static class SimulationSaveCodec
                 ReadDouble(reader)));
         }
 
+        // До v10 шкалы условий тоже были в процентах. Критические счётчики
+        // (Critical*GameSeconds) — это СЕКУНДЫ, а не шкала, и пересчёту не
+        // подлежат: иначе игрок после загрузки получил бы 100 часов вместо часа.
+        if (formatVersion < 10)
+        {
+            state = state with
+            {
+                CumulativeHealth = PlayerConditionScale.FromPercent(state.CumulativeHealth),
+                CumulativeEnergy = PlayerConditionScale.FromPercent(state.CumulativeEnergy),
+                CumulativeHydration = PlayerConditionScale.FromPercent(state.CumulativeHydration),
+                Stress = PlayerConditionScale.FromPercent(state.Stress),
+                CumulativeStress = PlayerConditionScale.FromPercent(state.CumulativeStress),
+                CumulativeFatigue = PlayerConditionScale.FromPercent(state.CumulativeFatigue)
+            };
+        }
+
         return (state with { Effects = effects }).Normalize();
     }
+
+    /// <summary>
+    /// Проценты снимков до v10 → единицы шкалы. Пересчёт только значений шкал;
+    /// структура записи не меняется, поэтому старые снимки читаются без сдвига.
+    /// </summary>
+    private static PlayerVitalsState ScaleVitalsFromPercent(PlayerVitalsState vitals) =>
+        vitals with
+        {
+            Health = PlayerConditionScale.FromPercent(vitals.Health),
+            MaxHealth = PlayerConditionScale.FromPercent(vitals.MaxHealth),
+            Energy = PlayerConditionScale.FromPercent(vitals.Energy),
+            MaxEnergy = PlayerConditionScale.FromPercent(vitals.MaxEnergy),
+            Hydration = PlayerConditionScale.FromPercent(vitals.Hydration),
+            MaxHydration = PlayerConditionScale.FromPercent(vitals.MaxHydration),
+            Fatigue = PlayerConditionScale.FromPercent(vitals.Fatigue),
+            MaxFatigue = PlayerConditionScale.FromPercent(vitals.MaxFatigue)
+        };
 
     private static void WriteNullableString(BinaryWriter writer, string? value)
     {

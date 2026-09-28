@@ -53,7 +53,15 @@ public sealed class SimulationSaveCodecTests
                 ["gosha"] = -20
             },
             new[] { "ruslan" },
-            new PlayerVitalsState(88, 100, 72, 100, 90, 100, 14, 100),
+            new PlayerVitalsState(
+                PlayerConditionScale.FromPercent(88),
+                PlayerConditionScale.Maximum,
+                PlayerConditionScale.FromPercent(72),
+                PlayerConditionScale.Maximum,
+                PlayerConditionScale.FromPercent(90),
+                PlayerConditionScale.Maximum,
+                PlayerConditionScale.FromPercent(14),
+                PlayerConditionScale.Maximum),
             new PlayerProgressState(2750, 120, 0),
             new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase)
             {
@@ -226,6 +234,47 @@ public sealed class SimulationSaveCodecTests
         var decoded = SimulationSaveCodec.Decode(SimulationSaveCodec.Encode(original));
 
         Assert.Null(decoded.State.MapView);
+    }
+
+    /// <summary>
+    /// Снимок v9 хранил состояние персонажа В ПРОЦЕНТАХ. После перехода на
+    /// единицы шкалы (0..10000) старый файл обязан читаться так же, как читался
+    /// раньше: иначе у игрока после загрузки шкалы «схлопнулись» бы в сотую часть
+    /// и полный бак показывался бы как 1%.
+    ///
+    /// Раскладка байтов при этом НЕ менялась — поэтому проверяется именно
+    /// пересчёт значений, а не новая секция.
+    /// </summary>
+    [Fact]
+    public void VersionNineSaveConvertsPercentScalesToUnits()
+    {
+        var legacy = CreateSave() with
+        {
+            Header = CreateSave().Header with { FormatVersion = 9 },
+            State = CreateSave().State with
+            {
+                // Значения ровно такие, какими их писал формат v9: проценты.
+                PlayerVitals = new PlayerVitalsState(88, 100, 72, 100, 90, 100, 14, 100),
+                Conditions = new PlayerConditionState(
+                    12, 20, 5, 30, 8, 40, 3600, 1800,
+                    Array.Empty<ActivePlayerEffectState>())
+            }
+        };
+
+        var decoded = SimulationSaveCodec.Decode(SimulationSaveCodec.Encode(legacy));
+
+        Assert.Equal(PlayerConditionScale.FromPercent(88), decoded.State.PlayerVitals.Health);
+        Assert.Equal(PlayerConditionScale.FromPercent(100), decoded.State.PlayerVitals.MaxHealth);
+        Assert.Equal(PlayerConditionScale.FromPercent(14), decoded.State.PlayerVitals.Fatigue);
+
+        Assert.Equal(PlayerConditionScale.FromPercent(12), decoded.State.Conditions.CumulativeHealth);
+        Assert.Equal(PlayerConditionScale.FromPercent(30), decoded.State.Conditions.Stress);
+        Assert.Equal(PlayerConditionScale.FromPercent(40), decoded.State.Conditions.CumulativeFatigue);
+
+        // Критические счётчики — СЕКУНДЫ, а не шкала: их пересчёт превратил бы
+        // час критической усталости в сто часов.
+        Assert.Equal(3600d, decoded.State.Conditions.CriticalFatigueGameSeconds);
+        Assert.Equal(1800d, decoded.State.Conditions.CriticalStressGameSeconds);
     }
 
     [Fact]

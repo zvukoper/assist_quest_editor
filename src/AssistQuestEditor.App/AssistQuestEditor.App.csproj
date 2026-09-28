@@ -14,7 +14,7 @@
     <Version>1.0.40.192</Version>
     <AssemblyVersion>1.0.40.192</AssemblyVersion>
     <FileVersion>1.0.40.192</FileVersion>
-    <AssemblyInformationalVersion>1.0.40.192-ROUTE-RESUME-AND-INVENTORY-HOTKEY-R1</AssemblyInformationalVersion>
+    <AssemblyInformationalVersion>1.0.40.196-CHARACTER-STATE-10000-R1</AssemblyInformationalVersion>
     <PublishSingleFile>true</PublishSingleFile>
     <SelfContained>true</SelfContained>
     <RuntimeIdentifier>win-x64</RuntimeIdentifier>

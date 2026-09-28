@@ -61,16 +61,28 @@ const snapshot = {
   selection: { point: null, source: "" }, facts: { values: {} }, questStatuses: { quests: [] },
   states: { flags: {}, variables: {}, dialogueId: null, dialogueAnchor: null },
   // Усталость НЕ 0: если жёлтая часть есть, а мягкая пустая — это и есть дефект.
-  playerVitals: { health: 80, maxHealth: 100, energy: 55, maxEnergy: 100, hydration: 70, maxHydration: 100, fatigue: 40, maxFatigue: 100 },
+  //
+  // Значения — ЕДИНИЦЫ шкалы 0..10000, как их присылает Хост: 100 единиц равны
+  // одному проценту. Если подставить сюда проценты, шкала в интерфейсе схлопнется
+  // в сотую часть и проверки пройдут «успешно» на сломанной разметке.
+  playerVitals: {
+    health: 8000, maxHealth: 10000, energy: 5500, maxEnergy: 10000,
+    hydration: 7000, maxHydration: 10000, fatigue: 4000, maxFatigue: 10000
+  },
   playerProgress: { money: 1500, experience: 0, reserve: 0 },
   character: { stats: { strength: 5 }, skills: [] },
   inventory: { items: {}, newItemIds: [] },
   reputation: { entries: {} },
   conditions: {
-    cumulativeHealth: 10, cumulativeEnergy: 20, cumulativeHydration: 5,
-    stress: 30, cumulativeStress: 8,
-    cumulativeFatigue: 12, criticalFatigueGameSeconds: 0, criticalStressGameSeconds: 0,
+    cumulativeHealth: 1000, cumulativeEnergy: 2000, cumulativeHydration: 500,
+    stress: 3000, cumulativeStress: 800,
+    cumulativeFatigue: 1200, criticalFatigueGameSeconds: 0, criticalStressGameSeconds: 0,
     effects: []
+  },
+  // Скорости изменения шкал считает домен и присылает Хост: усталость растёт,
+  // у остальных шкал ноль — подсказка обязана показать и знак, и единицы.
+  conditionRates: {
+    health: 0, energy: 0, hydration: 0, fatigue: 55.56, stress: 0
   },
   telemetry: {}, environment: {},
   system: { runtimeRunning: false, runtimeMode: "Simulator", lastEvent: "", lastTransition: "" }
@@ -86,7 +98,7 @@ try {
   await page.evaluate(v => window.chrome.webview.dispatch("message", { type: "snapshot", version: "p", snapshot: v }), snapshot);
   await page.waitForTimeout(600);
 
-  // Раскрываем секцию «Потребности» в сайдбаре.
+  // Раскрываем секцию «Состояние персонажа» в сайдбаре.
   await page.evaluate(() => {
     const section = document.querySelector("#side .acc[data-section='vitals']");
     if (section && !section.classList.contains("open")) section.querySelector(".accHead").click();
@@ -118,7 +130,7 @@ try {
   out.fields = await page.evaluate(() =>
     [...document.querySelectorAll("#side .acc[data-section='vitals'] [data-t]")].map(n => n.dataset.t));
 
-  // Окно «Игрок» — потребности рисует AssistInventory.vitalsMarkup.
+  // Окно «Игрок» — состояние персонажа рисует AssistInventory.vitalsMarkup.
   out.playerWindow = await page.evaluate(() => {
     const panel = document.getElementById("inventoryPanel");
     panel.innerHTML = AssistInventory.panelMarkup(JSON.parse(JSON.stringify(window.__snapshot || {})), [], { withHeader: false });
@@ -154,7 +166,7 @@ try {
     "окно «Игрок»: состав шкал " + JSON.stringify(out.playerWindow?.labels));
 
   check((out.fields || []).includes("stress"),
-    "в разделе «Потребности» нет поля для стресса: " + JSON.stringify(out.fields));
+    "в разделе «Состояние персонажа» нет поля для стресса: " + JSON.stringify(out.fields));
 
   const colors = {
     health: "#32cd32", stress: "#8c63d9", energy: "#ff8c00",
@@ -184,7 +196,29 @@ try {
       `${name}: подсказка не называет кумулятивное значение отдельно`);
     check(scales.tooltips.some(t => t.includes("Реальное значение")),
       `${name}: подсказка не называет реальное значение`);
+    // Значение показывается в ЕДИНИЦАХ шкалы с максимумом, а не в процентах:
+    // иначе игрок не видит, сколько именно единиц движения даёт минута.
+    check(scales.tooltips.some(t => t.includes("/10000")),
+      `${name}: подсказка не показывает значение в единицах шкалы (…/10000)`);
+    // Скорость изменения — это то, ради чего шкала переведена в единицы: в
+    // процентах она округлялась бы до нуля и подсказка всегда показывала бы 0.
+    check(scales.tooltips.some(t => t.includes("Скорость")),
+      `${name}: подсказка не называет скорость изменения шкалы`);
+    check(scales.tooltips.some(t => t.includes("ед./мин")),
+      `${name}: скорость не показана в единицах за игровую минуту`);
   }
+
+  // Усталость растёт: подсказка обязана показать положительную скорость и знак.
+  const fatigueTip = out.sidebar?.tooltips.find(t => t.includes("Усталость"));
+  check(!!fatigueTip && fatigueTip.includes("Скорость: +") &&
+    fatigueTip.includes(" ед./мин"),
+    "сайдбар: скорость усталости не показана со знаком плюс: " +
+      JSON.stringify(fatigueTip));
+
+  // Реальное значение — единицы из снимка (4000 усталости), а не проценты.
+  check(!!fatigueTip && fatigueTip.includes("Реальное значение: 4000/10000"),
+    "сайдбар: реальное значение усталости не в единицах шкалы: " +
+      JSON.stringify(fatigueTip));
 
   // Усталость 40% — мягкая часть не пустая, иначе жёлтое выглядело бы «0%».
   const fatigueBar = out.sidebar?.bars.find(b => b.cls.includes("fatigue"));

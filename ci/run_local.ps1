@@ -607,6 +607,10 @@ New-Check -Id 'webSyntax' -Name 'Синтаксис web JavaScript' -Suites @('f
         '.\src\AssistQuestEditor.App\Web\dynamicEventEditor.js',
         '.\src\AssistQuestEditor.App\Web\interface.js',
         '.\src\AssistQuestEditor.App\Web\simulator.js',
+        # vitals.js раньше отсутствовал в списке, хотя его подключают и Симулятор,
+        # и окно «Игрок»: ошибка синтаксиса в нём оставляла шкалы состояния
+        # пустыми, и поймать её было нечем.
+        '.\src\AssistQuestEditor.App\Web\vitals.js',
         '.\src\AssistQuestEditor.App\Web\inventory.js',
         '.\src\AssistQuestEditor.App\Web\playerPanels.js',
         '.\src\AssistQuestEditor.App\Web\junctions.js',

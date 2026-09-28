@@ -44,8 +44,15 @@ public sealed record SimulationSaveState(
 
     public PlayerConditionState Conditions { get; init; } = PlayerConditionState.Empty;
 
-    /// <summary>Текущая версия формата.</summary>
-    public const int CurrentFormatVersion = 9;
+    /// <summary>
+    /// Текущая версия формата.
+    ///
+    /// v10: состояние персонажа хранится в ЕДИНИЦАХ шкалы 0..10000
+    /// (<see cref="PlayerConditionScale"/>), а не в процентах. Старые снимки
+    /// читаются с домножением процентных значений на 100, поэтому шкалы в
+    /// интерфейсе не «схлопываются» при загрузке.
+    /// </summary>
+    public const int CurrentFormatVersion = 10;
 
     /// <summary>Пользовательский маршрут Симулятора.</summary>
     public RouteState Route { get; init; } = RouteState.Empty;

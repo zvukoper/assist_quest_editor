@@ -1032,7 +1032,10 @@ public sealed class QuestRuntime : IQuestRuntimeController
 
     private void ApplyVital(QuestNode node, string property)
     {
-        var value = Math.Clamp(ParseDouble(GetParameter(node, "value"), 0), 0, 100);
+        // В нодах квеста значение задаётся В ПРОЦЕНТАХ (удобно автору), а
+        // хранилище ведёт единицы шкалы: перевод только на этой границе.
+        var percent = Math.Clamp(ParseDouble(GetParameter(node, "value"), 0), 0, 100);
+        var value = PlayerConditionScale.FromPercent(percent);
         var current = _hub.Get<PlayerVitalsState>("player-vitals").Value;
         var next = property switch
         {
@@ -1043,7 +1046,7 @@ public sealed class QuestRuntime : IQuestRuntimeController
             _ => current
         };
 
-        _hub.Get<PlayerVitalsState>("player-vitals").Set(next, "QuestRuntime");
+        _hub.Get<PlayerVitalsState>("player-vitals").Set(next.Normalize(), "QuestRuntime");
     }
 
     private void ApplyProgress(QuestNode node, string property, int sign)

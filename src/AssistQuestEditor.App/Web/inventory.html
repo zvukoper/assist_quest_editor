@@ -60,8 +60,8 @@
 
 <div class="inventoryNotifications" id="inventoryNotifications" aria-live="polite"></div>
 
-<script src="vitals.js?v=a692d18f"></script>
-<script src="inventory.js?v=086dde99"></script>
+<script src="vitals.js?v=121642ce"></script>
+<script src="inventory.js?v=1b1f0aca"></script>
 <script src="playerPanels.js?v=e2c1841d"></script>
 <script>
 (function () {
@@ -164,6 +164,12 @@
     if (message.type === "snapshot") {
       snapshot = message.snapshot || null;
       catalog = Array.isArray(message.itemCatalog) ? message.itemCatalog : [];
+      // Скорости шкал приходят отдельно от самого снимка: их считает домен, а
+      // окно «Игрок» показывает разметку шкал ТЕМ ЖЕ модулем, что и Симулятор —
+      // значит и подсказка с «ед./мин» должна работать здесь так же.
+      if (snapshot && message.conditionRates) {
+        snapshot.conditionRates = message.conditionRates;
+      }
       render();
       return;
     }

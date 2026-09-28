@@ -594,6 +594,34 @@ check(!/SimulationSpeed|simulationSpeed/.test(saveCodec),
 check(!/SimulationSpeed|simulationSpeed/.test(saveMapper),
   "Кратность ускорения не должна переноситься в сохранение мира.");
 
+// Движение игрока по маршруту идёт в ИГРОВОМ времени.
+//
+// Дефект: в `RouteMovementEngine.Advance` передавались РЕАЛЬНЫЕ секунды, поэтому
+// при ×2/×4/×8 часы ускорялись, а игрок полз с прежней скоростью — «FF ускоряет
+// время, но не движение». Кнопка FF ускоряет И пройденный путь, а спидометр
+// остаётся прежним: масштабируется ВРЕМЯ шага, а не отображаемая скорость
+// (SpeedKmh задаётся путевой точкой).
+const simForm = read("src/AssistQuestEditor.App/Host/SimulatorForm.cs");
+const routeTick = simForm.slice(
+  simForm.indexOf("private void UpdateRouteMovement()"),
+  simForm.indexOf("private void SetPlayerMovementIdle()"));
+check(/elapsed\s*\*\s*Math\.Max\(0d,\s*_runtime\.SimulationSpeed\)/.test(routeTick),
+  "Движение по маршруту обязано масштабироваться кратностью ускорения времени: " +
+  "иначе FF ускоряет часы, но не перемещение игрока.");
+const advanceCall = routeTick.slice(
+  routeTick.indexOf("RouteMovementEngine.Advance("));
+const advanceArgs = advanceCall.slice(0, advanceCall.indexOf(");"));
+check(!/\belapsed\b/.test(advanceArgs),
+  "В RouteMovementEngine.Advance обязаны уходить ИГРОВЫЕ секунды, а не реальные.");
+
+// Та же кратность обязана масштабировать покадровую экстраполяцию маркера в web:
+// между пакетами (live_state раз в 250 мс) маркер «доезжает» по скорости и курсу,
+// и без кратности он отстаёт от авторитетной позиции при ускорении.
+const simJs = read("src/AssistQuestEditor.App/Web/simulator.js");
+const aheadLine = simJs.slice(simJs.indexOf("const ahead = speedKmh / 3.6 * age"));
+check(/const ahead\s*=\s*speedKmh\s*\/\s*3\.6\s*\*\s*age\s*\*\s*timeScale/.test(aheadLine),
+  "Экстраполяция маркера игрока обязана учитывать кратность ускорения времени.");
+
 // Меню действий в шапке открывается ПОВЕРХ содержимого.
 //
 // Причина дефекта была в контексте наложения: `z-index` работает только среди
@@ -917,8 +945,9 @@ try {
     "Без ускорения часы не должны становиться оранжевыми и показывать кратность: " +
       JSON.stringify(stoppedState));
 
-  // Кратность: ff перебирает набор 1x → 2x → 4x → 8x и отправляет новое
-  // значение в Host (см. c745348). С ×1 следующий шаг — ×2, а не ×5.
+  // Кратность: ff перебирает набор ×2 → ×5 → ×12 → ×18 → ×1 и отправляет новое
+  // значение в Host (см. c745348). С ×1 следующий шаг — ×2: набор замкнут по
+  // кругу, поэтому с «нет ускорения» ff всегда включает именно ×2.
   // Повторный шаг проверять здесь нельзя: локальная кратность страницы
   // обновляется только очередным снимком Host, а не самим кликом.
   await page.click("#simFastForward");

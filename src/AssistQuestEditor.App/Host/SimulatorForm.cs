@@ -361,11 +361,18 @@ public sealed class SimulatorForm : WebViewForm
             $"points={pointCount}; selected={snapshot.Selection.Point?.Id ?? "<none>"}; player={snapshot.Player.Position}");
         LogQuestSnapshot("snapshot");
 
+        // Скорости изменения шкал едут со снимком: подсказка шкалы показывает,
+        // сколько единиц прибавляется за игровую минуту, и без этого Web
+        // пришлось бы повторять правила усталости и стресса — то есть заводить
+        // вторую их версию, которая неизбежно разойдётся с доменом.
+        var conditionRates = BuildConditionRates(snapshot);
+
         var payload = JsonSerializer.Serialize(new
         {
             type = "snapshot",
             version = VersionInfo.InformationalVersion,
             snapshot,
+            conditionRates,
             journal = _journalEntries.ToArray(),
             itemCatalog = ItemCatalogFactory.CreateStarter(),
             // Каталог НПЦ нужен UI, чтобы показать имя и портрет рядом с числом
@@ -422,6 +429,37 @@ public sealed class SimulatorForm : WebViewForm
         // одного поля в Симуляторе молча ломала бы инвентарь.
         if (_inventoryForm is not null && !_inventoryForm.IsDisposed)
             _inventoryForm.SetSnapshotJson(payload);
+    }
+
+    /// <summary>
+    /// Скорости изменения шкал состояния для подсказок интерфейса.
+    ///
+    /// Считает ДОМЕН по тем же константам, что и начисление, а Хост только
+    /// передаёт результат в Web. Второй расчёт в JavaScript неизбежно разошёлся
+    /// бы с правилами усталости и стресса — и подсказка врала бы ровно в тот
+    /// момент, когда игрок по ней принимает решение.
+    ///
+    /// Покой/движение берутся из скорости игрока, сон — из того, что Симулятор не
+    /// выполняет начисление во время сна.
+    /// </summary>
+    private object BuildConditionRates(SimulatorSnapshot snapshot)
+    {
+        var player = _hub.Get<PlayerState>("player").Value;
+        var moving = !_runtime.IsPaused && player.SpeedKmh > 0.001d;
+        var rates = PlayerConditionRates.From(
+            snapshot.PlayerVitals,
+            snapshot.Conditions,
+            moving,
+            sleeping: false);
+
+        return new
+        {
+            health = rates.HealthPerGameMinute,
+            energy = rates.EnergyPerGameMinute,
+            hydration = rates.HydrationPerGameMinute,
+            fatigue = rates.FatiguePerGameMinute,
+            stress = rates.StressPerGameMinute
+        };
     }
 
     /// <summary>
@@ -1928,6 +1966,18 @@ public sealed class SimulatorForm : WebViewForm
         if (elapsed <= 0d)
             return;
 
+        // Движение по маршруту идёт в ИГРОВОМ времени: маршрут — часть мира,
+        // поэтому кратность ускорения времени обязана ускорять и его. Раньше
+        // сюда попадали РЕАЛЬНЫЕ секунды, и при ×2/×4/×8 игрок полз с той же
+        // скоростью, хотя часы «убегали» вперёд и расчётное время прибытия
+        // (оно считается по игровому времени) расходилось с движением.
+        // Спидометр при этом остаётся прежним: масштабируется только пройденный
+        // путь, а не отображаемая скорость (SpeedKmh задаётся путевой точкой).
+        var gameElapsed = elapsed * Math.Max(0d, _runtime.SimulationSpeed);
+
+        if (gameElapsed <= 0d)
+            return;
+
         var current = _hub.Get<PlayerState>("player").Value;
         var previousTargetId = _routeTargetWaypointId;
 
@@ -1936,11 +1986,10 @@ public sealed class SimulatorForm : WebViewForm
             _routePlan,
             _routeCursor,
             current.Position,
-            elapsed);
+            gameElapsed);
 
         _routeTravelRealSeconds += elapsed;
-        _routeTravelGameSeconds +=
-            elapsed * Math.Max(0d, _runtime.SimulationSpeed);
+        _routeTravelGameSeconds += gameElapsed;
 
         _routeCursor = result.Cursor;
         _routeLastHeading = result.HeadingDegrees;
@@ -2164,6 +2213,11 @@ public sealed class SimulatorForm : WebViewForm
 
     private void SetRouteStateAfterLoad(RouteState route, RouteRuntimeState? runtime = null)
     {
+        // RoutePlanner.Build привязывает первую фиксированную точку к дороге
+        // ОТ ТЕКУЩЕГО ПОЛОЖЕНИЯ ИГРОКА, поэтому позиция нужна и при загрузке
+        // (иначе привязка шла бы от начала координат).
+        var playerPosition = _hub.Get<PlayerState>("player").Value.Position;
+
         _routeState = (route ?? RouteState.Empty).Normalize();
         _selectedRouteWaypointId = null;
         _routeStoppedWaypointIndex = null;
@@ -2387,6 +2441,10 @@ public sealed class SimulatorForm : WebViewForm
             playerVitals = _hub.Get<PlayerVitalsState>("player-vitals").Value,
             playerProgress = _hub.Get<PlayerProgressState>("player-progress").Value,
             conditions = _hub.Get<PlayerConditionState>("player-conditions").Value,
+            // Скорости шкал едут и в live_state: окно «Игрок» обновляется им, а
+            // подсказка шкалы показывает скорость — без этого поля подсказка
+            // показывала бы ноль до следующего полного снимка.
+            conditionRates = BuildConditionRates(_hub.GetSnapshot()),
             runtime = _runtime.State,
             simulationRunning = _runtime.SimulationRunning,
             simulationPaused = _runtime.IsPaused,
@@ -2873,16 +2931,19 @@ public sealed class SimulatorForm : WebViewForm
     private void SetPlayerVitals(JsonElement root)
     {
         var current = _hub.Get<PlayerVitalsState>("player-vitals").Value;
+
+        // Редактор вводит ПРОЦЕНТЫ, а хранилище ведёт единицы шкалы: перевод
+        // делается здесь, ровно на границе между интерфейсом и состоянием.
         var next = current with
         {
-            Health = Math.Clamp(Number(root, "health", current.Health), 0, current.MaxHealth),
-            Energy = Math.Clamp(Number(root, "energy", current.Energy), 0, current.MaxEnergy),
-            Hydration = Math.Clamp(Number(root, "hydration", current.Hydration), 0, current.MaxHydration),
-            Fatigue = Math.Clamp(Number(root, "fatigue", current.Fatigue), 0, current.MaxFatigue)
+            Health = PlayerConditionScale.FromPercent(Number(root, "health", PlayerConditionScale.ToPercent(current.Health))),
+            Energy = PlayerConditionScale.FromPercent(Number(root, "energy", PlayerConditionScale.ToPercent(current.Energy))),
+            Hydration = PlayerConditionScale.FromPercent(Number(root, "hydration", PlayerConditionScale.ToPercent(current.Hydration))),
+            Fatigue = PlayerConditionScale.FromPercent(Number(root, "fatigue", PlayerConditionScale.ToPercent(current.Fatigue)))
         };
 
         // Стресс — часть условий, а не потребностей, но правится из того же блока
-        // «Потребности». Поле необязательное: отсутствие ключа означает
+        // «Состояние персонажа». Поле необязательное: отсутствие ключа означает
         // «оставить как есть», иначе применение здоровья сбрасывало бы стресс.
         var conditions = _hub.Get<PlayerConditionState>("player-conditions").Value;
 
@@ -2893,32 +2954,30 @@ public sealed class SimulatorForm : WebViewForm
         {
             conditions = conditions with
             {
-                Stress = Math.Clamp(stress, 0d, Math.Max(0d, 100d - conditions.CumulativeStress))
+                Stress = PlayerConditionScale.FromPercent(stress)
             };
         }
 
-        _hub.Get<PlayerVitalsState>("player-vitals").Set(next, "Редактор потребностей");
-        _hub.Get<PlayerConditionState>("player-conditions").Set(conditions, "Редактор потребностей");
+        _hub.Get<PlayerVitalsState>("player-vitals").Set(next.Normalize(), "Редактор состояния персонажа");
+        _hub.Get<PlayerConditionState>("player-conditions").Set(conditions.Normalize(), "Редактор состояния персонажа");
     }
 
     /// <summary>
-    /// Правка стресса из блока «Потребности».
+    /// Правка стресса из блока «Состояние персонажа».
     ///
-    /// Кумулятивный стресс НЕ трогается: по правилам он снимается только
-    /// отпуском, и кнопка «Снять стресс» не должна его обнулять — иначе
+    /// Поле ввода — проценты, а состояние хранит единицы шкалы, поэтому перевод
+    /// делается здесь. Кумулятивный стресс НЕ трогается: по правилам он снимается
+    /// только отпуском, и кнопка «Снять стресс» не должна его обнулять — иначе
     /// редактор обходил бы единственный задуманный способ избавления.
     /// </summary>
     private void SetStress(JsonElement root)
     {
         var conditions = _hub.Get<PlayerConditionState>("player-conditions").Value;
-        var stress = Number(root, "stress", conditions.Stress);
+        var stress = Number(root, "stress", PlayerConditionScale.ToPercent(conditions.Stress));
 
         _hub.Get<PlayerConditionState>("player-conditions").Set(
-            conditions with
-            {
-                Stress = Math.Clamp(stress, 0d, Math.Max(0d, 100d - conditions.CumulativeStress))
-            },
-            "Редактор потребностей");
+            conditions with { Stress = PlayerConditionScale.FromPercent(stress) },
+            "Редактор состояния персонажа");
     }
 
     private void SetPlayerProgress(JsonElement root)
@@ -4089,9 +4148,16 @@ public sealed class SimulatorForm : WebViewForm
             : "точка " + CurrentTargetNumberText();
 
         var remainingDistance = RemainingRouteDistanceMeters();
-        var remainingReal = RemainingRouteSeconds();
-        var remainingGame = remainingReal.HasValue
-            ? remainingReal.Value * Math.Max(0d, _runtime.SimulationSpeed)
+        // RemainingRouteSeconds возвращает ИГРОВЫЕ секунды пути (движение по
+        // маршруту идёт в игровом времени). Реальное время получается делением
+        // на кратность ускорения: при ×8 маршрут проезжается в 8 раз быстрее
+        // по настенным часам, а игровая длительность не меняется.
+        var remainingGame = RemainingRouteSeconds();
+        var speedScale = Math.Max(0d, _runtime.SimulationSpeed);
+        var remainingReal = remainingGame.HasValue
+            ? (speedScale > 0d
+                ? remainingGame.Value / speedScale
+                : remainingGame.Value)
             : (double?)null;
 
         AppendJournal(
@@ -4154,6 +4220,13 @@ public sealed class SimulatorForm : WebViewForm
 
         var waypoints = _routeState.Waypoints.Select((waypoint, index) =>
         {
+            // EstimateRouteSeconds считает ИГРОВЫЕ секунды пути: движение по
+            // маршруту идёт в игровом времени, поэтому и скорость поедания
+            // маршрута масштабируется кратностью ускорения времени.
+            //   * время прибытия — игровой момент плюс игровая длительность;
+            //   * обратный отсчёт на карте — РЕАЛЬНЫЕ секунды, то есть игровые,
+            //     делённые на кратность (при ×8 до точки в 8 раз меньше реального
+            //     времени, хотя игровая метка та же).
             var countdown = EstimateRouteSeconds(index);
 
             return new
@@ -4172,10 +4245,13 @@ public sealed class SimulatorForm : WebViewForm
                 distanceFromFirstMeters = cumulative[index],
                 estimatedArrivalGameTime = countdown.HasValue
                     ? GameCalendar.FormatTime(
-                        clock.Now + TimeSpan.FromSeconds(
-                            countdown.Value * speedScale))
+                        clock.Now + TimeSpan.FromSeconds(countdown.Value))
                     : "—",
-                countdownRealSeconds = countdown
+                countdownRealSeconds = countdown.HasValue
+                    ? (speedScale > 0d
+                        ? countdown.Value / speedScale
+                        : countdown.Value)
+                    : countdown
             };
         }).ToArray();
 

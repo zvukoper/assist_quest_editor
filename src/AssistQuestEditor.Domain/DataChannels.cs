@@ -172,8 +172,8 @@ public sealed class SimulatorDataChannelHub : IDataChannelHub
 
         PlayerVitals = new DataChannel<PlayerVitalsState>(
             "player-vitals",
-            "Потребности игрока",
-            new PlayerVitalsState(100, 100, 100, 100, 100, 100, 0, 100));
+            "Состояние персонажа",
+            PlayerVitalsState.Default);
 
         PlayerProgress = new DataChannel<PlayerProgressState>(
             "player-progress",
@@ -344,7 +344,7 @@ public sealed class SimulatorDataChannelHub : IDataChannelHub
             },
             null,
             null), "Сброс симулятора");
-        PlayerVitals.Set(new PlayerVitalsState(100, 100, 100, 100, 100, 100, 0, 100), "Сброс симулятора");
+        PlayerVitals.Set(PlayerVitalsState.Default, "Сброс симулятора");
         PlayerProgress.Set(new PlayerProgressState(1500, 0, 0), "Сброс симулятора");
         PlayerConditions.Set(PlayerConditionState.Empty, "Сброс симулятора");
         Character.Set(
@@ -447,7 +447,7 @@ public sealed class SimulatorDataChannelHub : IDataChannelHub
         }
         else if (channel is DataChannel<PlayerVitalsState> vitals)
         {
-            vitals.Changed += (_, args) => PublishTransition("player-vitals", args.Source, "Изменены потребности игрока");
+            vitals.Changed += (_, args) => PublishTransition("player-vitals", args.Source, "Изменено состояние персонажа");
         }
         else if (channel is DataChannel<PlayerProgressState> progress)
         {
