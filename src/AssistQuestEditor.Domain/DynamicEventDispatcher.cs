@@ -622,7 +622,7 @@ public sealed class DynamicEventDispatcher : IDynamicEventDispatcher
         var parts = new List<string>();
 
         if (money > 0)
-            parts.Add($"{money.ToString("N0", new CultureInfo("ru-RU"))} ₽");
+            parts.Add($"{money.ToString("N0", new System.Globalization.CultureInfo("ru-RU"))} ₽");
 
         if (experience > 0)
             parts.Add($"+{experience} опыта");
@@ -642,7 +642,7 @@ public sealed class DynamicEventDispatcher : IDynamicEventDispatcher
             : BuildRewardMessage(eventName, completion.Money, completion.Experience);
 
         return consumed && message.IndexOf("деактивирован", StringComparison.OrdinalIgnoreCase) < 0
-            ? message + " Тайник деактивирован для повторной генерации."
+            ? message + " Событие деактивировано для повторной генерации."
             : message;
     }
 
