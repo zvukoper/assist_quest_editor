@@ -49,6 +49,12 @@
         respawnOnExpired: false,
         removeOnCompleted: true
       },
+      completion: {
+        completeOnDiscovery: false,
+        money: 0,
+        experience: 0,
+        message: ""
+      },
       presentation: {
         discovery: "WorldMarker"
       }
@@ -106,6 +112,13 @@
         spawnOnSimulationStart: Boolean(document.getElementById("dynamicEventSpawnOnStart")?.checked),
         respawnOnExpired: Boolean(document.getElementById("dynamicEventRespawnOnExpired")?.checked),
         removeOnCompleted: Boolean(document.getElementById("dynamicEventRemove")?.checked)
+      },
+      completion: {
+        ...(current.completion || {}),
+        completeOnDiscovery: Boolean(document.getElementById("dynamicEventCompleteOnDiscovery")?.checked),
+        money: Math.max(0, Math.floor(number(document.getElementById("dynamicEventRewardMoney")?.value, 0))),
+        experience: Math.max(0, Math.floor(number(document.getElementById("dynamicEventRewardExperience")?.value, 0))),
+        message: document.getElementById("dynamicEventCompletionMessage")?.value.trim() || ""
       },
       presentation: {
         ...(current.presentation || {}),
@@ -165,6 +178,7 @@
 
     const trigger = definition.trigger || {};
     const policy = definition.spawnPolicy || {};
+    const completion = definition.completion || {};
 
     ws.innerHTML =
       "<div class='toolbar' style='margin-bottom:10px;flex-wrap:wrap'>" +
@@ -226,6 +240,17 @@
         "<div class='field'><label>Тип события в Event Bus</label><input id='dynamicEventEventType' value='" + esc(trigger.eventType || "") + "' placeholder='например HornPressed'></div>" +
         "<div class='miniLabel'>Дополнительный payload пока сохраняется в canonical JSON и может быть задан вручную. Это позволяет не потерять provider-specific события.</div>" +
       "</div>" +
+
+      "<div class='sectionTitle' style='margin-top:16px'>Завершение и награда</div>" +
+      "<label class='checkRow'><input id='dynamicEventCompleteOnDiscovery' type='checkbox' " +
+        (completion.completeOnDiscovery ? "checked" : "") +
+        "> завершить сразу при попадании игрока в TriggerRadius</label>" +
+      "<div class='field'><label>Деньги, ₽</label><input id='dynamicEventRewardMoney' type='number' min='0' value='" +
+        esc(Math.max(0, Math.floor(number(completion.money, 0)))) + "'></div>" +
+      "<div class='field'><label>Опыт</label><input id='dynamicEventRewardExperience' type='number' min='0' value='" +
+        esc(Math.max(0, Math.floor(number(completion.experience, 0)))) + "'></div>" +
+      "<div class='field'><label>Сообщение ОК (необязательно)</label><textarea id='dynamicEventCompletionMessage' rows='2'>" +
+        esc(completion.message || "") + "</textarea></div>" +
 
       "<div class='sectionTitle' style='margin-top:16px'>Политика генерации</div>" +
       "<div class='field'><label>Максимум активных экземпляров</label><input id='dynamicEventMaxActive' type='number' min='0' value='" + esc(policy.maxActiveInstances ?? 1) + "'></div>" +

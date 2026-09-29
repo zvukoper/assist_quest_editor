@@ -30,7 +30,7 @@ public sealed class ItemsForm : WebViewForm
         : base(
             "Предметы",
             "items.html",
-            new Size(1060, 720),
+            new Size(560, 720),
             "items")
     {
         MinimumSize = new Size(560, 380);

@@ -64,11 +64,17 @@
   }
 
   function visibleEntries() {
-    if (!query) return entries();
+    var source = entries().slice();
+    source.sort(function (a, b) {
+      var byName = String(a.name || "").localeCompare(
+        String(b.name || ""), "ru", { sensitivity: "base" }
+      );
+      return byName || String(a.id || "").localeCompare(String(b.id || ""), "en");
+    });
 
+    if (!query) return source;
     var needle = query.toLowerCase();
-
-    return entries().filter(function (entry) {
+    return source.filter(function (entry) {
       return String(entry.name || "").toLowerCase().indexOf(needle) >= 0 ||
         String(entry.id || "").toLowerCase().indexOf(needle) >= 0;
     });

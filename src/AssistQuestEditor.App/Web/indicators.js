@@ -1,840 +1,305 @@
-/**
- * Окно «Монитор показателей».
- *
- * Показывает КАЖДУЮ шкалу состояния: текущее значение / максимум = формула,
- * то есть перечень всех факторов, влияющих на скорость её изменения. Значения
- * обновляются в реальном времени тем же снимком и live_state, что и карта, —
- * окно ничего не считает само по правилам мира, а читает присланное Хостом.
- *
- * Почему разбор формул живёт в Web, а не в домене. Домен — источник ИСТИНЫ о
- * числах (он их и считает), а этот экран объясняет игроку, ИЗ ЧЕГО эти числа
- * складываются. Формулировки — производная от правил, и держать их рядом с
- * числами значило бы менять домен при каждой правке текста.
- *
- * Значения шкал приходят в ЕДИНИЦАХ 0..10000 (как и везде): перевод в проценты
- * делает AssistVitals, чтобы окно не заводило второй шкалы.
- */
 (function (global) {
   "use strict";
-
-  var body = null;
-  var snapshot = null;
-  var itemCatalog = [];
-  var simulationRunning = false;
-  var simulationPaused = false;
-  var lastMarkup = "";
-
-  /**
-   * Ключ шкалы, которую надо выделить (клик по имени показателя в журнале).
-   *
-   * Состояние ОКНА, а не снимка: Симулятор присылает его отдельным сообщением
-   * <c>{ type: "highlight", key: "…" }</c>, и оно живёт, пока окно открыто.
-   * Через снимок выделять нельзя: следующий же live_state (четыре раза в секунду)
-   * сбрасывал бы рамку раньше, чем игрок успел бы её заметить.
-   */
-  var highlightKey = "";
-
-  /** Через сколько снять выделение. Пока оно горит, блок не должен «убегать»
-   *  от игрока, поэтому время с запасом на прочтение. */
-  var HIGHLIGHT_MS = 4000;
-  var highlightTimer = null;
-
-  /**
-   * «Полезное направление» шкалы: +1 — игроку выгодно, чтобы значение росло,
-   * −1 — чтобы падало. Знак нужен, потому что «динамика вверх» для энергии и
-   * для усталости означает ПРОТИВОПОЛОЖНОЕ по смыслу, и цвет строки обязан
-   * следовать смыслу, а не арифметике.
-   */
-  var GOOD_DIRECTION = {
-    health: 1,
-    energy: 1,
-    hydration: 1,
-    stress: -1,
-    fatigue: -1,
-    resilience: 1,
-    metabolism: 1
-  };
-
-  /** Ниже этой скорости (единиц шкалы в игровую минуту) считаем «не меняется». */
+  var body = null, snapshot = null, itemCatalog = [], simulationRunning = false, simulationPaused = false;
+  var highlightKey = "", highlightTimer = null, lastMarkup = "";
+  var GOOD_DIRECTION = {health:1,energy:1,hydration:1,stress:-1,fatigue:-1,resilience:1,metabolism:1};
   var FLAT_RATE_EPSILON = 0.05;
 
-  /**
-   * Шкалы истощения. Истощение НЕ имеет собственной скорости в домене — оно
-   * начисляется рывками по факту перерасхода, поэтому его динамику измеряем
-   * САМИ: сравниваем текущее значение с образцом из скользящего окна.
-   */
-  var EXHAUSTION_SCALES = [
-    { field: "cumulativeEnergy", label: "Истощение энергии" },
-    { field: "cumulativeHydration", label: "Истощение жидкости" },
-    { field: "cumulativeFatigue", label: "Истощение усталости" },
-    { field: "cumulativeStress", label: "Кумулятивный стресс" }
-  ];
-
-  /**
-   * В каком блоке шкалы показывать каждую запись истощения.
-   *
-   * Требование автора: отдельного блока «Истощение» быть не должно — запись
-   * истощения живёт в блоке СВОЕЙ шкалы. Иначе про истощение энергии игрок
-   * читает в одном месте, а про саму энергию — в другом, и связь между числом и
-   * его причиной теряется.
-   */
-  var EXHAUSTION_BY_SCALE = {
-    energy: ["cumulativeEnergy"],
-    hydration: ["cumulativeHydration"],
-    fatigue: ["cumulativeFatigue"],
-    stress: ["cumulativeStress"]
+  function v(){ return global.AssistVitals; }
+  function num(value){ var n=Number(value); return Number.isFinite(n)?n:0; }
+  function fmt(value,digits){
+    var n=Number(value); if(!Number.isFinite(n)) return "0";
+    var s=n.toFixed(digits==null?0:digits);
+    return s.replace(/\.0+$/,"").replace(/(\.\d*?)0+$/,"$1");
+  }
+  function esc(value){ return v()?v().escapeHtml(value):String(value==null?"":value); }
+  function conditions(){ return (snapshot&&snapshot.conditions)||{}; }
+  function vitals(){ return (snapshot&&snapshot.playerVitals)||{}; }
+  function character(){ return (snapshot&&snapshot.character)||{}; }
+  function effects(){ return Array.isArray(conditions().effects)?conditions().effects:[]; }
+  function activeEffects(){ return effects().filter(function(e){return num(e.remainingRealSeconds)>0;}); }
+  function hasEffect(id){
+    var wanted=String(id||"").toLowerCase();
+    return activeEffects().some(function(e){return String(e.id||"").toLowerCase()===wanted;});
+  }
+  function totalStressPercent(){
+    return Math.min(100,Math.round((num(conditions().stress)+num(conditions().cumulativeStress))/100));
+  }
+  function resiliencePercent(){ return Math.round(num(vitals().resilience)/100); }
+  function metabolismPercent(){ return Math.round(num(vitals().metabolism)/100); }
+  function isMoving(){ return num(snapshot&&snapshot.player&&snapshot.player.speedKmh)>0.001; }
+  function gameHour(){
+    var d=snapshot&&snapshot.daylight, value=d&&(d.gameClockLabel||d.gameTimeLabel)||"";
+    var m=String(value).match(/^(\d{1,2})[:.]/); return m?Number(m[1]):12;
+  }
+  function nightFactor(){
+    var h=gameHour(); return h>=6&&h<18?1:h>=18&&h<22?1.5:2.5;
+  }
+  var EFFECT_SCALE_MAP={
+    bull:["health","energy","hydration"], power_surge:["health","energy","hydration","fatigue","stress","resilience","metabolism"],
+    burnout:["fatigue"], unkempt:["stress"], bum:["stress","resilience"], relaxation:["stress"], rested:["stress"],
+    drowsiness:["fatigue","resilience"], alcohol_aftereffect:["hydration","fatigue"], nicotine_rebound:["stress"],
+    caffeine_overuse:["stress"], caffeine_excess:["stress"], caffeine_jitter:["stress"], late_caffeine:["stress","fatigue"],
+    caffeine_withdrawal:["stress","resilience"], analgesia:["health"], analgesic_overuse:["health","stress"],
+    strong_bones:["health"], sorbent:["health"]
   };
-
-  /** Окно измерения: короче — шум от тиков, длиннее — «залипшая» оценка. */
-  var EXHAUSTION_WINDOW_MS = 6000;
-
-  var exhaustionSamples = [];
-
-  function v() { return global.AssistVitals; }
-
-  function escapeHtml(value) {
-    return v()
-      ? v().escapeHtml(value)
-      : String(value == null ? "" : value);
+  var PERK_NAMES={
+    "perk.dairy_habit":"Молочная привычка","perk.smoker":"Прокуренный","perk.discharged":"Уволен","perk.breadwinner":"Кормилец",
+    "skill.mechanics":"Механик","skill.navigation":"Штурман","skill.medicine":"Фельдшер"
+  };
+  function scale(key){ return (v()&&v().SCALES||[]).find(function(s){return s.key===key;})||null; }
+  function valuesFor(key){
+    var s=scale(key); if(s&&v()&&v().read) return v().read(snapshot,s);
+    var actual=num(vitals()[key]); return {actual:actual,maximum:10000,percent:actual/100,displayPercent:actual/100};
   }
-
-  function num(value) {
-    var number = Number(value);
-    return Number.isFinite(number) ? number : 0;
+  function rateFor(key){ return num(snapshot&&snapshot.conditionRates&&snapshot.conditionRates[key]); }
+  function contribution(rate,key,semanticOverride){
+    var values=valuesFor(key), unitsPerHour=rate*60;
+    var percentPerHour=values.maximum>0?unitsPerHour/values.maximum*100:0;
+    var good=semanticOverride==null?(GOOD_DIRECTION[key]||0):semanticOverride;
+    var useful=Math.abs(rate)<FLAT_RATE_EPSILON?null:good!==0&&((rate>0)===(good>0));
+    return {unitsPerHour:unitsPerHour,percentPerHour:percentPerHour,useful:useful};
   }
-
-  function percent(units) {
-    return Math.round(num(units) / 100);
+  function contributionHtml(rate,key,semanticOverride){
+    var c=contribution(rate,key,semanticOverride);
+    var cls=Math.abs(rate)<FLAT_RATE_EPSILON?"factorContribution factorNeutral":c.useful?"factorContribution factorGood":"factorContribution factorBad";
+    return "<strong class='"+cls+"'>"+(rate>0?"+":"")+fmt(rate,1)+" ед./мин ("+
+      (c.unitsPerHour>0?"+":"")+fmt(c.unitsPerHour,1)+" ед./час; "+
+      (c.percentPerHour>0?"+":"")+fmt(c.percentPerHour,1)+"%/ч)</strong>";
   }
-
-  function fmt(value, digits) {
-    var number = Number(value);
-    if (!Number.isFinite(number)) return "0";
-    var rounded = number.toFixed(digits == null ? 0 : digits);
-    return rounded.replace(/\.0+$/, "").replace(/(\.\d*?)0+$/, "$1");
+  function factor(text,key,rate,kind,active,semanticOverride){
+    return {text:text,key:key,rate:Number(rate)||0,kind:kind,active:!!active,semanticOverride:semanticOverride};
   }
-
-  var CONDITIONS = function () { return (snapshot && snapshot.conditions) || {}; };
-  var VITALS = function () { return (snapshot && snapshot.playerVitals) || {}; };
-
-  function effects() {
-    return Array.isArray(CONDITIONS().effects) ? CONDITIONS().effects : [];
-  }
-
-  function hasEffect(id) {
-    var key = String(id).toLowerCase();
-    return effects().some(function (effect) {
-      return String(effect.id || "").toLowerCase() === key &&
-        num(effect.remainingRealSeconds) > 0;
+  function activePerkRows(key){
+    var result=[],seen={};
+    activeEffects().forEach(function(effect){
+      var id=String(effect.id||"").toLowerCase();
+      if(!((EFFECT_SCALE_MAP[id]||[]).includes(key))) return;
+      seen[id]=true;
+      result.push({id:effect.id,name:effect.name||effect.id,kind:effect.isDebuff?"debuff":"buff"});
     });
+    var ch=character(), ids=[];
+    (Array.isArray(ch.buffs)?ch.buffs:[]).forEach(function(id){ids.push({id:id,kind:"buff"});});
+    (Array.isArray(ch.debuffs)?ch.debuffs:[]).forEach(function(id){ids.push({id:id,kind:"debuff"});});
+    ids.forEach(function(entry){
+      var id=String(entry.id||"").toLowerCase();
+      if(seen[id]||!((EFFECT_SCALE_MAP[id]||[]).includes(key))) return;
+      seen[id]=true;
+      result.push({id:entry.id,name:PERK_NAMES[id]||entry.id,kind:entry.kind});
+    });
+    (Array.isArray(ch.skills)?ch.skills:[]).forEach(function(skill){
+      if(num(skill.level)<=0) return;
+      var id=String(skill.id||"").toLowerCase();
+      var affects=(id==="skill.medicine"&&key==="health")||(id==="skill.navigation"&&key==="energy")||(id==="skill.mechanics"&&key==="fatigue");
+      if(affects) result.push({id:skill.id,name:skill.name||PERK_NAMES[id]||skill.id,kind:"buff"});
+    });
+    return result;
   }
-
-  function effectNames(isDebuff) {
-    return effects()
-      .filter(function (effect) {
-        return !!effect.isDebuff === !!isDebuff &&
-          num(effect.remainingRealSeconds) > 0;
-      })
-      .map(function (effect) {
-        return effect.name || effect.id || "эффект";
+  function consumedItemFor(key){
+    if(key!=="energy"&&key!=="hydration") return null;
+    var stomach=conditions().stomach||{};
+    var remaining=key==="energy"?num(stomach.energyRemaining):num(stomach.hydrationRemaining);
+    if(remaining<=0) return null;
+    var id=String(conditions().lastConsumedItemId||""); if(!id) return null;
+    var found=(itemCatalog||[]).find(function(e){return String(e.id||"").toLowerCase()===id.toLowerCase();});
+    return {id:id,name:(found&&(found.name||found.id))||id,rate:key==="energy"?num(stomach.energyPerGameSecond)*60:num(stomach.hydrationPerGameSecond)*60};
+  }
+  function chipHtml(entry,isItem){
+    if(isItem) return "<button type='button' class='indicatorChip itemChip' data-item-link='"+esc(entry.id)+"' title='Открыть окно «Предметы»'>"+esc(entry.name)+"</button>";
+    return "<button type='button' class='indicatorChip "+(entry.kind==="debuff"?"debuffChip":"buffChip")+"' data-perk-link='"+esc(entry.id)+"' data-perk-kind='"+esc(entry.kind)+"' title='Открыть окно «Перки, баффы, скиллы»'>"+esc(entry.name)+"</button>";
+  }
+  function dynamicChipRows(key){
+    var html="";
+    activePerkRows(key).forEach(function(entry){
+      html+="<div class='indicatorFact dynamicItem'>• "+chipHtml(entry,false)+"</div>";
+    });
+    var item=consumedItemFor(key);
+    if(item) html+="<div class='indicatorFact dynamicItem'>• "+chipHtml(item,true)+" <span class='indicatorItemMeta'>усваивается "+contributionHtml(item.rate,key)+"</span></div>";
+    return html;
+  }
+  function dynamicFactors(key){
+    var rate=rateFor(key), result=[];
+    if(key==="fatigue"&&isMoving()&&nightFactor()!==1)
+      result.push(factor("Ночное время: коэффициент ×"+fmt(nightFactor(),1),key,rate*(1-1/nightFactor()),"dynamic",true));
+    if(key==="fatigue"&&hasEffect("burnout"))
+      result.push(factor("Выгорание: усталость копится ×1,10",key,rate*0.1/1.1,"dynamic",true));
+    if(key==="health"){
+      var exhaustionLoss=-((num(conditions().cumulativeEnergy)+num(conditions().cumulativeHydration))/100)*100/6*4/60;
+      if(Math.abs(exhaustionLoss)>FLAT_RATE_EPSILON) result.push(factor("Истощение энергии и жидкости повреждает здоровье",key,exhaustionLoss,"dynamic",true));
+    }
+    return result;
+  }
+  function permanentFactors(key){
+    var rate=rateFor(key), result=[];
+    if(key==="health"){
+      var maxH=Math.max(1,num(vitals().maxHealth)||10000);
+      var hp=num(vitals().health)/maxH*100;
+      var ep=num(vitals().energy)/Math.max(1,num(vitals().maxEnergy)||10000)*100;
+      var wp=num(vitals().hydration)/Math.max(1,num(vitals().maxHydration)||10000)*100;
+      var basePct=hp<100&&ep>35&&wp>35?(ep>70&&wp>70?6:2):0;
+      var baseRate=basePct*100/60;
+      result.push(factor("Базовое восстановление здоровья",key,baseRate,"permanent",baseRate>FLAT_RATE_EPSILON));
+      var stressActive=totalStressPercent()>0;
+      result.push(factor("Любой стресс: восстановление ×0,75",key,stressActive?-Math.abs(baseRate)*0.25:0,"permanent",stressActive));
+      var cumStress=num(conditions().cumulativeStress)>0;
+      result.push(factor("Кумулятивный стресс: дополнительно ×0,5",key,cumStress?-Math.abs(baseRate)*0.25:0,"permanent",cumStress));
+      var mp=metabolismPercent();
+      result.push(factor("Метаболизм ниже 45%: восстановление ×0,75",key,mp<45?-Math.abs(baseRate)*0.25:0,"permanent",mp<45));
+      result.push(factor("Метаболизм ≥75%: восстановление ×1,5",key,mp>=75?Math.abs(baseRate)*0.5:0,"permanent",mp>=75));
+      return result;
+    }
+    if(key==="energy"||key==="hydration"){
+      var normalBase=key==="energy"?100/30:100/90;
+      var m=metabolismPercent(), mf=m<45?0.9:m>=75?1.25:1;
+      var base=-normalBase*mf*100/60;
+      result.push(factor(key==="energy"?"Базовый расход энергии в Нормальном состоянии":"Базовый расход жидкости в Нормальном состоянии",key,base,"permanent",true,-1));
+      var needs=num(vitals().health)<num(vitals().maxHealth);
+      result.push(factor(key==="energy"?"Восстановление здоровья: 1:1 по энергии":"Восстановление здоровья: 1:2 по жидкости",key,needs?rate*0.15:0,"permanent",needs,-1));
+      result.push(factor("Метаболизм <45%: расход ×0,9",key,m<45?Math.abs(base)*0.1:0,"permanent",m<45,-1));
+      result.push(factor("Метаболизм ≥75%: расход ×1,25",key,m>=75?-Math.abs(base)*0.25:0,"permanent",m>=75,-1));
+      return result;
+    }
+    if(key==="fatigue"){
+      if(isMoving()) result.push(factor("Нормальная нагрузка: движение в транспорте",key,100/18/60,"permanent",true));
+      else {
+        var rest=-100/9/60*(1-totalStressPercent()/100);
+        result.push(factor("Покой: восстановление усталости",key,rest,"permanent",Math.abs(rest)>FLAT_RATE_EPSILON));
+      }
+      result.push(factor("Кумулятивная усталость ускоряет истощение",key,num(conditions().cumulativeFatigue)>0?rate*0.05:0,"permanent",num(conditions().cumulativeFatigue)>0));
+      return result;
+    }
+    if(key==="stress"){
+      var cf=num(conditions().cumulativeFatigue)>0;
+      result.push(factor("Кумулятивная усталость формирует стресс",key,cf?rate:0,"permanent",cf));
+      var res=resiliencePercent();
+      result.push(factor("Устойчивость уменьшает скорость накопления",key,rate!==0?-Math.abs(rate)*Math.min(0.25,res/400):0,"permanent",true));
+      return result;
+    }
+    if(key==="resilience"){
+      var rp=resiliencePercent(), target=hasEffect("bum")?50:60;
+      var delta=target>rp?Math.min(0.8333,(target-rp)/15):-Math.min(0.8333,(rp-target)/15);
+      result.push(factor("Возврат к номиналу 60%",key,hasEffect("bum")?0:delta,"permanent",!hasEffect("bum")&&Math.abs(delta)>FLAT_RATE_EPSILON));
+      result.push(factor("Дебафф «Бомж» ограничивает устойчивость 50%",key,hasEffect("bum")?rate:0,"permanent",hasEffect("bum"),-1));
+      return result;
+    }
+    if(key==="metabolism"){
+      var mp2=metabolismPercent();
+      result.push(factor("Возврат к номиналу 60%",key,(60-mp2)*100/60/60,"permanent",Math.abs(60-mp2)>0));
+      [["cumulativeStress","Истощение стресса"],["cumulativeFatigue","Истощение усталости"],["cumulativeHydration","Истощение жидкости"],["cumulativeEnergy","Истощение энергии"]].forEach(function(entry){
+        var active=num(conditions()[entry[0]])>0;
+        result.push(factor(entry[1]+": −2% за 15 игровых минут",key,active?-200/60:0,"permanent",active,1));
       });
+      return result;
+    }
+    return result;
   }
-
-  /** Стресс в процентах с учётом кумулятивной части — как в домене. */
-  function totalStressPercent() {
-    var units = num(CONDITIONS().stress) + num(CONDITIONS().cumulativeStress);
-    return Math.min(100, percent(units));
+  function renderFactor(item,key){
+    var cls="indicatorFact "+(item.active?"permanentActive":"permanentInactive");
+    return "<div class='"+cls+"'>• "+esc(item.text)+" "+contributionHtml(item.rate,key,item.semanticOverride)+"</div>";
   }
-
-  function stressFactor() {
-    var value = 1 - totalStressPercent() / 100;
-    return Math.max(0, Math.min(1, value));
+  function renderDynamicFactor(item,key){
+    return "<div class='indicatorFact dynamicFactor'>• "+esc(item.text)+" "+contributionHtml(item.rate,key,item.semanticOverride)+"</div>";
   }
-
-  /** Замедление накопления стресса активными баффами, в процентах. */
-  function stressSlowdownPercent() {
-    return effects()
-      .filter(function (effect) {
-        return !effect.isDebuff && num(effect.remainingRealSeconds) > 0;
-      })
-      .reduce(function (sum, effect) {
-        return sum + num(effect.stressAccumulationSlowdownPercent);
-      }, 0);
+  function headerDynamics(key){
+    var rate=rateFor(key);
+    if(!Number.isFinite(rate)||Math.abs(rate)<FLAT_RATE_EPSILON) return "<span class='trendFlat'>— 0 ед./мин (0 ед./час)</span>";
+    var rising=rate>0, good=GOOD_DIRECTION[key]||0, positive=good!==0&&rising===(good>0);
+    return "<span class='"+(positive?"trendGood":"trendBad")+"'>"+(rising?"▲":"▼")+" "+(rate>0?"+":"")+fmt(rate,1)+" ед./мин ("+(rate*60>0?"+":"")+fmt(rate*60,1)+" ед./час)</span>";
   }
-
-  function fatigueAccrualMultiplier() {
-    var cumulativePercent = percent(CONDITIONS().cumulativeFatigue);
-    var steps = Math.floor(cumulativePercent / 5);
-    // База и шаг — те же числа, что в домене (×3 и +0,5 за каждые 5%).
-    return 3 + steps * 0.5;
-  }
-
-  /**
-   * Пункт переваривания для раздела шкалы (энергия или жидкость).
-   *
-   * Пока в виртуальном желудке есть неусвоенное, автор просил ПОКАЗЫВАТЬ этот
-   * пункт в соответствующем разделе мониторинга: название съеденного, эффект и
-   * его КОЛИЧЕСТВО. Прирост красится в lime, убыль — в красную: цвет следует
-   * смыслу воздействия, а не знаку числа.
-   *
-   * Возвращает пустую строку, если по этой шкале переваривать нечего: пустой
-   * пункт выглядел бы как поломка данных.
-   */
-  function digestionRow(key) {
-    var stomach = CONDITIONS().stomach || {};
-    var remaining = num(key === "energy"
-      ? stomach.energyRemaining
-      : stomach.hydrationRemaining);
-    var ratePerSecond = num(key === "energy"
-      ? stomach.energyPerGameSecond
-      : stomach.hydrationPerGameSecond);
-
-    if (remaining <= 0)
-      return "";
-
-    var name = consumedItemName();
-    var perMinute = ratePerSecond * 60;
-    var perHourPercent = ratePerSecond * 3600 / 100;
-    var remainingPercent = remaining / 100;
-    var className = perMinute > 0
-      ? "indicatorDynamicGood"
-      : "indicatorDynamicBad";
-    var direction = perMinute > 0 ? "+" : "";
-
-    return "<div class='indicatorFact indicatorDigestionRow' data-digestion='" + key + "'>" +
-      "• <strong>" + escapeHtml(name) + "</strong>" +
-      " переваривается: " +
-      "<span class='" + className + "'>" + direction + fmt(perMinute, 1) + " ед./мин (" +
-      direction + fmt(perHourPercent, 2) + "% в час)</span>" +
-      ", осталось " + fmt(remainingPercent, 2) + "% (" +
-      Math.round(remaining) + " ед., ~" +
-      fmt(remaining / Math.max(0.000001, ratePerSecond) / 60, 1) + " игровых мин)" +
-    "</div>";
-  }
-
-  /** Название последнего съеденного предмета из каталога снимка. */
-  function consumedItemName() {
-    var id = String(CONDITIONS().lastConsumedItemId || "");
-    if (!id) return "съеденное";
-
-    var found = (itemCatalog || []).find(function (item) {
-      return String(item.id || "").toLowerCase() === id.toLowerCase();
+  function stateFromRates(){
+    var sum=0,count=0;
+    (v()&&v().SCALES||[]).forEach(function(item){
+      var rate=rateFor(item.key); if(!Number.isFinite(rate)) return;
+      var values=valuesFor(item.key); if(!values.maximum) return;
+      var useful=rate*60/values.maximum*100*(GOOD_DIRECTION[item.key]||0);
+      sum+=Math.max(-100,Math.min(100,useful)); count++;
     });
-
-    return (found && (found.name || found.id)) || id;
+    var mean=count?sum/count:0, score=Math.max(0,Math.min(100,50+mean/2));
+    var band=100/7, index=Math.min(6,Math.floor(score/band));
+    var states=[
+      ["Критическое","stateCritical"],["Тяжёлое","stateSevere"],["Неудовлетворительное","stateUnsat"],
+      ["Удовлетворительное","stateSatisfactory"],["Нормальное","stateNormal"],["Положительное","statePositive"],["Превосходное","stateExcellent"]
+    ];
+    return {text:states[index][0],className:states[index][1],score:score};
   }
-
-  function resiliencePercent() {
-    var value = percent(VITALS().resilience);
-    return hasEffect("bum") ? Math.min(50, value) : value;
+  function renderState(){
+    var node=document.getElementById("characterStateValue"); if(!node) return;
+    var state=stateFromRates(); node.className="characterStateValue "+state.className;
+    node.textContent=state.text; node.title="Суммарная оценка динамики: "+fmt(state.score,1)+"/100";
   }
-
-  function metabolismPercent() {
-    return percent(VITALS().metabolism);
+  function renderCard(key){
+    var s=scale(key); if(!s) return "";
+    var values=valuesFor(key), current=Math.round(values.actual), maximum=Math.round(values.maximum);
+    var display=Math.round(values.displayPercent==null?values.percent:values.displayPercent);
+    var permanent=permanentFactors(key), active=permanent.filter(function(x){return x.active;}), inactive=permanent.filter(function(x){return !x.active;});
+    var dynamic=dynamicFactors(key), highlighted=key===highlightKey?" indicatorHighlight":"";
+    return "<section class='indicatorCard"+highlighted+"' data-scale-key='"+esc(key)+"'>"+
+      "<div class='indicatorTopRow'><div class='indicatorName'>"+esc(s.label)+"</div>"+
+      "<div class='indicatorDynamics'>"+headerDynamics(key)+"</div>"+
+      "<div class='indicatorValue'><span class='valueReal'>("+current+" / "+maximum+")</span> <span class='valuePercent'>"+display+"%</span></div></div>"+
+      "<div class='indicatorFactors'>"+dynamicChipRows(key)+
+      dynamic.map(function(x){return renderDynamicFactor(x,key);}).join("")+
+      active.map(function(x){return renderFactor(x,key);}).join("")+
+      inactive.map(function(x){return renderFactor(x,key);}).join("")+
+      "</div></section>";
   }
-
-  function metabolismFactor() {
-    var value = metabolismPercent();
-    var factor = value < 45 ? 0.9 : value >= 75 ? 1.25 : 1;
-    return hasEffect("bull") ? factor * 0.5 : factor;
-  }
-
-  function isMoving() {
-    return num(snapshot && snapshot.player && snapshot.player.speedKmh) > 0.001;
-  }
-
-  function gameHour() {
-    var daylight = snapshot && snapshot.daylight;
-    var text = (daylight && (daylight.gameClockLabel || daylight.gameTimeLabel)) || "";
-    var match = String(text).match(/^(\d{1,2}):/);
-    return match ? Number(match[1]) : 12;
-  }
-
-  function nightFatigueFactor() {
-    var hour = gameHour();
-    if (hour >= 6 && hour < 18) return 1;
-    if (hour >= 18 && hour < 22) return 1.5;
-    return 2.5;
-  }
-
-  function rateLine(key) {
-    var rates = (snapshot && snapshot.conditionRates) || {};
-    if (!Number.isFinite(Number(rates[key]))) return "";
-    var perMinute = Number(rates[key]);
-    var perHour = perMinute * 60;
-    return "сейчас: " + (perMinute > 0 ? "+" : "") + fmt(perMinute, 1) +
-      " ед./мин (" + (perHour > 0 ? "+" : "") + fmt(perHour, 1) + " ед./час)";
-  }
-
-  /**
-   * Динамика шкалы: направление, скорость и КЛАСС строки.
-   *
-   * Скорость берём из домена (`conditionRates`), поэтому вторая таблица правил
-   * не заводится: подсветка не может разойтись с механикой. «Позитивная
-   * динамика» — это движение шкалы в ПОЛЕЗНУЮ игроку сторону (энергия растёт
-   * или усталость падает), и только она красится в lime; движение во вред
-   * красное; стояние на месте — нейтральное.
-   */
-  function scaleDynamics(key) {
-    var rates = (snapshot && snapshot.conditionRates) || {};
-    var rate = Number(rates[key]);
-    var good = GOOD_DIRECTION[key] || 0;
-
-    if (!Number.isFinite(rate) || Math.abs(rate) < FLAT_RATE_EPSILON) {
-      return {
-        text: "без изменений",
-        detail: "0 ед./мин",
-        className: "indicatorDynamicFlat"
-      };
+  function render(){
+    if(!body||!snapshot||!v()) return;
+    var markup=(v().SCALES||[]).map(function(s){return renderCard(s.key);}).join("");
+    if(markup!==lastMarkup){
+      lastMarkup=markup; body.innerHTML=markup;
+      if(highlightKey) scrollToHighlight();
     }
-
-    var rising = rate > 0;
-    var positive = good !== 0 && rising === (good > 0);
-
-    return {
-      text: rising ? "растёт" : "падает",
-      detail: (rate > 0 ? "+" : "") + fmt(rate, 1) + " ед./мин (" +
-        (rate * 60 > 0 ? "+" : "") + fmt(rate * 60, 1) + " ед./час)",
-      className: positive
-        ? "indicatorDynamicGood"
-        : "indicatorDynamicBad"
-    };
+    renderState();
   }
-
-  /** Образец снимка для расчёта динамики истощения. */
-  function exhaustionSample() {
-    var conditions = CONDITIONS();
-    var sample = { at: Date.now() };
-    EXHAUSTION_SCALES.forEach(function (scale) {
-      sample[scale.field] = num(conditions[scale.field]);
-    });
-    return sample;
+  function scrollToHighlight(){
+    var node=body.querySelector("[data-scale-key='"+highlightKey+"']");
+    if(node&&node.scrollIntoView) node.scrollIntoView({block:"center"});
   }
-
-  /**
-   * Запоминает текущее значение истощения в скользящем окне.
-   *
-   * Истощение начисляется рывками, и мгновенной «скорости» у него нет, поэтому
-   * динамику получаем сравнением с образцом ~6 реальных секунд назад. Образцы
-   * копятся в модуле (окно времени), иначе короче окно не измерить.
-   */
-  function rememberExhaustion() {
-    exhaustionSamples.push(exhaustionSample());
-    var cutoff = Date.now() - EXHAUSTION_WINDOW_MS;
-    exhaustionSamples = exhaustionSamples.filter(function (item) {
-      return item.at >= cutoff;
-    });
+  function setHighlight(key){
+    highlightKey=String(key||"");
+    if(highlightTimer) global.clearTimeout(highlightTimer);
+    highlightTimer=null; render();
+    if(!highlightKey) return;
+    highlightTimer=global.setTimeout(function(){highlightKey="";highlightTimer=null;render();},4000);
   }
-
-  /**
-   * Динамика одного истощения: изменение за окно, переведённое в единицы в час.
-   * Пока окно не набралось, честно сообщаем «наблюдаем», а не выдумываем ноль.
-   */
-  function exhaustionDynamics(scale) {
-    var current = num(CONDITIONS()[scale.field]);
-    var oldest = exhaustionSamples.length ? exhaustionSamples[0] : null;
-    var spanMs = oldest ? Date.now() - oldest.at : 0;
-
-    if (!oldest || spanMs < 1500) {
-      return {
-        current: current,
-        ratePerHour: 0,
-        text: "наблюдаем…",
-        className: "indicatorDynamicFlat",
-        delta: 0
-      };
+  function applyMessage(message){
+    if(!message) return;
+    if(message.type==="snapshot"){
+      snapshot=message.snapshot||snapshot;
+      if(Array.isArray(message.itemCatalog)) itemCatalog=message.itemCatalog;
+      if(snapshot&&message.conditionRates) snapshot.conditionRates=message.conditionRates;
+      if(message.daylight) snapshot.daylight=message.daylight;
+      simulationRunning=!!message.simulationRunning; simulationPaused=!!message.simulationPaused;
+    } else if(message.type==="live_state"){
+      if(!snapshot) snapshot={};
+      if(message.player) snapshot.player=message.player;
+      if(message.playerVitals) snapshot.playerVitals=message.playerVitals;
+      if(message.conditions) snapshot.conditions=message.conditions;
+      if(message.character) snapshot.character=message.character;
+      if(message.conditionRates) snapshot.conditionRates=message.conditionRates;
+      if(message.daylight) snapshot.daylight=message.daylight;
+      if(typeof message.simulationRunning==="boolean") simulationRunning=message.simulationRunning;
+      if(typeof message.simulationPaused==="boolean") simulationPaused=message.simulationPaused;
+    } else if(message.type==="highlight"){
+      setHighlight(message.key); return;
     }
-
-    var delta = current - num(oldest[scale.field]);
-    var perHour = delta / spanMs * 3600000;
-
-    if (Math.abs(perHour) < FLAT_RATE_EPSILON) {
-      return {
-        current: current,
-        ratePerHour: 0,
-        text: "без изменений",
-        className: "indicatorDynamicFlat",
-        delta: delta
-      };
-    }
-
-    return {
-      current: current,
-      ratePerHour: perHour,
-      text: perHour > 0 ? "растёт" : "снижается",
-      // Истощение — всегда вред игроку, поэтому рост красный, а снижение
-      // (отпуск, «Бык») — полезное, зелёное.
-      className: perHour > 0 ? "indicatorDynamicBad" : "indicatorDynamicGood",
-      delta: delta
-    };
-  }
-
-  /**
-   * Строки истощения ОДНОЙ шкалы, для показа в её собственном блоке.
-   *
-   * Требование автора: отдельного блока «Истощение» нет. Если истощения по шкале
-   * нет — строка всё равно показывается, но приглушённым белым: игрок должен
-   * видеть, что механизм есть и что он в норме, а не гадать, почему раздела нет.
-   * Если истощение есть — вся строка красная.
-   *
-   * Динамику меряем только когда истощение действительно накоплено: у нулевого
-   * истощения скорости нет, и «наблюдаем…» на каждой шкале было бы шумом.
-   */
-  function exhaustionRowsFor(key) {
-    var fields = EXHAUSTION_BY_SCALE[key] || [];
-
-    return fields.map(function (field) {
-      var scale = EXHAUSTION_SCALES.filter(function (item) {
-        return item.field === field;
-      })[0];
-      if (!scale) return "";
-
-      var units = num(CONDITIONS()[field]);
-      var label = escapeHtml(scale.label);
-      var value = Math.round(units) + "/" + Math.round(PlayerScaleMaximum()) +
-        " (" + percent(units) + "%)";
-
-      if (units <= 0) {
-        // Норма: строка есть, но приглушена — белым и без цвета тревоги.
-        return "<div class='indicatorFact indicatorExhaustionRow indicatorExhaustionNone' " +
-          "data-exhaustion='" + escapeHtml(field) + "'>" +
-          "• " + label + ": <strong>нет</strong> — шкала в норме." +
-        "</div>";
-      }
-
-      var dynamics = exhaustionDynamics(scale);
-      var rateText = (dynamics.ratePerHour > 0 ? "+" : "") +
-        fmt(dynamics.ratePerHour, 1) + " ед./час";
-
-      return "<div class='indicatorFact indicatorExhaustionRow indicatorExhaustionPresent' " +
-        "data-exhaustion='" + escapeHtml(field) + "'>" +
-        "• " + label + ": <strong>" + value + "</strong>" +
-        " · <strong>Текущая динамика</strong>: " +
-        "<span class='" + dynamics.className + "'>" +
-        escapeHtml(dynamics.text) + " (" + rateText + ")</span>" +
-      "</div>";
-    }).join("");
-  }
-
-  function PlayerScaleMaximum() {
-    var maximum = num(VITALS().maxHealth);
-    return maximum > 0 ? maximum : 10000;
-  }
-
-  /**
-   * Факторы скорости изменения шкалы.
-   *
-   * Возвращает массив строк: базовая скорость, затем каждый множитель, который
-   * домен применяет. Строки описывают и то, что СЕЙЧАС действует (например,
-   * «ночь ×2,5»), и то, что могло бы (например, «если усталость ≥ 80% …»).
-   */
-  function factorsFor(key) {
-    var lines = [];
-    var activeBuffs = effectNames(false);
-    var activeDebuffs = effectNames(true);
-
-    if (key === "health") {
-      var energyPercent = percent(VITALS().energy);
-      var hydrationPercent = percent(VITALS().hydration);
-      var regen = energyPercent > 70 && hydrationPercent > 70
-        ? 1.5
-        : energyPercent > 35 && hydrationPercent > 35
-          ? 0.5
-          : 0;
-
-      lines.push("База: +" + fmt(regen, 1) + "% за 15 игровых минут " +
-        "(энергия " + energyPercent + "%, жидкость " + hydrationPercent + "%: " +
-        (regen > 0 ? "выше 35%" : "ниже 35% — восстановления нет") + ").");
-      lines.push("Восстановление тратит запасы: 1 единица здоровья = 1 энергии и 2 жидкости. " +
-        "Нет энергии или жидкости — нет и восстановления.");
-      if (totalStressPercent() > 0) lines.push("Любой стресс замедляет восстановление ×0,75.");
-      if (hasEffect("bull")) lines.push("«Бык» ускоряет восстановление ×1,5.");
-      lines.push("При метаболизме ниже 45% восстановление ×0,75; от 75% — ×1,5.");
-      lines.push("Истощение энергии и жидкости: −(суммарный % истощения ÷ 6) за 15 игровых минут.");
-      if (num(CONDITIONS().cumulativeEnergy) > 0 || num(CONDITIONS().cumulativeHydration) > 0) {
-        var drain = (percent(CONDITIONS().cumulativeEnergy) +
-          percent(CONDITIONS().cumulativeHydration)) / 6;
-        lines.push("Сейчас: истощение " + percent(CONDITIONS().cumulativeEnergy) +
-          "% + " + percent(CONDITIONS().cumulativeHydration) +
-          "% → −" + fmt(drain, 2) + "% за 15 игровых минут.");
-      }
-      lines.push("Истощение снижает МАКСИМУМ шкалы (не даёт восстановиться выше).");
-    } else if (key === "energy" || key === "hydration") {
-      // Числа взяты из констант домена: расход — это полная шкала за 30 игровых
-      // часов (энергия) и за 90 (жидкость). Прежние «4 часа» и «2 часа» были из
-      // старой модели, где пища не успевала перекрыть расход, и динамика
-      // оставалась красной даже после плотного обеда.
-      var hours = key === "energy"
-        ? "30 игровых часов"
-        : "90 игровых часов";
-      var demand = key === "energy" ? 100 / 30 : 100 / 90;
-      var scale = key === "energy"
-        ? "5000 ккал (100% шкалы)"
-        : "15 000 мл (100% шкалы)";
-      lines.push("База: 100% за " + hours + " (в покое). 100% шкалы — это " + scale + ".");
-      lines.push("Метаболизм: ниже 45% расход ×0,9; от 75% расход ×1,25. Сейчас ×" +
-        fmt(metabolismFactor(), 2) + (hasEffect("bull") ? " (за счёт «Быка» ÷2)" : "") + ".");
-      lines.push("Во сне расход ×1/3.");
-      lines.push("Истощение по этой шкале копится, когда значение падает ниже 1%" +
-        (key === "hydration" ? " — в двойном размере (2 единицы на 1)" : " — 1:1") + ".");
-      lines.push("Форсаж расходуется первым: пока есть запас, обычная шкала не падает.");
-      // Модель пищеварения: желудок на 1 литр, усвоение идёт с ПОСТОЯННОЙ
-      // скоростью, поэтому время до полного переваривания зависит от размера
-      // порции — мелкая еда переваривается быстро, крупная долго. Без этой
-      // строки игрок видел бы «полный обед на 2 часа» и не понимал, откуда срок.
-      lines.push("Пища приходит из желудка: он вмещает 1 л и опорожняется за 2 игровых часа " +
-        "(полная еда даёт 100% энергии за это время). Жидкость усваивается по 1,35 л в час, " +
-        "поэтому порция воды занимает желудок на столько часов, сколько в ней литров, " +
-        "делённых на 1,35.");
-      lines.push("Сейчас: расход " + fmt(demand * metabolismFactor() * (hasEffect("bull") ? 0.5 : 1), 2) +
-        "% в час (в движении).");
-    } else if (key === "fatigue") {
-      lines.push("Рост в движении: 100% за 18 игровых часов + 100% за 900 км.");
-      lines.push("Время суток: 06–18 ×1,0, 18–22 ×1,5, ночь ×2,5. Сейчас ×" +
-        fmt(nightFatigueFactor(), 1) + ".");
-      if (hasEffect("burnout")) lines.push("«Выгорание» ускоряет рост усталости ×1,1.");
-      lines.push("Восстановление в покое: 100% за 9 игровых часов, замедлено на процент стресса.");
-      lines.push("Усталость ≥ 80%: копится истощение усталости каждый игровой час — " +
-        "сейчас коэффициент ×" + fmt(fatigueAccrualMultiplier(), 2) +
-        " (3,0 базово + 0,5 за каждые 5% истощения).");
-      if (hasEffect("bull")) lines.push("«Бык» полностью прекращает накопление истощения.");
-      if (isMoving()) lines.push("Сейчас: движение — усталость растёт.");
-    } else if (key === "stress") {
-      lines.push("Каждый 1% кумулятивной усталости даёт +0,5% стресса в игровой час.");
-      lines.push("Стресс выше 50%: +1% кумулятивного стресса каждый игровой час " +
-        "и дебафф «Выгорание» (разово).");
-      lines.push("Устойчивость замедляет получение стресса на свой процент ÷ 4. " +
-        "Сейчас ÷4 от " + resiliencePercent() + "%.");
-      if (hasEffect("bum")) lines.push("«Бомж» ускоряет стресс ×2,5.");
-      else if (hasEffect("unkempt")) lines.push("«Неопрятный» ускоряет стресс ×1,5.");
-      if (stressSlowdownPercent() > 0) {
-        lines.push("Баффы отдыха замедляют накопление стресса на " +
-          fmt(stressSlowdownPercent(), 0) + "%.");
-      }
-      if (isMoving()) lines.push("В движении скорость ×1,5.");
-      lines.push("Кумулятивный стресс снимается только отпуском.");
-    } else if (key === "resilience") {
-      lines.push("Норма — 60%: шкала плавно сходится к ней (0,5% за 15 игровых минут).");
-      if (hasEffect("bum")) {
-        lines.push("«Бомж»: цель — 50%, сходится к ней на 1% за 15 игровых минут.");
-      }
-      lines.push("Устойчивость замедляет негативные эффекты и стресс (÷4).");
-      lines.push("Она же (÷2) даёт шанс не получить очередную порцию истощения.");
-    } else if (key === "metabolism") {
-      lines.push("Норма — 60%: шкала сходится к ней на 1% в игровой час.");
-      lines.push("Каждая шкала истощения снижает метаболизм на 2% за 15 игровых минут.");
-      var scales = (num(CONDITIONS().cumulativeStress) > 0 ? 1 : 0) +
-        (num(CONDITIONS().cumulativeFatigue) > 0 ? 1 : 0) +
-        (num(CONDITIONS().cumulativeHydration) > 0 ? 1 : 0) +
-        (num(CONDITIONS().cumulativeEnergy) > 0 ? 1 : 0);
-      lines.push("Сейчас активных шкал истощения: " + scales +
-        " → −" + fmt(scales * 2, 1) + "% за 15 игровых минут.");
-      lines.push("Ниже 45%: расход медленнее ×0,9. От 75%: расход ×1,25 и ускоренное избавление от негатива.");
-    }
-
-    if (key !== "stress") {
-      if (activeBuffs.length) lines.push("Баффы: " + activeBuffs.join(", ") + ".");
-      if (activeDebuffs.length) lines.push("Дебаффы: " + activeDebuffs.join(", ") + ".");
-    }
-
-    var rate = rateLine(key);
-    if (rate) lines.push(rate);
-
-    return lines;
-  }
-
-  /**
-   * Строка-фактор.
-   *
-   * Истощение здесь БОЛЬШЕ НЕ помечается: у каждой шкалы есть своя строка
-   * истощения (см. exhaustionRowsFor), и это единственный владелец признака.
-   * Помечать ещё и упоминания в формулах значило бы красить красным половину
-   * блока, и по цвету нельзя было бы понять, ГДЕ именно истощение накоплено.
-   */
-  function factorRow(line) {
-    return "<div class='indicatorFact'>• " + escapeHtml(line) + "</div>";
-  }
-
-  function scaleRow(scale) {
-    var values = v().read(snapshot, scale);
-    var current = Math.round(values.actual);
-    var maximum = Math.round(values.maximum);
-    var lines = factorsFor(scale.key);
-    var dynamics = scaleDynamics(scale.key);
-    // Пункт переваривания — только у шкал, которые желудок наполняет.
-    var digestion = scale.key === "energy" || scale.key === "hydration"
-      ? digestionRow(scale.key)
-      : "";
-    // Строки истощения идут ПОСЛЕ динамики и переваривания, но ПЕРЕД факторами:
-    // это состояние шкалы, а не объяснение формулы.
-    var exhaustion = exhaustionRowsFor(scale.key);
-
-    // Выделение блока по клику в журнале: имя показателя в отчёте — ссылка, и
-    // без рамки игрок после клика искал бы нужный блок среди восьми.
-    var highlighted = scale.key === highlightKey ? " indicatorHighlight" : "";
-
-    return "<section class='indicatorCard" + highlighted + "' data-scale-key='" +
-      escapeHtml(scale.key) + "'>" +
-      "<div class='indicatorTitle'>" +
-        "<span class='indicatorName'>" + escapeHtml(scale.label) + "</span>" +
-        "<span class='indicatorValue'>" + current + " / " + maximum +
-          " = " + Math.round(values.displayPercent) + "%</span>" +
-      "</div>" +
-      "<div class='indicatorFormula'>" +
-        // Жирная строка «Текущая динамика» идёт ПЕРВОЙ: это ответ на главный
-        // вопрос игрока («что с шкалой происходит СЕЙЧАС»), а формулы ниже —
-        // объяснение, почему так.
-        "<div class='indicatorFact indicatorDynamicRow'>" +
-          "<strong>Текущая динамика</strong>: " +
-          "<span class='" + dynamics.className + "'>" +
-            escapeHtml(dynamics.text) + "</span> — " +
-          escapeHtml(dynamics.detail) +
-        "</div>" +
-        digestion +
-        exhaustion +
-        lines.map(factorRow).join("") +
-      "</div>" +
-    "</section>";
-  }
-
-  function render() {
-    if (!body || !snapshot || !v()) return;
-
-    // Разделов «Истощение» БОЛЬШЕ НЕТ: записи о нём уехали в блоки своих шкал
-    // (см. exhaustionRowsFor), поэтому здесь остаются только шкалы, пункт
-    // переваривания и активные эффекты.
-    var markup = v().SCALES.map(scaleRow).join("") +
-      effectsSection();
-
-    // Замена узлов сбрасывает прокрутку и снимает выделение. Пересборка идёт
-    // только при фактическом изменении текста, но выделение — как раз повод
-    // пересобрать: без этого клик из журнала не подсветил бы ничего.
-    if (markup === lastMarkup) return;
-    lastMarkup = markup;
-    body.innerHTML = markup;
-
-    // Блок с выделением доводим до экрана: он может быть значительно ниже.
-    if (highlightKey) scrollToHighlight();
-  }
-
-  /**
-   * Прокручивает список к выделенному блоку и ставит его на середину окна.
-   *
-   * Отдельная функция, потому что пересборка разметки и прокрутка — разные
-   * поводы: первый приходит с каждым изменившимся снимком, вторая нужна только
-   * при новом выделении.
-   */
-  function scrollToHighlight() {
-    var node = body.querySelector("[data-scale-key='" + highlightKey + "']");
-    if (!node || !node.scrollIntoView) return;
-
-    node.scrollIntoView({ block: "center" });
-  }
-
-  /**
-   * Ставит выделение на шкалу и через время снимает его.
-   *
-   * Таймер ОДИН на окно: повторный клик по другому показателю не должен
-   * оставлять висеть таймер от предыдущего — иначе старое выделение снималось бы
-   * уже после нового, и рамка исчезала бы раньше времени.
-   */
-  function setHighlight(key) {
-    highlightKey = String(key || "");
-
-    if (highlightTimer) global.clearTimeout(highlightTimer);
-
-    if (!highlightKey) {
-      render();
-      return;
-    }
-
-    render();
-
-    highlightTimer = global.setTimeout(function () {
-      highlightTimer = null;
-      highlightKey = "";
-      render();
-    }, HIGHLIGHT_MS);
-  }
-
-  function effectsSection() {
-    var list = effects();
-    if (!list.length) return "";
-
-    var buffs = list.filter(function (effect) { return !effect.isDebuff; });
-    var debuffs = list.filter(function (effect) { return effect.isDebuff; });
-
-    /**
-     * Имя эффекта — КЛИКАБЕЛЬНОЕ, с подсказкой и цветом по знаку.
-     *
-     * Требования автора: баффы окрашивать позитивным цветом, дебаффы —
-     * негативным; название кликабельно и с тултипом; клик открывает окно перков
-     * и подсвечивает ИМЕННО тот пункт, по которому щёлкнули.
-     *
-     * Подсветка нужна потому, что список перков длинный: без неё игрок после
-     * клика оказывается в начале окна и сам ищет, куда именно он нажал.
-     */
-    function chip(effect) {
-      var name = String(effect.name || effect.id || "");
-      var description = v() && v().effectDescription
-        ? v().effectDescription(effect.id)
-        : "";
-      var seconds = num(effect.remainingRealSeconds);
-
-      // Подсказка: описание действия плюс остаток реального времени. Остаток
-      // печатаем в реальных минутах — таймеры эффектов идут по реальному
-      // времени, а не по игровому.
-      var tooltip = description || name;
-      if (seconds > 0) {
-        tooltip += "\nОсталось: " +
-          (seconds >= 60
-            ? Math.floor(seconds / 60) + " мин " + Math.round(seconds % 60) + " с"
-            : Math.round(seconds) + " с");
-      }
-
-      return "<button type='button' class='indicatorEffect " +
-        (effect.isDebuff ? "debuff" : "buff") +
-        "' data-perk-link='" + escapeHtml(effect.id) + "'" +
-        " data-perk-kind='" + (effect.isDebuff ? "debuff" : "buff") + "'" +
-        " data-game-tooltip=\"" + escapeHtml(tooltip) + "\" " +
-        "title='" + escapeHtml(name) + "'>" +
-        escapeHtml(name) +
-      "</button>";
-    }
-
-    return "<section class='indicatorCard'>" +
-      "<div class='indicatorTitle'><span class='indicatorName'>Активные эффекты</span>" +
-        "<span class='indicatorValue'>" + list.length + "</span></div>" +
-      "<div class='indicatorFormula'>" +
-        (buffs.length ? "<div class='indicatorFact'>Баффы: " +
-          buffs.map(chip).join("") + "</div>" : "") +
-        (debuffs.length ? "<div class='indicatorFact'>Дебаффы: " +
-          debuffs.map(chip).join("") + "</div>" : "") +
-        "<div class='indicatorFact'>Нажмите на эффект, чтобы открыть окно " +
-          "«Перки, баффы, скиллы» и увидеть его описание.</div>" +
-      "</div>" +
-    "</section>";
-  }
-
-  function applyMessage(message) {
-    if (!message) return;
-
-    if (message.type === "snapshot") {
-      snapshot = message.snapshot || snapshot;
-      // Каталог нужен, чтобы назвать съеденный предмет по Id: в желудке лежит
-      // только остаток, и без каталога пункт переваривания был бы безымянным.
-      if (Array.isArray(message.itemCatalog))
-        itemCatalog = message.itemCatalog;
-      if (snapshot && message.conditionRates) {
-        snapshot.conditionRates = message.conditionRates;
-      }
-      if (message.daylight) snapshot.daylight = message.daylight;
-      simulationRunning = !!message.simulationRunning;
-      simulationPaused = !!message.simulationPaused;
-    } else if (message.type === "live_state") {
-      // live_state может прийти РАНЬШЕ полного снимка: симуляция уже идёт, а
-      // снимок мира ещё собирается. Тогда снимок создаёт именно он — иначе окно
-      // осталось бы пустым до следующего полного снимка, а его можно ждать
-      // сколько угодно. Пустой объект безопасен: все обращения к снимку идут
-      // через "snapshot && snapshot.<...>", и шкалы нарисуются с нулями.
-      if (!snapshot) snapshot = {};
-      if (message.player) snapshot.player = message.player;
-      if (message.playerVitals) snapshot.playerVitals = message.playerVitals;
-      if (message.conditions) snapshot.conditions = message.conditions;
-      if (message.conditionRates) snapshot.conditionRates = message.conditionRates;
-      if (message.daylight) snapshot.daylight = message.daylight;
-      if (typeof message.simulationRunning === "boolean") simulationRunning = message.simulationRunning;
-      if (typeof message.simulationPaused === "boolean") simulationPaused = message.simulationPaused;
-    } else if (message.type === "indicators_closed") {
-      send({ action: "close_indicators" });
-      return;
-    } else if (message.type === "highlight") {
-      // Выделение — не снимок: его приход не должен приводить к rememberExhaustion,
-      // иначе отметка истощения сдвинулась бы на пустом месте.
-      setHighlight(message.key);
-      return;
-    }
-
-    // Образец истощения берём ПОСЛЕ обновления снимка: динамику оно и меряет.
-    rememberExhaustion();
     render();
   }
-
-  function init() {
-    body = document.getElementById("indicatorsBody");
-    if (!body) return;
-
-    // Без общей разметки шкал (AssistVitals) монитор показать нечего: она даёт и
-    // состав шкал, и перевод единиц в проценты. Лучше не рисовать ничего, чем
-    // показать шкалы, посчитанные второй копией правил.
-    if (!v()) return;
-
-    v().attachTooltips(document);
-
-    // Клик по имени эффекта открывает окно «Перки, баффы, скиллы» и просит
-    // подсветить именно этот пункт.
-    //
-    // Делегирование, а не подписка на каждый чип: разметка пересобирается на
-    // каждом изменении снимка, и обработчики на узлах терялись бы вместе с ними.
-    // Подсветку выполняет ХОСТ: окно перков — отдельная страница, и «какой пункт
-    // подсветить» — это состояние между двумя окнами, а не свойство разметки.
-    body.addEventListener("click", function (event) {
-      var node = event.target && event.target.closest
-        ? event.target.closest("[data-perk-link]")
-        : null;
-      if (!node) return;
-
-      send({
-        action: "open_perks",
-        perkId: node.getAttribute("data-perk-link") || "",
-        perkKind: node.getAttribute("data-perk-kind") || ""
-      });
+  function send(payload){ if(global.chrome&&global.chrome.webview) global.chrome.webview.postMessage(payload); }
+  function init(){
+    body=document.getElementById("indicatorsBody"); if(!body||!v()) return;
+    body.addEventListener("click",function(event){
+      var perk=event.target&&event.target.closest?event.target.closest("[data-perk-link]"):null;
+      if(perk){send({action:"open_perks",perkId:perk.getAttribute("data-perk-link")||"",perkKind:perk.getAttribute("data-perk-kind")||""});return;}
+      var item=event.target&&event.target.closest?event.target.closest("[data-item-link]"):null;
+      if(item) send({action:"open_items",itemId:item.getAttribute("data-item-link")||""});
     });
-
-    // Тикер: игровое время и «сейчас: …» должны меняться, даже если новый
-    // пакет не пришёл (шлюз шлёт live_state только при запущенной симуляции).
-    //
-    // Образцы истощения копятся ЗДЕСЬ, а не только при приходе сообщения: между
-    // пакетами значения уже изменились, и окно замера должно это видеть.
-    global.setInterval(function () {
-      if (!snapshot || !simulationRunning || simulationPaused) return;
-      rememberExhaustion();
-      render();
-    }, 1000);
-
-    if (global.chrome && global.chrome.webview) {
-      global.chrome.webview.addEventListener("message", function (event) {
-        try {
-          applyMessage(typeof event.data === "string" ? JSON.parse(event.data) : event.data);
-        } catch (error) {
-          // Разбор сообщения не должен ронять окно монитора.
-        }
-      });
-    }
-
-    send({ action: "indicators_ready" });
+    if(global.chrome&&global.chrome.webview) global.chrome.webview.addEventListener("message",function(event){try{applyMessage(typeof event.data==="string"?JSON.parse(event.data):event.data);}catch(_){ }});
+    global.setInterval(function(){if(simulationRunning&&!simulationPaused) render();},1000);
+    send({action:"indicators_ready"});
   }
-
-  function send(payload) {
-    if (global.chrome && global.chrome.webview) {
-      global.chrome.webview.postMessage(payload);
-    }
-  }
-
-  // Клавиша Escape закрывает окно: Host закрывает форму, страница лишь просит.
-  document.addEventListener("keydown", function (event) {
-    if (event.key === "Escape") send({ action: "close_indicators" });
-  });
-
-  global.AssistIndicators = {
-    render: render,
-    factorsFor: factorsFor,
-    setHighlight: setHighlight
-  };
-
-  if (document.readyState === "loading") {
-    document.addEventListener("DOMContentLoaded", init);
-  } else {
-    init();
-  }
-})(typeof window !== "undefined" ? window : this);
+  document.addEventListener("keydown",function(event){if(event.key==="Escape")send({action:"close_indicators"});});
+  global.AssistIndicators={render:render,setHighlight:setHighlight,factorsFor:function(key){return dynamicFactors(key).concat(permanentFactors(key));},stateFromRates:stateFromRates};
+  if(document.readyState==="loading") document.addEventListener("DOMContentLoaded",init); else init();
+})(typeof window!=="undefined"?window:this);

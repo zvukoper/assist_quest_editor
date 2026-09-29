@@ -6,43 +6,40 @@
 <title>Монитор показателей</title>
 <link rel="stylesheet" href="theme.css?v=b329b3ea">
 <style>
-  html, body { height:100%; margin:0; overflow:hidden; background:#0d1014; }
-  .indicatorsWindow {
-    height:100%;
-    box-sizing:border-box;
-    padding:8px;
-    display:flex;
-    flex-direction:column;
-    min-height:0;
-  }
-  .indicatorsHead {
-    flex:0 0 auto;
-    display:flex;
-    align-items:baseline;
-    gap:10px;
-    padding:2px 2px 8px;
-  }
-  .indicatorsHead strong { font-size:13px; }
-  .indicatorsHead .indicatorsHint {
-    color:var(--muted);
-    font-size:10px;
-  }
-  .indicatorsBody {
-    flex:1 1 auto;
-    min-height:0;
-    overflow:auto;
-    display:grid;
-    grid-template-columns:repeat(auto-fill,minmax(430px,1fr));
-    gap:8px;
-    align-content:start;
-  }
+html,body{height:100%;margin:0;overflow:hidden;background:#0d1014}
+.indicatorsWindow{height:100%;box-sizing:border-box;padding:8px;display:flex;flex-direction:column;min-height:0}
+.indicatorsHead{flex:0 0 auto;display:flex;align-items:baseline;gap:8px;padding:2px 2px 8px}
+.indicatorsHead strong,.characterStateLabel,.characterStateValue{font-size:13px}
+.characterStateValue{font-weight:800}
+.stateCritical{color:var(--red)}.stateSevere{color:#ffd400}.stateUnsat{color:#ff8c00}.stateSatisfactory{color:var(--muted)}.stateNormal{color:#4fd66d}.statePositive,.stateExcellent{color:var(--lime)}
+.indicatorsDivider{color:var(--muted);font-size:13px}
+.indicatorsBody{flex:1 1 auto;min-height:0;overflow-y:auto;overflow-x:hidden;display:flex;flex-direction:column;gap:8px}
+.indicatorCard{border:1px solid var(--border);border-radius:7px;background:rgba(23,24,25,.96);overflow:hidden;transition:border-color 80ms ease,box-shadow 120ms ease}
+.indicatorCard.indicatorHighlight{border-color:var(--accent);box-shadow:0 0 0 2px rgba(250,176,3,.18)}
+.indicatorTopRow{min-height:31px;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));align-items:center;border-bottom:1px solid rgba(255,255,255,.08);font-size:13px;line-height:1.15;font-weight:800}
+.indicatorTopRow>div{min-width:0;padding:6px 9px}
+.indicatorDynamics{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.indicatorValue{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+.indicatorName{color:#fff}.valueReal{color:var(--muted)}.valuePercent{color:var(--accent);font-weight:800}
+.trendGood,.factorGood{color:var(--lime);font-weight:800}.trendBad,.factorBad{color:var(--red);font-weight:800}.trendFlat,.factorNeutral{color:var(--muted);font-weight:700}
+.indicatorFactors{padding:7px 9px 8px}.indicatorFact{font-size:10px;line-height:1.4;margin:2px 0;color:#e8edf3}.dynamicFactor{color:#fff}.permanentActive{color:#fff;font-weight:700}.permanentInactive{color:#7b848e;font-weight:400}.factorContribution{font-size:10px}
+.dynamicItem{display:flex;align-items:center;flex-wrap:wrap;gap:4px}
+.indicatorChip{appearance:none;border:1px solid rgba(255,255,255,.16);border-radius:4px;padding:2px 6px;font-size:10px;font-weight:800;cursor:pointer;background:rgba(255,255,255,.06);color:#fff}
+.indicatorChip:hover{background:rgba(255,255,255,.12);border-color:var(--accent)}
+.buffChip{color:var(--lime);border-color:rgba(17,251,6,.30);background:rgba(17,251,6,.06)}
+.debuffChip{color:#ff8a8a;border-color:rgba(207,12,12,.35);background:rgba(207,12,12,.08)}
+.itemChip{color:var(--accent);border-color:rgba(250,176,3,.35);background:rgba(250,176,3,.08)}
+.indicatorItemMeta{color:var(--muted)}.indicatorItemMeta .factorContribution{margin-left:2px}
+@media(max-width:760px){.indicatorTopRow,.indicatorsHead strong,.characterStateLabel,.characterStateValue{font-size:11px}.indicatorTopRow>div{padding:5px 6px}.indicatorFact,.factorContribution,.indicatorChip{font-size:9px}}
 </style>
 </head>
 <body>
 <div class="indicatorsWindow">
   <div class="indicatorsHead">
     <strong>Монитор показателей</strong>
-    <span class="indicatorsHint">текущее / максимум = формула: все факторы, влияющие на скорость изменения шкалы</span>
+    <span class="indicatorsDivider">|</span>
+    <span class="characterStateLabel">Состояние персонажа:</span>
+    <span id="characterStateValue" class="characterStateValue stateSatisfactory">Удовлетворительное</span>
   </div>
   <div class="indicatorsBody" id="indicatorsBody"></div>
 </div>

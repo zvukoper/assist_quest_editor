@@ -77,7 +77,7 @@
             }
           ],
           "parameters": {
-            "message": "Ты нашёл тайник! Получено 5 000 ₽ и +50 к навыку «Разведчик»."
+            "message": "Ты нашёл тайник! Получено 5 000 ₽, +50 опыта и +50 к навыку «Разведчик»."
           },
           "nodeId": "cache-found",
           "nodeType": "Notify"
@@ -107,7 +107,19 @@
           "nodeType": "AddMoney"
         },
         {
-          "title": "05. Разведчик +50",
+          "title": "05. Опыт +50",
+          "x": 1120,
+          "y": 230,
+          "sockets": [
+            {"socketId": "cache-experience.in", "name": "Вход", "direction": "Input", "flowKind": "Normal"},
+            {"socketId": "cache-experience.out", "name": "Далее", "direction": "Output", "flowKind": "Normal"}
+          ],
+          "parameters": {"amount": "50"},
+          "nodeId": "cache-experience",
+          "nodeType": "AddExperience"
+        },
+        {
+          "title": "06. Разведчик +50",
           "x": 1120,
           "y": 180,
           "sockets": [
@@ -174,6 +186,12 @@
         {
           "fromNodeId": "cache-money",
           "fromSocketId": "cache-money.out",
+          "toNodeId": "cache-experience",
+          "toSocketId": "cache-experience.in"
+        },
+        {
+          "fromNodeId": "cache-experience",
+          "fromSocketId": "cache-experience.out",
           "toNodeId": "cache-scout",
           "toSocketId": "cache-scout.in"
         },

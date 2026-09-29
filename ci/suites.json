@@ -55,7 +55,8 @@
       "title": "Dynamic Event smoke",
       "browser": true,
       "scripts": [
-        "ci/dynamic_event_editor_smoke.mjs"
+        "ci/dynamic_event_editor_smoke.mjs",
+        "ci/test_dynamic_cache.mjs"
       ]
     },
     "map": {
