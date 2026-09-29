@@ -96,6 +96,19 @@ internal static class Program
                 return;
             }
 
+            // Проба синхронизации УСТАНОВЛЕННОГО демо-мира: тем же методом, что
+            // вызывается при запуске приложения.
+            //
+            // Нужна потому, что исходный дефект («старый тайник без награды
+            // переживает обновление приложения») виден ТОЛЬКО на распакованном мире
+            // в документах, а не на архиве: набор файлов тот же, изменяется их
+            // содержимое. Без пробы эту ветку нельзя проверить без ручного запуска.
+            if (args.Any(arg => string.Equals(arg, "--demo-sync-probe", StringComparison.OrdinalIgnoreCase)))
+            {
+                Environment.ExitCode = DemoSyncProbeFromCommandLine(args);
+                return;
+            }
+
             // Проба выгрузки: тот же код, что вызывается из меню, но без диалога.
             // Диалог подтверждения в неинтерактивной среде не нажать, а проверить
             // упаковку архива и раскладку папки НУЖНО — иначе «Экспорт» остался бы
@@ -544,6 +557,15 @@ internal static class Program
 
         AppLogger.Info("Startup: миров найдено.", $"count={store.Worlds.Count}");
 
+        // Демо-мир приходит вместе с приложением, но его папка лежит в документах
+        // и переживает обновление. Обновляем её до показа списка: иначе автор
+        // продолжал бы играть в старый мир (например, с тайником без награды), а
+        // «список миров» успел бы прочитать устаревшие ресурсы кешем.
+        //
+        // Обновление идемпотентно (совпадающие файлы не переписываются), поэтому
+        // вызов на каждом запуске не трогает даты правки у неизменного контента.
+        EnsureBundledDemoWorldCurrent(store);
+
         using var chooser = new WorldChooserForm(store);
         if (chooser.ShowDialog() != DialogResult.OK || chooser.SelectedWorld is null)
             return false;
@@ -561,6 +583,47 @@ internal static class Program
             $"lastCampaign={world.Definition.LastCampaignId ?? "нет"}");
 
         return true;
+    }
+
+    /// <summary>
+    /// Приводит установленный демо-мир в соответствие с ПОСТАВКОЙ приложения.
+    ///
+    /// Нужно потому, что демо-мир — не только архив, предлагаемый кнопкой
+    /// «Пропустить», но и уже распакованный мир в документах. Он переживает
+    /// обновление приложения, а его контент правят вместе с кодом (например,
+    /// награду тайника). Набор файлов при этом не меняется — изменяется их
+    /// содержимое, — поэтому без явной синхронизации автор продолжал бы играть в
+    /// СТАРЫЙ установленный мир и видел бы старые правила.
+    ///
+    /// Синхронизируется только мир с id демо-мира. Миры автора — его собственные,
+    /// и трогать их содержимое приложение не имеет права.
+    /// </summary>
+    private static void EnsureBundledDemoWorldCurrent(WorldStore store)
+    {
+        try
+        {
+            var demo = store.FindWorld(DemoWorldSeeder.WorldId);
+            if (demo is null)
+                return;
+
+            var written = DemoWorldSeeder.SyncContentInto(demo.FolderPath);
+
+            if (written > 0)
+            {
+                store.Reload();
+                AppLogger.Info(
+                    "Startup: установленный демо-мир обновлён до поставки.",
+                    $"folder={demo.FolderPath}; files={written}");
+            }
+        }
+        catch (Exception ex)
+        {
+            // Не суметь обновить демо-мир — не повод не запускать приложение:
+            // автор увидит прежний мир, а причина останется в журнале.
+            AppLogger.Warn(
+                "Startup: не удалось обновить установленный демо-мир.",
+                ex.Message);
+        }
     }
 
     /// <summary>
@@ -690,6 +753,99 @@ internal static class Program
         Console.WriteLine("Источник: " + webDirectory);
         Console.WriteLine("Файл: " + target);
         return 0;
+    }
+
+    /// <summary>
+    /// Проба синхронизации установленного демо-мира.
+    ///
+    /// Запускается так:
+    /// `--demo-sync-probe &lt;корень&gt; [--report &lt;файл&gt;]`
+    ///
+    /// <c>&lt;корень&gt;</c> — пользовательский корень (каталог с папкой <c>worlds</c>).
+    /// Вызывает тот же <see cref="DemoWorldSeeder.SyncContentInto"/>, что и запуск
+    /// приложения, и печатает, СКОЛЬКО файлов реально записано и есть ли у
+    /// тайника награда. Так проверяется именно тот дефект, который видит автор:
+    /// «обнаружил тайник, а награды нет», — он живёт в распакованном мире, а не в
+    /// архиве.
+    ///
+    /// Код возврата: 0 — мир актуален (в том числе после обновления), 1 — награды
+    /// нет, 2 — демо-мир не установлен.
+    /// </summary>
+    private static int DemoSyncProbeFromCommandLine(string[] args)
+    {
+        var reportDefault = Path.Combine(
+            ResourceRootResolver.ExecutableDirectory(Environment.ProcessPath) ?? AppContext.BaseDirectory,
+            "demo-sync-probe-report.txt");
+
+        var reportIndex = Array.FindIndex(args, arg =>
+            string.Equals(arg, "--report", StringComparison.OrdinalIgnoreCase));
+        var report = reportIndex >= 0 && reportIndex + 1 < args.Length
+            ? args[reportIndex + 1]
+            : reportDefault;
+
+        try
+        {
+            var positional = args
+                .Where(arg => !arg.StartsWith("--", StringComparison.Ordinal))
+                .ToArray();
+
+            if (positional.Length < 1)
+                throw new ArgumentException("Ожидалось: --demo-sync-probe <корень> [--report <файл>]");
+
+            var userRoot = positional[0];
+            var worlds = new WorldStore(userRoot, AuthorIdentity.Anonymous, readOnly: false);
+            var demo = worlds.FindWorld(DemoWorldSeeder.WorldId);
+
+            if (demo is null)
+            {
+                var missing = new[] { "Демо-мир не установлен: " + userRoot };
+                Console.WriteLine(missing[0]);
+                WriteResourceLines(report, missing);
+                return 2;
+            }
+
+            var written = DemoWorldSeeder.SyncContentInto(demo.FolderPath);
+
+            var eventPath = Path.Combine(
+                demo.FolderPath,
+                WorldPaths.DynamicEventsFolder,
+                DemoWorldSeeder.CacheEventId + DynamicEventStore.Extension);
+
+            var hasReward = false;
+            if (File.Exists(eventPath))
+            {
+                var document = ResourceJsonFormat.Deserialize<DynamicEventDefinitionDocument>(
+                    File.ReadAllText(eventPath));
+                hasReward = document?.Definition.Completion is
+                {
+                    CompleteOnDiscovery: true,
+                    Money: > 0,
+                    Experience: > 0
+                };
+            }
+
+            var lines = new[]
+            {
+                "Синхронизация демо-мира выполнена.",
+                "Папка: " + demo.FolderPath,
+                "Записано файлов: " + written,
+                "Событие: " + eventPath,
+                "Награда тайника: " + (hasReward ? "есть" : "ОТСУТСТВУЕТ")
+            };
+
+            foreach (var line in lines)
+                Console.WriteLine(line);
+
+            WriteResourceLines(report, lines);
+            return hasReward ? 0 : 1;
+        }
+        catch (Exception ex)
+        {
+            var message = "Синхронизация демо-мира не выполнена: " + ex.Message;
+            Console.WriteLine(message);
+            WriteResourceLines(report, new[] { message });
+            return 1;
+        }
     }
 
     private static int BuildDemoWorldFromCommandLine()

@@ -643,6 +643,49 @@ const advanceArgs = advanceCall.slice(0, advanceCall.indexOf(");"));
 check(!/\belapsed\b/.test(advanceArgs),
   "В RouteMovementEngine.Advance обязаны уходить ИГРОВЫЕ секунды, а не реальные.");
 
+// Движок показателей НЕ ждёт симуляцию.
+//
+// Жалоба автора: «движок показателей не должен ждать симуляцию, он и в паузе и в
+// стопе должен вычислять значения шкал», «включение и выключение симуляции не
+// должно ничего менять в расчётах значений шкал и работе перков, скиллов, баффов
+// и дебаффов», «если бафф активирован на 15 реальных минут, то даже при
+// выключенной симуляции эти 15 минут продолжают истекать».
+//
+// Два требования проверяются здесь по коду Host, потому что оба — про состояние
+// симуляции, а не про домен (в домене это закреплено тестами
+// EffectTimersTickOnRealTimeEvenWhenGameTimeIsStopped и
+// StoppedGameTimeDoesNotChangeScaleValues):
+//   1. UpdatePlayerConditions вызывается в ЛЮБОМ состоянии — значит, раннего
+//      выхода по !SimulationRunning || IsPaused в нём быть не должно;
+//   2. живое состояние уходит в окна тоже в любом состоянии — иначе включение
+//      маршрута на остановленной симуляции не отражалось бы в интерфейсе.
+const conditionsTick = simForm.slice(
+  simForm.indexOf("private void UpdatePlayerConditions()"),
+  simForm.indexOf("private void PushLiveState()"));
+check(!/_runtime\.IsPaused/.test(conditionsTick),
+  "Обработка показателей не должна зависеть от паузы: таймеры эффектов идут " +
+  "по системному времени и обязаны тикать без симуляции.");
+check(/clockRunning\s*\?\s*Math\.Max\(0d,\s*\(clock\.Elapsed - previousElapsed\)/.test(conditionsTick),
+  "Игровой прирост показателей обязан обнуляться при остановленных часах: шкалы " +
+  "не меняют значений без игрового времени, но текущий срез мира считается.");
+const liveStateTick = simForm.slice(
+  simForm.indexOf("_runtimeTimer.Tick += (_, _) =>"),
+  simForm.indexOf("_runtimeTimer.Start();"));
+check(/PushLiveState\(\);/.test(liveStateTick),
+  "Живое состояние обязано уходить в окна и на остановленной симуляции: иначе " +
+  "включение маршрута не отражается в показателях до полного обновления мира.");
+check(!/if\s*\(_runtime\.SimulationRunning\)\s*\n\s*PushLiveState\(\);/.test(liveStateTick),
+  "PushLiveState не должен быть заперт условием «симуляция запущена».");
+
+// Пауза и стоп не должны СБРАСЫВАТЬ мир: спидометр и накопленное время пути —
+// часть состояния прохождения, а не симуляции.
+const routeAfterStateBody = simForm.slice(
+  simForm.indexOf("private void SetRouteAfterSimulationStateChange()"),
+  simForm.indexOf("private void SetRouteStateAfterLoad("));
+check(!/SetPlayerMovementIdle\(\)/.test(routeAfterStateBody),
+  "Пауза/стоп не должны обнулять скорость игрока: движение по маршруту — часть " +
+  "мира, а не симуляции, и выключение симуляции не меняет состояние прохождения.");
+
 // Та же кратность обязана масштабировать покадровую экстраполяцию маркера в web:
 // между пакетами (live_state раз в 250 мс) маркер «доезжает» по скорости и курсу,
 // и без кратности он отстаёт от авторитетной позиции при ускорении.
@@ -695,7 +738,13 @@ const controlsRow = simHeader.slice(
 check(controlsRow.length > 0, "Первая строка шапки Симулятора должна быть в разметке.");
 check(!/daylightIndicator/.test(controlsRow),
   "Индикатор фазы дня не должен стоять в строке управления: он её раздувает.");// Рисуется внутри HUD, а не отдельным элементом разметки.
-const hudMarkupStart = simulatorJs.indexOf("hud.innerHTML = [");
+//
+// Якорь — имя переменной с массивом частей HUD, а не способ вставки: разметка
+// ставится СВЕРКОЙ УЗЛОВ (window.AssistDom.reconcile) вместо `hud.innerHTML`,
+// иначе плашки мигали бы под курсором на каждом обновлении. Вставка тут ни при
+// чём — проверке важно, что HUD собирается массивом частей и что индикатор фазы
+// дня стоит в нём на своём месте.
+const hudMarkupStart = simulatorJs.indexOf("const hudMarkup = [");
 check(hudMarkupStart >= 0, "HUD должен собираться из массива частей.");
 const hudMarkup = simulatorJs.slice(hudMarkupStart, simulatorJs.indexOf("renderDaylight()", hudMarkupStart));
 check(hudMarkup.length > 0 && /daylightIndicator/.test(hudMarkup),

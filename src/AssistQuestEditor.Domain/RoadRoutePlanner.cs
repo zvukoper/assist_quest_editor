@@ -31,6 +31,35 @@ public sealed class RoadRoutePlanner
     /// второй — цепочки «остров → промежуточная компонента → материк».
     /// </summary>
     private const int MaxStitchRounds = 3;
+
+    /// <summary>
+    /// Порог «шва»: два конца полотна ближе этого стоят почти вплотную.
+    /// В выгрузке настоящие стыки — 10..25 м, изредка до 60 м.
+    /// </summary>
+    private const double SeamCloseMaxMeters = 60d;
+
+    /// <summary>
+    /// Если соседний конец достижим по дорогам в пределах этого расстояния,
+    /// шва нет — это обычная короткая связь. Швом считается только случай
+    /// «рядом по земле, далеко по дорогам».
+    /// </summary>
+    private const double SeamCloseRoadMaxMeters = 300d;
+
+    /// <summary>
+    /// Узлы со степенью выше этой не участвуют в закрытии швов: перекрёстки
+    /// связны по определению, а «шов» — это именно два конца полотна.
+    /// </summary>
+    private const int SeamCloseMaxDegree = 2;
+
+    /// <summary>
+    /// Направление для шва. Мягче <see cref="RecoveryDirectionDot"/>: у шва два
+    /// конца смотрят навстречу друг другу, и скалярное произведение выходит
+    /// около 0.4..0.5, но всё ещё положительное. Порог остаётся положительным,
+    /// чтобы не срезать «шпильку» — там два плеча проходят рядом, но полотно
+    /// между ними поворачивает назад (произведение около нуля или отрицательное).
+    /// </summary>
+    private const double SeamDirectionDot = 0.25d;
+
     private const double GridCellSizeMeters = 100d;
 
     /// <summary>
@@ -80,6 +109,12 @@ public sealed class RoadRoutePlanner
         double Distance,
         double ProjectionX,
         double ProjectionZ);
+
+    /// <summary>Найденный «шов»: два конца полотна, которые надо соединить.</summary>
+    private readonly record struct SeamPair(
+        double Distance,
+        int First,
+        int Second);
 
     public RoadRoutePlanner(
         IReadOnlyList<RoadSegment> segments,
@@ -444,6 +479,183 @@ public sealed class RoadRoutePlanner
 
         RunDirectionalRecovery(deadEnds, RecoveryGapMaxMeters, collectCandidates: false);
         StitchComponents(deadEnds);
+        CloseSeams(deadEnds);
+    }
+
+    /// <summary>
+    /// Закрывает «швы» — стыки полотна, которые идут врозь, но стоят вплотную.
+    ///
+    /// Сшивка компонент такой стык не ловит: её фильтр требует, чтобы цель лежала
+    /// в ДРУГОЙ компоненте, а у шва куски формально связны — просто единственный
+    /// путь между ними идёт многокилометровой петлёй «в обход». Так у перекрёстка
+    /// возле (161606.0,-80672.3) концы (161662.9,-80567.7) и (161658.4,-80553.1)
+    /// стоят в 15 м, но дорожное расстояние между ними — 70 км.
+    ///
+    /// Шов определяется по ДОРОЖНОМУ расстоянию, а не по компоненте: конец
+    /// соединяется с соседним концом, если тот близок по земле
+    /// (<see cref="SeamCloseMaxMeters"/>), далёк по дорогам
+    /// (<see cref="SeamCloseRoadMaxMeters"/>) и лежит впереди по направлению
+    /// полотна (мягкий <see cref="SeamDirectionDot"/>). Последнее условие не даёт
+    /// срезать «шпильку» — там два плеча проходят рядом, но полотно между ними
+    /// поворачивает назад, и произведение направлений получается около нуля.
+    ///
+    /// Один проход по возрастанию расстояния, как в алгоритме Краскала: если
+    /// конец уже стал связным, он пропускается (степень выросла).
+    /// </summary>
+    private void CloseSeams(
+        IReadOnlyList<(int NodeId, double OutwardX, double OutwardZ)> deadEnds)
+    {
+        var candidates = new List<SeamPair>();
+
+        foreach (var (sourceId, outwardX, outwardZ) in deadEnds)
+        {
+            if (sourceId < 0 || sourceId >= _nodes.Count)
+                continue;
+
+            if (_adjacency[sourceId].Count > SeamCloseMaxDegree)
+                continue;
+
+            var source = _nodes[sourceId];
+
+            var minCell = CellOf(
+                source.X - SeamCloseMaxMeters,
+                source.Z - SeamCloseMaxMeters,
+                GridCellSizeMeters);
+            var maxCell = CellOf(
+                source.X + SeamCloseMaxMeters,
+                source.Z + SeamCloseMaxMeters,
+                GridCellSizeMeters);
+
+            for (var cellX = minCell.X; cellX <= maxCell.X; cellX++)
+            for (var cellZ = minCell.Z; cellZ <= maxCell.Z; cellZ++)
+            {
+                if (!_nodeGrid.TryGetValue((cellX, cellZ), out var nodes))
+                    continue;
+
+                foreach (var targetId in nodes)
+                {
+                    if (targetId == sourceId || targetId >= deadEnds.Count)
+                        continue;
+
+                    // Цель — тоже конец полотна, иначе это был бы узел посреди дороги.
+                    if (_adjacency[targetId].Count > SeamCloseMaxDegree)
+                        continue;
+
+                    var target = _nodes[targetId];
+
+                    var dx = target.X - source.X;
+                    var dz = target.Z - source.Z;
+                    var distance = Math.Sqrt(dx * dx + dz * dz);
+
+                    if (distance <= NodeMergeToleranceMeters ||
+                        distance > SeamCloseMaxMeters)
+                        continue;
+
+                    var (_, targetOutwardX, targetOutwardZ) = deadEnds[targetId];
+
+                    // Оба конца обязаны смотреть навстречу друг другу. Порог
+                    // положительный (<see cref="SeamDirectionDot"/>), поэтому
+                    // «шпилька» — два плеча рядом, полотно между ними
+                    // поворачивает назад — сюда не попадает.
+                    var forwardFloor = SeamDirectionDot * distance;
+
+                    if (outwardX * dx + outwardZ * dz <= forwardFloor ||
+                        targetOutwardX * -dx + targetOutwardZ * -dz <= forwardFloor)
+                        continue;
+
+                    var distanceDirX = dx / distance;
+                    var distanceDirZ = dz / distance;
+
+                    // Запас на длину моста, чтобы «далеко по дорогам» не считалось
+                    // швом только из-за того, что сам мост ещё не построен.
+                    if (RoadDistanceWithin(sourceId, targetId, SeamCloseRoadMaxMeters))
+                        continue;
+
+                    candidates.Add(new SeamPair(
+                        distance,
+                        sourceId,
+                        targetId));
+                }
+            }
+        }
+
+        if (candidates.Count == 0)
+            return;
+
+        candidates.Sort((left, right) => left.Distance.CompareTo(right.Distance));
+
+        foreach (var candidate in candidates)
+        {
+            // Оба конца уже переиспользованы — стык закрыт другим, более коротким ребром.
+            if (_adjacency[candidate.First].Count > SeamCloseMaxDegree ||
+                _adjacency[candidate.Second].Count > SeamCloseMaxDegree)
+                continue;
+
+            AddEdge(
+                candidate.First,
+                candidate.Second,
+                candidate.Distance * RecoveryEdgeCostMultiplier,
+                recovery: true);
+        }
+    }
+
+    /// <summary>
+    /// Есть ли между узлами дорожный путь короче <paramref name="limitMeters"/>.
+    ///
+    /// Полный Дейкстра по 139 000 узлов на каждый конец слишком дорог, поэтому
+    /// поиск ограничен радиусом: узлы дальше, чем остаток лимита по прямой, не
+    /// могут дать путь короче — остаток только убывает. Границы берутся с запасом
+    /// по прямой, чтобы сетка не отсекла нужную область.
+    /// </summary>
+    private bool RoadDistanceWithin(int from, int to, double limitMeters)
+    {
+        var best = new Dictionary<int, double> { [from] = 0d };
+        var queue = new PriorityQueue<int, double>();
+        queue.Enqueue(from, 0d);
+
+        while (queue.Count > 0)
+        {
+            if (!queue.TryDequeue(out var current, out var currentDistance))
+                break;
+
+            if (currentDistance > limitMeters)
+                return false;
+
+            if (!best.TryGetValue(current, out var known) ||
+                currentDistance > known)
+                continue;
+
+            if (current == to)
+                return true;
+
+            var remaining = limitMeters - currentDistance;
+            var current_ = _nodes[current];
+
+            foreach (var edge in _adjacency[current])
+            {
+                var next = _nodes[edge.To];
+                var straight = Math.Sqrt(
+                    (next.X - current_.X) * (next.X - current_.X) +
+                    (next.Z - current_.Z) * (next.Z - current_.Z));
+
+                if (straight > remaining)
+                    continue;
+
+                var candidate = currentDistance + edge.Cost;
+
+                if (candidate > limitMeters)
+                    continue;
+
+                if (best.TryGetValue(edge.To, out var existing) &&
+                    existing <= candidate)
+                    continue;
+
+                best[edge.To] = candidate;
+                queue.Enqueue(edge.To, candidate);
+            }
+        }
+
+        return false;
     }
 
     /// <summary>

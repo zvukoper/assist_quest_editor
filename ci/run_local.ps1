@@ -626,7 +626,11 @@ New-Check -Id 'webSyntax' -Name 'Синтаксис web JavaScript' -Suites @('f
         '.\src\AssistQuestEditor.App\Web\playerPanels.js',
         '.\src\AssistQuestEditor.App\Web\junctions.js',
         '.\src\AssistQuestEditor.App\Web\cityBoundaries.js',
-        '.\src\AssistQuestEditor.App\Web\web_log.js'
+        '.\src\AssistQuestEditor.App\Web\web_log.js',
+        # dom_reconcile.js — общий точечный апдейтер разметки. Его отсутствие в
+        # списке оставляло бы ошибку синтаксиса незамеченной, а его поломка
+        # проявляется как пустое содержимое окон (разметка перестаёт ставиться).
+        '.\src\AssistQuestEditor.App\Web\dom_reconcile.js'
     )
 
     foreach ($file in $files) {
@@ -694,6 +698,16 @@ New-Check -Id 'domainTests' -Name 'Тесты домена' -Suites @('fast') -B
     $resultDir = Join-Path $root 'ci-results\domain-tests'
     New-Item -ItemType Directory -Path $resultDir -Force | Out-Null
 
+    # VSTest связывается с testhost по петлевому адресу 127.0.0.1. На машинах с
+    # VPN-адаптерами (tun2) сокет, созданный dual-stack, уходит в
+    # [::ffff:127.0.0.1] и падает с SocketException 10049 «Требуемый адрес для
+    # своего контекста неверен»; снаружи это выглядит как «vstest не смог
+    # подключиться к testhost за 90 с» и повисает весь прогон тестов.
+    # DOTNET_SYSTEM_NET_DISABLEIPV6 выключает IPv6 В ДОЧЕРНИХ процессах .NET на
+    # время проверки: адрес петли остаётся чистым IPv4. Это рантайм-переключатель
+    # только для тестов, поведение приложения не затрагивается.
+    $env:DOTNET_SYSTEM_NET_DISABLEIPV6 = '1'
+
     foreach ($test in $tests) {
         Write-Host "-> $($test.Name)" -ForegroundColor DarkGray
 
@@ -708,6 +722,8 @@ New-Check -Id 'domainTests' -Name 'Тесты домена' -Suites @('fast') -B
             throw "тесты не прошли: $($test.Name)"
         }
     }
+
+    Remove-Item Env:\DOTNET_SYSTEM_NET_DISABLEIPV6 -ErrorAction SilentlyContinue
 
     Write-Host "TRX: $resultDir" -ForegroundColor DarkGray
 }

@@ -309,6 +309,33 @@ public sealed class WorldStore
     /// </summary>
     public WorldRecord ImportBundledDemoWorld(bool overwrite = false)
     {
+        // Уже установленный демо-мир обновляется НА МЕСТЕ, а не импортируется
+        // вторым экземпляром.
+        //
+        // Почему это обязательно. Демо-мир приходит вместе с приложением, но его
+        // папка лежит в документах и переживает обновление. После исправления
+        // награды тайника (деньги/опыт и деактивация) автор продолжал играть в
+        // СТАРЫЙ установленный мир: набор файлов тот же, изменяется их
+        // СОДЕРЖИМОЕ, поэтому проверка состава файлов это не ловит, и «Пропустить»
+        // создавал бы второй экземпляр, оставляя сломанный первый. Обновление
+        // копирует канонические ресурсы поверх и СОХРАНЯЕТ каталог `Saves`:
+        // прохождение принадлежит автору, а не поставке.
+        var installed = FindWorld(DemoWorldSeeder.WorldId);
+        if (installed is not null)
+        {
+            var written = DemoWorldSeeder.SyncContentInto(installed.FolderPath);
+
+            if (written > 0)
+            {
+                Reload();
+                AppLogger.Info(
+                    "WorldStore: демо-мир обновлён на месте.",
+                    $"folder={installed.FolderPath}; files={written}");
+            }
+
+            return FindWorld(DemoWorldSeeder.WorldId) ?? installed;
+        }
+
         var archive = DemoWorldSeeder.BundledArchivePath;
 
         if (File.Exists(archive) && IsCurrentBundledDemoWorld(archive))
@@ -690,107 +717,8 @@ public static class DemoWorldSeeder
             var worldFolder = Path.Combine(
                 staging,
                 ResourceNaming.ToFolderName(WorldFullName));
-            Directory.CreateDirectory(worldFolder);
 
-            var world = new WorldDefinition(
-                Id: WorldId,
-                Name: WorldName,
-                FullName: WorldFullName,
-                Description: WorldDescription,
-                Version: 1,
-                Metadata: new ResourceMetadata().WithCreated(author, moment),
-                LastCampaignId: TrainingCampaignId);
-
-            File.WriteAllText(
-                WorldPaths.WorldFilePath(worldFolder),
-                ResourceJsonFormat.Serialize(
-                    new WorldDefinitionDocument(
-                        1,
-                        WorldDefinitionRules.FormatName,
-                        world)));
-
-            Directory.CreateDirectory(WorldPaths.SavesFolderPath(worldFolder));
-
-            var campaignFolder = WorldPaths.CampaignFolder(
-                worldFolder,
-                TrainingCampaignId);
-            var questsFolder = WorldPaths.QuestsFolderPath(campaignFolder);
-            Directory.CreateDirectory(questsFolder);
-            Directory.CreateDirectory(WorldPaths.ScenesFolderPath(campaignFolder));
-
-            var campaign = new CampaignDefinition(
-                Id: TrainingCampaignId,
-                Name: TrainingCampaignId,
-                Version: 1,
-                Active: true,
-                Quests: new[]
-                {
-                    new CampaignQuestEntry(
-                        CacheQuestId,
-                        Path.Combine(
-                            WorldPaths.QuestsFolder,
-                            CacheQuestId + ".aqquest"),
-                        1,
-                        CampaignQuestStatus.Enabled,
-                        1)
-                },
-                Files: new[]
-                {
-                    WorldPaths.CampaignFileName,
-                    Path.Combine(
-                        WorldPaths.QuestsFolder,
-                        CacheQuestId + ".aqquest")
-                },
-                Geo: GeoCoordinate.CreateDefault(),
-                StartDate: GameCalendar.DefaultStartDate,
-                StartConditions: new WorldStartConditions(
-                    Weather: "Ясно",
-                    RainPercent: 0,
-                    VisibilityMeters: 10000),
-                WorldId: WorldId,
-                FullName: "Обучение",
-                Description: "Учебная кампания для проверки Диспетчера динамических событий.",
-                Metadata: new ResourceMetadata().WithCreated(author, moment));
-
-            WorldContentSeeder.WriteCampaign(campaignFolder, campaign, WorldId);
-
-            var quest = CreateTrainingQuest(author, moment);
-            File.WriteAllText(
-                Path.Combine(questsFolder, CacheQuestId + ".aqquest"),
-                ResourceJsonFormat.Serialize(
-                    new QuestDefinitionDocument(1, "aqquest", quest)));
-
-            var locationFolder = Path.Combine(
-                worldFolder,
-                WorldPaths.LocationsFolder);
-            Directory.CreateDirectory(locationFolder);
-
-            var location = CreateTrainingLocation();
-            File.WriteAllText(
-                Path.Combine(
-                    locationFolder,
-                    CacheLocationId + LocationStore.Extension),
-                ResourceJsonFormat.Serialize(
-                    new LocationDefinitionDocument(
-                        1,
-                        "aqlocation",
-                        location)));
-
-            var eventFolder = Path.Combine(
-                worldFolder,
-                WorldPaths.DynamicEventsFolder);
-            Directory.CreateDirectory(eventFolder);
-
-            var dynamicEvent = CreateTrainingDynamicEvent();
-            File.WriteAllText(
-                Path.Combine(
-                    eventFolder,
-                    CacheEventId + DynamicEventStore.Extension),
-                ResourceJsonFormat.Serialize(
-                    new DynamicEventDefinitionDocument(
-                        1,
-                        DynamicEventDefinitionRules.FormatName,
-                        dynamicEvent)));
+            WriteContent(worldFolder, author, moment);
 
             Directory.CreateDirectory(
                 Path.GetDirectoryName(Path.GetFullPath(archivePath))!);
@@ -805,7 +733,7 @@ public static class DemoWorldSeeder
                     FullName: WorldFullName,
                     Description: WorldDescription,
                     Version: 1,
-                    Metadata: world.Metadata),
+                    Metadata: new ResourceMetadata().WithCreated(author, moment)),
                 includeDependencies: true);
         }
         finally
@@ -822,6 +750,261 @@ public static class DemoWorldSeeder
                     staging + "; " + ex.Message);
             }
         }
+    }
+
+    /// <summary>
+    /// Обновляет УЖЕ УСТАНОВЛЕННЫЙ демо-мир поверх текущей поставки.
+    ///
+    /// Канонические ресурсы перезаписываются, а каталог <c>Saves</c> НЕ ТРОГАЕТСЯ:
+    /// сохранения и автосохранение принадлежат автору, и обновление контента не
+    /// имеет права стирать прохождение.
+    ///
+    /// Файлы, СОДЕРЖИМОЕ которых совпадает, пропускаются: тогда метод идемпотентен,
+    /// и его безопасно вызывать на каждом запуске, не затирая даты правки у уже
+    /// актуального контента (иначе обновление выглядело бы как «мир изменён»).
+    ///
+    /// Возвращает число РЕАЛЬНО записанных файлов: ноль означает «мир уже
+    /// актуален», и по этому признаку вызывающий решает, нужен ли ему перезапуск
+    /// хранилищ.
+    /// </summary>
+    public static int SyncContentInto(string worldFolder)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(worldFolder);
+
+        var staging = Path.Combine(
+            Path.GetTempPath(),
+            "aq-demo-sync-" + Guid.NewGuid().ToString("N"));
+
+        try
+        {
+            WriteContent(staging, DemoAuthor, DemoMoment);
+
+            Directory.CreateDirectory(worldFolder);
+
+            var written = 0;
+
+            foreach (var source in Directory
+                         .EnumerateFiles(staging, "*", SearchOption.AllDirectories))
+            {
+                var relative = Path.GetRelativePath(staging, source);
+
+                // Сохранения не входят в поставку — их нечего обновлять.
+                if (IsUnderSaves(relative))
+                    continue;
+
+                var target = Path.Combine(worldFolder, relative);
+                Directory.CreateDirectory(Path.GetDirectoryName(target)!);
+
+                // Уже актуальный файл не переписывается: иначе каждая проверка
+                // трогала бы даты правки, и «мир изменён» показывалось бы на
+                // неизменном контенте.
+                if (File.Exists(target) && FilesEqual(source, target))
+                    continue;
+
+                File.Copy(source, target, overwrite: true);
+                written += 1;
+            }
+
+            // Пустые каталоги поставки (например, `campaigns/training/scenes`)
+            // тоже должны появиться у получателя: иначе редактор сцен создаст их
+            // сам, но до этого автор увидел бы «сцены пропали».
+            foreach (var folder in Directory
+                         .EnumerateDirectories(staging, "*", SearchOption.AllDirectories))
+            {
+                var relative = Path.GetRelativePath(staging, folder);
+                if (IsUnderSaves(relative))
+                    continue;
+
+                Directory.CreateDirectory(Path.Combine(worldFolder, relative));
+            }
+
+            return written;
+        }
+        finally
+        {
+            try
+            {
+                if (Directory.Exists(staging))
+                    Directory.Delete(staging, recursive: true);
+            }
+            catch (Exception ex)
+            {
+                AppLogger.Warn(
+                    "DemoWorldSeeder: не удалось удалить временную папку синхронизации.",
+                    staging + "; " + ex.Message);
+            }
+        }
+    }
+
+    private static bool IsUnderSaves(string relativePath) =>
+        relativePath.Equals(WorldPaths.SavesFolder, StringComparison.OrdinalIgnoreCase) ||
+        relativePath.StartsWith(
+            WorldPaths.SavesFolder + Path.DirectorySeparatorChar,
+            StringComparison.OrdinalIgnoreCase) ||
+        relativePath.StartsWith(
+            WorldPaths.SavesFolder + "/",
+            StringComparison.Ordinal);
+
+    /// <summary>
+    /// Совпадает ли содержимое двух файлов.
+    ///
+    /// Сравнивается длина, а затем побайтно через поток: ресурсы демо-мира малы
+    /// (единицы килобайт), поэтому побайтное сравнение дешевле, чем вычисление
+    /// хеша, и не требует криптографии ради «тот же JSON или нет».
+    /// </summary>
+    private static bool FilesEqual(string left, string right)
+    {
+        try
+        {
+            var leftInfo = new FileInfo(left);
+            var rightInfo = new FileInfo(right);
+
+            if (leftInfo.Length != rightInfo.Length)
+                return false;
+
+            using var leftStream = File.OpenRead(left);
+            using var rightStream = File.OpenRead(right);
+
+            var leftBuffer = new byte[8192];
+            var rightBuffer = new byte[8192];
+
+            while (true)
+            {
+                var leftRead = leftStream.Read(leftBuffer, 0, leftBuffer.Length);
+                var rightRead = rightStream.Read(rightBuffer, 0, rightBuffer.Length);
+
+                if (leftRead != rightRead)
+                    return false;
+
+                if (leftRead == 0)
+                    return true;
+
+                if (!leftBuffer.AsSpan(0, leftRead).SequenceEqual(rightBuffer.AsSpan(0, rightRead)))
+                    return false;
+            }
+        }
+        catch
+        {
+            // Не суметь сравнить — повод перезаписать, а не пропустить: контент
+            // поставки в этом случае заведомо важнее даты правки файла.
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Записывает канонические ресурсы демо-мира в папку мира.
+    ///
+    /// ЕДИНСТВЕННОЕ описание содержимого демо-мира: и упаковщик архива, и
+    /// обновление установленного мира вызывают этот метод. Две копии неизбежно
+    /// разошлись бы, и «Пропустить» собирало бы архив, отличный от того, что
+    /// обновляется на диске.
+    /// </summary>
+    private static void WriteContent(
+        string worldFolder,
+        string author,
+        DateTimeOffset moment)
+    {
+        Directory.CreateDirectory(worldFolder);
+
+        var world = new WorldDefinition(
+            Id: WorldId,
+            Name: WorldName,
+            FullName: WorldFullName,
+            Description: WorldDescription,
+            Version: 1,
+            Metadata: new ResourceMetadata().WithCreated(author, moment),
+            LastCampaignId: TrainingCampaignId);
+
+        File.WriteAllText(
+            WorldPaths.WorldFilePath(worldFolder),
+            ResourceJsonFormat.Serialize(
+                new WorldDefinitionDocument(
+                    1,
+                    WorldDefinitionRules.FormatName,
+                    world)));
+
+        Directory.CreateDirectory(WorldPaths.SavesFolderPath(worldFolder));
+
+        var campaignFolder = WorldPaths.CampaignFolder(
+            worldFolder,
+            TrainingCampaignId);
+        var questsFolder = WorldPaths.QuestsFolderPath(campaignFolder);
+        Directory.CreateDirectory(questsFolder);
+        Directory.CreateDirectory(WorldPaths.ScenesFolderPath(campaignFolder));
+
+        var campaign = new CampaignDefinition(
+            Id: TrainingCampaignId,
+            Name: TrainingCampaignId,
+            Version: 1,
+            Active: true,
+            Quests: new[]
+            {
+                new CampaignQuestEntry(
+                    CacheQuestId,
+                    Path.Combine(
+                        WorldPaths.QuestsFolder,
+                        CacheQuestId + ".aqquest"),
+                    1,
+                    CampaignQuestStatus.Enabled,
+                    1)
+            },
+            Files: new[]
+            {
+                WorldPaths.CampaignFileName,
+                Path.Combine(
+                    WorldPaths.QuestsFolder,
+                    CacheQuestId + ".aqquest")
+            },
+            Geo: GeoCoordinate.CreateDefault(),
+            StartDate: GameCalendar.DefaultStartDate,
+            StartConditions: new WorldStartConditions(
+                Weather: "Ясно",
+                RainPercent: 0,
+                VisibilityMeters: 10000),
+            WorldId: WorldId,
+            FullName: "Обучение",
+            Description: "Учебная кампания для проверки Диспетчера динамических событий.",
+            Metadata: new ResourceMetadata().WithCreated(author, moment));
+
+        WorldContentSeeder.WriteCampaign(campaignFolder, campaign, WorldId);
+
+        var quest = CreateTrainingQuest(author, moment);
+        File.WriteAllText(
+            Path.Combine(questsFolder, CacheQuestId + ".aqquest"),
+            ResourceJsonFormat.Serialize(
+                new QuestDefinitionDocument(1, "aqquest", quest)));
+
+        var locationFolder = Path.Combine(
+            worldFolder,
+            WorldPaths.LocationsFolder);
+        Directory.CreateDirectory(locationFolder);
+
+        var location = CreateTrainingLocation();
+        File.WriteAllText(
+            Path.Combine(
+                locationFolder,
+                CacheLocationId + LocationStore.Extension),
+            ResourceJsonFormat.Serialize(
+                new LocationDefinitionDocument(
+                    1,
+                    "aqlocation",
+                    location)));
+
+        var eventFolder = Path.Combine(
+            worldFolder,
+            WorldPaths.DynamicEventsFolder);
+        Directory.CreateDirectory(eventFolder);
+
+        var dynamicEvent = CreateTrainingDynamicEvent();
+        File.WriteAllText(
+            Path.Combine(
+                eventFolder,
+                CacheEventId + DynamicEventStore.Extension),
+            ResourceJsonFormat.Serialize(
+                new DynamicEventDefinitionDocument(
+                    1,
+                    DynamicEventDefinitionRules.FormatName,
+                    dynamicEvent)));
     }
 
     private static QuestDefinition CreateTrainingQuest(
@@ -973,6 +1156,19 @@ public static class DemoWorldSeeder
                 SpawnOnSimulationStart = true,
                 RespawnOnExpired = true,
                 RemoveOnCompleted = true
+            },
+            // Награда за завершение задана ЯВНО.
+            //
+            // Без неё тайник обнаруживался и «завершался», но выдавать было
+            // нечего: у события деньги и опыт по умолчанию нулевые, и автор
+            // проехал триггер, не получив ни денег, ни опыта, ни уведомления.
+            // Пустое завершение — не «награда по умолчанию», а её отсутствие.
+            Completion = new DynamicEventCompletionDefinition
+            {
+                CompleteOnDiscovery = true,
+                Money = 500,
+                Experience = 25,
+                Message = "Тайник найден: +500 ₽ и +25 опыта."
             },
             Presentation = new Dictionary<string, string>(
                 StringComparer.OrdinalIgnoreCase)

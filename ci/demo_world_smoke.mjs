@@ -221,6 +221,19 @@ if (extracted) {
         "Первый тайник должен создаваться при запуске симуляции.");
       check(def?.spawnPolicy?.respawnOnExpired === true,
         "Истёкший тайник должен пересоздаваться.");
+      // Награда за завершение: без неё тайник обнаруживался и «завершался», но
+      // выдавать было нечего — автор проехал триггер без денег, опыта и
+      // уведомления. Проверяются и суммы, и признак завершения по обнаружению,
+      // и текст сообщения: именно их отсутствие и было дефектом.
+      check(def?.completion?.completeOnDiscovery === true,
+        "Тайник должен завершаться при обнаружении (completeOnDiscovery).");
+      check(def?.completion?.money === 500,
+        "Тайник должен выдавать 500 рублей: " + def?.completion?.money);
+      check(def?.completion?.experience === 25,
+        "Тайник должен выдавать 25 опыта: " + def?.completion?.experience);
+      check(typeof def?.completion?.message === "string" &&
+            def.completion.message.length > 0,
+        "У завершения тайника должно быть сообщение для игрока.");
     } catch (error) {
       failures.push("Dynamic Event тайника не разбирается: " + error.message);
     }

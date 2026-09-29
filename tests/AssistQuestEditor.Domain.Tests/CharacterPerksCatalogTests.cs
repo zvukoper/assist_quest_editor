@@ -24,6 +24,8 @@ public sealed class CharacterPerksCatalogTests
     [InlineData("analgesia")]
     [InlineData("unkempt")]
     [InlineData("bum")]
+    [InlineData("thirst")]
+    [InlineData("dehydration")]
     [InlineData("analgesic_overuse")]
     [InlineData("drowsiness")]
     [InlineData("nicotine_rebound")]

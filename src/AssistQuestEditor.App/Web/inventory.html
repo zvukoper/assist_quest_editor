@@ -45,6 +45,17 @@
     overflow:auto;
     padding:8px;
   }
+  /* «Использовать» при полном желудке. Атрибут disabled сам по себе гасит
+     кнопку, но подсказка и курсор заданы явно: без них пункт выглядел бы
+     обычным, и игрок жал бы на него без результата. */
+  .graphContextMenuItemDisabled {
+    opacity:.45;
+    cursor:not-allowed;
+  }
+  .graphContextMenuItemDisabled:hover {
+    background:transparent;
+    color:inherit;
+  }
 </style>
 </head>
 <body>
@@ -60,7 +71,7 @@
 
 <div class="inventoryNotifications" id="inventoryNotifications" aria-live="polite"></div>
 
-<script src="vitals.js?v=c48bd86b"></script>
+<script src="vitals.js?v=2eae4807"></script>
 <script src="inventory.js?v=85fe82ff"></script>
 <script src="playerPanels.js?v=e2c1841d"></script>
 <script>
@@ -73,6 +84,48 @@
   var snapshot = null;
   var catalog = [];
   var activePlayerTab = "character";
+
+  // Каталог УПОТРЕБИМОГО с признаком «помещается в желудок».
+  //
+  // Живёт отдельно от `catalog` и обновляется ЖИВЫМ состоянием: признак
+  // меняется каждую секунду по мере усвоения, а полный снимок приходит редко.
+  // Второй таблицы пищевой ценности здесь нет — всё считает домен.
+  var consumables = [];
+
+  /**
+   * Помещается ли предмет в СВОБОДНОЕ место желудка.
+   *
+   * Признак приходит из домена (`fits`). Своей проверки здесь быть не должно:
+   * правило «объём больше свободного места — нельзя» одно, и повторённое в этой
+   * странице оно разошлось бы с движком — тогда «Использовать» осталось бы
+   * активным, а предмет молча не съедался бы (или наоборот).
+   *
+   * Отсутствие записи в каталоге употребимого (старый Хост, несъедобный предмет)
+   * трактуется как «помещается»: сердить всё меню из-за пропавшего поля нельзя.
+   */
+  function fitsStomach(itemId) {
+    var wanted = String(itemId || "").toLowerCase();
+    if (!wanted) return true;
+    var entry = consumables.find(function (x) {
+      return String(x.id || "").toLowerCase() === wanted;
+    });
+    if (!entry || entry.fits == null) return true;
+    return entry.fits !== false;
+  }
+
+  /**
+   * Отпечаток признаков «помещается» — чтобы НЕ перерисовывать сетку зря.
+   *
+   * Живое состояние приходит несколько раз в секунду, а перерисовка сбрасывает
+   * подсветку под курсором и заново вешает слушатели. Сравнение по паре
+   * «id:признак» ловит именно изменение годности и ничего больше.
+   */
+  function consumablesFitsSignature(list) {
+    return (Array.isArray(list) ? list : [])
+      .map(function (x) { return String(x.id || "") + ":" + (x.fits === false ? "0" : "1"); })
+      .sort()
+      .join("|");
+  }
 
   var seenItemIds = new Set();
 
@@ -181,9 +234,31 @@
 
     var item = AssistInventory.itemDefinition(catalog, itemId);
     var name = menu.querySelector("[data-inventory-menu-name]");
+    var amount = Number((snapshot.inventory.items || {})[itemId] || 0);
+
+    // «Использовать» НЕАКТИВНО, когда предмет не помещается в желудок, и рядом
+    // написано почему (требование автора: «в инвентаре "Использовать" неактивно
+    // и в скобках (желудок полон)»). Ограничение только для СЪЕДОБНОГО: у
+    // несъедобного предмета места в желудке не бывает вовсе, и гасить ему
+    // «Использовать» было бы неверно.
+    var consumable = consumables.find(function (x) {
+      return String(x.id || "").toLowerCase() === String(itemId || "").toLowerCase();
+    });
+    var usable = !consumable || fitsStomach(itemId);
+
     if (name)
-      name.textContent = (item.name || itemId) + " ×" +
-        Number((snapshot.inventory.items || {})[itemId] || 0);
+      name.textContent = (item.name || itemId) + " ×" + amount +
+        (usable ? "" : " (желудок полон)");
+
+    var useButton = menu.querySelector("[data-inventory-menu-action='use']");
+    if (useButton) {
+      useButton.disabled = !usable;
+      useButton.classList.toggle("graphContextMenuItemDisabled", !usable);
+      useButton.textContent = usable ? "Использовать" : "Использовать (желудок полон)";
+      useButton.title = usable
+        ? "Употребить предмет"
+        : "В желудке недостаточно свободного места";
+    }
 
     menu.dataset.inventoryItemId = itemId;
     menu.hidden = false;
@@ -274,12 +349,28 @@
     if (message.type === "snapshot") {
       snapshot = message.snapshot || null;
       catalog = Array.isArray(message.itemCatalog) ? message.itemCatalog : [];
+      if (Array.isArray(message.consumables)) consumables = message.consumables;
       // Скорости шкал приходят отдельно от самого снимка: их считает домен, а
       // окно «Игрок» показывает разметку шкал ТЕМ ЖЕ модулем, что и Симулятор —
       // значит и подсказка с «ед./мин» должна работать здесь так же.
       if (snapshot && message.conditionRates) {
         snapshot.conditionRates = message.conditionRates;
       }
+      render();
+      return;
+    }
+
+    // ЖИВОЕ состояние перерисовывает сетку ТОЛЬКО когда изменился признак
+    // «помещается»: оно приходит несколько раз в секунду, и полная
+    // перерисовка на каждом кадре убила бы подсветку под курсором (ровно тот
+    // дефект, из-за которого значок «новый» однажды мигал).
+    if (message.type === "live_state") {
+      if (!Array.isArray(message.consumables)) return;
+      var changed = consumablesFitsSignature(consumables) !==
+        consumablesFitsSignature(message.consumables);
+      if (!changed) return;
+      if (snapshot && message.conditions) snapshot.conditions = message.conditions;
+      consumables = message.consumables;
       render();
       return;
     }

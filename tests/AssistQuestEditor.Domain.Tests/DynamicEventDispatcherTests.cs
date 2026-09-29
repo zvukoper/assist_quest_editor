@@ -450,10 +450,162 @@ public sealed class DynamicEventDispatcherTests
         Assert.Single(completed);
         Assert.Equal("5000", completed[0].Payload["money"]);
         Assert.Equal("50", completed[0].Payload["experience"]);
-        Assert.Equal("ОК: Тестовый тайник. Получено 5 000 ₽ и +50 опыта.", completed[0].Payload["message"]);
+        Assert.Equal(
+            "ОК: Тестовый тайник. Получено 5 000 ₽ и +50 опыта. Событие деактивировано для повторной генерации.",
+            completed[0].Payload["message"]);
 
         // Consumed не занимает active-slot: следующая генерация разрешена.
         Assert.True(dispatcher.TrySpawn("test_dynamic_cache"));
+    }
+
+    [Fact]
+    public void PendingTriggerDoesNotRepublishUnchangedStateOnEveryTick()
+    {
+        // Регрессия: ветка «триггер сработал, но генерация отложена» возвращает
+        // true на каждом тике (это нужно для перепроверки), а Tick безусловно
+        // писал канал. Hub публиковал ChannelChanged 4 раза в секунду, и журнал
+        // заполнялся строкой «Динамических событий: N» без единого изменения мира.
+        var point = Point("cache", "Тайник", "cache", 0);
+        var hub = new SimulatorDataChannelHub(new[] { point });
+
+        var definition = Definition(
+            "cache",
+            "Тайник",
+            "cache-location",
+            trigger: new DynamicEventTriggerDefinition
+            {
+                Type = "DistanceTravelled",
+                MinDistanceMeters = 100,
+                MaxDistanceMeters = 100
+            },
+            policy: new DynamicEventSpawnPolicy
+            {
+                MaxActiveInstances = 1,
+                RemoveOnCompleted = false
+            });
+
+        var dispatcher = new DynamicEventDispatcher(
+            hub,
+            new FakeLocationResolver(point),
+            () => new[] { definition },
+            new Random(1));
+
+        // Занятый лимит гарантирует, что следующий порог останется pending.
+        Assert.True(dispatcher.TrySpawn("cache"));
+
+        var publications = 0;
+        hub.DynamicEvents.Changed += (_, _) => publications++;
+
+        dispatcher.SetSimulationRunning(true);
+        MovePlayer(hub, 100);
+        dispatcher.Tick();
+
+        Assert.True(Assert.Single(dispatcher.State.Schedules).TriggerPending);
+
+        var afterPending = publications;
+
+        // Игрок не двигается, лимит занят: состояние мира больше не меняется.
+        for (var index = 0; index < 5; index++)
+            dispatcher.Tick();
+
+        Assert.Equal(afterPending, publications);
+    }
+
+    /// <summary>
+    /// Реальный путь демо-тайника: экземпляр создаётся при СТАРТЕ симуляции
+    /// (spawnOnSimulationStart), игрок въезжает в радиус, и событие обязано
+    /// завершиться, выдав деньги, опыт, ОК-сообщение и деактивироваться.
+    ///
+    /// Отличие от <see cref="TestDynamicCacheAutoCompletesOnTriggerAndGrantsRewards"/>
+    /// принципиально: тот спавнит вручную и потому не покрывает ветку
+    /// «материализация при старте + автообнаружение». Именно в ней жил дефект
+    /// автора: тайник обнаруживался, но события завершения не было, и награды
+    /// не выдавались.
+    /// </summary>
+    [Fact]
+    public void TestDynamicCacheSeededOnStartIsDiscoveredAndGrantsRewards()
+    {
+        var point = Point("cache-seed", "Тестовый тайник", "cache", 100);
+        var hub = new SimulatorDataChannelHub(new[] { point });
+
+        var definition = Definition(
+            "test_dynamic_cache",
+            "Тестовый динамический тайник",
+            "test-cache-location",
+            // Тот же триггер, что у поставляемого тайника: он ждёт СОБСТВЕННОГО
+            // обнаружения, а не ручного запроса.
+            new DynamicEventTriggerDefinition
+            {
+                Type = "DynamicEventDiscovery",
+                SourceDefinitionId = "test_dynamic_cache",
+                MinGameHours = 5d / 60d,
+                MaxGameHours = 5d / 60d
+            },
+            new DynamicEventSpawnPolicy
+            {
+                MaxActiveInstances = 1,
+                SpawnChance = 1d,
+                SpawnOnSimulationStart = true,
+                RespawnOnExpired = true,
+                RemoveOnCompleted = true
+            }) with
+        {
+            Completion = new DynamicEventCompletionDefinition
+            {
+                CompleteOnDiscovery = true,
+                Money = 500,
+                Experience = 25,
+                Message = "Тайник найден: +500 ₽ и +25 опыта."
+            },
+            TriggerRadius = 35
+        };
+
+        var dispatcher = new DynamicEventDispatcher(
+            hub,
+            new FakeLocationResolver(point),
+            () => new[] { definition },
+            new Random(1));
+
+        var completed = new List<SimulatorEvent>();
+        dispatcher.Published += e =>
+        {
+            if (e.EventType.Equals("DynamicEventCompleted", StringComparison.OrdinalIgnoreCase))
+                completed.Add(e);
+        };
+
+        // Старт симуляции материализует тайник сам, без TrySpawn.
+        dispatcher.SetSimulationRunning(true);
+        var seeded = Assert.Single(dispatcher.State.Instances);
+        Assert.Equal(DynamicEventInstanceStatus.Active, seeded.Status);
+
+        var before = hub.Get<PlayerProgressState>("player-progress").Value;
+
+        // Игрок ещё далеко: обнаружения нет.
+        MovePlayer(hub, 0);
+        dispatcher.Tick();
+        Assert.Empty(completed);
+
+        // Въезд в радиус: автообнаружение + завершение с наградой.
+        MovePlayer(hub, 100);
+        dispatcher.Tick();
+
+        var after = hub.Get<PlayerProgressState>("player-progress").Value;
+
+        Assert.Equal(before.Money + 500, after.Money);
+        Assert.Equal(before.Experience + 25, after.Experience);
+
+        // Событие ДЕАКТИВИРОВАНО: removeOnCompleted убирает использованный
+        // экземпляр, поэтому активных тайников не остаётся, и следующая
+        // генерация (respawnOnExpired) разрешена.
+        Assert.Empty(dispatcher.State.Instances);
+
+        Assert.Single(completed);
+        Assert.Equal("500", completed[0].Payload["money"]);
+        Assert.Equal("25", completed[0].Payload["experience"]);
+        Assert.Contains("Тайник найден", completed[0].Payload["message"]);
+        Assert.Contains(
+            "Событие деактивировано для повторной генерации.",
+            completed[0].Payload["message"]);
     }
 
     private static DynamicEventDefinition Definition(

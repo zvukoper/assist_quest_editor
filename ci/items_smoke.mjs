@@ -20,7 +20,7 @@ const root = process.cwd();
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "aq-items-"));
 fs.mkdirSync(path.join(tmp, "Web"), { recursive: true });
 
-for (const name of ["theme.css", "vitals.js", "items.js", "web_log.js"]) {
+for (const name of ["theme.css", "vitals.js", "items.js", "web_log.js", "dom_reconcile.js"]) {
   const src = path.join(root, "src", "AssistQuestEditor.App", "Web", name);
   if (fs.existsSync(src)) fs.copyFileSync(src, path.join(tmp, "Web", name));
 }
@@ -43,21 +43,29 @@ const payload = {
     {
       id: "water.bottle", name: "Вода", description: "Бутылка воды. Восполняет жидкость.",
       category: "Напиток", color: "#4b8fe8", letter: "В", quantity: 3,
-      feeds: true, grams: 500, kilocalories: 0, waterMilliliters: 500,
+      feeds: true, edible: true, grams: 500, milliliters: 500,
+      kilocalories: 0, waterMilliliters: 500,
       energyPercent: 0, hydrationPercent: 3.33
     },
     {
+      // ОБЪЁМ ПОРЦИИ (400) НАРОЧНО ОТЛИЧАЕТСЯ от содержимого ВОДЫ (250) —
+      // это прямой сторож дефекта автора: «Банан 110 мл, а добавилось 150».
+      // Окно печатало `waterMilliliters`, и объём в карточке не совпадал с тем,
+      // что займёт порция. Показ 250 вместо 400 обязан валить проверку.
       id: "food.meal", name: "Паёк", description: "Нормальная еда: энергия и жидкость.",
       category: "Еда", color: "#b98a55", letter: "П", quantity: 0,
-      feeds: true, grams: 400, kilocalories: 600, waterMilliliters: 250,
+      feeds: true, edible: true, grams: 400, milliliters: 400,
+      kilocalories: 600, waterMilliliters: 250,
       energyPercent: 12, hydrationPercent: 1.67
     },
     {
       // Неедовый предмет: блока пищевой ценности быть НЕ должно — «0 ккал»
-      // читалось бы как «еда, но бесполезная».
+      // читалось бы как «еда, но бесполезная». ОБЪЁМ при этом показать надо:
+      // это свойство предмета, а не еды.
       id: "note", name: "Записка", description: "Короткая записка из тайника.",
       category: "Квестовый предмет", color: "#e7d58a", letter: "З", quantity: 1,
-      feeds: false, grams: 0, kilocalories: 0, waterMilliliters: 0,
+      feeds: false, edible: false, grams: 0, milliliters: 0,
+      kilocalories: 0, waterMilliliters: 0,
       energyPercent: 0, hydrationPercent: 0
     }
   ]
@@ -93,6 +101,10 @@ try {
     quantity: (() => {
       const input = node.querySelector("[data-item-qty]");
       return input ? input.value : null;
+    })(),
+    badge: (() => {
+      const badge = node.querySelector(".itemEdibleBadge");
+      return badge ? badge.textContent.trim() : "";
     })()
   })));
 
@@ -122,17 +134,66 @@ try {
   const water = cards.find(card => card.id === "water.bottle");
   check(/Пищевая ценность/.test(water.text),
     "у воды нет блока пищевой ценности.");
-  check(/500 мл/.test(water.text), "у воды не показан объём.");
+  check(/Объём порции 500 мл/.test(water.text),
+    "у воды не показан объём порции в миллилитрах: " + water.text);
   check(/3\.3%/.test(water.text), "у воды не показан процент шкалы.");
 
   const meal = cards.find(card => card.id === "food.meal");
   check(/600 ккал/.test(meal.text), "у пайка не показана калорийность.");
   check(/Энергия/.test(meal.text), "у пайка не сказано, что он даёт энергию.");
+  // ПРЯМОЙ СТОРОЖ ДЕФЕКТА АВТОРА: объём порции (400), а НЕ содержимое воды (250).
+  // Прежняя карточка печатала `waterMilliliters`, и «Паёк 250 мл» не совпадал с
+  // тем, сколько паёк займёт в желудке (400).
+  check(/Объём порции 400 мл/.test(meal.text),
+    "у пайка показан не объём порции, а содержимое воды: " + meal.text);
+  // Отрицание — по ПОДПИСИ ОБЪЁМА, а не по всей карточке: «Жидкость 250 мл» там
+  // обязана быть, и проверка всей карточки ловила бы именно её.
+  check(!/Объём порции 250 мл/.test(meal.text),
+    "у пайка объём порции показан как содержимое воды (250 мл): " + meal.text);
 
   // Неедовый предмет: блока пищевой ценности быть не должно.
   const note = cards.find(card => card.id === "note");
   check(!/Пищевая ценность/.test(note.text),
     "у неедового предмета показана пищевая ценность: " + note.text);
+
+  // ── Салатовая плашка «съедобно» ───────────────────────────────────────────
+  // Автор: «съедобные предметы пометить салатовой плашкой - "съедобно"».
+  check(/съедобно/.test(water.badge), "у воды нет плашки «съедобно»: " + water.badge);
+  check(/съедобно/.test(meal.badge), "у пайка нет плашки «съедобно»: " + meal.badge);
+  check(note.badge === "",
+    "у неедового предмета есть плашка «съедобно»: " + note.badge);
+  // Плашка салатовая, а не какого-то другого цвета: зелёный — это и есть
+  // «съедобно», и подмена цвета отняла бы смысл метки.
+  const badgeColor = await page.$eval(".itemEdibleBadge", node => {
+    const rgb = getComputedStyle(node).backgroundColor.match(/\d+/g).map(Number);
+    return { r: rgb[0], g: rgb[1], b: rgb[2] };
+  });
+  check(badgeColor.g > badgeColor.r && badgeColor.g > badgeColor.b,
+    "плашка «съедобно» не салатовая: rgb(" +
+    badgeColor.r + "," + badgeColor.g + "," + badgeColor.b + ")");
+
+  // ── Галочка «только съедобное» ────────────────────────────────────────────
+  // Автор: «сделать возле поиска галочку - "только съедобное" - которая скрывает
+  // все несъедобные предметы из списка».
+  const edibleFilter = await page.$("#itemsOnlyEdible");
+  check(!!edibleFilter, "возле поиска нет галочки «только съедобное».");
+  if (edibleFilter) {
+    await page.check("#itemsOnlyEdible");
+    await page.waitForTimeout(80);
+    const filtered = await page.$$eval(".itemCard", nodes =>
+      nodes.map(node => node.getAttribute("data-item-id")));
+    check(!filtered.includes("note"),
+      "галочка «только съедобное» не скрыла неедовый предмет: " + filtered.join(","));
+    check(filtered.includes("water.bottle") && filtered.includes("food.meal"),
+      "галочка «только съедобное» скрыла съедобные предметы: " + filtered.join(","));
+    // Снятие галочки обязано вернуть весь каталог: фильтр — это ПОКАЗ, и он не
+    // имеет права терять предметы навсегда.
+    await page.uncheck("#itemsOnlyEdible");
+    await page.waitForTimeout(80);
+    const restored = await page.$$eval(".itemCard", nodes => nodes.length);
+    check(restored === payload.entries.length,
+      "снятие галочки не вернуло весь каталог: " + restored + " из " + payload.entries.length);
+  }
 
   // ── Количество ────────────────────────────────────────────────────────────
   // Поле показывает ЗАПАС, а не ноль по умолчанию: 0 — это «предмета нет»,
@@ -174,6 +235,38 @@ try {
   check(typed && typed.itemId === "note" && typed.quantity === 7,
     "поле количества отправило неверное значение: " + JSON.stringify(typed));
 
+  // ── Одна колонка и отсутствие горизонтальной прокрутки ────────────────────
+  // Требование автора: «сортировать по алфавиту и сделать в одну колонку с
+  // прокруткой. Ширину сократить в два раза. Горизонтальную прокрутку исключить,
+  // текст переносить.» Проверяется ФАКТИЧЕСКАЯ раскладка: число дорожек сетки и
+  // отсутствие горизонтального переполнения. Без этого возврат multi-column
+  // `auto-fill` прошёл бы незамеченным (плитка и количество остались бы верны).
+  const layout = await page.evaluate(() => {
+    const body = document.getElementById("itemsBody");
+    const style = getComputedStyle(body);
+    const tracks = style.gridTemplateColumns.trim().split(/\s+/).filter(Boolean);
+    return {
+      tracks: tracks.length,
+      scrollWidth: body.scrollWidth,
+      clientWidth: body.clientWidth,
+      overflowX: style.overflowX
+    };
+  });
+  check(layout.tracks === 1,
+    "каталог не в одну колонку: дорожек сетки " + layout.tracks + ".");
+  check(layout.scrollWidth <= layout.clientWidth + 1,
+    "горизонтальная прокрутка каталога: " + layout.scrollWidth + " > " + layout.clientWidth + ".");
+  check(layout.overflowX === "hidden",
+    "горизонтальная прокрутка не запрещена явно: overflow-x = " + layout.overflowX + ".");
+
+  // Алфавитный порядок карточек: сортировка живёт в JS, и «выключить» её можно,
+  // не тронув ни отрисовку, ни количество. Имена в фикстуре даны НЕ по алфавиту
+  // («Вода», «Паёк», «Записка»), поэтому проверка осмысленна.
+  const shownNames = cards.map(card => card.name);
+  const alphabetical = shownNames.slice().sort((a, b) => a.localeCompare(b, "ru"));
+  check(JSON.stringify(shownNames) === JSON.stringify(alphabetical),
+    "предметы не по алфавиту: " + JSON.stringify(shownNames) + ".");
+
   // ── Поиск ─────────────────────────────────────────────────────────────────
   await page.fill("#itemsSearch", "паёк");
   await page.waitForTimeout(80);
@@ -203,6 +296,94 @@ try {
   check(highlighted && highlighted.background !== "rgba(0, 0, 0, 0)",
     "у подсвеченного предмета нет более светлого фона: " +
     (highlighted && highlighted.background));
+
+  // ── Фликер и тормоза при ЖИВЫХ обновлениях ────────────────────────────────
+  //
+  // Автор: «сильно тормозит список предметов. Прокрутка колесом или скроллом
+  // тормозит. Если выключить симуляцию, всё плавно передвигается».
+  //
+  // Причина: список пересобирался через `innerHTML` на КАЖДОМ обновлении, то есть
+  // все карточки заменялись новыми узлами четыре раза в секунду. Замена узла —
+  // это снятие и вставка в документ: карточка под курсором теряет `:hover`
+  // (мерцание плашек), выделение текста сбрасывается, а вёрстка получает
+  // пересчёт ровно в тот момент, когда пользователь тянет прокрутку.
+  //
+  // Проверяются ДВА свойства, и оба обязаны держаться:
+  //  1) повтор того же списка не трогает DOM ВООБЩЕ — ни одного узла;
+  //  2) при настоящем изменении (правка количества) карточки остаются ТЕМИ ЖЕ
+  //     узлами, а не пересоздаются.
+  {
+    // Повтор ТОГО ЖЕ списка — самый частый случай живого обновления.
+    await page.evaluate(data => window.chrome.webview.dispatch("message", data), payload);
+    await page.evaluate(() => {
+      window.__mutations = { added: 0, removed: 0 };
+      window.__observer = new MutationObserver(records => {
+        for (const record of records) {
+          window.__mutations.added += record.addedNodes.length;
+          window.__mutations.removed += record.removedNodes.length;
+        }
+      });
+      window.__observer.observe(document.getElementById("itemsBody"),
+        { childList: true, subtree: true });
+    });
+
+    for (let tick = 0; tick < 4; tick++) {
+      await page.evaluate(data => window.chrome.webview.dispatch("message", data), payload);
+      await page.waitForTimeout(30);
+    }
+
+    const repeated = await page.evaluate(() => {
+      window.__observer.disconnect();
+      return window.__mutations;
+    });
+    check(repeated.added === 0 && repeated.removed === 0,
+      "повтор того же списка предметов пересобирает разметку: добавлено узлов " +
+      repeated.added + ", убрано " + repeated.removed + ". Каждая замена узла — это " +
+      "потерянный :hover под курсором и пересчёт вёрстки при прокрутке");
+
+    // Настоящее изменение: количество предмета. Узлы обязаны УЦЕЛЕТЬ.
+    await page.evaluate(() => {
+      window.__kept = {
+        water: document.querySelector("[data-item-id='water.bottle']"),
+        note: document.querySelector("[data-item-id='note']"),
+        tile: document.querySelector("[data-item-id='water.bottle'] .itemTile"),
+        minus: document.querySelector("[data-item-id='water.bottle'] .itemMicro")
+      };
+    });
+
+    await page.evaluate(data => window.chrome.webview.dispatch("message", data), {
+      type: "items",
+      entries: payload.entries.map(entry =>
+        entry.id === "water.bottle" ? { ...entry, quantity: 9 } : entry)
+    });
+    await page.waitForTimeout(80);
+
+    const identity = await page.evaluate(() => ({
+      water: window.__kept.water === document.querySelector("[data-item-id='water.bottle']"),
+      note: window.__kept.note === document.querySelector("[data-item-id='note']"),
+      tile: window.__kept.tile === document.querySelector("[data-item-id='water.bottle'] .itemTile"),
+      minus: window.__kept.minus === document.querySelector("[data-item-id='water.bottle'] .itemMicro"),
+      quantity: document.querySelector("[data-item-id='water.bottle'] [data-item-qty]").value
+    }));
+
+    check(identity.quantity === "9",
+      "количество в карточке не обновилось при изменении списка: " + identity.quantity);
+    check(identity.water,
+      "карточка предмета подменена при изменении количества — она мерцает под курсором");
+    check(identity.note,
+      "соседняя карточка подменена при изменении количества другого предмета");
+    check(identity.tile && identity.minus,
+      "плитка или микрокнопка карточки пересозданы: выделение и курсор сбрасываются");
+
+    // Ключ карточки обязан быть в разметке: без него сверка узлов ключует
+    // карточки по ПОРЯДКУ, а порядок задаёт сортировка по названию — правка
+    // количества переставляла бы карточки местами.
+    const keyed = await page.$$eval(".itemCard",
+      nodes => nodes.every(node => (node.getAttribute("data-key") || "").length > 0));
+    check(keyed,
+      "у карточек нет ключа data-key: сверка узлов считала бы их безымянными и " +
+      "могла бы переставить карточки при правке количества");
+  }
 
   if (errors.length) throw new Error("pageerror: " + errors.join(" | "));
 

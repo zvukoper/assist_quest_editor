@@ -9,28 +9,166 @@
 html,body{height:100%;margin:0;overflow:hidden;background:#0d1014}
 .indicatorsWindow{height:100%;box-sizing:border-box;padding:8px;display:flex;flex-direction:column;min-height:0}
 .indicatorsHead{flex:0 0 auto;display:flex;align-items:baseline;gap:8px;padding:2px 2px 8px}
-.indicatorsHead strong,.characterStateLabel,.characterStateValue{font-size:13px}
-.characterStateValue{font-weight:800}
+.indicatorsHead strong,.characterStateLabel,.characterStateValue{font-size:14px}
+.characterStateValue{font-weight:600}
 .stateCritical{color:var(--red)}.stateSevere{color:#ffd400}.stateUnsat{color:#ff8c00}.stateSatisfactory{color:var(--muted)}.stateNormal{color:#4fd66d}.statePositive,.stateExcellent{color:var(--lime)}
-.indicatorsDivider{color:var(--muted);font-size:13px}
-.indicatorsBody{flex:1 1 auto;min-height:0;overflow-y:auto;overflow-x:hidden;display:flex;flex-direction:column;gap:8px}
-.indicatorCard{border:1px solid var(--border);border-radius:7px;background:rgba(23,24,25,.96);overflow:hidden;transition:border-color 80ms ease,box-shadow 120ms ease}
+.indicatorsDivider{color:var(--muted);font-size:14px}
+/* Тело монитора — МНОГОКОЛОНОЧНОЕ: блоки шириной 500px раскладываются в столько
+   колонок, сколько влезает по ширине окна, и заполняют свободное место. Прокрутка
+   только вертикальная. Автор запретил и обрезку по высоте, и собственную
+   прокрутку внутри блока, поэтому карточка имеет height:auto и overflow:visible,
+   а раскладка не режет её: flex-wrap и align-items:flex-start оставляют карточке
+   её собственную высоту — по контенту. */
+.indicatorsBody{
+  flex:1 1 auto;min-height:0;overflow-y:auto;overflow-x:hidden;
+  display:flex;flex-wrap:wrap;align-content:flex-start;align-items:flex-start;gap:8px;
+}
+.indicatorCard{
+  flex:0 1 500px;width:500px;max-width:100%;box-sizing:border-box;
+  border:1px solid var(--border);border-radius:7px;background:rgba(23,24,25,.96);
+  overflow:visible;
+  transition:border-color 80ms ease,box-shadow 120ms ease;
+}
 .indicatorCard.indicatorHighlight{border-color:var(--accent);box-shadow:0 0 0 2px rgba(250,176,3,.18)}
-.indicatorTopRow{min-height:31px;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));align-items:center;border-bottom:1px solid rgba(255,255,255,.08);font-size:13px;line-height:1.15;font-weight:800}
+/* Верхняя строка карточки — ОДИН шрифт на все три ячейки (12px/600), жирностью
+   выделено ТОЛЬКО имя шкалы (700). Третья колонка содержит шкалу над значением,
+   поэтому она auto, а средняя тянется и переносит текст. */
+.indicatorTopRow{min-height:31px;display:grid;grid-template-columns:auto minmax(0,1fr) auto;align-items:center;border-bottom:1px solid rgba(255,255,255,.08);font-size:12px;line-height:1.15;font-weight:600}
 .indicatorTopRow>div{min-width:0;padding:6px 9px}
-.indicatorDynamics{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.indicatorValue{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
-.indicatorName{color:#fff}.valueReal{color:var(--muted)}.valuePercent{color:var(--accent);font-weight:800}
-.trendGood,.factorGood{color:var(--lime);font-weight:800}.trendBad,.factorBad{color:var(--red);font-weight:800}.trendFlat,.factorNeutral{color:var(--muted);font-weight:700}
-.indicatorFactors{padding:7px 9px 8px}.indicatorFact{font-size:10px;line-height:1.4;margin:2px 0;color:#e8edf3}.dynamicFactor{color:#fff}.permanentActive{color:#fff;font-weight:700}.permanentInactive{color:#7b848e;font-weight:400}.factorContribution{font-size:10px}
+/* Динамику не обрезаем: переносим. Обрезанная стрелка с многоточием читалась бы
+   как «изменений нет», хотя шкала движется. */
+.indicatorDynamics{white-space:normal;overflow-wrap:anywhere}
+/* Третья ячейка: СВЕРХУ шкала, СНИЗУ значение — порядок задан автором. Шкала
+   рисуется той же геометрией и цветами, что и в сайдбаре (AssistVitals.barTrack),
+   чтобы одна и та же шкала не выглядела в двух окнах по-разному. */
+.indicatorValue{display:flex;flex-direction:column;align-items:flex-end;gap:3px;text-align:right;font-size:12px;font-variant-numeric:tabular-nums;white-space:nowrap}
+.indicatorScale{width:120px;max-width:100%}
+.indicatorScale .dualBar{height:7px}
+.indicatorValueText{white-space:nowrap}
+/* Пунктир под именем — видимый признак того, что при наведении появится
+   описание шкалы и её влияние (тот же приём, что у эффектов в сайдбаре). */
+.indicatorName{color:#fff;font-size:12px;font-weight:700;cursor:help;text-decoration:underline dotted rgba(255,255,255,.32);text-underline-offset:2px}
+.valueReal{color:var(--muted)}.valuePercent{color:var(--accent);font-weight:600}
+.trendGood,.factorGood{color:var(--lime);font-weight:600}.trendBad,.factorBad{color:var(--red);font-weight:600}.trendFlat,.factorNeutral{color:var(--muted);font-weight:600}
+.indicatorFactors{padding:7px 9px 8px}.indicatorFact{font-size:11px;line-height:1.4;margin:2px 0;color:#e8edf3}.dynamicFactor{color:#fff}.permanentActive{color:#fff;font-weight:600}.permanentInactive{color:#7b848e;font-weight:400}.factorContribution{font-size:11px}
 .dynamicItem{display:flex;align-items:center;flex-wrap:wrap;gap:4px}
-.indicatorChip{appearance:none;border:1px solid rgba(255,255,255,.16);border-radius:4px;padding:2px 6px;font-size:10px;font-weight:800;cursor:pointer;background:rgba(255,255,255,.06);color:#fff}
+.indicatorChip{appearance:none;border:1px solid rgba(255,255,255,.16);border-radius:4px;padding:2px 6px;font-size:11px;font-weight:600;cursor:pointer;background:rgba(255,255,255,.06);color:#fff}
 .indicatorChip:hover{background:rgba(255,255,255,.12);border-color:var(--accent)}
 .buffChip{color:var(--lime);border-color:rgba(17,251,6,.30);background:rgba(17,251,6,.06)}
 .debuffChip{color:#ff8a8a;border-color:rgba(207,12,12,.35);background:rgba(207,12,12,.08)}
 .itemChip{color:var(--accent);border-color:rgba(250,176,3,.35);background:rgba(250,176,3,.08)}
 .indicatorItemMeta{color:var(--muted)}.indicatorItemMeta .factorContribution{margin-left:2px}
-@media(max-width:760px){.indicatorTopRow,.indicatorsHead strong,.characterStateLabel,.characterStateValue{font-size:11px}.indicatorTopRow>div{padding:5px 6px}.indicatorFact,.factorContribution,.indicatorChip{font-size:9px}}
+/* ── Блок «Желудок» ────────────────────────────────────────────────────────
+   Автор: «предлагаю сделать желудок прямоугольной областью, такой же как другие
+   блоки шкалы, и встроить в общую сетку со шкалами. Объём желудка визуально
+   будет состоять из 4 строк высотой по 35px. То есть 1 литр желудка нужно
+   распределить по области размером 470x140px».
+
+   Поэтому блок — ОБЫЧНАЯ ЯЧЕЙКА СЕТКИ шириной как карточка шкалы (500px), а не
+   полоса во всю ширину: полоса ломала сетку и не давала области соответствовать
+   литру (чем шире окно, тем больше литра приходилось бы на пиксель). */
+.stomachCard{flex:0 1 500px;width:500px;max-width:100%}
+.stomachHead{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap;padding:6px 9px;border-bottom:1px solid rgba(255,255,255,.08);font-size:12px;font-weight:600}
+.stomachHead .stomachTitle{color:#fff;font-weight:700}
+.stomachHead .stomachDynamics{color:var(--muted);font-weight:600}
+.stomachHead .stomachFactors{color:var(--muted);font-weight:400}
+/* Занятый объём желудка: «0,55 / 1 л». Стоит ПОСЛЕ влияний усвоения и перед
+   кнопкой, отделён рамкой слева — это не часть фразы об усвоении, а отдельный
+   показатель (объём задаёт предел, а не скорость). */
+.stomachVolume{color:#e8edf3;font-weight:600;font-variant-numeric:tabular-nums;padding-left:8px;border-left:1px solid rgba(255,255,255,.14)}
+.stomachFactorGood{color:var(--lime);font-weight:600}
+.stomachFactorBad{color:var(--red);font-weight:600}
+/* Кнопка «Содержимое» — в шапке, ПОСЛЕ динамики усвоения и её влияний.
+   margin-left:auto отодвигает её к правому краю строки, чтобы она не разрывала
+   фразу «Усвоение: +N ккал/мин, влияние 1, влияние 2». */
+.stomachContentsButton{appearance:none;margin-left:auto;border:1px solid rgba(255,255,255,.18);border-radius:4px;padding:2px 8px;font-size:11px;font-weight:600;cursor:pointer;background:rgba(255,255,255,.06);color:#e8edf3}
+.stomachContentsButton:hover{background:rgba(250,176,3,.16);border-color:var(--accent);color:#fff}
+/* Область желудка — ЧЕТЫРЕ СТРОКИ ПО 35px (автор: «объём желудка визуально
+   будет состоять из 4 строк высотой по 35px»). Высота ЖЁСТКАЯ, а не по
+   содержимому: иначе область не соответствовала бы литру, и «занято 1 из 1»
+   показывалось бы при визуально пустой половине (именно это и увидел автор).
+   Порции ставит укладчик в indicators.js — плитками без наложения, и сумма их
+   площадей строго отвечает занятым миллилитрам. */
+.stomachArea{
+  position:relative;
+  width:100%;box-sizing:border-box;height:140px;
+  padding:7px;margin:8px 0 9px;
+  border:1px dashed rgba(255,255,255,.18);border-radius:6px;
+  background:rgba(255,255,255,.025);cursor:context-menu;
+  overflow:hidden;
+}
+.stomachAreaEmpty{position:absolute;left:0;right:0;top:50%;transform:translateY(-50%);text-align:center;color:#6d757e;font-size:11px}
+/* Порция — плитка внутри области желудка. Координаты и размер ставит УКЛАДЧИК
+   (indicators.js): место в области значения не имеет, но плитки не должны
+   накладываться друг на друга, а их суммарная площадь обязана строго отвечать
+   занятым миллилитрам. Поэтому absolute + px, а не поток. */
+.stomachPortion{
+  position:absolute;box-sizing:border-box;
+  padding:3px 6px;border:1px solid rgba(0,0,0,.4);border-radius:4px;
+  color:#fff;font-size:10px;line-height:1.2;
+  overflow:hidden;cursor:context-menu;
+  transition:filter 90ms ease;
+}
+.stomachPortion:hover{filter:brightness(1.22)}
+/* Продолжение крупной порции: тот же предмет, но в следующем ряду. Текст в нём
+   не повторяется (иначе «Вода» стояла бы два раза и предмет читался бы как два),
+   поэтому внутренний отступ ему не нужен. */
+.stomachPortionPart{padding:0}
+/* Обе строки плитки имеют ЖЁСТКУЮ высоту строки (12px), потому что шрифт
+   подбирается автоматически: без этого уменьшение шрифта сжимало бы плитку, и
+   она перестала бы быть ровной в ряду. Высота строки берётся по максимальному
+   шрифту (10px × 1,2), а уменьшенный шрифт просто центрируется в ней. */
+.stomachPortionName{font-weight:700;height:12px;line-height:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+/* Цвет подписи НЕ задаётся здесь. Он выбирается по яркости заливки предмета в
+   indicators.js (readableInk): у молока и витамина заливка светлая, и жёсткий
+   светлый цвет делал подпись нечитаемой — замечание автора «плашки светлые,
+   текст белый». Правило ниже оставлено иерархическим: таймер чуть тише
+   названия, но ТЕМ ЖЕ цветом, что выбран для плитки (currentColor). */
+.stomachPortionTimer{color:currentColor;opacity:.85;height:12px;line-height:12px;font-variant-numeric:tabular-nums;white-space:nowrap;overflow:hidden}
+/* Тултип со списком веществ порции. */
+.stomachTooltip{position:fixed;z-index:40;max-width:280px;padding:7px 9px;border:1px solid var(--border);border-radius:6px;background:rgba(13,16,20,.98);color:#e8edf3;font-size:11px;line-height:1.45;box-shadow:0 6px 18px rgba(0,0,0,.45);pointer-events:none}
+.stomachTooltip strong{display:block;margin-bottom:3px;color:#fff}
+.stomachTooltip ul{margin:0;padding-left:16px}
+/* Меню КАТАЛОГА употребимого (ПКМ по пустому месту желудка). Две колонки:
+   список длинный, а тянуться оно вниз на весь экран не должно. */
+.stomachMenu{position:fixed;z-index:41;min-width:230px;max-height:min(340px,60vh);overflow-y:auto;padding:5px;border:1px solid var(--border);border-radius:6px;background:rgba(20,22,25,.99);box-shadow:0 8px 22px rgba(0,0,0,.5)}
+.stomachMenuHead{padding:3px 8px 6px;color:var(--muted);font-size:10px;text-transform:uppercase;letter-spacing:.04em}
+.stomachMenuItem{display:flex;align-items:center;gap:7px;width:100%;box-sizing:border-box;appearance:none;border:0;text-align:left;padding:5px 8px;border-radius:4px;background:transparent;color:#e8edf3;font-size:11px;cursor:pointer}
+.stomachMenuItem:hover{background:rgba(250,176,3,.16);color:#fff}
+/* Пункт, который НЕ ПОМЕЩАЕТСЯ в желудок: серый и некликабельный (требование
+   автора). Оставлен в списке, а не убран: пропажа читалась бы как «предмет
+   исчез из каталога», а серый пункт показывает, ЧТО не влезает и почему. */
+.stomachMenuItemDisabled{color:#6d757e;cursor:not-allowed;opacity:.55}
+.stomachMenuItemDisabled:hover{background:transparent;color:#6d757e}
+.stomachMenuItemDisabled .stomachMenuSwatch{filter:grayscale(1)}
+.stomachMenuSwatch{flex:0 0 auto;width:12px;height:12px;border-radius:3px;border:1px solid rgba(255,255,255,.22)}
+.stomachMenuName{flex:1 1 auto;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.stomachMenuMeta{flex:0 0 auto;color:var(--muted);font-size:10px;font-variant-numeric:tabular-nums}
+.stomachMenuEmpty{padding:8px;color:#6d757e;font-size:11px}
+/* ── Окно «Содержимое желудка» (кнопка в шапке блока) ──────────────────────
+   Всплывающее окно ВНУТРИ монитора: простой список порций с названием и
+   таймером, ПКМ по строке убирает порцию. Позиционируется у кнопки, за шапку
+   его можно перетащить. */
+.stomachWindow{position:fixed;z-index:42;width:min(320px,calc(100vw - 16px));max-height:min(420px,70vh);display:flex;flex-direction:column;border:1px solid var(--border);border-radius:7px;background:rgba(20,22,25,.99);box-shadow:0 12px 30px rgba(0,0,0,.55)}
+/* display:flex ПЕРЕБИВАЕТ действие атрибута hidden (он лишь display:none из
+   стилей браузера), поэтому скрытие задано явно — без этой строки окно было бы
+   видно всегда, и кнопка «Содержимое» выглядела бы сломанной. */
+.stomachWindow[hidden]{display:none}
+.stomachWindowHead{display:flex;align-items:center;gap:8px;padding:6px 9px;border-bottom:1px solid rgba(255,255,255,.08);font-size:12px;font-weight:700;color:#fff;cursor:move;user-select:none}
+.stomachWindowTitle{flex:1 1 auto}
+.stomachWindowClose{appearance:none;border:0;background:transparent;color:var(--muted);font-size:13px;line-height:1;cursor:pointer;padding:2px 5px;border-radius:4px}
+.stomachWindowClose:hover{background:rgba(255,255,255,.12);color:#fff}
+.stomachWindowBody{flex:1 1 auto;min-height:0;overflow-y:auto;padding:5px}
+.stomachWindowEmpty{padding:12px;color:#6d757e;font-size:11px;text-align:center}
+.stomachRow{display:flex;align-items:center;gap:8px;padding:5px 7px;border-radius:4px;border-bottom:1px solid rgba(255,255,255,.05);font-size:11px;color:#e8edf3;cursor:context-menu}
+.stomachRow:last-child{border-bottom:0}
+.stomachRow:hover{background:rgba(255,255,255,.06)}
+.stomachRowSwatch{flex:0 0 auto;width:10px;height:10px;border-radius:3px;border:1px solid rgba(255,255,255,.22)}
+.stomachRowName{flex:1 1 auto;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.stomachRowVolume{flex:0 0 auto;color:#e8edf3;font-variant-numeric:tabular-nums;white-space:nowrap}
+.stomachRowTimer{flex:0 0 auto;color:var(--muted);font-variant-numeric:tabular-nums;white-space:nowrap}
+@media(max-width:760px){.stomachPortion,.stomachTooltip,.stomachMenuItem{font-size:10px}.stomachArea{padding:5px}}
+@media(max-width:760px){.indicatorTopRow,.indicatorName,.indicatorValue{font-size:11px}.indicatorsHead strong,.characterStateLabel,.characterStateValue{font-size:12px}.indicatorTopRow>div{padding:5px 6px}.indicatorFact,.factorContribution,.indicatorChip{font-size:10px}.indicatorScale{width:88px}}
 </style>
 </head>
 <body>
@@ -43,8 +181,18 @@ html,body{height:100%;margin:0;overflow:hidden;background:#0d1014}
   </div>
   <div class="indicatorsBody" id="indicatorsBody"></div>
 </div>
+<div class="stomachTooltip" id="stomachTooltip" hidden></div>
+<div class="stomachMenu" id="stomachMenu" hidden></div>
+<div class="stomachWindow" id="stomachWindow" hidden>
+  <div class="stomachWindowHead" id="stomachWindowHead">
+    <span class="stomachWindowTitle">Содержимое желудка</span>
+    <button type="button" class="stomachWindowClose" id="stomachWindowClose" title="Закрыть (Esc)">✕</button>
+  </div>
+  <div class="stomachWindowBody" id="stomachWindowBody"></div>
+</div>
 <script src="web_log.js?v=18763af3"></script>
-<script src="vitals.js?v=c48bd86b"></script>
-<script src="indicators.js?v=f7cec3e9"></script>
+<script src="dom_reconcile.js?v=b4a5a022"></script>
+<script src="vitals.js?v=2eae4807"></script>
+<script src="indicators.js?v=8b152c31"></script>
 </body>
 </html>

@@ -183,11 +183,25 @@ public sealed class DynamicEventDispatcher : IDynamicEventDispatcher
 
         _lastPlayerPosition = player.Position;
 
+        // Tick — самое частое место записи (каждые 250 мс), поэтому запись канала
+        // обязана быть условной. Ветки «триггер сработал, но генерация отложена»
+        // возвращают true на КАЖДОМ тике специально (триггер перепроверяется), но
+        // состояния мира они не меняют. Без этой проверки Hub получал Set на каждом
+        // тике, publishTransition отправлял ChannelChanged, и журнал заполнялся
+        // строкой «Динамических событий: N» 4 раза в секунду — при неподвижном
+        // игроке и занятом лимите это продолжалось бесконечно. Сравнение с уже
+        // опубликованным состоянием оставляет только настоящие изменения; значение
+        // канала — источник правды, поэтому «отложенный» триггер (это внутренняя
+        // память Dispatcher) в канал не попадает.
         if (changed)
-            WriteState(
-                State.Instances,
-                schedules.Values.OrderBy(item => item.DefinitionId, StringComparer.OrdinalIgnoreCase).ToArray(),
-                "DynamicEventDispatcher.Tick");
+        {
+            var nextSchedules = schedules.Values
+                .OrderBy(item => item.DefinitionId, StringComparer.OrdinalIgnoreCase)
+                .ToArray();
+
+            if (!StateEquals(State.Instances, nextSchedules))
+                WriteState(State.Instances, nextSchedules, "DynamicEventDispatcher.Tick");
+        }
     }
 
     public void Reset()
@@ -552,8 +566,8 @@ public sealed class DynamicEventDispatcher : IDynamicEventDispatcher
             instance.Point,
             new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
             {
-                ["money"] = completion.Money.ToString(CultureInfo.InvariantCulture),
-                ["experience"] = completion.Experience.ToString(CultureInfo.InvariantCulture),
+                ["money"] = completion.Money.ToString(System.Globalization.CultureInfo.InvariantCulture),
+                ["experience"] = completion.Experience.ToString(System.Globalization.CultureInfo.InvariantCulture),
                 ["consumed"] = consumed ? "true" : "false"
             });
 
@@ -598,8 +612,8 @@ public sealed class DynamicEventDispatcher : IDynamicEventDispatcher
             instance.Point,
             new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
             {
-                ["money"] = money.ToString(CultureInfo.InvariantCulture),
-                ["experience"] = experience.ToString(CultureInfo.InvariantCulture)
+                ["money"] = money.ToString(System.Globalization.CultureInfo.InvariantCulture),
+                ["experience"] = experience.ToString(System.Globalization.CultureInfo.InvariantCulture)
             });
     }
 
@@ -1267,6 +1281,37 @@ public sealed class DynamicEventDispatcher : IDynamicEventDispatcher
         var dy = a.Y - b.Y;
         var dz = a.Z - b.Z;
         return Math.Sqrt(dx * dx + dy * dy + dz * dz);
+    }
+
+    /// <summary>
+    /// Совпадает ли переданное состояние с уже опубликованным в канале.
+    ///
+    /// Записи-записи равны по значению (records + List), поэтому сравнение
+    /// отсекает повторную публикацию того же самого состояния — именно так
+    /// тик с отложенным триггером перестаёт быть «изменением мира».
+    /// </summary>
+    private bool StateEquals(
+        IReadOnlyList<DynamicEventInstance> instances,
+        IReadOnlyList<DynamicEventScheduleState> schedules)
+    {
+        var current = State;
+
+        return SequenceEqual(instances, current.Instances) &&
+            SequenceEqual(schedules, current.Schedules);
+    }
+
+    private static bool SequenceEqual<T>(IReadOnlyList<T> left, IReadOnlyList<T> right)
+    {
+        if (left.Count != right.Count)
+            return false;
+
+        for (var index = 0; index < left.Count; index++)
+        {
+            if (!EqualityComparer<T>.Default.Equals(left[index], right[index]))
+                return false;
+        }
+
+        return true;
     }
 
     private static bool ApproximatelyEqual(double? a, double? b) =>

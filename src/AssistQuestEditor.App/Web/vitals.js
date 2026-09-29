@@ -1,6 +1,17 @@
 /**
  * Единая отрисовка шкал состояния персонажа.
  * Все значения приходят из Domain/Host в единицах 0..10000.
+ *
+ * ВАЖНО про «потолок». У двух шкал есть ФИЗИЧЕСКАЯ размерность, и домен
+ * присылает её отдельными полями: `energyKilocalories` / `maxEnergyKilocalories`
+ * (0..5000 ккал) и `hydrationMilliliters` / `maxHydrationMilliliters`
+ * (0..3000 мл). Внутренние единицы хранения (0..10000) видны только
+ * разработчику — игроку показывается ФИЗИЧЕСКАЯ величина, и потолок у неё
+ * 5000 и 3000, а не 10000. Раньше интерфейс читал только единицы, из-за чего
+ * «Жидкость» показывала «7000 / 10000», хотя это 2100 из 3000 мл.
+ *
+ * Числа размерности (5000 и 3000) в JavaScript НЕ дублируются: их присылает
+ * домен вместе со снимком, и Web берёт их из полей `physical`/`maxPhysical`.
  */
 (function (global) {
   "use strict";
@@ -39,7 +50,10 @@
       color: "#32cd32",
       fill: "consume",
       maxKey: "maxHealth",
-      desc: "Здоровье: 100% — максимум."
+      desc: "Здоровье: 100% — максимум.",
+      affects:
+        "На что влияет: при 0% персонаж погибает; пока здоровья нет, " +
+        "восстановление съедает энергию и жидкость и удваивает усталость."
     },
     {
       key: "stress",
@@ -47,7 +61,10 @@
       color: "#8c63d9",
       fill: "fill",
       maxKey: null,
-      desc: "Стресс выше 50% запускает риск «Выгорания»."
+      desc: "Стресс выше 50% запускает риск «Выгорания».",
+      affects:
+        "На что влияет: снижает получаемый опыт, замедляет восстановление " +
+        "здоровья и ускоряет истощение организма."
     },
     {
       key: "energy",
@@ -55,7 +72,15 @@
       color: "#ff8c00",
       fill: "consume",
       maxKey: "maxEnergy",
-      desc: "Расходуется в дороге и во сне медленнее."
+      // ФИЗИЧЕСКАЯ размерность шкалы: игроку показываются килокалории, а не
+      // единицы хранения. Поля приходят из домена вместе со снимком.
+      physicalKey: "energyKilocalories",
+      physicalMaxKey: "maxEnergyKilocalories",
+      physicalUnit: "ккал",
+      desc: "Шкала 0–5000 ккал. Расходуется в дороге, во сне медленнее.",
+      affects:
+        "На что влияет: без энергии падает работоспособность и здоровье; " +
+        "восстанавливается едой и сном."
     },
     {
       key: "hydration",
@@ -63,7 +88,16 @@
       color: "#2f7ff0",
       fill: "consume",
       maxKey: "maxHydration",
-      desc: "Уровень гидратации."
+      // Единицы — миллилитры: шкала 0–3000 мл, а не 0–10000 единиц.
+      physicalKey: "hydrationMilliliters",
+      physicalMaxKey: "maxHydrationMilliliters",
+      physicalUnit: "мл",
+      desc:
+        "Шкала 0–3000 мл. Ниже 1500 мл начинается «Жажда», " +
+        "ниже 500 мл — «Обезвоживание».",
+      affects:
+        "На что влияет: обезвоживание ускоряет усталость и мешает " +
+        "восстановлению здоровья; восстанавливается питьём."
     },
     {
       key: "fatigue",
@@ -71,7 +105,10 @@
       color: "#e03131",
       fill: "fill",
       maxKey: "maxFatigue",
-      desc: "Растёт от времени и дистанции, отдых и сон уменьшают."
+      desc: "Растёт от времени и дистанции, отдых и сон уменьшают.",
+      affects:
+        "На что влияет: выше 80% начинается критическое истощение — " +
+        "ускоряется расход энергии и жидкости и падает здоровье."
     },
     {
       key: "resilience",
@@ -80,7 +117,10 @@
       fill: "fill",
       maxKey: null,
       derived: true,
-      desc: "Снижает вероятность негативных эффектов и замедляет стресс."
+      desc: "Снижает вероятность негативных эффектов и замедляет стресс.",
+      affects:
+        "На что влияет: выше 60% даёт +1% к восстановлению здоровья " +
+        "за каждые 10 игр. мин."
     },
     {
       key: "metabolism",
@@ -89,7 +129,10 @@
       fill: "fill",
       maxKey: null,
       derived: true,
-      desc: "45–75% — нормальная зона. Ниже расход медленнее, от 75% — выше."
+      desc: "45–75% — нормальная зона. Ниже расход медленнее, от 75% — выше.",
+      affects:
+        "На что влияет: выше 60% даёт +1% к восстановлению здоровья " +
+        "за каждые 10 игр. мин; от 75% растёт расход энергии и жидкости."
     }
   ];
 
@@ -100,6 +143,34 @@
     ["fatigue"],
     ["resilience", "metabolism"]
   ];
+
+  /**
+   * С КАКОЙ СТОРОНЫ кладётся кумулятивная (истощённая) часть шкалы —
+   * задано автором и выведено из смысла истощения, а не из вида шкалы.
+   *
+   *   • «end» — истощение ОГРАНИЧИВАЕТ МАКСИМУМ: закреплённая часть растёт от
+   *     правого края, и видно, что доступный потолок стал ниже 100%. Так ведут
+   *     себя расходуемые шкалы: истощение здоровья, энергии и жидкости.
+   *   • «start» — истощение СОЗДАЁТ НЕСНИЖАЕМЫЙ ПОРОГ: закреплённая часть растёт
+   *     от левого края, и видно, что ниже неё значение уже не опустится. Так
+   *     ведут себя накопительные шкалы: истощение стресса и усталости.
+   *
+   * Сторона объявлена ЯВНО на каждой шкале, а не выведена из fill/consume:
+   * вид шкалы и смысл истощения совпадают лишь случайно, и следующая шкала
+   * с другим fill молча получила бы закрепление не с той стороны.
+   */
+  var CUMULATIVE_SIDE = {
+    health: "end",
+    energy: "end",
+    hydration: "end",
+    stress: "start",
+    fatigue: "start"
+  };
+
+  function cumulativeClassFor(scale) {
+    var side = CUMULATIVE_SIDE[scale.key] || "start";
+    return side === "end" ? "fromEnd" : "fromStart";
+  }
 
   /**
    * Описания эффектов: что бафф или дебафф делает с показателями.
@@ -123,7 +194,7 @@
     bull:
       "Бык (бафф, 2 игровых дня): прекращает ЛЮБОЕ негативное накопление " +
       "(истощение и кумулятивный стресс). Метаболизм расходует энергию и " +
-      "жидкость как при сниженном, восстановление здоровья ускорено в 1,5 раза, " +
+      "жидкость как при сниженном, восстановление здоровья +2% за 10 минут, " +
       "полученный форсаж умножается на 1,5.",
     strong_bones:
       "Крепкие кости (бафф, 3 игровых дня): даётся за регулярное употребление " +
@@ -155,6 +226,16 @@
       "Бомж (дебафф, гигиена ниже 20%): стресс копится в 2,5 раза быстрее, " +
       "обаяние снижено на 3, устойчивость не поднимается выше 50%. " +
       "Снимается полноценным сном или в отпуске.",
+    thirst:
+      "Жажда (дебафф, жидкость ниже 1500 мл): копится истощение жидкости, " +
+      "стресс растёт на 0,5% в минуту, метаболизм теряет 1% за 10 игровых " +
+      "минут. Снимается, как только в желудке начинает усваиваться что-то " +
+      "с жидкостью.",
+    dehydration:
+      "Обезвоживание (дебафф, жидкость ниже 500 мл): метаболизм теряет 2% " +
+      "за 10 игровых минут, стресс растёт на 25% быстрее, устойчивость падает " +
+      "вместе с расходом жидкости, действия с физической нагрузкой недоступны " +
+      "(кроме движения). Снимается при положительной динамике жидкости.",
     caffeine_overuse:
       "Кофеин — перенапряжение (дебафф): слишком много кофеина за сутки; " +
       "сердце и нервы на пределе.",
@@ -276,11 +357,45 @@
       cumulativeUnits: cumulativeUnits,
       maximum: maximumUnits,
       percent: percent,
-      displayPercent: percent + unitsToPercent(overchargeUnits)
+      displayPercent: percent + unitsToPercent(overchargeUnits),
+      physical: physicalValue(vitals, scale.physicalKey, scale),
+      maxPhysical: physicalValue(vitals, scale.physicalMaxKey, scale),
+      physicalUnit: scale.physicalUnit || ""
     };
   }
 
+  /**
+   * ФИЗИЧЕСКАЯ величина шкалы (ккал или мл) для показа игроку.
+   *
+   * Домен присылает её готовым полем (`energyKilocalories` и т.п.) — Web НЕ
+   * пересчитывает её сам, иначе второе правило пересчёта разошлось бы с первым.
+   * Если размерности у шкалы нет (стресс, усталость, здоровье) или поле не
+   * пришло, возвращается null: такой шкале показывается процент, а не выдуманное
+   * «ккал» у стресса. Потолок размерности (5000 ккал, 3000 мл) тоже приходит из
+   * домена — в JavaScript его числа не дублируются.
+   */
+  function physicalValue(vitals, fieldKey, scale) {
+    if (!fieldKey || !scale.physicalUnit)
+      return null;
+    var value = Number(vitals[fieldKey]);
+    return Number.isFinite(value) ? value : null;
+  }
+
+  /**
+   * Подпись значения шкалы.
+   *
+   * У шкал с физической размерностью показывается ФИЗИЧЕСКОЕ число (2750 из
+   * 5000 ккал), у остальных — процент. Автор просил именно это: потолок энергии
+   * 5000 и жидкости 3000, а не внутренние 10000.
+   */
   function valueLabel(scale, values) {
+    if (values.maxPhysical != null) {
+      return Math.round(values.physical) +
+        " / " +
+        Math.round(values.maxPhysical) +
+        " " +
+        values.physicalUnit;
+    }
     return Math.round(
       values.displayPercent == null
         ? values.percent
@@ -348,12 +463,29 @@
   }
 
   function tooltip(scale, values, snapshot) {
+    // Строка «Реальное значение» показывает ФИЗИЧЕСКУЮ величину, если она есть
+    // (2750/5000 ккал, 2100/3000 мл), и процент — всегда. Внутренние единицы
+    // хранения в подсказку больше не попадают: автор видел в них «потолок
+    // 10000» и справедливо считал это ошибкой.
+    var physical =
+      values.maxPhysical != null
+        ? Math.round(values.physical) +
+          "/" +
+          Math.round(values.maxPhysical) +
+          " " +
+          values.physicalUnit +
+          " (" +
+          Math.round(values.percent) +
+          "%)"
+        : Math.round(values.actual) +
+          "/" +
+          Math.round(values.maximum) +
+          " ед. (" +
+          Math.round(values.percent) +
+          "%)";
     var lines = [
       scale.label,
-      "Реальное значение: " +
-        Math.round(values.actual) + "/" +
-        Math.round(values.maximum) +
-        " (" + Math.round(values.percent) + "%)",
+      "Реальное значение: " + physical,
       "Форсаж: " +
         (values.overcharge > 0
           ? "+" + Math.round(unitsToPercent(values.overcharge)) +
@@ -392,19 +524,16 @@
     return lines.join("\n");
   }
 
-  function barMarkup(scale, values, snapshot) {
-    var cumulativeClass =
-      scale.fill === "fill"
-        ? "fromStart"
-        : "fromEnd";
-    var overchargeClass = cumulativeClass;
-    var surgeClass =
-      hasEffect(snapshot, "power_surge")
-        ? " powerSurge"
-        : "";
-    var tooltipText =
-      escapeHtml(tooltip(scale, values, snapshot));
-    var dynamics = dynamicsMarkup(scale, snapshot);
+  /**
+   * Геометрия дорожки шкалы без внешней обёртки `.dualStat`.
+   *
+   * Вынесена из `barMarkup`, чтобы монитор показателей рисовал шкалу ВНУТРИ
+   * карточки той же геометрией и теми же цветами, что и сайдбар. Два независимых
+   * рисунка одной шкалы разошлись бы: «двойная шкала» перестала бы быть двойной
+   * ровно там, где её и сверяют.
+   */
+  function barTrack(scale, values) {
+    var cumulativeClass = cumulativeClassFor(scale);
     var cumulative =
       values.cumulative > 0
         ? "<div class='dualBarCumulative " +
@@ -420,11 +549,31 @@
     var overcharge =
       overchargePercent > 0
         ? "<div class='dualBarOvercharge " +
-          overchargeClass +
+          cumulativeClass +
           "' style=\"width:" +
           Math.min(100, overchargePercent) +
           "%\"></div>"
         : "";
+
+    return "<div class='dualBar " + scale.key + "'>" +
+      "<div class='dualBarSoft' style=\"width:" +
+        values.soft +
+        "%;background:" +
+        scale.color +
+        "\"></div>" +
+      cumulative +
+      overcharge +
+    "</div>";
+  }
+
+  function barMarkup(scale, values, snapshot) {
+    var surgeClass =
+      hasEffect(snapshot, "power_surge")
+        ? " powerSurge"
+        : "";
+    var tooltipText =
+      escapeHtml(tooltip(scale, values, snapshot));
+    var dynamics = dynamicsMarkup(scale, snapshot);
 
     return "<div class='dualStat" + surgeClass +
       "' data-vital-scale='" + scale.key +
@@ -436,15 +585,7 @@
         // ними: автор просил значок слева от процентов у КАЖДОЙ шкалы.
         "<span>" + dynamics.markup + valueLabel(scale, values) + "</span>" +
       "</div>" +
-      "<div class='dualBar " + scale.key + "'>" +
-        "<div class='dualBarSoft' style=\"width:" +
-          values.soft +
-          "%;background:" +
-          scale.color +
-          "\"></div>" +
-        cumulative +
-        overcharge +
-      "</div>" +
+      barTrack(scale, values) +
     "</div>";
   }
 
@@ -608,6 +749,8 @@
     read: read,
     tooltip: tooltip,
     dynamicsMarkup: dynamicsMarkup,
+    barTrack: barTrack,
+    valueLabel: valueLabel,
     barMarkup: barMarkup,
     markup: markup,
     fieldsMarkup: fieldsMarkup,

@@ -203,8 +203,15 @@ public sealed class SimulatorForm : WebViewForm
             _dynamicEventDispatcher.Tick();
             UpdatePlayerConditions();
 
-            if (_runtime.SimulationRunning)
-                PushLiveState();
+            // Живое состояние идёт в окна в ЛЮБОМ состоянии симуляции, а не
+            // только в запущенной. Движок показателей тикает и в паузе, и в
+            // стопе (смотри <see cref="UpdatePlayerConditions"/>): шкалы и
+            // таймеры эффектов обязаны обновляться без симуляции, а таймеры
+            // завязаны на СИСТЕМНОЕ время, которое не останавливается вместе с
+            // игровым. Прежнее условие показывало интерфейсу только последний
+            // снимок, и включение маршрута на остановленной симуляции не
+            // отражалось в окнах до следующего полного обновления.
+            PushLiveState();
         };
         _runtimeTimer.Start();
 
@@ -405,6 +412,18 @@ public sealed class SimulatorForm : WebViewForm
             version = VersionInfo.InformationalVersion,
             snapshot,
             conditionRates,
+            // Желудок для монитора: порции в литрах/ккал/мл и их сроки.
+            // Считает ДОМЕН — время до конца порции выводится из остатка и
+            // ставки, и вторая такая же формула в JavaScript разошлась бы с
+            // начислением (см. CharacterDigestionReport).
+            digestion = BuildDigestionSnapshot(snapshot),
+            // Каталог УПОТРЕБИМОГО для меню желудка (ПКМ по пустому месту).
+            //
+            // Отдельный список, а не общий `itemCatalog`: тот содержит записи
+            // `ItemDefinition` без признака съедобности, и страница не может
+            // отличить руду от супа — меню оказалось бы либо пустым, либо с
+            // камнями. Признак «этим можно питаться» считает домен.
+            consumables = BuildConsumablesCatalog(),
             journal = _journalEntries.ToArray(),
             itemCatalog = ItemCatalogFactory.CreateStarter(),
             // Каталог НПЦ нужен UI, чтобы показать имя и портрет рядом с числом
@@ -504,10 +523,150 @@ public sealed class SimulatorForm : WebViewForm
         };
     }
 
+    /// <summary>
+    /// Каталог УПОТРЕБИМЫХ предметов: то, что можно положить в желудок, минуя
+    /// поиск в инвентаре и выдачу.
+    ///
+    /// Автор задал это прямо: «ПКМ на пустом месте желудка открывает список не
+    /// инвентаря, а каталог существующих объектов, которые съедобны. Это действие
+    /// заменяет поиск предмета, выдачу в инвентарь и нажатие в меню использовать;
+    /// эти действия сокращаются до "выбрал — попало в желудок"». Поэтому список
+    /// строится из КАТАЛОГА, а не из содержимого инвентаря.
+    ///
+    /// Признак «годится» считает ДОМЕН (<see cref="CharacterVitalsEngine.CanConsume"/>):
+    /// у страницы нет ни пищевых профилей, ни таблицы эффектов, и повторять их в
+    /// JavaScript значило бы завести вторую версию правил о том, что съедобно.
+    ///
+    /// Объём в МИЛЛИЛИТРАХ и признак «влезет в свободное место» тоже приходят
+    /// отсюда: правило «объём порции больше свободного места — предмет не
+    /// употребить» живёт в домене одним экземпляром
+    /// (<see cref="CharacterDigestionReport.Fits"/>), и меню желудка лишь гасит
+    /// непомещающиеся пункты по готовому признаку.
+    /// </summary>
+    private object[] BuildConsumablesCatalog()
+    {
+        var stomach = _hub
+            .Get<PlayerConditionState>("player-conditions")
+            .Value
+            .Stomach;
+
+        return ItemCatalogFactory.CreateStarter()
+            .Where(item => CharacterVitalsEngine.CanConsume(item.Id))
+            .Select(item =>
+            {
+                var profile = CharacterConsumableCatalog.GetProfile(item.Id);
+
+                return (object)new
+                {
+                    id = item.Id,
+                    name = item.Name,
+                    category = item.Category,
+                    color = item.Color,
+                    grams = CharacterConsumableCatalog.GetPortionGrams(item.Id),
+                    // Объём порции в миллилитрах — то же число, что займёт место в
+                    // желудке и что подписано в меню («Колбаса 200 мл»). Это
+                    // ЕДИНСТВЕННАЯ величина объёма: прежде меню печатало из
+                    // `profile.WaterMilliliters`, то есть содержимое ВОДЫ, и у
+                    // банана рядом с «150 мл порцией» стояло бы «110 мл» —
+                    // ровно то расхождение, которое автор принял за ошибку
+                    // добавления.
+                    volumeMilliliters = CharacterConsumableCatalog.GetPortionMilliliters(item.Id),
+                    kilocalories = profile.Kilocalories,
+                    waterMilliliters = profile.WaterMilliliters,
+                    // Помещается ли в СВОБОДНОЕ место прямо сейчас. Считает домен
+                    // по текущему желудку: страница не знает ни вместимости, ни
+                    // правила о минимуме в 0,01 доли.
+                    fits = CharacterDigestionReport.Fits(stomach, item.Id)
+                };
+            })
+            .ToArray();
+    }
+
+    /// <summary>
+    /// Желудок для монитора показателей: порции, объём и влияние на усвоение.
+    ///
+    /// Считает ДОМЕН (<see cref="CharacterDigestionReport"/>), а не страница:
+    /// срок порции выводится из её остатка и ставки, а ставку задаёт физиология
+    /// (еда — «полный желудок за два часа», питьё — «1,35 литра в час»). Вторая
+    /// такая же формула в JavaScript разошлась бы с начислением при первой же
+    /// правке баланса — ровно тот класс дефектов, что «потолок 10000».
+    /// </summary>
+    private static object BuildDigestionSnapshot(SimulatorSnapshot snapshot)
+    {
+        var conditions = snapshot.Conditions;
+        var stomach = conditions.Stomach;
+        var metabolismPercent = PlayerConditionScale.ToPercent(
+            snapshot.PlayerVitals.Metabolism);
+
+        var portions = CharacterDigestionReport
+            .Portions(stomach)
+            .Select(portion => new
+            {
+                itemId = portion.ItemId,
+                volumeFraction = portion.VolumeFraction,
+                volumeLiters = portion.VolumeLiters,
+                // Объём в МИЛЛИЛИТРАХ — рабочая величина интерфейса: и подпись
+                // «занято / всего», и ширина плитки считаются в них. Литры
+                // остаются полем для совместимости и читаются как есть, но
+                // страница миллилитры больше не вычисляет умножением.
+                volumeMilliliters = portion.VolumeMilliliters,
+                // Ккал и мл — то, что игрок узнаёт с этикетки предмета.
+                kilocalories = portion.EnergyKilocalories,
+                waterMilliliters = portion.WaterMilliliters,
+                remainingGameSeconds = portion.RemainingGameSeconds,
+                remainingGameMinutes = portion.RemainingGameMinutes,
+                // СКОРОСТЬ ЭТОЙ ПОРЦИИ: без неё строка предмета в шкале не
+                // может показать свой вклад и повторяла бы общий итог желудка,
+                // приписывая апельсину восстановление жидкости, которого он не
+                // даёт. В единицах шкалы за игровую минуту — та же размерность,
+                // что у energyPerMinute/hydrationPerMinute ниже.
+                energyPerMinute = portion.EnergyPerGameSecond * 60d,
+                hydrationPerMinute = portion.HydrationPerGameSecond * 60d
+            })
+            .ToArray();
+
+        var factors = CharacterDigestionReport
+            .MetabolismFactors(
+                metabolismPercent,
+                elevatedMetabolism: metabolismPercent >=
+                    CharacterVitalsEngine.ElevatedMetabolismPercent,
+                reducedMetabolism: metabolismPercent <
+                    CharacterVitalsEngine.ReducedMetabolismPercent)
+            .Select(factor => new
+            {
+                text = factor.Text,
+                useful = factor.Useful
+            })
+            .ToArray();
+
+        return new
+        {
+            // Доли, а не только литры: страница раскладывает желудок на всю
+            // ширину блока, и рисовать приходится ОТНОСИТЕЛЬНЫМИ размерами.
+            volumeFraction = stomach.VolumeFraction,
+            occupiedLiters = stomach.OccupiedLiters,
+            totalLiters = CharacterDigestion.StomachVolumeLiters,
+            // МИЛЛИЛИТРЫ — то, чем подписан блок«занято / всего» и чем отмерена
+            // область желудка. Считает домен: миллилитр и грамм приравнены в
+            // одном месте, и повторять это в JavaScript значило бы завести вторую
+            // версию правила об объёме.
+            occupiedMilliliters = stomach.OccupiedLiters * 1000d,
+            totalMilliliters = CharacterDigestionReport.StomachCapacityMilliliters,
+            // Скорости усвоения в единицах шкалы за игровую минуту: их показывает
+            // строка «общая динамика усвоения» в шапке блока.
+            energyPerMinute = stomach.EnergyPerGameSecond * 60d,
+            hydrationPerMinute = stomach.HydrationPerGameSecond * 60d,
+            portions,
+            factors
+        };
+    }
+
     private object BuildConditionRates(SimulatorSnapshot snapshot)
     {
-        var player = _hub.Get<PlayerState>("player").Value;
-        var moving = !_runtime.IsPaused && player.SpeedKmh > 0.001d;
+        // скорость. Скорость может быть нулевой в кадре между пакетами или на
+        // разгоне, но игрок по-прежнему «едет», и показывать ему «покой» в этот
+        // момент нельзя: покой — это ВЫКЛЮЧЕННОЕ движение по маршруту.
+        var moving = _routeEnabled;
         var rates = CharacterVitalsEngine.RatesFrom(
             snapshot.PlayerVitals,
             snapshot.Conditions,
@@ -606,9 +765,13 @@ public sealed class SimulatorForm : WebViewForm
         _indicatorsForm = new IndicatorsForm();
         _indicatorsForm.GlobalHotKeyPressed += SimulatorForm_GlobalHotKeyPressed;
         _indicatorsForm.CloseRequested += (_, _) => CloseIndicatorsWindow();
+        _indicatorsForm.NavigationRequested += IndicatorsForm_NavigationRequested;
+        _indicatorsForm.StomachActionRequested += IndicatorsForm_StomachActionRequested;
         _indicatorsForm.FormClosed += (_, _) =>
         {
             _indicatorsForm.GlobalHotKeyPressed -= SimulatorForm_GlobalHotKeyPressed;
+            _indicatorsForm.NavigationRequested -= IndicatorsForm_NavigationRequested;
+            _indicatorsForm.StomachActionRequested -= IndicatorsForm_StomachActionRequested;
             _indicatorsForm = null;
         };
 
@@ -629,6 +792,111 @@ public sealed class SimulatorForm : WebViewForm
             return;
 
         _indicatorsForm.Close();
+    }
+
+    /// <summary>
+    /// Изменение ЖЕЛУДКА из монитора показателей: убрать порцию или употребить
+    /// предмет.
+    ///
+    /// Оба действия выполняет Симулятор, а не страница: желудок — часть
+    /// состояния мира, и правка «на стороне Web» была бы потеряна при первом же
+    /// обновлении из домена.
+    /// </summary>
+    private void IndicatorsForm_StomachActionRequested(
+        object? sender,
+        StomachActionEventArgs e)
+    {
+        switch (e.Kind)
+        {
+            case "remove":
+                RemoveStomachPortion(e.ItemId);
+                break;
+
+            case "use":
+                if (!string.IsNullOrWhiteSpace(e.ItemId))
+                    ConsumeStomachItem(e.ItemId!);
+                break;
+        }
+    }
+
+    /// <summary>
+    /// Убирает порцию из желудка, НЕ возвращая её в инвентарь.
+    ///
+    /// Почему так, а не «вернуть как было»: удаление здесь — инструмент
+    /// наблюдения и отладки баланса (автор просил убирать объект ПКМ), а возврат
+    /// в инвентарь сделал бы из него способ обмена съеденного обратно на предмет.
+    /// </summary>
+    private void RemoveStomachPortion(string? itemId)
+    {
+        if (string.IsNullOrWhiteSpace(itemId))
+            return;
+
+        var conditions = _hub.Get<PlayerConditionState>("player-conditions").Value;
+
+        // Убираем ПЕРВУЮ порцию с этим Id: порций может быть несколько (съел
+        // два апельсина), и «удалить один апельсин» — самое понятное поведение
+        // для ПКМ по иконке.
+        var target = conditions.Stomach.Portions
+            .FirstOrDefault(portion =>
+                portion.ItemId.Equals(
+                    itemId,
+                    StringComparison.OrdinalIgnoreCase));
+
+        if (target is null)
+        {
+            // Порции уже нет (усвоилась между кликом и обработкой) — это не
+            // ошибка игрока, и ругаться на неё нельзя: просто обновляем монитор.
+            RequestSnapshot("stomach portion removed");
+            return;
+        }
+
+        var remaining = conditions.Stomach.Portions
+            .Where(portion => !ReferenceEquals(portion, target))
+            .ToArray();
+
+        _hub.Get<PlayerConditionState>("player-conditions").Set(
+            conditions with
+            {
+                Stomach = new StomachContents(0d, 0d, 0d, 0d, 0d)
+                {
+                    Portions = remaining
+                }.Normalize()
+            },
+            "Удаление порции из желудка");
+
+        AppendJournal(
+            "StomachPortionRemoved",
+            DateTimeOffset.UtcNow,
+            "Состояние игрока",
+            "Из желудка удалён предмет: [[item:" + itemId + ":" +
+            ItemLabel(itemId) + "]] " + ItemLabel(itemId) + ".",
+            _hub.Get<PlayerState>("player").Value.Position);
+
+        RequestSnapshot("stomach portion removed");
+    }
+
+    /// <summary>
+    /// Открывает окно, на пункт которого сослался монитор показателей.
+    ///
+    /// Клик по чипу в мониторе обязан открыть ТО ЖЕ окно, что и клик по такому же
+    /// чипу в сайдбаре или журнале. Иначе получаются две разные «ссылки» на один
+    /// и тот же пункт, и одна из них молча ничего не делает — что автор и увидел
+    /// на «Воде» и «Отдохнувшем».
+    /// </summary>
+    private void IndicatorsForm_NavigationRequested(
+        object? sender,
+        IndicatorNavigationRequestEventArgs e)
+    {
+        switch (e.Target)
+        {
+            case "perks":
+                OpenPerksWindow(e.Id, e.Kind);
+                break;
+
+            case "items":
+                OpenItemsWindow(e.Id);
+                break;
+        }
     }
 
     /// <summary>
@@ -878,7 +1146,18 @@ public sealed class SimulatorForm : WebViewForm
                 // Кормит ли предмет: у неедовых пунктов пищевого блока нет вовсе,
                 // и рисовать «0 ккал» значило бы обещать еду там, где её нет.
                 feeds = profile.Feeds,
+                // Объём порции В МИЛЛИЛИТРАХ — единая величина для окна предметов,
+                // меню желудка и списка содержимого. Прежде окно показывало
+                // `grams`, и у банана рядом с пищевой ценностью стояло «150 г», а в
+                // меню желудка — «110 мл» (вода в банане): два разных числа на один
+                // предмет. Теперь всюду одно и то же — объём порции.
+                milliliters = CharacterConsumableCatalog.GetPortionMilliliters(item.Id),
                 grams = profile.Grams,
+                // Съедобность считает ДОМЕН: у таблеток калорий нет, но они
+                // занимают желудок и действуют, поэтому «съедобно» — это не
+                // «есть калории», а «CanConsume». Галочка «только съедобное» и
+                // салатовая плашка обязаны означать ровно то же, что меню желудка.
+                edible = CharacterVitalsEngine.CanConsume(item.Id),
                 kilocalories = profile.Kilocalories,
                 waterMilliliters = profile.WaterMilliliters,
                 energyPercent = profile.EnergyPercent,
@@ -3023,12 +3302,22 @@ public sealed class SimulatorForm : WebViewForm
         _conditionsLastPosition = null;
     }
 
+    /// <summary>
+    /// Реакция маршрута на смену состояния симуляции (пауза/стоп/продолжение).
+    ///
+    /// Мир при выключении симуляции НЕ сбрасывается: останавливается только
+    /// время. Движение по маршруту — часть мира, а не симуляции, поэтому
+    /// скорость и позиция игрока, накопленное время пути и включённость маршрута
+    /// сохраняются. Прежде здесь вызывался <see cref="SetPlayerMovementIdle"/>,
+    /// и пауза обнуляла спидометр, а также накопленное игровое/реальное время
+    /// пути — то есть выключение симуляции меняло состояние прохождения.
+    ///
+    /// Сбрасывается только ЯКОРЬ времени последнего тика: иначе при продолжении
+    /// разница с ним включила бы в себя всю паузу и игрок «прыгнул» бы вперёд.
+    /// </summary>
     private void SetRouteAfterSimulationStateChange()
     {
         _routeMovementLastTick = null;
-
-        if (_routeEnabled)
-            SetPlayerMovementIdle();
     }
 
     private void SetRouteStateAfterLoad(RouteState route, RouteRuntimeState? runtime = null)
@@ -3163,17 +3452,20 @@ public sealed class SimulatorForm : WebViewForm
 
     private void UpdatePlayerConditions()
     {
-        if (!_runtime.SimulationRunning || _runtime.IsPaused)
-        {
-            _conditionsLastRealTick = null;
-            _conditionsLastGameElapsed = null;
-            _conditionsLastPosition = null;
-            return;
-        }
-
         var now = DateTimeOffset.UtcNow;
         var clock = _hub.Get<WorldClockState>("sim-time").Value;
 
+        // Время идёт только при РАБОТАЮЩЕЙ симуляции. Пауза и полная остановка
+        // замораживают игровое время, а значит и прирост шкал: единицы шкал
+        // начисляются за игровое время, а оно стоит. Мир при этом НЕ сбрасывается
+        // и не обнуляется — снимок состояния остаётся тем же, поэтому и значения
+        // шкал, и покой/нагрузка, и ночной коэффициент читаются правильно.
+        var clockRunning = _runtime.SimulationRunning;
+
+        // Обработка таймеров реального времени (эффектов, баффов и дебаффов)
+        // не зависит от симуляции: системное время не останавливается вместе с
+        // игровым. Бафф, выданный на 15 реальных минут, продолжает истекать и
+        // при выключенной симуляции, и в интерфейсе это видно.
         if (_conditionsLastRealTick is null || _conditionsLastGameElapsed is null)
         {
             _conditionsLastRealTick = now;
@@ -3185,7 +3477,13 @@ public sealed class SimulatorForm : WebViewForm
         var previousElapsed = _conditionsLastGameElapsed.Value;
         var previousPosition = _conditionsLastPosition;
         var realSeconds = Math.Max(0d, (now - _conditionsLastRealTick.Value).TotalSeconds);
-        var gameSeconds = Math.Max(0d, (clock.Elapsed - previousElapsed).TotalSeconds);
+
+        // При остановленных часах игровой прирост равен нулю: шкалы не меняют
+        // значений, но домен всё равно обрабатывает таймеры эффектов и строит
+        // текущий срез мира.
+        var gameSeconds = clockRunning
+            ? Math.Max(0d, (clock.Elapsed - previousElapsed).TotalSeconds)
+            : 0d;
 
         _conditionsLastRealTick = now;
         _conditionsLastGameElapsed = clock.Elapsed;
@@ -3194,7 +3492,18 @@ public sealed class SimulatorForm : WebViewForm
             return;
 
         var currentPlayer = _hub.Get<PlayerState>("player").Value;
-        var moving = currentPlayer.SpeedKmh > 0.001d;
+        // «В движении» определяется ВКЛЮЧЁННЫМ движением по маршруту, а не
+        // мгновенной скоростью игрока:
+        //
+        //  • Покой — это состояние, когда движение по маршруту ВЫКЛЮЧЕНО. Тогда
+        //    усталость восстанавливается. Пока маршрут включён, игрок считается
+        //    движущимся даже в кадре с нулевой скоростью (разгон, пауза между
+        //    пакетами), и отдых ему не начисляется.
+        //  • Пауза/стоп не меняют это состояние: кнопка движения по маршруту —
+        //    часть мира, а не симуляции, поэтому покой и нагрузка считаются по
+        //    ней в любом состоянии. Меняться не должны только ЗНАЧЕНИЯ шкал —
+        //    они зависят от игрового времени, а оно стоит.
+        var moving = _routeEnabled;
 
         // Усталость начисляется и за пройденную дистанцию, а не только за
         // игровое время. Игровое время идёт 1:1 с реальным, поэтому «100% за 18
@@ -3202,9 +3511,14 @@ public sealed class SimulatorForm : WebViewForm
         // выглядела неработающей. Дистанция за тик берётся из фактического
         // смещения игрока: так она учитывает и движение по маршруту, и любые
         // другие источники перемещения, без второй бухгалтерии скорости.
+        //
+        // При остановленных часах игрок не перемещается (UpdateRouteMovement
+        // не двигает его), поэтому дистанция за тик равна нулю — вторая шкала,
+        // зависящая от времени, сама собой замирает.
         var traveledMeters = 0d;
 
         if (moving &&
+            clockRunning &&
             previousPosition is { })
         {
             var dx = currentPlayer.Position.X - previousPosition.X;
@@ -3266,6 +3580,20 @@ public sealed class SimulatorForm : WebViewForm
             // подсказка шкалы показывает скорость — без этого поля подсказка
             // показывала бы ноль до следующего полного снимка.
             conditionRates = BuildConditionRates(_hub.GetSnapshot()),
+            // Желудок едет и в live_state: порции усваиваются на ходу, и их сроки
+            // меняются каждую секунду — без этого блока таймеры в мониторе
+            // обновлялись бы только раз в полный снимок.
+            digestion = BuildDigestionSnapshot(_hub.GetSnapshot()),
+            // Каталог употребимого — тоже: меню желудка открывается ПКМ, и без
+            // него список был бы пуст, если полный снимок ещё не приходил.
+            //
+            // Окно инвентаря читает ОТСЮДА признаки `fits` и объёмы: у него нет
+            // ни пищевых профилей, ни вместимости желудка, и правило «объём
+            // больше свободного места — нельзя» обязано приходить готовым.
+            // Снимок инвентарю приходит редко (по изменению мира), поэтому из
+            // живого обновления он один и узнаёт, что желудок успел наполниться.
+            consumables = BuildConsumablesCatalog(),
+            itemCatalog = ItemCatalogFactory.CreateStarter(),
             runtime = _runtime.State,
             simulationRunning = _runtime.SimulationRunning,
             simulationPaused = _runtime.IsPaused,
@@ -3281,6 +3609,15 @@ public sealed class SimulatorForm : WebViewForm
         // нужнее, чем карте — именно за изменениями он и наблюдает.
         if (_indicatorsForm is not null && !_indicatorsForm.IsDisposed)
             _indicatorsForm.PushLiveStateJson(payload);
+
+        // Инвентарь получает live_state ТОЖЕ — из-за одного поля: признака
+        // «помещается ли предмет в желудок». Он меняется каждую секунду по мере
+        // усвоения, а полный снимок приходит редко (по изменению мира), поэтому
+        // без этого пункт «Использовать» оставался бы активным, пока желудок уже
+        // полон, и предмет молча не съедался бы. Остальные поля инвентарь из
+        // живого обновления не читает.
+        if (_inventoryForm is not null && !_inventoryForm.IsDisposed)
+            _inventoryForm.PushLiveStateJson(payload);
 
         // Окна перков и предметов тоже живое состояние: таймеры баффов тикают, а
         // количество предметов меняется от еды и квестов.
@@ -3881,17 +4218,8 @@ public sealed class SimulatorForm : WebViewForm
             return;
         }
 
-        var update = CharacterVitalsEngine.UseItem(
-            itemId,
-            _hub.Get<PlayerVitalsState>("player-vitals").Value,
-            _hub.Get<PlayerConditionState>("player-conditions").Value,
-            _hub.Get<WorldClockState>("sim-time").Value.Now.TimeOfDay.TotalHours);
-
-        if (update.Events.Any(item => item.Kind == "UnknownItem"))
-        {
-            PostSaveError("Для этого предмета нет механики употребления.");
+        if (!TryApplyItemUse(itemId))
             return;
-        }
 
         var items = new Dictionary<string, int>(
             inventory.Items,
@@ -3900,8 +4228,6 @@ public sealed class SimulatorForm : WebViewForm
             [itemId] = quantity - 1
         };
 
-        _hub.Get<PlayerVitalsState>("player-vitals").Set(update.Vitals, "Употребление предмета");
-        _hub.Get<PlayerConditionState>("player-conditions").Set(update.Conditions, "Употребление предмета");
         channel.Set(
             new InventoryState(items, inventory.NewItemIds),
             "Употребление предмета");
@@ -3919,6 +4245,79 @@ public sealed class SimulatorForm : WebViewForm
 
         PersistSession("автосохранение: употребление предмета", force: true);
         RequestSnapshot("inventory item used");
+    }
+
+    /// <summary>
+    /// Применяет механику предмета к шкалам и условиям — ОБЩАЯ часть обоих
+    /// способов употребления (из инвентаря и из каталога в желудке).
+    ///
+    /// Здесь только последствия для организма: ни наличия, ни списания. Списывает
+    /// инвентарь вызывающий, и делает это лишь тот путь, для которого инвентарь
+    /// вообще важен.
+    /// </summary>
+    /// <returns>
+    /// <c>false</c>, если предмет применить нельзя (нет механики) — тогда ничего
+    /// не изменено и ошибка уже отправлена в интерфейс.
+    /// </returns>
+    private bool TryApplyItemUse(string itemId)
+    {
+        var update = CharacterVitalsEngine.UseItem(
+            itemId,
+            _hub.Get<PlayerVitalsState>("player-vitals").Value,
+            _hub.Get<PlayerConditionState>("player-conditions").Value,
+            _hub.Get<WorldClockState>("sim-time").Value.Now.TimeOfDay.TotalHours);
+
+        if (update.Events.Any(item => item.Kind == "UnknownItem"))
+        {
+            PostSaveError("Для этого предмета нет механики употребления.");
+            return false;
+        }
+
+        _hub.Get<PlayerVitalsState>("player-vitals").Set(update.Vitals, "Употребление предмета");
+        _hub.Get<PlayerConditionState>("player-conditions").Set(update.Conditions, "Употребление предмета");
+
+        return true;
+    }
+
+    /// <summary>
+    /// Употребляет предмет ИЗ КАТАЛОГА, минуя инвентарь (выбор в меню желудка).
+    ///
+    /// Автор задал это действие как замену ТРЁХ шагов: «поиск предмета, выдача в
+    /// инвентарь и нажатие в меню "использовать"» — «выбрал — попало в желудок».
+    /// Поэтому инвентарь здесь не участвует вовсе: ни наличия, ни количества, ни
+    /// списания.
+    ///
+    /// Именно на этом ломалось прежнее поведение. Выбор в меню шёл через
+    /// <see cref="UseInventoryItemCore"/>, а тот первым делом требует предмет В
+    /// ИНВЕНТАРЕ — и на предмете, которого там нет, МОЛЧА выходил (единственный
+    /// отклик, «Предмет закончился.», страница монитора не показывает). Снаружи
+    /// это выглядело так, будто клик по пункту не делает ничего: меню
+    /// закрывалось, а желудок оставался прежним.
+    /// </summary>
+    private void ConsumeStomachItem(string itemId)
+    {
+        if (string.IsNullOrWhiteSpace(itemId))
+            return;
+
+        if (!TryApplyItemUse(itemId))
+            return;
+
+        // Журнал отличается от инвентарного: по нему потом и видно, каким путём
+        // предмет попал в организм, — а без различия разбор такого случая снова
+        // упёрся бы в «действие пришло, а дальше ничего».
+        AppendJournal(
+            "ItemUsed",
+            DateTimeOffset.UtcNow,
+            "Состояние игрока",
+            "Употреблён предмет из каталога: [[item:" + itemId + ":" +
+            ItemLabel(itemId) + "]] " + ItemLabel(itemId) + ".",
+            _hub.Get<PlayerState>("player").Value.Position);
+
+        AppLogger.Info("SimulatorForm: предмет употреблён из каталога (без инвентаря).",
+            $"item={itemId}");
+
+        PersistSession("автосохранение: употребление из каталога", force: true);
+        RequestSnapshot("stomach item consumed");
     }
 
     private void FindFullLodging()
@@ -3943,7 +4342,9 @@ public sealed class SimulatorForm : WebViewForm
         var money = _hub.Get<PlayerProgressState>("player-progress").Value.Money;
         if (money < CharacterVitalsEngine.HotelPrice)
         {
-            PostSaveError("Полноценный ночлег стоит 5000 рублей.");
+            PostSaveError(
+                $"Полноценный ночлег стоит " +
+                $"{CharacterVitalsEngine.HotelPrice:0} рублей.");
             return;
         }
 
@@ -3976,14 +4377,18 @@ public sealed class SimulatorForm : WebViewForm
         var progressChannel = _hub.Get<PlayerProgressState>("player-progress");
         var progress = progressChannel.Value;
         if (progress.Money < CharacterVitalsEngine.HotelPrice)
-            throw new InvalidOperationException("Для полноценного ночлега нужно 5000 рублей.");
+            throw new InvalidOperationException(
+                $"Для полноценного ночлега нужно " +
+                $"{CharacterVitalsEngine.HotelPrice:0} рублей.");
 
         var update = CharacterVitalsEngine.CompleteHotelSleep(
             _hub.Get<PlayerVitalsState>("player-vitals").Value,
             _hub.Get<PlayerConditionState>("player-conditions").Value);
 
         if (update.Events.Any(item => item.Kind == "SleepBlocked"))
-            throw new InvalidOperationException("Сон невозможен: здоровье, энергия или жидкость должны быть выше 5%.");
+            throw new InvalidOperationException(
+                $"Сон невозможен: здоровье, энергия или жидкость должны быть выше " +
+                $"{CharacterVitalsTuning.SleepBlockedBelowPercent:0.#}%.");
 
         var beforeVitals = _hub.Get<PlayerVitalsState>("player-vitals").Value;
         var beforeConditions = _hub.Get<PlayerConditionState>("player-conditions").Value;
@@ -4010,7 +4415,8 @@ public sealed class SimulatorForm : WebViewForm
             "HotelSleep",
             DateTimeOffset.UtcNow,
             "Гостиница",
-            "Полноценный ночлег: 7 игровых часов, 5000 рублей.",
+            $"Полноценный ночлег: {CharacterVitalsEngine.HotelSleepHours} игровых часов, " +
+            $"{CharacterVitalsEngine.HotelPrice:0} рублей.",
             player.Position);
 
         // Отчёт об изменении состояния: автор просил после ночлега, сна и отдыха
@@ -4180,7 +4586,9 @@ public sealed class SimulatorForm : WebViewForm
             return;
         }
 
-        var hours = fullSleep ? 4 : 6;
+        var hours = fullSleep
+            ? CharacterVitalsTuning.FullSleepHours
+            : CharacterVitalsTuning.FieldSleepHours;
         var currentVitals = _hub.Get<PlayerVitalsState>("player-vitals").Value;
         var currentConditions = _hub.Get<PlayerConditionState>("player-conditions").Value;
 
@@ -4192,7 +4600,9 @@ public sealed class SimulatorForm : WebViewForm
 
         if (update.Events.Any(item => item.Kind == "SleepBlocked"))
         {
-            PostSaveError("Сон невозможен: здоровье, энергия или жидкость должны быть выше 5%.");
+            PostSaveError(
+                $"Сон невозможен: здоровье, энергия или жидкость должны быть выше " +
+                $"{CharacterVitalsTuning.SleepBlockedBelowPercent:0.#}%.");
             return;
         }
 
@@ -4215,8 +4625,8 @@ public sealed class SimulatorForm : WebViewForm
             DateTimeOffset.UtcNow,
             "Состояние игрока",
             fullSleep
-                ? "Полноценный сон: 4 игровых часа."
-                : "Полевой сон: 6 игровых часов.");
+                ? $"Полноценный сон: {hours} игровых часа."
+                : $"Полевой сон: {hours} игровых часов.");
 
         // Отчёт об изменении состояния — как и у ночлега: автор просил видеть
         // после сна, что именно изменилось и какие перки получены.

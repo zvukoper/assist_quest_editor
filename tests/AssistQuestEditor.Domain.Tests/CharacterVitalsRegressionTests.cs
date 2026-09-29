@@ -51,13 +51,17 @@ public sealed class CharacterVitalsRegressionTests
 
         Assert.Equal(
             PlayerConditionScale.RateFromPercent(
-                -100d / CharacterVitalsEngine.EnergyConsumptionHours / 60d),
+                -CharacterVitalsEngine
+                    .EnergyConsumptionPercentPerHour(moving: true) /
+                60d),
             rates.EnergyPerGameMinute,
             6);
 
         Assert.Equal(
             PlayerConditionScale.RateFromPercent(
-                -100d / CharacterVitalsEngine.HydrationConsumptionHours / 60d),
+                -CharacterVitalsEngine
+                    .HydrationConsumptionPercentPerHour(moving: true) /
+                60d),
             rates.HydrationPerGameMinute,
             6);
 

@@ -74,10 +74,16 @@ const snapshot = {
   // Значения — ЕДИНИЦЫ шкалы 0..10000, как их присылает Хост: 100 единиц равны
   // одному проценту. Если подставить сюда проценты, шкала в интерфейсе схлопнется
   // в сотую часть и проверки пройдут «успешно» на сломанной разметке.
+  //
+  // ФИЗИЧЕСКИЕ поля (`energyKilocalories` и т.п.) обязательны: именно их
+  // показывает интерфейс у энергии и жидкости. Без них подпись откатилась бы к
+  // процентам, и дефект «потолок 10000 вместо 3000» вернулся бы незамеченным.
   playerVitals: {
     health: 8000, maxHealth: 10000, energy: 5500, maxEnergy: 10000,
     hydration: 7000, maxHydration: 10000, fatigue: 4000, maxFatigue: 10000,
-    resilience: 6000, metabolism: 6000
+    resilience: 6000, metabolism: 6000,
+    energyKilocalories: 2750, maxEnergyKilocalories: 5000,
+    hydrationMilliliters: 2100, maxHydrationMilliliters: 3000
   },
   playerProgress: { money: 1500, experience: 0, reserve: 0 },
   character: { stats: { strength: 5 }, skills: [] },
@@ -259,6 +265,15 @@ try {
     }
     check(scales.tooltips.some(t => t.includes("Реальное значение")),
       `${name}: подсказка не называет реальное значение`);
+    // Физические шкалы показывают ФИЗИЧЕСКИЙ потолок, а не внутренние 10000:
+    // энергия — 5000 ккал, жидкость — 3000 мл. Это прямая просьба автора, и
+    // проверка идёт по тексту подсказки, которую видит игрок.
+    check(scales.tooltips.some(t => t.includes("/5000 ккал")),
+      `${name}: подсказка энергии не показывает потолок 5000 ккал`);
+    check(scales.tooltips.some(t => t.includes("/3000 мл")),
+      `${name}: подсказка жидкости не показывает потолок 3000 мл`);
+    check(!scales.tooltips.some(t => /Жидкост[а-я]*[\s\S]{0,80}\/10000/.test(t)),
+      `${name}: подсказка жидкости всё ещё показывает внутренний потолок 10000`);
     // Значение показывается в ЕДИНИЦАХ шкалы с максимумом, а не в процентах:
     // иначе игрок не видит, сколько именно единиц движения даёт минута.
     check(scales.tooltips.some(t => t.includes("/10000")),
@@ -279,9 +294,19 @@ try {
       JSON.stringify(fatigueTip));
 
   // Реальное значение — единицы из снимка (4000 усталости), а не проценты.
-  check(!!fatigueTip && fatigueTip.includes("Реальное значение: 4000/10000"),
+  // У усталости размерности нет, поэтому она остаётся в единицах — и потолок у
+  // неё честно равен 10000.
+  check(!!fatigueTip && fatigueTip.includes("Реальное значение: 4000/10000 ед."),
     "сайдбар: реальное значение усталости не в единицах шкалы: " +
       JSON.stringify(fatigueTip));
+
+  // Подпись шкалы в разметке: у энергии и жидкости — ФИЗИЧЕСКАЯ величина.
+  const energyValue = (out.sidebar?.values || []).find(v => /5000/.test(v)) || "";
+  check(energyValue.includes("2750 / 5000 ккал"),
+    "сайдбар: энергия не подписана как «2750 / 5000 ккал», получено: " + energyValue);
+  const hydrationValue = (out.sidebar?.values || []).find(v => /мл/.test(v)) || "";
+  check(hydrationValue.includes("2100 / 3000 мл"),
+    "сайдбар: жидкость не подписана как «2100 / 3000 мл», получено: " + hydrationValue);
 
   // Усталость 40% — мягкая часть не пустая, иначе жёлтое выглядело бы «0%».
   const fatigueBar = out.sidebar?.bars.find(b => b.cls.includes("fatigue"));

@@ -488,6 +488,28 @@ public static class SimulationSaveCodec
         {
             WriteString(writer, conditions.LastConsumedItemId);
         }
+
+        // v15: ПОРЦИИ желудка по отдельности. До этого хранились только четыре
+        // суммы, поэтому монитор не мог показать, ЧТО лежит в желудке: он видел
+        // единственное имя последнего предмета, и «Вода» подменялась
+        // «Апельсином». Суммы пишутся ВСЕГДА (они нужны движку и старым
+        // читателям), список порций — только новым форматом.
+        if (formatVersion >= 15)
+        {
+            var portions = conditions.Stomach.Portions ??
+                Array.Empty<StomachPortion>();
+
+            writer.Write(portions.Count);
+            foreach (var portion in portions)
+            {
+                WriteString(writer, portion.ItemId);
+                WriteDouble(writer, portion.VolumeFraction);
+                WriteDouble(writer, portion.EnergyRemaining);
+                WriteDouble(writer, portion.HydrationRemaining);
+                WriteDouble(writer, portion.EnergyPerGameSecond);
+                WriteDouble(writer, portion.HydrationPerGameSecond);
+            }
+        }
     }
 
     private static PlayerConditionState ReadConditions(
@@ -567,6 +589,40 @@ public static class SimulationSaveCodec
             state = state with
             {
                 LastConsumedItemId = ReadString(reader)
+            };
+        }
+
+        if (formatVersion >= 15)
+        {
+            var portions = new List<StomachPortion>();
+            var portionCount = reader.ReadInt32();
+            for (var index = 0; index < portionCount; index++)
+            {
+                portions.Add(new StomachPortion(
+                    ReadString(reader),
+                    ReadDouble(reader),
+                    ReadDouble(reader),
+                    ReadDouble(reader),
+                    ReadDouble(reader),
+                    ReadDouble(reader)));
+            }
+
+            state = state with
+            {
+                Stomach = state.Stomach with { Portions = portions }
+            };
+        }
+        else if (formatVersion >= 13)
+        {
+            // Старые форматы знали только суммы и ОДНО имя (последний предмет).
+            // Собираем из них одну порцию под этим именем — так загрузка не
+            // обнуляет желудок и игрок не теряет уже съеденное.
+            state = state with
+            {
+                Stomach = state.Stomach with
+                {
+                    LegacyItemId = state.LastConsumedItemId
+                }
             };
         }
 

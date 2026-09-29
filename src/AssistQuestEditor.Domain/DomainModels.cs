@@ -83,8 +83,12 @@ public sealed record PlayerVitalsState(
     double MaxFatigue)
 {
     public double Hygiene { get; init; } = PlayerConditionScale.Maximum;
-    public double Resilience { get; init; } = PlayerConditionScale.FromPercent(60d);
-    public double Metabolism { get; init; } = PlayerConditionScale.FromPercent(60d);
+    public double Resilience { get; init; } =
+        PlayerConditionScale.FromPercent(
+            CharacterVitalsTuning.DefaultResiliencePercent);
+    public double Metabolism { get; init; } =
+        PlayerConditionScale.FromPercent(
+            CharacterVitalsTuning.DefaultMetabolismPercent);
 
     /// <summary>
     /// Энергия шкалы в КИЛОКАЛОРИЯХ (задано автором: 0..5000).
@@ -106,7 +110,7 @@ public sealed record PlayerVitalsState(
         100d *
         CharacterDigestion.EnergyScaleKilocalories;
 
-    /// <summary>Жидкость шкалы в МИЛЛИЛИТРАХ (задано автором: 0..15000).</summary>
+    /// <summary>Жидкость шкалы в МИЛЛИЛИТРАХ (задано автором: 0..3000).</summary>
     public double HydrationMilliliters =>
         PlayerConditionScale.ToPercent(Hydration) /
         100d *

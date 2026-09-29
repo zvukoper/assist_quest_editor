@@ -22,8 +22,8 @@
     gap:10px;
     padding:2px 2px 8px;
   }
-  .perksHead strong { font-size:13px; }
-  .perksHead .perksHint { color:var(--muted); font-size:10px; }
+  .perksHead strong { font-size:14px; }
+  .perksHead .perksHint { color:var(--muted); font-size:11px; }
 
   /* Разделы идут колонками в две ширины: перков, умений, баффов и дебаффов
      вместе много, и одним длинным списком их пришлось бы листать. */
@@ -45,8 +45,8 @@
     flex-direction:column;
     gap:6px;
   }
-  .perksCardTitle { font-size:12px; font-weight:600; display:flex; justify-content:space-between; align-items:baseline; gap:8px; }
-  .perksCardTitle .perksCount { color:var(--muted); font-size:10px; font-weight:400; }
+  .perksCardTitle { font-size:13px; font-weight:600; display:flex; justify-content:space-between; align-items:baseline; gap:8px; }
+  .perksCardTitle .perksCount { color:var(--muted); font-size:11px; font-weight:400; }
 
   .perkEntry {
     border:1px solid var(--border);
@@ -71,14 +71,14 @@
     background:rgba(120,190,255,.16);
     box-shadow:0 0 0 2px rgba(120,190,255,.3);
   }
-  .perkEntryName { font-size:12px; font-weight:600; }
+  .perkEntryName { font-size:13px; font-weight:600; }
   .perkEntry.active .perkEntryName { color:#f7df9b; }
   .perkEntry.active .perkEntrySuffix { color:#f2c85a; font-weight:600; }
-  .perkEntrySuffix { font-weight:400; font-size:11px; }
-  .perkEntryText { font-size:10px; line-height:1.45; color:rgba(233,237,242,.82); }
+  .perkEntrySuffix { font-weight:400; font-size:12px; }
+  .perkEntryText { font-size:11px; line-height:1.45; color:rgba(233,237,242,.82); }
   .perkEntryText .perkEntryLabel { color:var(--muted); }
   .perkEntryFooter { display:flex; align-items:center; gap:6px; flex-wrap:wrap; }
-  .perkEntryDuration { font-size:10px; color:var(--muted); }
+  .perkEntryDuration { font-size:11px; color:var(--muted); }
   .perkLevelInput {
     width:52px;
     background:#0f141a;
@@ -86,13 +86,13 @@
     border:1px solid var(--border);
     border-radius:4px;
     padding:2px 4px;
-    font-size:11px;
+    font-size:12px;
     text-align:right;
   }
   /* Действие пункта — маленькая кнопка: их по паре на пункт, и крупные кнопки
      превратили бы список в стену. */
   .perkAction {
-    font-size:10px;
+    font-size:11px;
     padding:2px 8px;
     background:rgba(255,255,255,.06);
     color:#e9edf2;
@@ -105,7 +105,7 @@
   /* Кнопка незаконченного пункта видна, но не работает: спрятать её значило бы
      выдать «в разработке» за отсутствие возможности. */
   .perkAction[disabled] { opacity:.45; cursor:not-allowed; }
-  .perkError { flex:0 0 auto; font-size:10px; color:#ff9a9a; min-height:12px; padding:0 2px 4px; }
+  .perkError { flex:0 0 auto; font-size:11px; color:#ff9a9a; min-height:12px; padding:0 2px 4px; }
 </style>
 </head>
 <body>
@@ -118,7 +118,7 @@
   <div class="perksBody" id="perksBody"></div>
 </div>
 <script src="web_log.js?v=18763af3"></script>
-<script src="vitals.js?v=c48bd86b"></script>
+<script src="vitals.js?v=2eae4807"></script>
 <script src="perks.js?v=c043a5aa"></script>
 </body>
 </html>

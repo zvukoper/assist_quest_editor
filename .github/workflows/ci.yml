@@ -221,6 +221,7 @@ jobs:
           node --check .\src\AssistQuestEditor.App\Web\junctions.js
           node --check .\src\AssistQuestEditor.App\Web\cityBoundaries.js
           node --check .\src\AssistQuestEditor.App\Web\web_log.js
+          node --check .\src\AssistQuestEditor.App\Web\dom_reconcile.js
 
 
       - name: .NET SDK

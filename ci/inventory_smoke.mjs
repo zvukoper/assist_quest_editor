@@ -267,6 +267,33 @@ check(/private void DropInventoryItemCore\(string itemId\)/.test(simulatorForm) 
       /items\.Remove\(itemId\)/.test(simulatorForm),
   "Выброс предмета обязан списывать одну единицу и убирать предмет при нуле.");
 
+// --- 5d. Полный желудок гасит «Использовать» ---
+//
+// Автор: «если съедобный предмет по объёму больше, чем свободное место желудка,
+// предмет употребить нельзя. В инвентаре "Использовать" неактивно и в скобках
+// (желудок полон)». Признак считает ДОМЕН (`CharacterDigestionReport.Fits`) и
+// присылает Хост в поле `fits` списка `consumables`; страница лишь гасит пункт.
+// Без этих проверок кнопка была бы живой и молча ничего не делала — ровно тот
+// класс дефектов, что уже ловился на меню желудка.
+check(/graphContextMenuItemDisabled/.test(inventoryHtml),
+  "Инвентарь не умеет гасить пункт «Использовать» (нет класса graphContextMenuItemDisabled).");
+check(/\.graphContextMenuItemDisabled\s*\{/.test(inventoryHtml) ||
+      /\.graphContextMenuItemDisabled\s*\{/.test(themeCss),
+  "Класс graphContextMenuItemDisabled применяется, но правила для него нет: пункт не посереет.");
+check(/fitsStomach/.test(inventoryHtml) && /consumables/.test(inventoryHtml),
+  "Инвентарь не читает признак помещаемости из списка consumables.");
+check(/желудок полон/.test(inventoryHtml),
+  "В инвентаре нет пометки «(желудок полон)» для непомещающегося предмета.");
+check(/useButton\.disabled\s*=/.test(inventoryHtml),
+  "Пункт «Использовать» не становится фактически недоступным: атрибут disabled не ставится.");
+// Состояние обязано приходить ЖИВЫМ обновлением, а не только со снимком: пока
+// окно открыто, желудок освобождается от переваривания, и «не помещается» должно
+// сниматься без переоткрытия инвентаря.
+check(/live_state/.test(inventoryHtml) && /consumablesFitsSignature/.test(inventoryHtml),
+  "Инвентарь не пересчитывает пометку при живом обновлении: кнопка останется серой после усвоения.");
+check(/PushLiveStateJson/.test(inventoryForm),
+  "Хост не отправляет в инвентарь живое состояние: пометка «желудок полон» не обновится.");
+
 // --- 6. Реальные размеры: число ячеек и размер окна ---
 
 const exe = findExecutable();

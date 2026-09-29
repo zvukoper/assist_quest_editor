@@ -59,7 +59,7 @@ public sealed record SimulationSaveState(
     /// v14: Id последнего употреблённого предмета — подпись пункта переваривания
     /// в мониторе показателей.
     /// </summary>
-    public const int CurrentFormatVersion = 14;
+    public const int CurrentFormatVersion = 15;
 
     /// <summary>Пользовательский маршрут Симулятора.</summary>
     public RouteState Route { get; init; } = RouteState.Empty;

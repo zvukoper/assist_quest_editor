@@ -34,6 +34,19 @@ public sealed class InventoryForm : WebViewForm
     /// </summary>
     private string? _lastSnapshotJson;
 
+    /// <summary>
+    /// Последнее ЖИВОЕ обновление (live_state).
+    ///
+    /// Хранится отдельно от снимка и НЕ подменяет его: странице для
+    /// инициализации нужен полный снимок, и если первым сообщением придёт
+    /// live_state, окно останется пустым (ровно этот дефект был в мониторе
+    /// показателей). Нужен он ради одного поля — признака «помещается ли предмет
+    /// в желудок»: он меняется каждую секунду по мере усвоения, а полный снимок
+    /// приходит редко, поэтому без живого обновления «Использовать» осталось бы
+    /// активным, пока желудок уже полон.
+    /// </summary>
+    private string? _lastLiveStateJson;
+
     public InventoryForm()
         : base(
             "Игрок",
@@ -108,6 +121,21 @@ public sealed class InventoryForm : WebViewForm
             PostJson(snapshotJson);
     }
 
+    /// <summary>
+    /// Обновляет окно живым состоянием (признаки «помещается» и объёмы).
+    ///
+    /// Отдельный метод, а не <see cref="SetSnapshotJson"/>: живое состояние
+    /// приходит несколько раз в секунду, и им нельзя подменять снимок для
+    /// повтора — страница инициализируется именно полным снимком.
+    /// </summary>
+    public void PushLiveStateJson(string json)
+    {
+        _lastLiveStateJson = json;
+
+        if (Browser.CoreWebView2 is not null)
+            PostJson(json);
+    }
+
     /// <summary>Показывает всплывающее уведомление о выдаче или изъятии предмета.</summary>
     public void NotifyInventoryChange(string itemId, double delta)
     {
@@ -138,6 +166,11 @@ public sealed class InventoryForm : WebViewForm
                 case "inventory_ready":
                     if (_lastSnapshotJson is not null)
                         PostJson(_lastSnapshotJson);
+                    // Живое состояние идёт ПОСЛЕ снимка: снимок инициализирует
+                    // страницу, а живое обновление лишь уточняет признаки
+                    // «помещается». В обратном порядке окно оставалось бы пустым.
+                    if (_lastLiveStateJson is not null)
+                        PostJson(_lastLiveStateJson);
                     break;
 
                 // Клавиша I и Escape действуют и в окне инвентаря: «открывать и

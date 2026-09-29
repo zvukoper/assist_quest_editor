@@ -19,11 +19,26 @@
   var body = null;
   var errorNode = null;
   var searchNode = null;
+  var edibleNode = null;
   var payload = null;
-  var lastMarkup = "";
+
+  /**
+   * Подпись ПОКАЗАННОГО списка — по ней видно, нужно ли вообще собирать разметку.
+   * Смотри пояснение в render().
+   */
+  var lastSignature = null;
 
   /** Строка поиска живёт в окне, а не в данных: это фильтр показа. */
   var query = "";
+
+  /**
+   * Галочка «только съедобное» — тоже фильтр ПОКАЗА, и живёт рядом с запросом.
+   *
+   * Хранится в окне, а не в данных: автор просил скрывать неСъедобное именно в
+   * СПИСКЕ, а сам каталог обязан остаться полным — иначе «выбросить мыло» стало
+   * бы негде, и фильтр превратился бы в потерю предметов.
+   */
+  var onlyEdible = false;
 
   var highlightId = "";
   var HIGHLIGHT_MS = 4000;
@@ -72,6 +87,13 @@
       return byName || String(a.id || "").localeCompare(String(b.id || ""), "en");
     });
 
+    // Съедобность приходит от Хоста (`edible` = CharacterVitalsEngine.CanConsume),
+    // а не выводится здесь из калорий: у таблеток и мыла калорий нет, но они
+    // употребимы, и признак «есть ккал» отфильтровал бы их как неСъедобное.
+    if (onlyEdible) {
+      source = source.filter(function (entry) { return entry.edible === true; });
+    }
+
     if (!query) return source;
     var needle = query.toLowerCase();
     return source.filter(function (entry) {
@@ -81,31 +103,37 @@
   }
 
   /**
-   * Пищевая ценность и эффекты.
+   * Объём порции и пищевая ценность.
    *
-   * Блок печатается ТОЛЬКО у еды и питья: у прочих предметов нет ни калорий, ни
-   * воды, и «0 ккал» в карточке читалось бы как «еда, но бесполезная».
+   * ОБЪЁМ печатается у КАЖДОГО предмета (требование автора) и идёт первым: это
+   * единственное число, по которому видно, сколько предмет займёт в желудке.
+   * Хост отдаёт его в `milliliters` — том же числе, что подписано в меню желудка,
+   * поэтому «150 мл» здесь и «150 мл» там совпадают.
+   *
+   * Блок пищевой ценности печатается ТОЛЬКО у еды и питья: у прочих предметов нет
+   * ни калорий, ни воды, и «0 ккал» в карточке читалось бы как «еда, но
+   * бесполезная».
    *
    * Рядом с абсолютными величинами идут проценты шкалы: игрок ищет в мониторе
    * именно проценты, а «250 мл» без перевода заставил бы его считать в уме.
    */
   function nutritionHtml(entry) {
-    if (!entry.feeds) return "";
-
     var parts = [];
 
-    if (num(entry.grams) > 0) {
-      parts.push("Порция " + fmt(entry.grams) + " г");
+    if (num(entry.milliliters) > 0) {
+      parts.push("Объём порции " + fmt(entry.milliliters) + " мл");
     }
 
-    if (num(entry.kilocalories) > 0) {
-      parts.push("Энергия " + fmt(entry.kilocalories) + " ккал (" +
-        fmt(entry.energyPercent) + "% шкалы)");
-    }
+    if (entry.feeds) {
+      if (num(entry.kilocalories) > 0) {
+        parts.push("Энергия " + fmt(entry.kilocalories) + " ккал (" +
+          fmt(entry.energyPercent) + "% шкалы)");
+      }
 
-    if (num(entry.waterMilliliters) > 0) {
-      parts.push("Жидкость " + fmt(entry.waterMilliliters) + " мл (" +
-        fmt(entry.hydrationPercent) + "% шкалы)");
+      if (num(entry.waterMilliliters) > 0) {
+        parts.push("Жидкость " + fmt(entry.milliliters) + " мл (" +
+          fmt(entry.hydrationPercent) + "% шкалы)");
+      }
     }
 
     if (!parts.length) return "";
@@ -114,6 +142,20 @@
       "Пищевая ценность: </span>" + escapeHtml(parts.join(" · ")) + "</div>";
   }
 
+  /**
+   * Ключ карточки для сверки узлов.
+   *
+   * Сверка (`AssistDom.reconcile`) ключуется по `id` и ключевым `data-`атрибутам.
+   * У карточки нет ни того, ни другого — `id` был бы обязан быть уникальным в
+   * документе, а роль узла задаёт именно `data-item-id`. Поэтому признаки
+   * добавляются ПРЯМО В РАЗМЕТКУ: без них сверка считала бы карточку безымянной
+   * и сохраняла бы её по ПОРЯДКУ, а порядок задаёт сортировка по названию —
+   * смена количества у одного предмета переставляла бы карточки местами.
+   *
+   * `data-key` — тот самый атрибут, который сверка читает первым; `data-item-id`
+   * уже стоял в разметке и раньше (по нему ищет подсветка), и сверка читает его
+   * тоже, но порядок перебора оставлен явным.
+   */
   function cardHtml(entry) {
     var classes = "itemCard";
 
@@ -122,14 +164,15 @@
 
     var quantity = Math.max(0, Math.round(num(entry.quantity)));
 
-    return "<div class='" + classes + "' data-item-id='" +
-      escapeHtml(entry.id) + "'>" +
+    return "<div class='" + classes + "' data-key='" + escapeHtml(entry.id) +
+      "' data-item-id='" + escapeHtml(entry.id) + "'>" +
       "<div class='itemTile' style='background:" + escapeHtml(entry.color || "#888") +
         "' aria-hidden='true'>" + escapeHtml(entry.letter || "?") + "</div>" +
       "<div class='itemMain'>" +
         "<div class='itemTitle'>" +
           "<span class='itemName'>" + escapeHtml(entry.name) + "</span>" +
           "<span class='itemCategory'>" + escapeHtml(entry.category) + "</span>" +
+          (entry.edible ? "<span class='itemEdibleBadge'>съедобно</span>" : "") +
         "</div>" +
         "<div class='itemDescription'>" + escapeHtml(entry.description) + "</div>" +
         nutritionHtml(entry) +
@@ -154,24 +197,74 @@
     "</div>";
   }
 
+  /**
+   * Сколько ЕДИНИЦ предмета показано в открытом окне — ключ для проверки «список
+   * не изменился».
+   *
+   * ЗАЧЕМ ОТДЕЛЬНО ОТ СВЕРКИ УЗЛОВ. Сверка узлов переживает смену данных, но она
+   * стоит разбора разметки: двадцать тысяч символов четыре раза в секунду. Между
+   * тем живые обновления Хоста — это ПОВТОР того же списка: количество меняется
+   * только когда игрок правит его сам или съедает предмет. По одной этой строке
+   * видно, изменился ли список, и в самом частом случае разметка не собирается
+   * вовсе.
+   *
+   * Признак намеренно берётся из ТЕХ ЖЕ полей, что печатает карточка
+   * (название, количество, съедобность, объём, ккал, вода, категория, описание,
+   * цвет): любое поле, влияющее на показ, обязано сбрасывать список, иначе
+   * карточка осталась бы со старым содержимым.
+   */
+  function entriesSignature(list) {
+    var parts = [];
+    for (var i = 0; i < list.length; i++) {
+      var entry = list[i];
+      parts.push([entry.id, entry.name, entry.category, entry.description,
+        entry.color, entry.letter, entry.edible === true ? 1 : 0,
+        Math.max(0, Math.round(num(entry.quantity))),
+        num(entry.milliliters), num(entry.kilocalories), num(entry.waterMilliliters)]
+        .join("\u0001"));
+    }
+    return parts.join("\u0002");
+  }
+
   function render() {
     if (!body) return;
 
     var list = visibleEntries();
 
+    // Список не изменился — разметку не собираем вовсе. Прокрутка, выделение и
+    // карточка под курсором остаются ровно как были.
+    var signature = entriesSignature(list);
+    if (signature === lastSignature) return;
+    lastSignature = signature;
+
     var markup = list.length
       ? list.map(cardHtml).join("")
       : "<div class='itemsEmpty'>" +
-        (entries().length
-          ? "Ничего не найдено по запросу."
-          : "Каталог предметов пуст.") +
+        (onlyEdible && !query
+          ? "Нет съедобных предметов в каталоге."
+          : entries().length
+            ? "Ничего не найдено по запросу."
+            : "Каталог предметов пуст.") +
         "</div>";
 
-    // Пересборка только при изменении: снимок приходит часто, и замена узлов
-    // сбрасывала бы фокус в поле количества вместе с набранным числом.
-    if (markup === lastMarkup) return;
-    lastMarkup = markup;
-    body.innerHTML = markup;
+    // Разметка ставится СВЕРКОЙ УЗЛОВ, а не `innerHTML`.
+    //
+    // Прежняя замена всех карточек сразу давала три беды, и все три заметны при
+    // ВКЛЮЧЁННОЙ симуляции: карточка под курсором теряла `:hover` (мерцание
+    // плашек), выделение текста сбрасывалось, а прокрутка дёргалась — список
+    // высотой в несколько экранов пересобирался целиком четыре раза в секунду.
+    // Автор: «сильно тормозит список предметов. Прокрутка колесом или скроллом
+    // тормозит. Если выключить симуляцию, всё плавно передвигается».
+    //
+    // Ключом карточки служит `data-key` (см. cardHtml), поэтому сверка сохраняет
+    // узлы и меняет только то, что действительно изменилось. Запасной путь —
+    // прежняя замена целиком, чтобы старая страница из кеша WebView2 осталась
+    // рабочей.
+    if (global.AssistDom && global.AssistDom.reconcile) {
+      global.AssistDom.reconcile(body, markup);
+    } else {
+      body.innerHTML = markup;
+    }
 
     if (highlightId) scrollToHighlight();
   }
@@ -197,10 +290,13 @@
     highlightTimer = null;
 
     // Ссылку из журнала не должен прятать фильтр: иначе клик по названию не
-    // показал бы ничего, и выглядело бы это как сломанная ссылка.
-    if (highlightId && query) {
+    // показал бы ничего, и выглядело бы это как сломанная ссылка. Галочку
+    // «только съедобное» снимаем по той же причине — ссылка может вести на мазь.
+    if (highlightId && (query || onlyEdible)) {
       query = "";
+      onlyEdible = false;
       if (searchNode) searchNode.value = "";
+      if (edibleNode) edibleNode.checked = false;
     }
 
     render();
@@ -259,11 +355,23 @@
     body = document.getElementById("itemsBody");
     errorNode = document.getElementById("itemsError");
     searchNode = document.getElementById("itemsSearch");
+    edibleNode = document.getElementById("itemsOnlyEdible");
     if (!body) return;
 
     if (searchNode) {
       searchNode.addEventListener("input", function () {
         query = String(searchNode.value || "").trim();
+        render();
+      });
+    }
+
+    // Галочка «только съедобное» — фильтр ПОКАЗА, как и поиск: она скрывает
+    // неСъедобное из СПИСКА, а каталог остаётся полным. Снимать её при выделении
+    // из журнала не нужно: ссылка может вести на мазь, и галочка спрятала бы
+    // предмет, на который сослался игрок.
+    if (edibleNode) {
+      edibleNode.addEventListener("change", function () {
+        onlyEdible = edibleNode.checked === true;
         render();
       });
     }

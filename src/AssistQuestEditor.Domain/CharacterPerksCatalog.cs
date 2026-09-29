@@ -163,51 +163,51 @@ public static class CharacterPerksCatalog
             "Отдохнувший",
             "Выдаётся, когда усталость доходит до нуля. Заменяет «Расслабление», а не складывается с ним.",
             "Опыт +25%, накопление стресса замедлено на своё значение процента.",
-            DurationRealSeconds: 25d * 60d),
+            DurationRealSeconds: CharacterVitalsTuning.RestedDurationRealSeconds),
         new(
             "relaxation",
             CharacterPerkCategory.Buff,
             "Расслабление",
             "Выдаётся коротким отдыхом вне сна. Не складывается с «Отдохнувшим».",
             "Опыт +15%, накопление стресса замедлено на своё значение процента.",
-            DurationRealSeconds: 15d * 60d),
+            DurationRealSeconds: CharacterVitalsTuning.RelaxationDurationRealSeconds),
         new(
             "bull",
             CharacterPerkCategory.Buff,
             "Бык",
             "Даётся за дисциплину в спорте и питании. Пока действует, негатив не накапливается вовсе.",
             "Любое негативное накопление (истощение и кумулятивный стресс) прекращается; " +
-            "метаболизм расходует ресурсы как при сниженном; восстановление здоровья ×1,5; " +
+            "метаболизм расходует ресурсы как при сниженном; восстановление здоровья +2% за 10 минут; " +
             "получаемый форсаж ×1,5.",
-            DurationGameSeconds: 2d * 24d * 3600d),
+            DurationGameSeconds: CharacterItemTuning.BullFromSupplementGameSeconds),
         new(
             "strong_bones",
             CharacterPerkCategory.Buff,
             "Крепкие кости",
             "Даётся за регулярное употребление молочных продуктов.",
             "Полностью исключает риск переломов.",
-            DurationGameSeconds: 3d * 24d * 3600d),
+            DurationGameSeconds: CharacterItemTuning.StrongBonesGameSeconds),
         new(
             "power_surge",
             CharacterPerkCategory.Buff,
             "Прилив сил",
             "Кратковременный подъём: шкалы замирают, ничто не тратится.",
             "Блокирует ЛЮБОЕ изменение шкал — значения замораживаются.",
-            DurationRealSeconds: 15d * 60d),
+            DurationRealSeconds: CharacterVitalsTuning.PowerSurgeDurationRealSeconds),
         new(
             "sorbent",
             CharacterPerkCategory.Buff,
             "Сорбент",
             "Даётся приёмом сорбента.",
             "Связывает токсины, ускоряя очищение организма (вывод кофеина и алкоголя).",
-            DurationGameSeconds: 4d * 3600d),
+            DurationGameSeconds: CharacterItemTuning.SorbentGameSeconds),
         new(
             "analgesia",
             CharacterPerkCategory.Buff,
             "Обезболивание",
             "Даётся приёмом обезболивающего.",
             "Снимает боль, поддерживает здоровье.",
-            DurationGameSeconds: 2d * 3600d),
+            DurationGameSeconds: CharacterItemTuning.AnalgesiaGameSeconds),
 
         // ── Дебаффы: временная расплата ────────────────────────────────────
         new(
@@ -217,7 +217,26 @@ public static class CharacterPerksCatalog
             "Выдаётся разово при входе стресса в критическую зону (выше 50%).",
             "Усталость копится на 10% быстрее. В момент выдачи разом снимает 5% здоровья, " +
             "энергии и жидкости.",
-            DurationRealSeconds: 15d * 60d),
+            DurationRealSeconds: CharacterVitalsTuning.BurnoutDurationRealSeconds),
+        new(
+            CharacterVitalsEngine.ThirstEffectId,
+            CharacterPerkCategory.Debuff,
+            "Жажда",
+            "Начинается, когда жидкости в шкале остаётся меньше 1500 мл. Снимается, как " +
+            "только в желудке начинает усваиваться что-то с жидкостью.",
+            "Копится истощение жидкости (снижает верхний предел шкалы), стресс растёт на " +
+            "0,5% в минуту, метаболизм падает на 1% за 10 игровых минут.",
+            DurationGameSeconds: 0d),
+        new(
+            CharacterVitalsEngine.DehydrationEffectId,
+            CharacterPerkCategory.Debuff,
+            "Обезвоживание",
+            "Начинается, когда жидкости остаётся меньше 500 мл. Снимается, когда игрок " +
+            "добивается положительной (зелёной) динамики жидкости.",
+            "Метаболизм падает вдвое быстрее (2% за 10 игровых минут), стресс копится " +
+            "на 25% быстрее, устойчивость падает вместе с расходом жидкости, действия " +
+            "с физической нагрузкой недоступны (кроме движения).",
+            DurationGameSeconds: 0d),
         new(
             "unkempt",
             CharacterPerkCategory.Debuff,
@@ -239,28 +258,28 @@ public static class CharacterPerksCatalog
             "Злоупотребление обезболивающими",
             "Начинается после 4-го приёма обезболивающего.",
             "Препарат перестаёт помогать и добавляет стресс.",
-            DurationGameSeconds: 6d * 3600d),
+            DurationGameSeconds: CharacterItemTuning.AnalgesicOveruseGameSeconds),
         new(
             "drowsiness",
             CharacterPerkCategory.Debuff,
             "Сонливость",
             "Побочный эффект успокоительных и адаптогенов.",
             "Усталость копится быстрее, устойчивость снижена.",
-            DurationGameSeconds: 2d * 3600d),
+            DurationGameSeconds: CharacterItemTuning.DrowsinessGameSeconds),
         new(
             "nicotine_rebound",
             CharacterPerkCategory.Debuff,
             "Никотиновый откат",
             "Расплата за выкуренную сигарету: облегчение краткое, откат дольше.",
             "Стресс резко возвращается после краткого облегчения.",
-            DurationRealSeconds: 60d * 60d),
+            DurationRealSeconds: CharacterItemTuning.NicotineReboundRealSeconds),
         new(
             "alcohol_aftereffect",
             CharacterPerkCategory.Debuff,
             "Последействие алкоголя",
             "Наступает после выпивки.",
             "Обезвоживание и разбитость: жидкость падает, устойчивость снижена.",
-            DurationGameSeconds: 3d * 3600d),
+            DurationGameSeconds: CharacterItemTuning.BeerAftereffectGameSeconds),
         new(
             "caffeine_overuse",
             CharacterPerkCategory.Debuff,

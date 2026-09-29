@@ -4,7 +4,7 @@ namespace AssistQuestEditor.Domain;
 /// Физический профиль съедобного/питьевого предмета.
 ///
 /// Зачем он нужен. Шкалы получили физический смысл — 5000 ккал энергии и
-/// 15000 мл жидкости, — поэтому «сколько восстанавливает предмет» обязано быть
+/// 3000 мл жидкости, — поэтому «сколько восстанавливает предмет» обязано быть
 /// выражено в КАЛОРИЯХ и МИЛЛИЛИТРАХ, а не в абстрактных процентах. Иначе
 /// бутылка питьевой воды на 500 мл восполняла бы 3,75 литра, а правило автора
 /// «организм усваивает 1 литр в час» не выполнялось бы вовсе: 25% шкалы за час
@@ -39,30 +39,14 @@ public sealed record ConsumableProfile(
 
 /// <summary>
 /// Расширение каталога предметов для Character Vitals.
-/// Дозы кофеина — игровые справочные значения, а не медицинская инструкция:
-/// они основаны на типичных величинах для соответствующих напитков/продуктов.
+/// Дозы кофеина живут в <see cref="CharacterItemTuning"/> — калибровочном
+/// файле, а не здесь: они часть баланса персонажа, и правка баланса не должна
+/// требовать поиска по каталогу.
 /// </summary>
 public static class CharacterConsumableCatalog
 {
-    private static readonly IReadOnlyDictionary<string, double> CaffeineMgByItem =
-        new Dictionary<string, double>(StringComparer.OrdinalIgnoreCase)
-        {
-            ["drink.coffee"] = 95d,
-            ["drink.espresso"] = 80d,
-            ["drink.black_tea"] = 50d,
-            ["drink.green_tea"] = 35d,
-            ["drink.cola"] = 40d,
-            ["drink.energy"] = 80d,
-            ["food.dark_chocolate"] = 25d,
-            ["drink.decaf_coffee"] = 5d
-        };
-
     public static double GetCaffeineMg(string itemId) =>
-        CaffeineMgByItem.TryGetValue(
-            itemId ?? string.Empty,
-            out var value)
-                ? value
-                : 0d;
+        CharacterItemTuning.CaffeineMgOf(itemId);
 
     /// <summary>
     /// ОБЪЁМ ПОРЦИИ предмета в граммах (для еды) или миллилитрах (для питья).
@@ -103,6 +87,109 @@ public static class CharacterConsumableCatalog
     /// </summary>
     public static double GetPortionFraction(string itemId) =>
         GetProfile(itemId).PortionFraction;
+
+    /// <summary>
+    /// ОБЪЁМ ПОРЦИИ для ЛЮБОГО предмета, включая неедовые.
+    ///
+    /// Зачем отдельно от <see cref="GetProfile"/>. Пищевой профиль есть лишь у
+    /// еды и питья: таблетка, сигарета и настойка кормят «побочно» — калорий у
+    /// них нет, но место в желудке они занимают. В прежней модели объём брался
+    /// из профиля, и у всего остального он был НУЛЕВОЙ: движок подставлял
+    /// минимум 0,01, поэтому и всасываемость, и таймер в мониторе считались по
+    /// одному и тому же крошечному числу для таблетки и для обеда.
+    ///
+    /// Здесь три источника, по порядку доверия:
+    ///   1. пищевой профиль — настоящая масса порции (400 г супа, 500 мл воды);
+    ///   2. явная таблица ниже — бытовой объём порции для неедовых предметов;
+    ///   3. осторожный запас 100 мл — так предмет участвует в пищеварении,
+    ///      но не раздувает желудок до размеров обеда.
+    /// </summary>
+    public static double GetPortionFractionOrDefault(string itemId)
+    {
+        var profile = GetProfile(itemId);
+        if (profile.Grams > 0d)
+            return profile.PortionFraction;
+
+        return CharacterDigestion.PortionFraction(
+            GetPortionGrams(itemId));
+    }
+
+    /// <summary>
+    /// ОБЪЁМ ПОРЦИИ в МИЛЛИЛИТРАХ — сколько места предмет займёт в желудке.
+    ///
+    /// Это ЕДИНСТВЕННОЕ число объёма порции: и место в желудке
+    /// (<see cref="CharacterDigestion.Begin"/>), и признак «влезет»
+    /// (<see cref="CharacterDigestionReport.Fits"/>), и подпись в меню желудка, и
+    /// объём в окне предметов обязаны брать его отсюда. Градуировка задана
+    /// ОБЪЁМОМ, а грамм и миллилитр приравнены (порция воды 500 мл весит 500 г),
+    /// поэтому отдельной «массы» у порции нет — иначе появилось бы второе число,
+    /// которое рано или поздно разошлось бы с первым.
+    ///
+    /// Почему миллилитры, а не граммы, в ИМЕНИ. Автор сверяет объём с подписью
+    /// «N мл» и в меню, и в желудке. Прежний код отдавал в интерфейс `grams`, и в
+    /// меню рядом с едой печаталось содержимое ВОДЫ («Банан 110 мл» — это вода в
+    /// банане), а не объём порции (150 мл). Правильная величина была здесь всё
+    /// время; ошибочным было её ИМЯ в разметке.
+    /// </summary>
+    public static double GetPortionMilliliters(string itemId) =>
+        GetPortionGrams(itemId);
+
+    /// <summary>
+    /// Сколько ГРАММОВ занимает порция ПРЕДМЕТА БЕЗ ПИЩЕВОГО ПРОФИЛЯ (включая
+    /// бытовые). Таблетка — граммы, напитки не из профиля — миллилитры.
+    ///
+    /// Хранилище чисел; для показа объёма пользуйтесь
+    /// <see cref="GetPortionMilliliters"/> — это то же число, но названное так,
+    /// как его читает игрок.
+    /// </summary>
+    public static double GetPortionGrams(string itemId)
+    {
+        var profile = GetProfile(itemId);
+        if (profile.Grams > 0d)
+            return profile.Grams;
+
+        return NonFoodPortions.TryGetValue(
+            itemId ?? string.Empty,
+            out var value)
+                ? value
+                : DefaultNonFoodPortionGrams;
+    }
+
+    /// <summary>Порция по умолчанию, если о предмете ничего не известно.</summary>
+    private const double DefaultNonFoodPortionGrams = 100d;
+
+    /// <summary>
+    /// Объём порции (граммы≈миллилитры) для предметов БЕЗ пищевого профиля.
+    ///
+    /// Числа бытовые: таблетка ≈ 1 г, сигарета ≈ 1 г, стограммовый пакетик
+    /// сорбента — 100 г, полная порция приготовленного молока — 250 г. Они
+    /// задают только МЕСТО в желудке; питательность таких предметов считают
+    /// эффекты (<see cref="CharacterItemTuning"/>), а не диетология.
+    /// </summary>
+    private static readonly IReadOnlyDictionary<string, double> NonFoodPortions =
+        new Dictionary<string, double>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["food.milk"] = 250d,
+            ["food.meal"] = 400d,
+            ["meat"] = 300d,
+            ["gosha.homemade_sausage"] = 200d,
+            ["supplement.multivitamin"] = 3d,
+            ["vitamin.c_effervescent"] = 5d,
+            ["vitamin.c"] = 3d,
+            ["supplement.omega3"] = 3d,
+            ["vitamin.d3"] = 3d,
+            ["mineral.magnesium"] = 3d,
+            ["mineral.zinc"] = 3d,
+            ["adaptogen.ashwagandha"] = 3d,
+            ["adaptogen.tincture"] = 30d,
+            ["medicine.valerian"] = 3d,
+            ["medicine.sorbent"] = 100d,
+            ["medicine.recovery_salts"] = 1000d,
+            ["painkiller"] = 2d,
+            ["smoke.cigarette"] = 1d,
+            ["soap"] = 0d,
+            ["skin.ointment"] = 0d
+        };
 
     /// <summary>
     /// Профили еды и питья. Калорийность и содержание воды — справочные бытовые

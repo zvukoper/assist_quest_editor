@@ -132,10 +132,19 @@ public sealed record PlayerConditionRates(
 /// </summary>
 public static class PlayerConditionEngine
 {
-    public const double FatigueCriticalPercent = 80d;
-    public const double StressCriticalPercent = 50d;
-    public const double FatigueBuildHours = 18d;
-    public const double FatigueRestHours = 9d;
+    // Все числа ниже ПРИВЯЗАНЫ к калибровочному файлу
+    // <see cref="CharacterVitalsTuning"/>: раньше они были продублированы здесь
+    // собственными литералами, и правка калибровки не меняла поведение этого
+    // (второго) движка условий. Теперь источник один — менять нужно только
+    // CharacterVitalsTuning.cs.
+    public const double FatigueCriticalPercent =
+        CharacterVitalsTuning.FatigueCriticalPercent;
+    public const double StressCriticalPercent =
+        CharacterVitalsTuning.StressCriticalPercent;
+    public const double FatigueBuildHours =
+        CharacterVitalsTuning.FatigueBuildHours;
+    public const double FatigueRestHours =
+        CharacterVitalsTuning.FatigueRestHours;
     /// <summary>
     /// Во сколько раз сон снимает усталость быстрее обычного отдыха на месте.
     /// Множитель нужен только подсказке о скорости изменения: сам сон считает
@@ -154,21 +163,34 @@ public static class PlayerConditionEngine
     /// скоростью (1:1), а 100% за 18 часов — это 5.6% за час, чего в пределах
     /// сессии не видно (значение округляется до целого).
     /// </summary>
-    public const double FatigueBuildKilometers = 900d;
-    public const double StressPerCumulativeFatiguePerHour = 0.5d;
-    public const double CumulativeFatiguePerCriticalHour = 1d;
-    public const double CumulativeStressPerCriticalHour = 1d;
+    public const double FatigueBuildKilometers =
+        CharacterVitalsTuning.FatigueBuildKilometers;
+    public const double StressPerCumulativeFatiguePerHour =
+        CharacterVitalsTuning.StressPerCumulativeFatiguePercentPerHour;
+    public const double CumulativeFatiguePerCriticalHour =
+        CharacterVitalsTuning.CumulativeFatiguePerCriticalHour;
+    public const double CumulativeStressPerCriticalHour =
+        CharacterVitalsTuning.CumulativeStressPerCriticalHour;
 
-    public const double BurnoutFatigueBuildMultiplier = 1.10d;
-    public const double BurnoutPenaltyPercent = 5d;
-    public const double BurnoutDurationRealSeconds = 15d * 60d;
+    public const double BurnoutFatigueBuildMultiplier =
+        CharacterVitalsTuning.BurnoutFatigueBuildMultiplier;
+    public const double BurnoutPenaltyPercent =
+        CharacterVitalsTuning.BurnoutInstantPenaltyPercent;
+    public const double BurnoutDurationRealSeconds =
+        CharacterVitalsTuning.BurnoutDurationRealSeconds;
 
-    public const double RelaxationExperienceMultiplier = 1.15d;
-    public const double RelaxationStressSlowdownPercent = 15d;
-    public const double RelaxationDurationRealSeconds = 15d * 60d;
-    public const double RestedExperienceMultiplier = 1.25d;
-    public const double RestedStressSlowdownPercent = 25d;
-    public const double RestedDurationRealSeconds = 25d * 60d;
+    public const double RelaxationExperienceMultiplier =
+        CharacterVitalsTuning.RelaxationExperienceMultiplier;
+    public const double RelaxationStressSlowdownPercent =
+        CharacterVitalsTuning.RelaxationStressSlowdownPercent;
+    public const double RelaxationDurationRealSeconds =
+        CharacterVitalsTuning.RelaxationDurationRealSeconds;
+    public const double RestedExperienceMultiplier =
+        CharacterVitalsTuning.RestedExperienceMultiplier;
+    public const double RestedStressSlowdownPercent =
+        CharacterVitalsTuning.RestedStressSlowdownPercent;
+    public const double RestedDurationRealSeconds =
+        CharacterVitalsTuning.RestedDurationRealSeconds;
 
     private const double SecondsPerGameHour = 3600d;
 
@@ -402,11 +424,21 @@ public static class PlayerConditionEngine
         state = state with
         {
             CumulativeFatigue = fullSleep
-                ? 0d
-                : state.CumulativeFatigue > PlayerConditionScale.FromPercent(10d)
+                ? PlayerConditionScale.FromPercent(
+                    CharacterVitalsTuning
+                        .FullSleepCumulativeFatigueClearPercent)
+                : state.CumulativeFatigue >
+                  PlayerConditionScale.FromPercent(
+                      CharacterVitalsTuning
+                          .FieldSleepCumulativeFatigueFloorPercent)
                     ? Math.Max(
-                        PlayerConditionScale.FromPercent(10d),
-                        state.CumulativeFatigue - PlayerConditionScale.FromPercent(6d))
+                        PlayerConditionScale.FromPercent(
+                            CharacterVitalsTuning
+                                .FieldSleepCumulativeFatigueFloorPercent),
+                        state.CumulativeFatigue -
+                        PlayerConditionScale.FromPercent(
+                            CharacterVitalsTuning
+                                .FieldSleepCumulativeFatigueClearPercent))
                     : state.CumulativeFatigue,
             CriticalFatigueGameSeconds = 0d
         };

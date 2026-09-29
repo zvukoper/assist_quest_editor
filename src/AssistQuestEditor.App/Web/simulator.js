@@ -101,6 +101,10 @@
   let lastAppliedMapViewRestoreToken = null;
   let eventHistory = [];
   let journalHistory = [];
+  // Последняя показанная награда динамического события: служит отпечатком для
+  // подавления повторного уведомления, когда домен публикует и RewardGranted, и
+  // Completed об одном и том же факте.
+  let dynamicEventCompletionWithReward = null;
   // Раскрытые разделы сайдбара приходят СНИМКОМ от Host и хранятся в
   // пользовательских настройках (ui-settings.json), а не в localStorage.
   // localStorage живёт в профиле WebView2, а профиль меняется вместе с
@@ -112,14 +116,21 @@
   let sidebarPointerDown = false;
   // Подпись содержимого сайдбара: по ней перерисовка понимает, что менять нечего.
   let lastSidebarSignature = "";
+  // Последняя разметка ЛЕВОГО сайдбара (квесты, инструменты, события теста).
+  //
+  // Снимок приходит четыре раза в секунду, и каждый приход ЗАМЕНЯЛ все узлы
+  // сайдбара. У кнопок «Монитор показателей», «Перки», «Предметы» при этом
+  // сбрасывался :hover: под курсором оказывался новый узел. Снаружи это и
+  // выглядело как «кнопки постоянно мигают то выделением, то без него»,
+  // причём независимо от маршрута — пересборка не зависела ни от чего.
+  let lastRuntimeSidebarSignature = "";
   // Последние значения бейджей HUD, зависящих от АВТОРИТЕТНЫХ данных, а не от
   // текущего момента. По ним видно, изменилось ли содержимое: снимок приходит
   // 4 раза в секунду, а время в шапке идёт своим тикером, поэтому без кэша HUD
   // пересобирался бы на каждом пакете — и вместе с ним мигали его бейджи.
   let lastHudSignature = "";
 
-  function hudSignature() {
-    return [
+  function hudSignature() {    return [
       simulationRunning ? 1 : 0,
       simulationPaused ? 1 : 0,
       simulationSpeed,
@@ -304,6 +315,9 @@
     return info;
   }
 
+  // Раздел «Инструменты» живёт в ЛЕВОМ сайдбаре (см. renderRuntimeSidebar), а не
+  // здесь: монитор показателей, перки и предметы — не настройка мира, а окна
+  // постоянного доступа, и место им там, где всегда виден контекст квестов.
   const sections = [
     ["player", "Игрок и мир"],
     ["route", "Движение по маршруту"],
@@ -3120,6 +3134,90 @@
     renderGameplayPanels();
   }
 
+  /**
+   * Уведомление о срабатывании динамического события и его награде.
+   *
+   * Событие в мире происходит БЕЗ участия игрока (он проезжает триггер), поэтому
+   * единственный способ узнать о нём — показать всплывающее сообщение. Без него
+   * награда выдавалась «в тишине»: деньги и опыт менялись, а игрок этого не
+   * видел и считал, что триггер не сработал.
+   *
+   * Награда и завершение — РАЗНЫЕ события домена, и сообщение должно быть одно:
+   * иначе на один тайник игрок получал бы два всплывающих окна подряд, и второе
+   * читалось бы как «второй тайник».
+   */
+  function showEventNotification(eventType, event) {
+    if (!inventoryNotifications) return;
+
+    const payload = (event && event.payload) || {};
+    const money = Number(payload.money || 0);
+    const experience = Number(payload.experience || 0);
+    const isReward = money > 0 || experience > 0;
+
+    const parts = [];
+    if (money > 0) parts.push(money.toLocaleString("ru-RU") + " ₽");
+    if (experience > 0) parts.push(experience.toLocaleString("ru-RU") + " опыт");
+
+    const title = eventType === "DynamicEventRewardGranted"
+      ? "Награда"
+      : "Событие завершено";
+    const detail = payload.message || parts.join(" · ") || "Динамическое событие сработало.";
+    // Подзаголовок показываем только когда награда реально есть: подпись
+    // «Награда» над текстом «ничего не выдано» противоречила бы сама себе.
+    const type = isReward ? "add" : "reward";
+
+    const toast = document.createElement("div");
+    toast.className = "inventoryNotification " + type + " in";
+    toast.innerHTML =
+      "<div class='inventoryNotificationTitle'>" + escapeHtml(title) + "</div>" +
+      "<div class='inventoryNotificationName'>" + escapeHtml(detail) + "</div>";
+    inventoryNotifications.appendChild(toast);
+
+    window.setTimeout(() => {
+      toast.classList.add("closing");
+      window.setTimeout(() => toast.remove(), 100);
+    }, 5900);
+  }
+
+  /**
+   * События динамических событий из домена.
+   *
+   * Возвращает true, если событие обработано (уведомление показано): вызывающий
+   * код тогда не показывает его повторно. RewardGranted подавляется, когда следом
+   * за ним приходит DynamicEventCompleted с теми же числами — при завершении с
+   * наградой домен публикует ОБА события, и два всплывающих окна об одном факте
+   * сбивали бы с толку.
+   */
+  function handleDynamicEventNotification(event) {
+    if (!event) return false;
+
+    const type = event.eventType || "";
+
+    if (type !== "DynamicEventCompleted" && type !== "DynamicEventRewardGranted") {
+      return false;
+    }
+
+    const payload = event.payload || {};
+    const money = Number(payload.money || 0);
+    const experience = Number(payload.experience || 0);
+
+    if (type === "DynamicEventRewardGranted" &&
+        dynamicEventCompletionWithReward &&
+        money === dynamicEventCompletionWithReward.money &&
+        experience === dynamicEventCompletionWithReward.experience) {
+      // Награда уже показана завершением: не дублируем.
+      return true;
+    }
+
+    if (type === "DynamicEventCompleted" && (money > 0 || experience > 0)) {
+      dynamicEventCompletionWithReward = { money, experience };
+      window.setTimeout(() => { dynamicEventCompletionWithReward = null; }, 2000);
+    }
+
+    showEventNotification(type, event);
+    return true;
+  }
+
   function scheduleUiRender() {
     if (uiRenderScheduled) return;
     uiRenderScheduled = true;
@@ -3206,6 +3304,46 @@
       "</section>";
   }
 
+  /**
+   * Раздел «Инструменты» левого сайдбара — ОДИН узел на всё время работы окна.
+   *
+   * Монитор показателей, перки и предметы — окна постоянного доступа, а не
+   * настройка одного показателя, поэтому они живут ПЕРВЫМ разделом левого
+   * сайдбара. Содержимое раздела неизменно, поэтому узел создаётся один раз и
+   * лишь ПЕРЕСТАВЛЯЕТСЯ при пересборке остального сайдбара.
+   *
+   * Иначе кнопки «мигали выделением»: пересборка сайдбара заменяла их узлы, а
+   * замена узла сбрасывает :hover и начинает переход оформления заново. Раздел
+   * статичен — пересоздавать его не за чем.
+   */
+  let toolsSection = null;
+  function ensureToolsSection() {
+    if (toolsSection) return toolsSection;
+
+    const host = document.createElement("div");
+    host.innerHTML =
+      "<section class='acc open runtimeTools'>" +
+        "<div class='accHead'><strong>Инструменты</strong></div>" +
+        "<div class='accBody'>" +
+          "<button class='smallButton primary' id='openIndicators' style='width:100%'>Монитор показателей</button>" +
+          "<button class='smallButton' id='openPerks' style='width:100%;margin-top:6px'>Перки, баффы, скиллы</button>" +
+          "<button class='smallButton' id='openItems' style='width:100%;margin-top:6px'>Предметы</button>" +
+        "</div>" +
+      "</section>";
+    toolsSection = host.firstElementChild;
+
+    // Обработчики навешиваются ОДИН раз: узел больше не пересоздаётся, поэтому
+    // терять их вместе с разметкой, как это было раньше, негде.
+    toolsSection.querySelector("#openIndicators")
+      .addEventListener("click", () => send({ action: "open_indicators" }));
+    toolsSection.querySelector("#openPerks")
+      .addEventListener("click", () => send({ action: "open_perks" }));
+    toolsSection.querySelector("#openItems")
+      .addEventListener("click", () => send({ action: "open_items" }));
+
+    return toolsSection;
+  }
+
   function renderRuntimeSidebar() {
     if (!runtimeSide || !snapshot) return;
 
@@ -3216,7 +3354,9 @@
     const pointCount = snapshot.world?.points?.length || 0;
     const entry = selectedQuestEntry();
 
-    runtimeSide.innerHTML =
+    // Раздел «Инструменты» в разметку НЕ входит: он живёт отдельным узлом (см.
+    // ensureToolsSection) и лишь возвращается на первое место после пересборки.
+    const markup =
       "<div class='runtimeSideHeader'>" +
         "<div>" +
           "<div class='panelTitle'>Квесты</div>" +
@@ -3282,6 +3422,30 @@
           : "<div class='eventList runtimeEventList'>" + eventHistory.map(renderEvent).join("") + "</div>") +
       "</section>";
 
+    // Пересборка ТОЛЬКО при изменении содержимого.
+    //
+    // Замена узлов сбрасывает :hover у элемента под курсором. Содержимое
+    // сайдбара меняется редко (статус Runtime, текущая нода, журнал событий),
+    // поэтому сравнение полной строки ловит все настоящие изменения.
+    if (markup === lastRuntimeSidebarSignature) return;
+    lastRuntimeSidebarSignature = markup;
+    // Сверка узлов, а не `innerHTML`: при настоящем изменении содержимого
+    // подменяются только изменившиеся элементы, поэтому кнопки шапки раздела
+    // при обновлении журнала событий не мигают.
+    //
+    // Раздел «Инструменты» ОХРАНЯЕТСЯ: он живёт вне разметки и лишь возвращается
+    // на первое место. Без этого сверка сочла бы его лишним узлом и удалила —
+    // кнопки «Монитор показателей» и соседние исчезли бы при первой же смене
+    // содержимого сайдбара.
+    if (window.AssistDom && window.AssistDom.reconcile) {
+      window.AssistDom.reconcile(runtimeSide, markup, { preserve: "section.runtimeTools" });
+    } else {
+      runtimeSide.innerHTML = markup;
+    }
+    // Раздел инструментов возвращается на ПЕРВОЕ место: это единственный узел,
+    // который переживает пересборку, поэтому порядок восстанавливаем явно.
+    runtimeSide.insertBefore(ensureToolsSection(), runtimeSide.firstChild);
+
     runtimeSide.querySelector("#detachJournal")?.addEventListener("click", () => send({ action: "detach_journal" }));
     runtimeSide.querySelector("#openJournal")?.addEventListener("click", () => send({ action: "open_journal" }));
     runtimeSide.querySelector("#fitWorldSide")?.addEventListener("click", () => {
@@ -3310,7 +3474,6 @@
     runtimeSide.querySelector("#hornEventSide")?.addEventListener("click", () => {
       send({ action: "emit_event", eventType: "HornPressed", source: "Simulator", payload: {} });
     });
-
   }
 
   /**
@@ -3835,15 +3998,16 @@
     }
 
     lastHudSignature = signature;
-
     // Ускоренное игровое время: часы уходят в оранжевый и рядом появляется
     // кратность. При ×1 ничего не показывается — иначе оранжевый был бы
     // постоянным шумом и перестал бы означать «время ускорено».
     const accelerated = simulationSpeed !== 1;
     const clockText = escapeHtml(currentGameMoment()?.clock || daylight?.gameClockLabel || daylight?.gameTimeLabel || "");
 
-    hud.innerHTML = [
-      "<span class='badge " + (simulationRunning ? "accent" : "blue") + "'>" +
+    // Сверка узлов, а не `innerHTML`: бейджи и кнопка выхода из режима Location
+    // при изменении одного бейджа не подменяются, поэтому у них не сбрасывается
+    // :hover и не перезапускается анимация пульсации.
+    const hudMarkup = [      "<span class='badge " + (simulationRunning ? "accent" : "blue") + "'>" +
         (simulationRunning ? "Симуляция: ВКЛ" : "Симуляция: ВЫКЛ") + "</span>",
       daylight
         ? "<span class='badge " + (daylight.isDay ? "accent" : "blue") + "' id='hudClockBadge'>" +
@@ -3892,6 +4056,14 @@
             "title='Вернуть обычный вид карты'>Выйти из режима</button>"
         : "")
     ].join("");
+
+    // Сверка узлов: сменившийся бейдж обновляется, а остальные плашки остаются
+    // теми же узлами — без этого ряд бейджей мигал на каждом обновлении.
+    if (window.AssistDom && window.AssistDom.reconcile) {
+      window.AssistDom.reconcile(hud, hudMarkup);
+    } else {
+      hud.innerHTML = hudMarkup;
+    }
 
     // Кнопка выхода ищется каждый раз: HUD перерисовывается целиком.
     document.getElementById("locationVisExit")?.addEventListener("click", () => {
@@ -4012,6 +4184,33 @@
     send({ action: "set_sidebar_sections", sections: open });
   }
 
+  /**
+   * Собирает разметку сайдбара и ставит её СВЕРКОЙ УЗЛОВ.
+   *
+   * Почему не `innerHTML`. Снимок приходит четыре раза в секунду, и до этого
+   * каждый приход ЗАМЕНЯЛ все узлы сайдбара. Замена узла сбрасывает :hover и
+   * начинает переход оформления (`transition:background-color 50ms`) заново —
+   * снаружи это выглядит как мерцание кнопки под курсором. Автор описал это
+   * прямыми словами: «чуть реже мерцает любая кнопка в окне симулятора.
+   * Мерцание совпадает со сменой координат игрока в разделе с координатами» —
+   * координаты игрока меняются КАЖДУЮ секунду, значит содержимое сайдбара
+   * меняется на каждом обновлении, и кэш подписи от мерцания НЕ спасает: он
+   * ловит лишь полностью неизменную разметку.
+   *
+   * Сверка узлов переносит в документ только настоящие изменения: поле X
+   * получает новое число, а кнопки, заголовки и поля вокруг остаются ТЕМИ ЖЕ
+   * узлами и не мигают.
+   */
+  function commitSidebarMarkup(markup) {
+    if (window.AssistDom && window.AssistDom.reconcile) {
+      window.AssistDom.reconcile(side, markup);
+      return;
+    }
+    // Запасной путь для старой страницы из кеша WebView2: без общего модуля
+    // остаётся прежнее поведение — вставить разметку целиком.
+    side.innerHTML = markup;
+  }
+
   function renderSide() {
     const perfAt = window.AssistPerf?.start();
 
@@ -4062,7 +4261,7 @@
       return;
     }
 
-    side.innerHTML = sections.map((entry, index) => {
+    commitSidebarMarkup(sections.map((entry, index) => {
       const id = entry[0];
       const label = entry[1];
       const open = hasExplicitState ? openSections.has(id) : index === 0;
@@ -4070,31 +4269,15 @@
         "<div class='accHead'><strong>" + label + "</strong><span>⌄</span></div>" +
         "<div class='accBody'>" + sectionBody(id) + "</div>" +
       "</section>";
-    }).join("");
+    }).join(""));
 
     if (activeId) {
       const restored = side.querySelector("#" + CSS.escape(activeId));
       restored?.focus({ preventScroll: true });
     }
 
-    side.querySelectorAll(".accHead").forEach(head => {
-      head.addEventListener("click", () => {
-        head.parentElement.classList.toggle("open");
-        saveOpenSections();
-      });
-    });
-
-    // Нажатие кнопки мыши в сайдбаре замораживает его пересборку до отпускания:
-    // иначе подмена узлов между pointerdown и pointerup съедала бы click.
-    side.querySelectorAll("button").forEach(button => {
-      button.addEventListener("pointerdown", () => {
-        sidebarPointerDown = true;
-        // Страховка: если pointerup потеряется (перетаскивание за пределы окна,
-        // потеря захвата), пересборка не должна остаться отключённой навсегда.
-        window.setTimeout(() => { sidebarPointerDown = false; }, 1000);
-      });
-    });
-
+    // Раскрытие разделов и обработчики полей подписаны на КОНТЕЙНЕР (bindInputs):
+    // разметка ставится сверкой узлов, обработчиков на самих узлах больше нет.
     bindInputs();
     const eventList = side.querySelector("#eventList");
     if (eventList) {
@@ -4305,16 +4488,6 @@
         "</div>",
         "<div class='conditionEditActions'>" +
           "<button class='smallButton' id='resetStress'>Снять стресс</button>" +
-          // Монитор показателей стоит сразу под шкалами: он объясняет их
-          // значения, поэтому логично живёт там же, где сами шкалы.
-          "<button class='smallButton' id='openIndicators'>Монитор показателей</button>" +
-        "</div>",
-        // Перки и предметы — рядом со шкалами: и то и другое объясняет их
-        // значения, и держать причину и следствие в разных разделах значило бы
-        // заставлять игрока искать связь между ними.
-        "<div class='conditionEditActions'>" +
-          "<button class='smallButton' id='openPerks'>Перки, баффы, скиллы</button>" +
-          "<button class='smallButton' id='openItems'>Предметы</button>" +
         "</div>",
         "<div class='sleepActions'>" +
           "<button class='smallButton' id='fieldSleep'>Полевой сон · 6 ч</button>" +
@@ -4557,255 +4730,113 @@
     return "<div class='field'><label>" + label + "</label><input data-t='" + key + "' value='" + value + "'></div>";
   }
 
-  function bindInputs() {
-    side.querySelectorAll("[data-player]").forEach(input => {
-      input.addEventListener("change", () => {
-        send({
-          action: "set_player_position",
-          x: Number(side.querySelector("[data-player='x']").value),
-          y: Number(side.querySelector("[data-player='y']").value),
-          z: Number(side.querySelector("[data-player='z']").value)
-        });
-      });
-    });
-
-    side.querySelector("#routeToggle")?.addEventListener("click", () => {
-      send({
-        action: "route_toggle",
-        enabled: !route.enabled
-      });
-    });
-
-    side.querySelector("#routeEditToggle")?.addEventListener("click", () => {
-      if (!route.editingAllowed && !route.editing)
-        return;
-
-      send({
-        action: "route_edit_toggle",
-        enabled: !route.editing
-      });
-    });
-
-    side.querySelector("#routeSpeedInput")?.addEventListener("input", inputEvent => {
-      const input = inputEvent.currentTarget;
-      const raw = input.value.trim();
-
-      if (!raw)
-        return;
-
-      let speed = Number(raw);
-      if (!Number.isFinite(speed))
-        return;
-
-      speed = Math.max(0, Math.min(150, Math.round(speed)));
-      if (String(speed) !== raw)
-        input.value = String(speed);
-
-      if (route.selectedWaypointId) {
-        send({
-          action: "route_set_waypoint_speed",
-          id: route.selectedWaypointId,
-          speed
-        });
-      } else {
-        send({
-          action: "route_set_default_speed",
-          speed
-        });
-      }
-    });
-
-    side.querySelector("#routeOffroad")?.addEventListener("change", inputEvent => {
-      if (!route.selectedWaypointId)
-        return;
-
-      send({
-        action: "route_set_waypoint_offroad",
-        id: route.selectedWaypointId,
-        offRoad: !!inputEvent.currentTarget.checked
-      });
-    });
-
-    side.querySelector("#routeClear")?.addEventListener("click", () => {
-      send({ action: "route_clear" });
-    });
-
-    side.querySelector("#routeSaveFile")?.addEventListener("click", () => {
-      send({ action: "route_save_file" });
-    });
-
-    side.querySelector("#routeLoadFile")?.addEventListener("click", () => {
-      send({ action: "route_load_file" });
-    });
-
-    side.querySelector("#fieldSleep")?.addEventListener("click", () => {
-      send({ action: "sleep_field" });
-    });
-
-    side.querySelector("#fullSleep")?.addEventListener("click", () => {
-      send({ action: "sleep_full" });
-    });
-
-    side.querySelectorAll(".journalCoord").forEach(element => {
-      element.addEventListener("click", () => {
-        send({
-          action: "focus_journal_coordinate",
-          x: Number(element.dataset.x),
-          y: Number(element.dataset.y),
-          z: Number(element.dataset.z)
-        });
-      });
-    });
-
-    side.querySelectorAll("[data-fact]").forEach(input => {
-      input.addEventListener("change", () => send({ action: "set_fact", key: input.dataset.fact, value: input.value }));
-    });
-
-    side.querySelectorAll("[data-flag]").forEach(input => {
-      input.addEventListener("change", () => send({ action: "set_flag", key: input.dataset.flag, value: input.checked }));
-    });
-
-    side.querySelectorAll("[data-var]").forEach(input => {
-      input.addEventListener("change", () => send({ action: "set_variable", key: input.dataset.var, value: input.value }));
-    });
-
-    side.querySelectorAll("[data-item]").forEach(input => {
-      input.addEventListener("change", () => send({ action: "set_inventory", key: input.dataset.item, amount: Number(input.value) }));
-    });
-
+  /**
+   * Обработчики правого сайдбара — ТАБЛИЦЕЙ «селектор → действие».
+   *
+   * Почему таблица, а не `querySelector(...).addEventListener(...)`. Разметка
+   * сайдбара теперь ставится СВЕРКОЙ УЗЛОВ (commitSidebarMarkup): элементы,
+   * которые уже были на странице, ПЕРЕИСПОЛЬЗУЮТСЯ, а не создаются заново.
+   * Навешивание обработчиков после каждой отрисовки добавляло бы к одному и тому
+   * же узлу второй такой же обработчик — и одно нажатие отправляло бы Host два
+   * сообщения («Выбрать» срабатывал бы дважды).
+   *
+   * Один обработчик на контейнер (см. bindInputs) снимает вопрос вовсе: подписка
+   * на `side` происходит ОДИН раз, а нужное действие выбирается по ближайшему
+   * предку события. Появление новых узлов ничего не ломает — они подпадают под
+   * те же селекторы.
+   *
+   * Порядок важен: берётся ПЕРВОЕ совпадение, поэтому частные случаи стоят выше
+   * общих.
+   */
+  const SIDEBAR_CLICK_HANDLERS = [
+    [".accHead", (node) => {
+      node.parentElement?.classList.toggle("open");
+      saveOpenSections();
+    }],
+    [".journalCoord", (node) => send({
+      action: "focus_journal_coordinate",
+      x: Number(node.dataset.x),
+      y: Number(node.dataset.y),
+      z: Number(node.dataset.z)
+    })],
     // Одна кнопка у КАЖДОГО поля: она отправляет только это значение, а
     // остальные Host оставляет как есть (set_vitals принимает частичный набор).
-    side.querySelectorAll("[data-apply-t]").forEach(button => {
-      button.addEventListener("click", () => {
-        const key = button.dataset.applyT;
-        const field = side.querySelector("[data-t='" + key + "']");
-        const value = Number(field?.value);
-        if (!Number.isFinite(value)) return;
-
-        if (key === "stress") {
-          send({ action: "set_stress", stress: value });
-          return;
-        }
-
-        send({ action: "set_vitals", [key]: value });
-      });
-    });
-
-    side.querySelector("#openIndicators")?.addEventListener("click", () => {
-      send({ action: "open_indicators" });
-    });
-
-    // Ссылок нет — открываем окно без подсветки: подсветка нужна только при
-    // переходе ПО КОНКРЕТНОМУ пункту (из журнала или монитора), а здесь игрок
-    // открывает окно целиком.
-    side.querySelector("#openPerks")?.addEventListener("click", () => {
-      send({ action: "open_perks" });
-    });
-
-    side.querySelector("#openItems")?.addEventListener("click", () => {
-      send({ action: "open_items" });
-    });
-
-    side.querySelector("#resetStress")?.addEventListener("click", () => {
-      send({ action: "set_stress", stress: 0 });
-    });
-
-    side.querySelector("#applyProgress")?.addEventListener("click", () => {
-      send({
-        action: "set_progress",
-        money: Number(side.querySelector("[data-t='money']").value),
-        experience: Number(side.querySelector("[data-t='experience']").value),
-        reserve: Number(side.querySelector("[data-t='reserve']").value)
-      });
-    });
-
-    side.querySelector("#applyCharacter")?.addEventListener("click", () => {
-      side.querySelectorAll("[data-stat]").forEach(input => {
-        send({
-          action: "set_character_stat",
-          stat: input.dataset.stat,
-          value: Number(input.value)
-        });
-      });
-    });
-
-    side.querySelectorAll("[data-rep]").forEach(input => {
-      input.addEventListener("change", () => send({ action: "set_reputation", key: input.dataset.rep, amount: Number(input.value) }));
-    });
-
-    side.querySelector("#addFact")?.addEventListener("click", () => {
-      const key = side.querySelector("#newFactKey").value.trim();
-      if (key) send({ action: "set_fact", key, value: side.querySelector("#newFactValue").value });
-    });
-
-    side.querySelector("#addVar")?.addEventListener("click", () => {
-      const key = side.querySelector("#newVarKey").value.trim();
-      if (key) send({ action: "set_variable", key, value: side.querySelector("#newVarValue").value });
-    });
-
-    side.querySelector("#grantItem")?.addEventListener("click", () => {
-      const select = side.querySelector("#grantItemId");
-      const amount = Math.max(
-        1,
-        Math.min(
-          999,
-          Math.round(
-            Number(side.querySelector("#grantItemAmount").value) || 1)));
-      const key = select?.value?.trim() || "";
-      if (key)
-        send({
-          action: "grant_inventory_item",
-          itemId: key,
-          amount
-        });
-    });
-
-    side.querySelector("#addItem")?.addEventListener("click", () => {
-      const key = side.querySelector("#newItemKey").value.trim();
-      if (key) send({ action: "set_inventory", key, amount: Number(side.querySelector("#newItemValue").value) });
-    });
-
-    side.querySelector("#addRep")?.addEventListener("click", () => {
-      const key = side.querySelector("#newRepKey").value.trim();
-      if (key) send({ action: "set_reputation", key, amount: Number(side.querySelector("#newRepValue").value) });
-    });
-
-    side.querySelector("#applyStatus")?.addEventListener("click", () => {
-      send({
-        action: "set_quest_status",
-        questId: side.querySelector("#questId").value,
-        status: side.querySelector("#questStatus").value,
-        step: side.querySelector("#questStep").value
-      });
-    });
-
-    side.querySelector("#applyTelemetry")?.addEventListener("click", () => {
+    ["[data-apply-t]", (node) => {
+      const key = node.dataset.applyT;
+      const field = side.querySelector("[data-t='" + key + "']");
+      const value = Number(field?.value);
+      if (!Number.isFinite(value)) return;
+      if (key === "stress") { send({ action: "set_stress", stress: value }); return; }
+      send({ action: "set_vitals", [key]: value });
+    }],
+    ["#routeToggle", () => send({ action: "route_toggle", enabled: !route.enabled })],
+    ["#routeEditToggle", () => {
+      if (!route.editingAllowed && !route.editing) return;
+      send({ action: "route_edit_toggle", enabled: !route.editing });
+    }],
+    ["#routeClear", () => send({ action: "route_clear" })],
+    ["#routeSaveFile", () => send({ action: "route_save_file" })],
+    ["#routeLoadFile", () => send({ action: "route_load_file" })],
+    ["#fieldSleep", () => send({ action: "sleep_field" })],
+    ["#fullSleep", () => send({ action: "sleep_full" })],
+    ["#resetStress", () => send({ action: "set_stress", stress: 0 })],
+    ["#applyProgress", () => send({
+      action: "set_progress",
+      money: Number(side.querySelector("[data-t='money']").value),
+      experience: Number(side.querySelector("[data-t='experience']").value),
+      reserve: Number(side.querySelector("[data-t='reserve']").value)
+    })],
+    ["#applyCharacter", () => {
+      side.querySelectorAll("[data-stat]").forEach(input => send({
+        action: "set_character_stat",
+        stat: input.dataset.stat,
+        value: Number(input.value)
+      }));
+    }],
+    ["#applyStatus", () => send({
+      action: "set_quest_status",
+      questId: side.querySelector("#questId").value,
+      status: side.querySelector("#questStatus").value,
+      step: side.querySelector("#questStep").value
+    })],
+    ["#applyTelemetry", () => {
       const payload = { action: "set_telemetry", horn: snapshot.telemetry.hornPressed };
       side.querySelectorAll("[data-t]").forEach(input => payload[input.dataset.t] = Number(input.value));
       send(payload);
-    });
-
-    side.querySelector("#horn")?.addEventListener("click", () => {
-      send({ action: "set_telemetry", horn: !snapshot.telemetry.hornPressed });
-    });
-
-    side.querySelector("#hornEvent")?.addEventListener("click", () => {
-      send({ action: "emit_event", eventType: "HornPressed", source: "Simulator", payload: {} });
-    });
-
+    }],
+    ["#addFact", () => {
+      const key = side.querySelector("#newFactKey").value.trim();
+      if (key) send({ action: "set_fact", key, value: side.querySelector("#newFactValue").value });
+    }],
+    ["#addVar", () => {
+      const key = side.querySelector("#newVarKey").value.trim();
+      if (key) send({ action: "set_variable", key, value: side.querySelector("#newVarValue").value });
+    }],
+    ["#addItem", () => {
+      const key = side.querySelector("#newItemKey").value.trim();
+      if (key) send({ action: "set_inventory", key, amount: Number(side.querySelector("#newItemValue").value) });
+    }],
+    ["#addRep", () => {
+      const key = side.querySelector("#newRepKey").value.trim();
+      if (key) send({ action: "set_reputation", key, amount: Number(side.querySelector("#newRepValue").value) });
+    }],
+    ["#grantItem", () => {
+      const select = side.querySelector("#grantItemId");
+      const amount = Math.max(1, Math.min(999,
+        Math.round(Number(side.querySelector("#grantItemAmount").value) || 1)));
+      const key = select?.value?.trim() || "";
+      if (key) send({ action: "grant_inventory_item", itemId: key, amount });
+    }],
+    ["#horn", () => send({ action: "set_telemetry", horn: !snapshot.telemetry.hornPressed })],
+    ["#hornEvent", () => send({ action: "emit_event", eventType: "HornPressed", source: "Simulator", payload: {} })],
     // «Применить» записывает и погоду, и игровое время, а затем просит свежий
     // снимок: без него индикатор светового дня и подписи на карте остались бы
     // от прежнего момента до следующего события.
-    side.querySelector("#applyEnvironment")?.addEventListener("click", () => {
+    ["#applyEnvironment", () => {
       const dateText = side.querySelector("#simDate")?.value || "";
       const timeText = side.querySelector("#simTime")?.value || "";
       const moment = parseWorldMoment(dateText, timeText);
-
-      if (moment === null) {
-        setWorldNotice("Дата и время в формате дд.мм.гггг и чч:мм.");
-        return;
-      }
-
+      if (moment === null) { setWorldNotice("Дата и время в формате дд.мм.гггг и чч:мм."); return; }
       setWorldNotice("Применено.");
       send({
         action: "set_environment",
@@ -4814,11 +4845,9 @@
         visibility: Number(side.querySelector("#visibility").value)
       });
       send({ action: "set_world_time", moment });
-      // Явный запрос снимка: изменения времени и погоды должны быть видны сразу.
       send({ action: "request_snapshot", reason: "environment applied" });
-    });
-
-    side.querySelector("#saveWorldToCampaign")?.addEventListener("click", () => {
+    }],
+    ["#saveWorldToCampaign", () => {
       // Пустое поле читается из DOM как "", а Number("") даёт 0 — и 0 проходит
       // проверку диапазона, записывая координату 55° в ноль. Поэтому «пусто»
       // и «ноль» различаются явно, а не через Number().
@@ -4828,36 +4857,28 @@
         const value = Number(text);
         return Number.isFinite(value) ? value : null;
       };
-
       const latitude = parseCoordinate(side.querySelector("#worldLatitude"));
       const longitude = parseCoordinate(side.querySelector("#worldLongitude"));
-
       if (latitude === null || longitude === null) {
         setWorldNotice("Заполните широту и долготу: пустое поле сохранить нельзя.");
         return;
       }
-
       if (latitude < -90 || latitude > 90 || longitude < -180 || longitude > 180) {
         setWorldNotice("Широта от -90 до 90, долгота от -180 до 180.");
         return;
       }
-
       setWorldNotice("Сохранение в кампанию…");
       send({ action: "save_world_to_campaign", latitude, longitude });
-    });
-
-    side.querySelector("#loadWorldFromCampaign")?.addEventListener("click", () => {
+    }],
+    ["#loadWorldFromCampaign", () => {
       setWorldNotice("Загрузка из кампании…");
       send({ action: "load_world_from_campaign" });
-    });
-
-
-    side.querySelector("#emitExpectedEvent")?.addEventListener("click", () => {
+    }],
+    ["#emitExpectedEvent", () => {
       const expected = runtimeExpectedEvent();
       if (expected) send({ action: "emit_event", ...expected });
-    });
-
-    side.querySelector("#emitEvent")?.addEventListener("click", () => {
+    }],
+    ["#emitEvent", () => {
       let payload = {};
       try {
         payload = JSON.parse(side.querySelector("#eventPayload").value || "{}");
@@ -4871,7 +4892,88 @@
         source: side.querySelector("#eventSource").value,
         payload
       });
+    }]
+  ];
+
+  const SIDEBAR_CHANGE_HANDLERS = [
+    ["[data-player]", () => send({
+      action: "set_player_position",
+      x: Number(side.querySelector("[data-player='x']").value),
+      y: Number(side.querySelector("[data-player='y']").value),
+      z: Number(side.querySelector("[data-player='z']").value)
+    })],
+    ["#routeOffroad", (node) => {
+      if (!route.selectedWaypointId) return;
+      send({ action: "route_set_waypoint_offroad", id: route.selectedWaypointId, offRoad: !!node.checked });
+    }],
+    ["[data-fact]", (node) => send({ action: "set_fact", key: node.dataset.fact, value: node.value })],
+    ["[data-flag]", (node) => send({ action: "set_flag", key: node.dataset.flag, value: node.checked })],
+    ["[data-var]", (node) => send({ action: "set_variable", key: node.dataset.var, value: node.value })],
+    ["[data-item]", (node) => send({ action: "set_inventory", key: node.dataset.item, amount: Number(node.value) })],
+    ["[data-rep]", (node) => send({ action: "set_reputation", key: node.dataset.rep, amount: Number(node.value) })]
+  ];
+
+  const SIDEBAR_INPUT_HANDLERS = [
+    ["#routeSpeedInput", (node) => {
+      const raw = node.value.trim();
+      if (!raw) return;
+      let speed = Number(raw);
+      if (!Number.isFinite(speed)) return;
+      speed = Math.max(0, Math.min(150, Math.round(speed)));
+      if (String(speed) !== raw) node.value = String(speed);
+      if (route.selectedWaypointId) {
+        send({ action: "route_set_waypoint_speed", id: route.selectedWaypointId, speed });
+      } else {
+        send({ action: "route_set_default_speed", speed });
+      }
+    }]
+  ];
+
+  /**
+   * Проводит событие по таблице: первое совпадение селектора и есть действие.
+   *
+   * `node` — ближайший предок, на котором стоит селектор. Обработчик получает его
+   * первым аргументом, а не читает `event.currentTarget`: при подписке на контейнер
+   * `currentTarget` — это сам сайдбар, и относительные пути вида
+   * `side.querySelector(...)` всё равно работают как прежде.
+   */
+  function dispatchSidebarHandlers(table, event) {
+    const target = event.target;
+    if (!target || !target.closest) return;
+    for (const [selector, handler] of table) {
+      const node = target.closest(selector);
+      if (!node) continue;
+      handler(node, event);
+      return;
+    }
+  }
+
+  /**
+   * Подписка правого сайдбара — ОДИН раз на контейнер.
+   *
+   * Разметка внутри меняется сверкой узлов, поэтому подписка на конкретные узлы
+   * после каждой отрисовки была бы либо потерей обработчиков (новый узел), либо
+   * их дублированием (переиспользованный узел). Подписка на контейнер свободна и
+   * от того, и от другого.
+   */
+  let sidebarInputsBound = false;
+  function bindInputs() {
+    if (sidebarInputsBound) return;
+    sidebarInputsBound = true;
+
+    // Нажатие кнопки замораживает пересборку до отпускания: иначе click между
+    // pointerdown и pointerup съедал бы себя, если разметка успела смениться.
+    side.addEventListener("pointerdown", event => {
+      if (!event.target?.closest?.("button")) return;
+      sidebarPointerDown = true;
+      // Страховка: если pointerup потеряется (перетаскивание за пределы окна,
+      // потеря захвата), пересборка не должна остаться отключённой навсегда.
+      window.setTimeout(() => { sidebarPointerDown = false; }, 1000);
     });
+
+    side.addEventListener("click", event => dispatchSidebarHandlers(SIDEBAR_CLICK_HANDLERS, event));
+    side.addEventListener("change", event => dispatchSidebarHandlers(SIDEBAR_CHANGE_HANDLERS, event));
+    side.addEventListener("input", event => dispatchSidebarHandlers(SIDEBAR_INPUT_HANDLERS, event));
   }
 
   function renderJournalEntry(entry) {
@@ -5251,8 +5353,16 @@
         if (simulatorEvent.eventType === "InventoryChanged") {
           handleInventoryEvent(simulatorEvent);
         }
+        // Награда за динамическое событие: игрок проехал триггер, и без
+        // уведомления он не узнает ни о событии, ни о деньгах и опыте.
+        const dynamicNotified = handleDynamicEventNotification(simulatorEvent);
         eventHistory.unshift(simulatorEvent);
         eventHistory.splice(12);
+        if (dynamicNotified) {
+          renderGameplayPanels();
+          scheduleSidebarRender();
+          return;
+        }
       }
       scheduleUiRender();
       scheduleSidebarRender();

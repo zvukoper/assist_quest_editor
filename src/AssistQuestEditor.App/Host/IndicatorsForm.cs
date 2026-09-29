@@ -151,12 +151,67 @@ public sealed class IndicatorsForm : WebViewForm
                 case "close_indicators":
                     CloseRequested?.Invoke(this, EventArgs.Empty);
                     break;
+
+                // Клик по имени эффекта или предмета внутри монитора.
+                //
+                // Монитор обязан передать просьбу НАРУЖУ: окна перков и предметов
+                // — отдельные формы Windows, и открыть их из JavaScript
+                // невозможно. Молчание здесь — ровно тот дефект, который видел
+                // автор: чип «Вода» и «Отдохнувший» выглядели кнопками, но клик
+                // ничего не делал, потому что сообщение приходило в этот switch и
+                // не находило ветки.
+                case "open_perks":
+                    NavigationRequested?.Invoke(this, new IndicatorNavigationRequestEventArgs(
+                        "perks",
+                        StringOrNull(root, "perkId"),
+                        StringOrNull(root, "perkKind")));
+                    break;
+
+                case "open_items":
+                    NavigationRequested?.Invoke(this, new IndicatorNavigationRequestEventArgs(
+                        "items",
+                        StringOrNull(root, "itemId"),
+                        null));
+                    break;
+
+                // ПКМ по порции в блоке «Желудок»: убрать её из желудка.
+                //
+                // Просьба идёт НАРУЖУ по той же причине, что и открытие окон:
+                // состояние мира принадлежит Симулятору, и страница не может
+                // изменить желудок сама. Без этой ветки удаление выглядело бы
+                // кнопкой, которая молча ничего не делает.
+                case "remove_stomach_portion":
+                    StomachActionRequested?.Invoke(this, new StomachActionEventArgs(
+                        "remove",
+                        StringOrNull(root, "itemId"),
+                        null));
+                    break;
+
+                // Клик по предмету в контекстном меню пустого места желудка:
+                // употребить предмет, как если бы его выбрали в инвентаре.
+                case "use_stomach_item":
+                    StomachActionRequested?.Invoke(this, new StomachActionEventArgs(
+                        "use",
+                        StringOrNull(root, "itemId"),
+                        null));
+                    break;
             }
         }
         catch (Exception ex)
         {
             AppLogger.Error("IndicatorsForm: ошибка разбора web message.", ex);
         }
+    }
+
+    private static string? StringOrNull(JsonElement root, string name)
+    {
+        if (root.ValueKind != JsonValueKind.Object ||
+            !root.TryGetProperty(name, out var node))
+            return null;
+
+        return node.ValueKind == JsonValueKind.String
+            ? node.GetString()
+            : null;
     }
 
     /// <summary>
@@ -182,4 +237,75 @@ public sealed class IndicatorsForm : WebViewForm
 
     /// <summary>Просьба закрыть окно (Escape внутри окна).</summary>
     public event EventHandler? CloseRequested;
+
+    /// <summary>
+    /// Просьба открыть другое окно (перки или предметы) с подсветкой пункта.
+    ///
+    /// Событие, а не прямой вызов: окно монитора не знает про Симулятор, и
+    /// наоборот. Так же устроены остальные окна проекта — страница лишь называет
+    /// намерение, а решение принимает владелец окон.
+    /// </summary>
+    public event EventHandler<IndicatorNavigationRequestEventArgs>? NavigationRequested;
+
+    /// <summary>
+    /// Просьба изменить ЖЕЛУДОК: убрать порцию или употребить предмет.
+    ///
+    /// Отдельное событие от <see cref="NavigationRequested"/>: навигация лишь
+    /// показывает другое окно, а здесь меняется СОСТОЯНИЕ МИРА, и путать эти два
+    /// намерения значило бы дать странице власть над данными через событие,
+    /// которое для этого не предназначено.
+    /// </summary>
+    public event EventHandler<StomachActionEventArgs>? StomachActionRequested;
+}
+
+/// <summary>
+/// Намерение монитора изменить желудок.
+///
+/// <see cref="Kind"/> — «remove» (убрать порцию) или «use» (употребить предмет)
+/// : два разных действия над одним и тем же Id, и без вида они были бы
+/// неразличимы принимающей стороной.
+/// </summary>
+public sealed class StomachActionEventArgs : EventArgs
+{
+    public StomachActionEventArgs(string kind, string? itemId, string? portionId)
+    {
+        Kind = kind;
+        ItemId = itemId;
+        PortionId = portionId;
+    }
+
+    /// <summary>«remove» или «use».</summary>
+    public string Kind { get; }
+
+    /// <summary>Id предмета, к которому относится действие.</summary>
+    public string? ItemId { get; }
+
+    /// <summary>Уточнение порции, если порций с одним Id несколько.</summary>
+    public string? PortionId { get; }
+}
+
+/// <summary>
+/// Намерение монитора открыть другое окно.
+///
+/// «Куда» и «что подсветить» едут одним аргументом: два отдельных события
+/// разошлись бы в момент добавления третьего окна, а вид ссылки (buff/debuff)
+/// нужен, чтобы принимающая сторона могла сверить раздел с каталогом.
+/// </summary>
+public sealed class IndicatorNavigationRequestEventArgs : EventArgs
+{
+    public IndicatorNavigationRequestEventArgs(string target, string? id, string? kind)
+    {
+        Target = target;
+        Id = id;
+        Kind = kind;
+    }
+
+    /// <summary>«perks» или «items».</summary>
+    public string Target { get; }
+
+    /// <summary>Id пункта для подсветки; может быть пустым.</summary>
+    public string? Id { get; }
+
+    /// <summary>Вид пункта («buff»/«debuff») — только для ссылок в перки.</summary>
+    public string? Kind { get; }
 }
