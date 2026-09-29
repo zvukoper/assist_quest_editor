@@ -104,17 +104,45 @@
     var found=(itemCatalog||[]).find(function(e){return String(e.id||"").toLowerCase()===id.toLowerCase();});
     return {id:id,name:(found&&(found.name||found.id))||id,rate:key==="energy"?num(stomach.energyPerGameSecond)*60:num(stomach.hydrationPerGameSecond)*60};
   }
-  function chipHtml(entry,isItem){
-    if(isItem) return "<button type='button' class='indicatorChip itemChip' data-item-link='"+esc(entry.id)+"' title='Открыть окно «Предметы»'>"+esc(entry.name)+"</button>";
-    return "<button type='button' class='indicatorChip "+(entry.kind==="debuff"?"debuffChip":"buffChip")+"' data-perk-link='"+esc(entry.id)+"' data-perk-kind='"+esc(entry.kind)+"' title='Открыть окно «Перки, баффы, скиллы»'>"+esc(entry.name)+"</button>";
+  function perkContribution(key,id){
+    var rate=rateFor(key), value=0, wanted=String(id||"").toLowerCase();
+
+    if(wanted==="relaxation"&&key==="stress") value=-Math.abs(rate)*0.15;
+    else if(wanted==="rested"&&key==="stress") value=-Math.abs(rate)*0.25;
+    else if(wanted==="unkempt"&&key==="stress") value=Math.abs(rate)*0.50;
+    else if(wanted==="bum"&&key==="stress") value=Math.abs(rate)*0.60;
+    else if(wanted==="burnout"&&key==="fatigue") value=Math.abs(rate)*0.10;
+    else if(wanted==="drowsiness"&&key==="fatigue") value=Math.abs(rate)*0.10;
+    else if(wanted==="alcohol_aftereffect"&&(key==="hydration"||key==="fatigue")) value=-Math.abs(rate)*0.10;
+    else if(wanted==="nicotine_rebound"&&key==="stress") value=Math.abs(rate)*0.25;
+    else if(wanted==="caffeine_overuse"&&key==="stress") value=Math.abs(rate)*0.20;
+    else if(wanted==="caffeine_excess"&&key==="stress") value=Math.abs(rate)*0.15;
+    else if(wanted==="caffeine_jitter"&&key==="stress") value=Math.abs(rate)*0.20;
+    else if(wanted==="caffeine_withdrawal"&&key==="stress") value=Math.abs(rate)*0.20;
+    else if(wanted==="late_caffeine"&&key==="fatigue") value=Math.abs(rate)*0.15;
+    else if(wanted==="analgesic_overuse"&&(key==="health"||key==="stress")) value=-Math.abs(rate)*0.10;
+    else if(wanted==="bull"&&(key==="health"||key==="energy"||key==="hydration")) value=Math.abs(rate)*0.25;
+    else if(wanted==="power_surge") value=0;
+
+    return value;
   }
+
+  function chipHtml(entry,isItem,key){
+    if(isItem)
+      return "<button type='button' class='indicatorChip itemChip' data-item-link='"+esc(entry.id)+"' title='Открыть окно «Предметы»'>"+esc(entry.name)+"</button>";
+
+    var rate=perkContribution(key,entry.id);
+    return "<button type='button' class='indicatorChip "+(entry.kind==="debuff"?"debuffChip":"buffChip")+"' data-perk-link='"+esc(entry.id)+"' data-perk-kind='"+esc(entry.kind)+"' title='Открыть окно «Перки, баффы, скиллы»'>"+esc(entry.name)+"</button>" +
+      " <span class='chipContribution'>"+contributionHtml(rate,key)+"</span>";
+  }
+
   function dynamicChipRows(key){
     var html="";
     activePerkRows(key).forEach(function(entry){
-      html+="<div class='indicatorFact dynamicItem'>• "+chipHtml(entry,false)+"</div>";
+      html+="<div class='indicatorFact dynamicItem'>• "+chipHtml(entry,false,key)+"</div>";
     });
     var item=consumedItemFor(key);
-    if(item) html+="<div class='indicatorFact dynamicItem'>• "+chipHtml(item,true)+" <span class='indicatorItemMeta'>усваивается "+contributionHtml(item.rate,key)+"</span></div>";
+    if(item) html+="<div class='indicatorFact dynamicItem'>• "+chipHtml(item,true,key)+" <span class='indicatorItemMeta'>усваивается "+contributionHtml(item.rate,key)+"</span></div>";
     return html;
   }
   function dynamicFactors(key){
@@ -152,7 +180,7 @@
       var normalBase=key==="energy"?100/30:100/90;
       var m=metabolismPercent(), mf=m<45?0.9:m>=75?1.25:1;
       var base=-normalBase*mf*100/60;
-      result.push(factor(key==="energy"?"Базовый расход энергии в Нормальном состоянии":"Базовый расход жидкости в Нормальном состоянии",key,base,"permanent",true,-1));
+      result.push(factor(key==="energy"?"Базовый расход энергии в Нормальном состоянии":"Базовый расход жидкости в Нормальном состоянии",key,base,"permanent",true));
       var needs=num(vitals().health)<num(vitals().maxHealth);
       result.push(factor(key==="energy"?"Восстановление здоровья: 1:1 по энергии":"Восстановление здоровья: 1:2 по жидкости",key,needs?rate*0.15:0,"permanent",needs,-1));
       result.push(factor("Метаболизм <45%: расход ×0,9",key,m<45?Math.abs(base)*0.1:0,"permanent",m<45,-1));
