@@ -96,6 +96,18 @@ public sealed record DynamicEventSpawnPolicy
 /// Это НЕ конкретный spawned event. Конкретный экземпляр появляется только
 /// внутри Runtime после срабатывания триггера и успешного разрешения Location.
 /// </summary>
+/// <summary>
+/// Действие после обнаружения Dynamic Event. Награды принадлежат самому событию,
+/// поэтому тайник может завершиться без обязательного Quest Runtime.
+/// </summary>
+public sealed record DynamicEventCompletionDefinition
+{
+    public bool CompleteOnDiscovery { get; init; }
+    public int Money { get; init; }
+    public int Experience { get; init; }
+    public string Message { get; init; } = string.Empty;
+}
+
 public sealed record DynamicEventDefinition(
     string Id,
     string Name)
@@ -122,6 +134,9 @@ public sealed record DynamicEventDefinition(
     public DynamicEventTriggerDefinition Trigger { get; init; } = new();
 
     public DynamicEventSpawnPolicy SpawnPolicy { get; init; } = new();
+
+    /// <summary>Завершение и награда события после обнаружения.</summary>
+    public DynamicEventCompletionDefinition Completion { get; init; } = new();
 
     /// <summary>
     /// Поля presentation остаются строками, чтобы не зашивать в Domain

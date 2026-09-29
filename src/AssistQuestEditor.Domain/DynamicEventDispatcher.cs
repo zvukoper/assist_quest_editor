@@ -300,7 +300,20 @@ public sealed class DynamicEventDispatcher : IDynamicEventDispatcher
 
         foreach (var instanceId in nearby)
         {
-            changed |= DiscoverInternal(instanceId, clock, schedules);
+            if (!DiscoverInternal(instanceId, clock, schedules))
+                continue;
+
+            changed = true;
+
+            var discovered = State.Instances.FirstOrDefault(item =>
+                item.InstanceId.Equals(instanceId, StringComparison.OrdinalIgnoreCase));
+
+            if (discovered is not null &&
+                _definitions.TryGetValue(discovered.DefinitionId, out var definition) &&
+                definition.Completion.CompleteOnDiscovery)
+            {
+                changed |= Complete(instanceId, consumed: true);
+            }
         }
 
         return changed;
@@ -490,19 +503,147 @@ public sealed class DynamicEventDispatcher : IDynamicEventDispatcher
 
     public bool Complete(string instanceId, bool consumed = false)
     {
-        var status = consumed ? DynamicEventInstanceStatus.Consumed : DynamicEventInstanceStatus.Completed;
-        return Transition(
-            instanceId,
-            new[]
+        var status = consumed
+            ? DynamicEventInstanceStatus.Consumed
+            : DynamicEventInstanceStatus.Completed;
+
+        var current = State.Instances.ToList();
+        var index = current.FindIndex(item =>
+            item.InstanceId.Equals(instanceId, StringComparison.OrdinalIgnoreCase));
+
+        if (index < 0 ||
+            current[index].Status is not (
+                DynamicEventInstanceStatus.Spawned or
+                DynamicEventInstanceStatus.Active or
+                DynamicEventInstanceStatus.Discovered or
+                DynamicEventInstanceStatus.Engaged))
+            return false;
+
+        var instance = current[index];
+
+        if (!_definitions.TryGetValue(instance.DefinitionId, out var definition))
+            return false;
+
+        var completion = NormalizeCompletion(definition.Completion);
+        ApplyCompletionRewards(definition, instance, completion);
+
+        var reason = consumed ? "Событие использовано." : "Событие завершено.";
+        current[index] = instance with
+        {
+            Status = status,
+            CompletedUtc = DateTimeOffset.UtcNow,
+            LastReason = reason
+        };
+
+        WriteState(current, State.Schedules, "DynamicEventDispatcher.Complete");
+
+        Publish(
+            "DynamicEventStateChanged",
+            reason,
+            instance.DefinitionId,
+            instance.InstanceId,
+            instance.Point);
+
+        Publish(
+            "DynamicEventCompleted",
+            BuildCompletionMessage(definition.Name, completion, consumed),
+            instance.DefinitionId,
+            instance.InstanceId,
+            instance.Point,
+            new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
             {
-                DynamicEventInstanceStatus.Spawned,
-                DynamicEventInstanceStatus.Active,
-                DynamicEventInstanceStatus.Discovered,
-                DynamicEventInstanceStatus.Engaged
+                ["money"] = completion.Money.ToString(CultureInfo.InvariantCulture),
+                ["experience"] = completion.Experience.ToString(CultureInfo.InvariantCulture),
+                ["consumed"] = consumed ? "true" : "false"
+            });
+
+        return true;
+    }
+
+    private void ApplyCompletionRewards(
+        DynamicEventDefinition definition,
+        DynamicEventInstance instance,
+        DynamicEventCompletionDefinition completion)
+    {
+        var money = Math.Max(0, completion.Money);
+        var experience = Math.Max(0, completion.Experience);
+
+        if (money == 0 && experience == 0)
+            return;
+
+        if (experience > 0)
+        {
+            var conditions = _hub.Get<PlayerConditionState>("player-conditions").Value;
+            experience = (int)Math.Round(
+                experience * PlayerConditionEngine.GetExperienceMultiplier(conditions),
+                MidpointRounding.AwayFromZero);
+        }
+
+        var channel = _hub.Get<PlayerProgressState>("player-progress");
+        var progress = channel.Value;
+
+        channel.Set(
+            progress with
+            {
+                Money = Math.Max(0, progress.Money + money),
+                Experience = Math.Max(0, progress.Experience + experience)
             },
-            status,
-            consumed ? "Событие использовано." : "Событие завершено.",
-            instance => instance with { CompletedUtc = DateTimeOffset.UtcNow });
+            "DynamicEventDispatcher.Reward");
+
+        Publish(
+            "DynamicEventRewardGranted",
+            BuildRewardMessage(definition.Name, money, experience),
+            definition.Id,
+            instance.InstanceId,
+            instance.Point,
+            new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["money"] = money.ToString(CultureInfo.InvariantCulture),
+                ["experience"] = experience.ToString(CultureInfo.InvariantCulture)
+            });
+    }
+
+    private static DynamicEventCompletionDefinition NormalizeCompletion(
+        DynamicEventCompletionDefinition? completion) =>
+        completion is null
+            ? new DynamicEventCompletionDefinition()
+            : completion with
+            {
+                Money = Math.Max(0, completion.Money),
+                Experience = Math.Max(0, completion.Experience),
+                Message = completion.Message?.Trim() ?? string.Empty
+            };
+
+    private static string BuildRewardMessage(
+        string eventName,
+        int money,
+        int experience)
+    {
+        var parts = new List<string>();
+
+        if (money > 0)
+            parts.Add($"{money.ToString("N0", new CultureInfo("ru-RU"))} ₽");
+
+        if (experience > 0)
+            parts.Add($"+{experience} опыта");
+
+        return parts.Count == 0
+            ? $"ОК: «{eventName}» завершено."
+            : $"ОК: «{eventName}». Получено {string.Join(" и ", parts)}.";
+    }
+
+    private static string BuildCompletionMessage(
+        string eventName,
+        DynamicEventCompletionDefinition completion,
+        bool consumed)
+    {
+        var message = !string.IsNullOrWhiteSpace(completion.Message)
+            ? completion.Message
+            : BuildRewardMessage(eventName, completion.Money, completion.Experience);
+
+        return consumed && message.IndexOf("деактивирован", StringComparison.OrdinalIgnoreCase) < 0
+            ? message + " Тайник деактивирован для повторной генерации."
+            : message;
     }
 
     public bool Cancel(string instanceId, string reason = "Событие отменено.") =>
@@ -1193,7 +1334,8 @@ public sealed class DynamicEventDispatcher : IDynamicEventDispatcher
         string message,
         string? definitionId = null,
         string? instanceId = null,
-        WorldPoint? point = null)
+        WorldPoint? point = null,
+        IReadOnlyDictionary<string, string>? additionalPayload = null)
     {
         var payload = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         if (!string.IsNullOrWhiteSpace(definitionId))
@@ -1207,6 +1349,16 @@ public sealed class DynamicEventDispatcher : IDynamicEventDispatcher
             payload["y"] = point.Position.Y.ToString(System.Globalization.CultureInfo.InvariantCulture);
             payload["z"] = point.Position.Z.ToString(System.Globalization.CultureInfo.InvariantCulture);
         }
+
+        if (additionalPayload is not null)
+        {
+            foreach (var pair in additionalPayload)
+                payload[pair.Key] = pair.Value;
+        }
+
+        // Сообщение является полезной частью события, а не только логом: журнал,
+        // тест и будущий Web UI должны видеть ровно тот текст, который получил игрок.
+        payload["message"] = message;
 
         var e = new SimulatorEvent(eventType, DateTimeOffset.UtcNow, "DynamicEventDispatcher", payload);
         _hub.Events.Publish(e);

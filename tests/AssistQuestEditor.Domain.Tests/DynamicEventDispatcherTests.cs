@@ -393,6 +393,69 @@ public sealed class DynamicEventDispatcherTests
             item.Status == DynamicEventInstanceStatus.Active);
     }
 
+    [Fact]
+    public void TestDynamicCacheAutoCompletesOnTriggerAndGrantsRewards()
+    {
+        var point = Point("cache-test", "Тестовый тайник", "cache", 100);
+        var hub = new SimulatorDataChannelHub(new[] { point });
+
+        var definition = Definition(
+            "test_dynamic_cache",
+            "Тестовый динамический тайник",
+            "test-cache-location",
+            new DynamicEventTriggerDefinition { Type = "Manual" },
+            new DynamicEventSpawnPolicy
+            {
+                MaxActiveInstances = 1,
+                RemoveOnCompleted = false
+            }) with
+            {
+                Completion = new DynamicEventCompletionDefinition
+                {
+                    CompleteOnDiscovery = true,
+                    Money = 5000,
+                    Experience = 50,
+                    Message = "ОК: Тестовый тайник. Получено 5 000 ₽ и +50 опыта."
+                },
+                TriggerRadius = 35
+            };
+
+        var dispatcher = new DynamicEventDispatcher(
+            hub,
+            new FakeLocationResolver(point),
+            () => new[] { definition },
+            new Random(1));
+
+        var completed = new List<SimulatorEvent>();
+        dispatcher.Published += e =>
+        {
+            if (e.EventType.Equals("DynamicEventCompleted", StringComparison.OrdinalIgnoreCase))
+                completed.Add(e);
+        };
+
+        dispatcher.SetSimulationRunning(true);
+        Assert.True(dispatcher.TrySpawn("test_dynamic_cache"));
+
+        var before = hub.Get<PlayerProgressState>("player-progress").Value;
+
+        MovePlayer(hub, 100);
+        dispatcher.Tick();
+
+        var after = hub.Get<PlayerProgressState>("player-progress").Value;
+        var instance = Assert.Single(dispatcher.State.Instances);
+
+        Assert.Equal(before.Money + 5000, after.Money);
+        Assert.Equal(before.Experience + 50, after.Experience);
+        Assert.Equal(DynamicEventInstanceStatus.Consumed, instance.Status);
+        Assert.Single(completed);
+        Assert.Equal("5000", completed[0].Payload["money"]);
+        Assert.Equal("50", completed[0].Payload["experience"]);
+        Assert.Equal("ОК: Тестовый тайник. Получено 5 000 ₽ и +50 опыта.", completed[0].Payload["message"]);
+
+        // Consumed не занимает active-slot: следующая генерация разрешена.
+        Assert.True(dispatcher.TrySpawn("test_dynamic_cache"));
+    }
+
     private static DynamicEventDefinition Definition(
         string id,
         string name,
