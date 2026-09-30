@@ -811,13 +811,20 @@ public sealed class CharacterVitalsEngineTests
             after.Conditions.Stomach.EnergyRemaining,
             2);
 
-        // Ставка постоянна и задана физиологией: полный желудок еды уходит за
-        // FoodStomachEmptyHours, то есть 5000 единиц в час.
+        // Ставка задана ПРОПУСКНОЙ СПОСОБНОСТЬЮ, а не таймером порции. У
+        // единственной порции она равна базовой сухой, умноженной на её
+        // «лёгкость» по содержанию воды (энергетик — почти сплошная вода:
+        // 320 мл на 330 мл). Прежняя проверка «5000 единиц в час» описывала
+        // модель, где ставку задавал таймер порции, и полный объём пищеварения
+        // уходил за 2 часа.
+        var portion = after.Conditions.Stomach.Portions[0];
+
         Assert.Equal(
-            PlayerConditionScale.Maximum /
-                CharacterDigestion.FoodStomachEmptyHours,
-            after.Conditions.Stomach.EnergyPerGameSecond * Hour,
-            3);
+            CharacterDigestion.DryThroughputMillilitersPerSecond *
+            (1d + (CharacterDigestion.WaterContentSpeedFactor - 1d) *
+             portion.WaterContent),
+            after.Conditions.Stomach.Portions[0].PerGameSecond,
+            6);
 
         Assert.Equal(
             80d / 12d,

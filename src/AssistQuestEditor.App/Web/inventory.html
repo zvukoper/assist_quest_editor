@@ -45,7 +45,7 @@
     overflow:auto;
     padding:8px;
   }
-  /* «Использовать» при полном желудке. Атрибут disabled сам по себе гасит
+  /* «Использовать» при полном пищеварении. Атрибут disabled сам по себе гасит
      кнопку, но подсказка и курсор заданы явно: без них пункт выглядел бы
      обычным, и игрок жал бы на него без результата. */
   .graphContextMenuItemDisabled {
@@ -71,7 +71,7 @@
 
 <div class="inventoryNotifications" id="inventoryNotifications" aria-live="polite"></div>
 
-<script src="vitals.js?v=2eae4807"></script>
+<script src="vitals.js?v=479a0b03"></script>
 <script src="inventory.js?v=85fe82ff"></script>
 <script src="playerPanels.js?v=e2c1841d"></script>
 <script>
@@ -85,7 +85,7 @@
   var catalog = [];
   var activePlayerTab = "character";
 
-  // Каталог УПОТРЕБИМОГО с признаком «помещается в желудок».
+  // Каталог УПОТРЕБИМОГО с признаком «помещается в пищеварение».
   //
   // Живёт отдельно от `catalog` и обновляется ЖИВЫМ состоянием: признак
   // меняется каждую секунду по мере усвоения, а полный снимок приходит редко.
@@ -93,7 +93,7 @@
   var consumables = [];
 
   /**
-   * Помещается ли предмет в СВОБОДНОЕ место желудка.
+   * Помещается ли предмет в СВОБОДНОЕ место пищеварения.
    *
    * Признак приходит из домена (`fits`). Своей проверки здесь быть не должно:
    * правило «объём больше свободного места — нельзя» одно, и повторённое в этой
@@ -236,10 +236,10 @@
     var name = menu.querySelector("[data-inventory-menu-name]");
     var amount = Number((snapshot.inventory.items || {})[itemId] || 0);
 
-    // «Использовать» НЕАКТИВНО, когда предмет не помещается в желудок, и рядом
+    // «Использовать» НЕАКТИВНО, когда предмет не помещается в пищеварение, и рядом
     // написано почему (требование автора: «в инвентаре "Использовать" неактивно
-    // и в скобках (желудок полон)»). Ограничение только для СЪЕДОБНОГО: у
-    // несъедобного предмета места в желудке не бывает вовсе, и гасить ему
+    // и в скобках (пищеварение занято)»). Ограничение только для СЪЕДОБНОГО: у
+    // несъедобного предмета места в пищеварении не бывает вовсе, и гасить ему
     // «Использовать» было бы неверно.
     var consumable = consumables.find(function (x) {
       return String(x.id || "").toLowerCase() === String(itemId || "").toLowerCase();
@@ -248,16 +248,16 @@
 
     if (name)
       name.textContent = (item.name || itemId) + " ×" + amount +
-        (usable ? "" : " (желудок полон)");
+        (usable ? "" : " (пищеварение занято)");
 
     var useButton = menu.querySelector("[data-inventory-menu-action='use']");
     if (useButton) {
       useButton.disabled = !usable;
       useButton.classList.toggle("graphContextMenuItemDisabled", !usable);
-      useButton.textContent = usable ? "Использовать" : "Использовать (желудок полон)";
+      useButton.textContent = usable ? "Использовать" : "Использовать (пищеварение занято)";
       useButton.title = usable
         ? "Употребить предмет"
-        : "В желудке недостаточно свободного места";
+        : "В пищеварении недостаточно свободного места";
     }
 
     menu.dataset.inventoryItemId = itemId;

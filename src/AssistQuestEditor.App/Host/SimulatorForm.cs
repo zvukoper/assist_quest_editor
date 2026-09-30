@@ -589,13 +589,14 @@ public sealed class SimulatorForm : WebViewForm
     }
 
     /// <summary>
-    /// Желудок для монитора показателей: порции, объём и влияние на усвоение.
+    /// Пищеварение для монитора показателей: порции, объём и влияние на усвоение.
     ///
     /// Считает ДОМЕН (<see cref="CharacterDigestionReport"/>), а не страница:
-    /// срок порции выводится из её остатка и ставки, а ставку задаёт физиология
-    /// (еда — «полный желудок за два часа», питьё — «1,35 литра в час»). Вторая
-    /// такая же формула в JavaScript разошлась бы с начислением при первой же
-    /// правке баланса — ровно тот класс дефектов, что «потолок 10000».
+    /// срок порции выводится из её остатка и ставки, а ставку задаёт ОДНА общая
+    /// пропускная способность пищеварения, поделённая между порциями по их
+    /// «лёгкости» (вода легче сухой пищи). Вторая такая же формула в JavaScript
+    /// разошлась бы с начислением при первой же правке баланса — ровно тот класс
+    /// дефектов, что «потолок 10000».
     /// </summary>
     private static object BuildDigestionSnapshot(SimulatorSnapshot snapshot)
     {
@@ -621,11 +622,14 @@ public sealed class SimulatorForm : WebViewForm
                 waterMilliliters = portion.WaterMilliliters,
                 remainingGameSeconds = portion.RemainingGameSeconds,
                 remainingGameMinutes = portion.RemainingGameMinutes,
+                // Доля ВОДЫ в порции: по ней игрок понимает, почему две порции
+                // одного объёма уходят за разное время.
+                waterContent = portion.WaterContent,
                 // СКОРОСТЬ ЭТОЙ ПОРЦИИ: без неё строка предмета в шкале не
-                // может показать свой вклад и повторяла бы общий итог желудка,
-                // приписывая апельсину восстановление жидкости, которого он не
-                // даёт. В единицах шкалы за игровую минуту — та же размерность,
-                // что у energyPerMinute/hydrationPerMinute ниже.
+                // может показать свой вклад и повторяла бы общий итог
+                // пищеварения, приписывая апельсину восстановление жидкости,
+                // которого он не даёт. В единицах шкалы за игровую минуту — та
+                // же размерность, что у energyPerMinute/hydrationPerMinute ниже.
                 energyPerMinute = portion.EnergyPerGameSecond * 60d,
                 hydrationPerMinute = portion.HydrationPerGameSecond * 60d
             })
@@ -647,17 +651,22 @@ public sealed class SimulatorForm : WebViewForm
 
         return new
         {
-            // Доли, а не только литры: страница раскладывает желудок на всю
-            // ширину блока, и рисовать приходится ОТНОСИТЕЛЬНЫМИ размерами.
+            // Доли, а не только литры: страница раскладывает область пищеварения
+            // на всю ширину блока, и рисовать приходится ОТНОСИТЕЛЬНЫМИ размерами.
             volumeFraction = stomach.VolumeFraction,
             occupiedLiters = stomach.OccupiedLiters,
             totalLiters = CharacterDigestion.StomachVolumeLiters,
-            // МИЛЛИЛИТРЫ — то, чем подписан блок«занято / всего» и чем отмерена
-            // область желудка. Считает домен: миллилитр и грамм приравнены в
+            // МИЛЛИЛИТРЫ — то, чем подписан блок «занято / всего» и чем отмерена
+            // область пищеварения. Считает домен: миллилитр и грамм приравнены в
             // одном месте, и повторять это в JavaScript значило бы завести вторую
             // версию правила об объёме.
-            occupiedMilliliters = stomach.OccupiedLiters * 1000d,
+            occupiedMilliliters = stomach.OccupiedMilliliters,
             totalMilliliters = CharacterDigestionReport.StomachCapacityMilliliters,
+            // Пропускная способность в миллилитрах в час — её показывает первый
+            // фактор блока: игрок обязан видеть лимит, из которого считаются
+            // сроки порций.
+            dryThroughputMillilitersPerHour =
+                CharacterDigestion.DryThroughputLitersPerHour * 1000d,
             // Скорости усвоения в единицах шкалы за игровую минуту: их показывает
             // строка «общая динамика усвоения» в шапке блока.
             energyPerMinute = stomach.EnergyPerGameSecond * 60d,
@@ -879,18 +888,25 @@ public sealed class SimulatorForm : WebViewForm
         _hub.Get<PlayerConditionState>("player-conditions").Set(
             conditions with
             {
+                // Суммы и ставки пересчитываются из оставшихся порций
+                // (Normalize → Materialize). Признаки метаболизма берутся У
+                // САМОГО содержимого: без них ставки пересчитались бы по
+                // «нормальной» пропускной способности, и оставшаяся еда пошла бы
+                // в шкалы не с той скоростью, с какой шла до удаления.
                 Stomach = new StomachContents(0d, 0d, 0d, 0d, 0d)
                 {
-                    Portions = remaining
+                    Portions = remaining,
+                    ElevatedMetabolism = conditions.Stomach.ElevatedMetabolism,
+                    ReducedMetabolism = conditions.Stomach.ReducedMetabolism
                 }.Normalize()
             },
-            "Удаление порции из желудка");
+            "Удаление порции из пищеварения");
 
         AppendJournal(
             "StomachPortionRemoved",
             DateTimeOffset.UtcNow,
             "Состояние игрока",
-            "Из желудка удалён предмет: [[item:" + itemId + ":" +
+            "Из пищеварения удалён предмет: [[item:" + itemId + ":" +
             ItemLabel(itemId) + "]] " + ItemLabel(itemId) + ".",
             _hub.Get<PlayerState>("player").Value.Position);
 

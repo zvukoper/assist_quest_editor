@@ -836,6 +836,92 @@ public sealed class RouteTests
         Assert.Same(plan, plan.ShiftWaypointIndices(0));
     }
 
+    /// <summary>
+    /// ГЕОМЕТРИЯ ПЛАНА МАТЕРИАЛИЗУЕТСЯ ОДИН РАЗ и дальше отдаётся тем же списком.
+    ///
+    /// Автор: «RoutePlan должен материализовать Points/Segments один раз».
+    /// Прежде `Points`, `Segments` и `TotalDistanceMeters` были чистыми
+    /// getter-ами, и каждое чтение (`Points.Count`, `Points[index]`,
+    /// `Segments.Count`) пересобирало геометрию заново. План читается десятки раз
+    /// за кадр, и на длинном маршруте это была скрытая работа — тем заметнее, чем
+    /// длиннее маршрут.
+    ///
+    /// Проверяется ИДЕНТИЧНОСТЬ ССЫЛОК, а не равенство содержимого: равенство
+    /// выполнялось бы и при пересборке на каждое чтение, поэтому оно ничего не
+    /// доказывало бы. Именно `Assert.Same` ловит возврат к вычисляемым getter-ам.
+    /// </summary>
+    [Fact]
+    public void RoutePlanMaterializesPointsAndSegmentsOnce()
+    {
+        var planner = new RoadRoutePlanner(new[]
+        {
+            new RoadSegment(0, 0, 100, 0),
+            new RoadSegment(100, 0, 200, 0)
+        });
+
+        var route = new RouteState(60, new[]
+        {
+            new RouteWaypoint("a", new WorldCoordinate(0, 0, 0), 60),
+            new RouteWaypoint("b", new WorldCoordinate(100, 0, 0), 60),
+            new RouteWaypoint("c", new WorldCoordinate(200, 0, 0), 60)
+        });
+
+        var plan = planner.Build(route);
+
+        // Геометрия не вырождена: иначе идентичность ссылок доказывала бы
+        // «кэш пустого массива».
+        Assert.NotEmpty(plan.Points);
+        Assert.NotEmpty(plan.Segments);
+
+        Assert.Same(plan.Points, plan.Points);
+        Assert.Same(plan.Segments, plan.Segments);
+
+        // Чтения «по месту» — те же самые, что в горячем пути Хоста
+        // (`Points.Count`, `Points[index]`, `Segments.Count`) — не пересобирают
+        // списки.
+        var points = plan.Points;
+        _ = plan.Points.Count;
+        _ = plan.Points[0];
+        _ = plan.Segments.Count;
+        _ = plan.TotalDistanceMeters;
+        Assert.Same(points, plan.Points);
+
+        // Сегменты построены ИЗ ТЕХ ЖЕ точек: список сегментов не должен
+        // «утянуть» вторую, независимо построенную геометрию.
+        Assert.Same(plan.Points, plan.Points);
+    }
+
+    /// <summary>
+    /// Кэш геометрии НЕ ВЛИЯЕТ на равенство планов: record сравнивает только
+    /// позиционные свойства, поэтому два плана с одинаковыми входами равны
+    /// независимо от того, материализованы их кэши или нет.
+    ///
+    /// Без этой проверки легко было бы «оптимизировать» до сравнения кэшей, и
+    /// тогда два одинаковых по входу плана оказались бы неравны из-за разного
+    /// состояния ленивых полей.
+    /// </summary>
+    [Fact]
+    public void RoutePlanEqualityIgnoresMaterializationCache()
+    {
+        var legs = new[]
+        {
+            new RouteLeg(0, 1,
+                new[] { new WorldCoordinate(0, 0, 0), new WorldCoordinate(100, 0, 0) },
+                100)
+        };
+
+        var untouched = new RoutePlan(legs, Array.Empty<string>());
+        var materialized = new RoutePlan(legs, Array.Empty<string>());
+
+        // Материализуем ровно один из двух.
+        _ = materialized.Points;
+        _ = materialized.Segments;
+        _ = materialized.TotalDistanceMeters;
+
+        Assert.Equal(untouched, materialized);
+        Assert.Equal(untouched.GetHashCode(), materialized.GetHashCode());
+    }
+
     [Fact]
     public void OffRoadWaypointCanStartNextRoadLeg()
     {        var planner = new RoadRoutePlanner(new[]

@@ -3388,7 +3388,7 @@ public static class CharacterVitalsEngine
     }
 
     /// <summary>
-    /// Кладёт ОДИН съеденный предмет в желудок как ОДНУ порцию — с обеими
+    /// Кладёт ОДИН съеденный предмет в ПИЩЕВАРЕНИЕ как ОДНУ порцию — с обеими
     /// шкалами сразу.
     ///
     /// Зачем отдельно от <see cref="AddResource"/>. Раньше питание шло двумя
@@ -3399,24 +3399,22 @@ public static class CharacterVitalsEngine
     /// колбаса появлялась «два раза», апельсин — тоже; шоколад давал две
     /// плитки, одна из которых исчезала через секунды.
     ///
-    /// ПОЧЕМУ СКЛАДЫВАТЬ БЫЛО НЕЛЬЗЯ. Объём порции — свойство КУСКА, а не шкалы:
-    /// доля желудка берётся из массы предмета. Две порции по 0,18 л описывали бы
-    /// 360 г съеденного вместо 180 г, и желудок переполнялся бы вдвое быстрее
-    /// реального. Поэтому одна порция несёт оба остатка и обе ставки, а объём
-    /// берётся один раз — по всему предмету.
+    /// ПОЧЕМУ СКЛАДЫВАТЬ НЕЛЬЗЯ. Объём порции — свойство КУСКА, а не шкалы:
+    /// место в пищеварении берётся из массы предмета. Две порции по 180 г
+    /// описывали бы 360 г съеденного вместо 180 г, и пищеварение переполнялось
+    /// бы вдвое быстрее реального. Поэтому одна порция несёт И объём, И воду,
+    /// И калории, а место берётся один раз — по всему предмету.
     ///
-    /// ПОЧЕМУ НЕ «ОБЩАЯ СТАВКА». Соблазн свести порцию к одной ставке выглядит
-    /// физиологичнее, но еда и питьё усваиваются с РАЗНЫХ скоростях: полный
-    /// желудок еды уходит за <see cref="CharacterDigestion.FoodStomachEmptyHours"/>
-    /// часов, жидкость — по <see cref="CharacterDigestion.HydrationAbsorptionLitersPerHour"/>
-    /// литра в час. Одна ставка на обе шкалы заставила бы воду усваиваться со
-    /// скоростью еды (или наоборот), и таймер порции перестал бы отвечать
-    /// содержимому. Поэтому у порции по-прежнему ДВЕ ставки — но у ОДНОЙ порции.
+    /// ПОЧЕМУ БОЛЬШЕ НЕ «ДВЕ СТАВКИ НА ПОРЦИЮ». Еда и питьё по-прежнему
+    /// усваиваются с РАЗНОЙ скоростью, но задаёт её уже не отдельный таймер
+    /// порции, а ОБЩАЯ пропускная способность пищеварения, делённая по
+    /// содержанию воды в порциях (см. <see cref="CharacterDigestion.Distribute"/>).
+    /// Поэтому порция хранит ФИЗИЧЕСКИЕ величины, а ставку получает при сборке.
     ///
     /// Отрицательные проценты (алкоголь обезвоживает) действуют МГНОВЕННО и в
-    /// желудок не попадают: желудок замедляет только ВОССТАНОВЛЕНИЕ, а не
+    /// пищеварение не попадают: оно замедляет только ВОССТАНОВЛЕНИЕ, а не
     /// «выпивание в минус». Порция без питательности (таблетка, сигарета)
-    /// желудок не занимает — <see cref="CharacterDigestion.Begin"/> её не создаёт.
+    /// пищеварение не занимает — <see cref="CharacterDigestion.Begin"/> её не создаёт.
     /// </summary>
     private static void AddConsumedPortion(
         ref PlayerVitalsState vitals,
@@ -3439,10 +3437,10 @@ public static class CharacterVitalsEngine
             };
         }
 
-        var energyPercent = Math.Max(0d, profile.EnergyPercent);
-        var hydrationPercent = Math.Max(0d, profile.HydrationPercent);
+        var kilocalories = Math.Max(0d, profile.Kilocalories);
+        var water = Math.Max(0d, profile.WaterMilliliters);
 
-        if (energyPercent <= 0d && hydrationPercent <= 0d)
+        if (kilocalories <= 0d && water <= 0d)
             return;
 
         // «Прилив сил» замораживает шкалы: восстановление от еды не должно
@@ -3460,22 +3458,21 @@ public static class CharacterVitalsEngine
                 // «последний предмет»: иначе Апельсин стирал бы Воду, хотя вода
                 // всё ещё переваривается.
                 state.LastConsumedItemId,
-                energyPercent,
-                hydrationPercent,
-                vitals.MaxEnergy,
-                vitals.MaxHydration,
-                elevatedMetabolism: metabolism >= ElevatedMetabolismPercent,
-                reducedMetabolism: metabolism < ReducedMetabolismPercent,
-                // Объём порции: он задаёт ВРЕМЯ переваривания, а не объём
-                // восстановления, и берётся ПО ВСЕМУ предмету — один раз.
-                // Минимум 0,01 отсекает вырождение у предметов с нулевой массой,
+                // ОБЪЁМ порции — из каталога: у еды и питья он есть в профиле, а у
+                // предметов без профиля (сорбент, соли) — в таблице бытовых
+                // порций. Минимум отсекает вырождение у позиций с нулевой массой,
                 // у которых всё же есть питательность.
-                portionFraction: Math.Max(
-                    0.01d,
-                    profile.PortionFraction > 0d
-                        ? profile.PortionFraction
-                        : CharacterConsumableCatalog.GetPortionFractionOrDefault(
-                            state.LastConsumedItemId)))
+                portionMilliliters: Math.Max(
+                    CharacterDigestion.MinimumPortionFraction *
+                    CharacterDigestion.CapacityMilliliters,
+                    profile.Grams > 0d
+                        ? profile.Grams
+                        : CharacterConsumableCatalog.GetPortionMilliliters(
+                            state.LastConsumedItemId)),
+                waterMilliliters: water,
+                kilocalories: kilocalories,
+                elevatedMetabolism: metabolism >= ElevatedMetabolismPercent,
+                reducedMetabolism: metabolism < ReducedMetabolismPercent)
         };
     }
 

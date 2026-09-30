@@ -58,23 +58,26 @@ html,body{height:100%;margin:0;overflow:hidden;background:#0d1014}
 .debuffChip{color:#ff8a8a;border-color:rgba(207,12,12,.35);background:rgba(207,12,12,.08)}
 .itemChip{color:var(--accent);border-color:rgba(250,176,3,.35);background:rgba(250,176,3,.08)}
 .indicatorItemMeta{color:var(--muted)}.indicatorItemMeta .factorContribution{margin-left:2px}
-/* ── Блок «Желудок» ────────────────────────────────────────────────────────
+/* ── Блок «Пищеварение» ────────────────────────────────────────────────────
    Автор: «предлагаю сделать желудок прямоугольной областью, такой же как другие
    блоки шкалы, и встроить в общую сетку со шкалами. Объём желудка визуально
-   будет состоять из 4 строк высотой по 35px. То есть 1 литр желудка нужно
-   распределить по области размером 470x140px».
+   будет состоять из 4 строк высотой по 35px».
 
-   Поэтому блок — ОБЫЧНАЯ ЯЧЕЙКА СЕТКИ шириной как карточка шкалы (500px), а не
+   Блок назван «Пищеварение»: по заданию автора желудок и кишечник сведены в
+   ОДИН объём, и подписывать его именем прежней ступени было бы неверно.
+   Объём вырос с 1 до 2 литров, а сетка из 4 строк сохранена: 500 мл на строку.
+
+   Блок — ОБЫЧНАЯ ЯЧЕЙКА СЕТКИ шириной как карточка шкалы (500px), а не
    полоса во всю ширину: полоса ломала сетку и не давала области соответствовать
-   литру (чем шире окно, тем больше литра приходилось бы на пиксель). */
+   объёму (чем шире окно, тем больше объёма приходилось бы на пиксель). */
 .stomachCard{flex:0 1 500px;width:500px;max-width:100%}
 .stomachHead{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap;padding:6px 9px;border-bottom:1px solid rgba(255,255,255,.08);font-size:12px;font-weight:600}
 .stomachHead .stomachTitle{color:#fff;font-weight:700}
 .stomachHead .stomachDynamics{color:var(--muted);font-weight:600}
 .stomachHead .stomachFactors{color:var(--muted);font-weight:400}
-/* Занятый объём желудка: «0,55 / 1 л». Стоит ПОСЛЕ влияний усвоения и перед
-   кнопкой, отделён рамкой слева — это не часть фразы об усвоении, а отдельный
-   показатель (объём задаёт предел, а не скорость). */
+/* Занятый объём пищеварения: «400 / 2000 мл». Стоит ПОСЛЕ влияний усвоения и
+   перед кнопкой, отделён рамкой слева — это не часть фразы об усвоении, а
+   отдельный показатель (объём задаёт предел, а не скорость). */
 .stomachVolume{color:#e8edf3;font-weight:600;font-variant-numeric:tabular-nums;padding-left:8px;border-left:1px solid rgba(255,255,255,.14)}
 .stomachFactorGood{color:var(--lime);font-weight:600}
 .stomachFactorBad{color:var(--red);font-weight:600}
@@ -83,9 +86,8 @@ html,body{height:100%;margin:0;overflow:hidden;background:#0d1014}
    фразу «Усвоение: +N ккал/мин, влияние 1, влияние 2». */
 .stomachContentsButton{appearance:none;margin-left:auto;border:1px solid rgba(255,255,255,.18);border-radius:4px;padding:2px 8px;font-size:11px;font-weight:600;cursor:pointer;background:rgba(255,255,255,.06);color:#e8edf3}
 .stomachContentsButton:hover{background:rgba(250,176,3,.16);border-color:var(--accent);color:#fff}
-/* Область желудка — ЧЕТЫРЕ СТРОКИ ПО 35px (автор: «объём желудка визуально
-   будет состоять из 4 строк высотой по 35px»). Высота ЖЁСТКАЯ, а не по
-   содержимому: иначе область не соответствовала бы литру, и «занято 1 из 1»
+/* Область пищеварения — ЧЕТЫРЕ СТРОКИ ПО 35px. Высота ЖЁСТКАЯ, а не по
+   содержимому: иначе область не соответствовала бы объёму, и «занято 1 из 1»
    показывалось бы при визуально пустой половине (именно это и увидел автор).
    Порции ставит укладчик в indicators.js — плитками без наложения, и сумма их
    площадей строго отвечает занятым миллилитрам. */
@@ -98,7 +100,7 @@ html,body{height:100%;margin:0;overflow:hidden;background:#0d1014}
   overflow:hidden;
 }
 .stomachAreaEmpty{position:absolute;left:0;right:0;top:50%;transform:translateY(-50%);text-align:center;color:#6d757e;font-size:11px}
-/* Порция — плитка внутри области желудка. Координаты и размер ставит УКЛАДЧИК
+/* Порция — плитка внутри области пищеварения. Координаты и размер ставит УКЛАДЧИК
    (indicators.js): место в области значения не имеет, но плитки не должны
    накладываться друг на друга, а их суммарная площадь обязана строго отвечать
    занятым миллилитрам. Поэтому absolute + px, а не поток. */
@@ -129,13 +131,13 @@ html,body{height:100%;margin:0;overflow:hidden;background:#0d1014}
 .stomachTooltip{position:fixed;z-index:40;max-width:280px;padding:7px 9px;border:1px solid var(--border);border-radius:6px;background:rgba(13,16,20,.98);color:#e8edf3;font-size:11px;line-height:1.45;box-shadow:0 6px 18px rgba(0,0,0,.45);pointer-events:none}
 .stomachTooltip strong{display:block;margin-bottom:3px;color:#fff}
 .stomachTooltip ul{margin:0;padding-left:16px}
-/* Меню КАТАЛОГА употребимого (ПКМ по пустому месту желудка). Две колонки:
+/* Меню КАТАЛОГА употребимого (ПКМ по пустому месту пищеварения). Две колонки:
    список длинный, а тянуться оно вниз на весь экран не должно. */
 .stomachMenu{position:fixed;z-index:41;min-width:230px;max-height:min(340px,60vh);overflow-y:auto;padding:5px;border:1px solid var(--border);border-radius:6px;background:rgba(20,22,25,.99);box-shadow:0 8px 22px rgba(0,0,0,.5)}
 .stomachMenuHead{padding:3px 8px 6px;color:var(--muted);font-size:10px;text-transform:uppercase;letter-spacing:.04em}
 .stomachMenuItem{display:flex;align-items:center;gap:7px;width:100%;box-sizing:border-box;appearance:none;border:0;text-align:left;padding:5px 8px;border-radius:4px;background:transparent;color:#e8edf3;font-size:11px;cursor:pointer}
 .stomachMenuItem:hover{background:rgba(250,176,3,.16);color:#fff}
-/* Пункт, который НЕ ПОМЕЩАЕТСЯ в желудок: серый и некликабельный (требование
+/* Пункт, который НЕ ПОМЕЩАЕТСЯ в пищеварение: серый и некликабельный (требование
    автора). Оставлен в списке, а не убран: пропажа читалась бы как «предмет
    исчез из каталога», а серый пункт показывает, ЧТО не влезает и почему. */
 .stomachMenuItemDisabled{color:#6d757e;cursor:not-allowed;opacity:.55}
@@ -145,7 +147,7 @@ html,body{height:100%;margin:0;overflow:hidden;background:#0d1014}
 .stomachMenuName{flex:1 1 auto;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .stomachMenuMeta{flex:0 0 auto;color:var(--muted);font-size:10px;font-variant-numeric:tabular-nums}
 .stomachMenuEmpty{padding:8px;color:#6d757e;font-size:11px}
-/* ── Окно «Содержимое желудка» (кнопка в шапке блока) ──────────────────────
+/* ── Окно «Содержимое пищеварения» (кнопка в шапке блока) ──────────────────
    Всплывающее окно ВНУТРИ монитора: простой список порций с названием и
    таймером, ПКМ по строке убирает порцию. Позиционируется у кнопки, за шапку
    его можно перетащить. */
@@ -185,14 +187,14 @@ html,body{height:100%;margin:0;overflow:hidden;background:#0d1014}
 <div class="stomachMenu" id="stomachMenu" hidden></div>
 <div class="stomachWindow" id="stomachWindow" hidden>
   <div class="stomachWindowHead" id="stomachWindowHead">
-    <span class="stomachWindowTitle">Содержимое желудка</span>
+    <span class="stomachWindowTitle">Содержимое пищеварения</span>
     <button type="button" class="stomachWindowClose" id="stomachWindowClose" title="Закрыть (Esc)">✕</button>
   </div>
   <div class="stomachWindowBody" id="stomachWindowBody"></div>
 </div>
 <script src="web_log.js?v=18763af3"></script>
 <script src="dom_reconcile.js?v=b4a5a022"></script>
-<script src="vitals.js?v=2eae4807"></script>
-<script src="indicators.js?v=2efec27b"></script>
+<script src="vitals.js?v=479a0b03"></script>
+<script src="indicators.js?v=d7cc9b52"></script>
 </body>
 </html>

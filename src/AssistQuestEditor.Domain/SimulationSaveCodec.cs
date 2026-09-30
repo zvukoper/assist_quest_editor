@@ -494,7 +494,33 @@ public static class SimulationSaveCodec
         // единственное имя последнего предмета, и «Вода» подменялась
         // «Апельсином». Суммы пишутся ВСЕГДА (они нужны движку и старым
         // читателям), список порций — только новым форматом.
-        if (formatVersion >= 15)
+        //
+        // v16: порции хранят ФИЗИЧЕСКИЕ величины (объём, калории, воду), а
+        // ставки НЕ пишутся: они выводятся из состава при загрузке
+        // (<see cref="CharacterDigestion.Normalize"/>). Иначе файл «запомнил» бы
+        // скорости на момент записи, и пищеварение после загрузки вело бы себя
+        // иначе, чем в непрерывной игре. Вместе с ними пишутся признаки
+        // метаболизма — без них ставки после загрузки пересчитались бы по
+        // «нормальной» пропускной способности и разъехались с игрой.
+        if (formatVersion >= 16)
+        {
+            var portions = conditions.Stomach.Portions ??
+                Array.Empty<StomachPortion>();
+
+            writer.Write(conditions.Stomach.ElevatedMetabolism);
+            writer.Write(conditions.Stomach.ReducedMetabolism);
+            writer.Write(portions.Count);
+            foreach (var portion in portions)
+            {
+                WriteString(writer, portion.ItemId);
+                WriteDouble(writer, portion.MassTotal);
+                WriteDouble(writer, portion.MassRemaining);
+                WriteDouble(writer, portion.KilocaloriesTotal);
+                WriteDouble(writer, portion.WaterMillilitersTotal);
+                WriteDouble(writer, portion.YieldBonusFraction);
+            }
+        }
+        else if (formatVersion >= 15)
         {
             var portions = conditions.Stomach.Portions ??
                 Array.Empty<StomachPortion>();
@@ -503,9 +529,9 @@ public static class SimulationSaveCodec
             foreach (var portion in portions)
             {
                 WriteString(writer, portion.ItemId);
-                WriteDouble(writer, portion.VolumeFraction);
-                WriteDouble(writer, portion.EnergyRemaining);
-                WriteDouble(writer, portion.HydrationRemaining);
+                WriteDouble(writer, CharacterDigestion.PortionFraction(portion.MassTotal));
+                WriteDouble(writer, portion.EnergyRemainingUnits);
+                WriteDouble(writer, portion.HydrationRemainingUnits);
                 WriteDouble(writer, portion.EnergyPerGameSecond);
                 WriteDouble(writer, portion.HydrationPerGameSecond);
             }
@@ -592,8 +618,11 @@ public static class SimulationSaveCodec
             };
         }
 
-        if (formatVersion >= 15)
+        if (formatVersion >= 16)
         {
+            var elevated = reader.ReadBoolean();
+            var reduced = reader.ReadBoolean();
+
             var portions = new List<StomachPortion>();
             var portionCount = reader.ReadInt32();
             for (var index = 0; index < portionCount; index++)
@@ -604,7 +633,48 @@ public static class SimulationSaveCodec
                     ReadDouble(reader),
                     ReadDouble(reader),
                     ReadDouble(reader),
-                    ReadDouble(reader)));
+                    ReadDouble(reader),
+                    0d));
+            }
+
+            state = state with
+            {
+                Stomach = state.Stomach with
+                {
+                    Portions = portions,
+                    ElevatedMetabolism = elevated,
+                    ReducedMetabolism = reduced
+                }
+            };
+        }
+        else if (formatVersion >= 15)
+        {
+            // Порции v15 хранили СУММЫ ШКАЛ, а не физические величины. Переводим
+            // их обратно через те же константы шкал, а объём собираем из доли
+            // вместимости: иначе загруженный файл «забыл» бы, что в желудке есть
+            // объём, и еда перестала бы занимать место.
+            var portions = new List<StomachPortion>();
+            var portionCount = reader.ReadInt32();
+            for (var index = 0; index < portionCount; index++)
+            {
+                var itemId = ReadString(reader);
+                var fraction = Math.Clamp(ReadDouble(reader), 0d, 1d);
+                var kilocalories = CharacterDigestion.KilocaloriesFromUnits(
+                    ReadDouble(reader));
+                var water = CharacterDigestion.MillilitersFromUnits(
+                    ReadDouble(reader));
+                ReadDouble(reader); // ставка энергии v15 — выводится заново
+                ReadDouble(reader); // ставка жидкости v15 — выводится заново
+
+                var mass = fraction * CharacterDigestion.CapacityMilliliters;
+                portions.Add(new StomachPortion(
+                    itemId,
+                    mass,
+                    mass,
+                    kilocalories,
+                    water,
+                    1d,
+                    0d));
             }
 
             state = state with

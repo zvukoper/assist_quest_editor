@@ -324,3 +324,11 @@
 2026-09-30 14:08:12.159 [INFO] [PID 25548] [TID 2] SimulatorForm: закрытие без автосохранения (симуляция уже остановлена).
 2026-09-30 14:08:12.227 [INFO] [PID 25548] [TID 2] Application.Run завершён.
 2026-09-30 14:08:12.230 [INFO] [PID 25548] [TID 2] === Assist Quest Editor END ===
+2026-09-30 14:58:11.444 [INFO] [PID 15240] [TID 2] === Assist Quest Editor START === | Version=1.0.48.1-ITEM-DATA-QUALITY-R1; Mode=User; BaseDirectory=D:\repo\assist_quest_editor\src\AssistQuestEditor.App\bin\Release\net10.0-windows\win-x64\; CurrentDirectory=D:\repo\assist_quest_editor\src\AssistQuestEditor.App\bin\Release\net10.0-windows\win-x64; LogPath=D:\repo\assist_quest_editor\MemoryAI\LOGS\assist_quest_editor.log
+2026-09-30 14:58:11.523 [INFO] [PID 15240] [TID 2] === Assist Quest Editor END ===
+2026-09-30 14:59:23.775 [INFO] [PID 29008] [TID 2] === Assist Quest Editor START === | Version=1.0.48.1-ITEM-DATA-QUALITY-R1; Mode=User; BaseDirectory=D:\repo\assist_quest_editor\src\AssistQuestEditor.App\bin\Release\net10.0-windows\win-x64\; CurrentDirectory=D:\repo\assist_quest_editor\src\AssistQuestEditor.App\bin\Release\net10.0-windows\win-x64; LogPath=D:\repo\assist_quest_editor\MemoryAI\LOGS\assist_quest_editor.log
+2026-09-30 14:59:23.851 [INFO] [PID 29008] [TID 2] === Assist Quest Editor END ===
+2026-09-30 15:00:28.590 [INFO] [PID 12200] [TID 2] === Assist Quest Editor START === | Version=1.0.48.1-ITEM-DATA-QUALITY-R1; Mode=User; BaseDirectory=D:\repo\assist_quest_editor\src\AssistQuestEditor.App\bin\Release\net10.0-windows\win-x64\; CurrentDirectory=D:\repo\assist_quest_editor\src\AssistQuestEditor.App\bin\Release\net10.0-windows\win-x64; LogPath=D:\repo\assist_quest_editor\MemoryAI\LOGS\assist_quest_editor.log
+2026-09-30 15:00:28.655 [INFO] [PID 12200] [TID 2] === Assist Quest Editor END ===
+2026-09-30 15:06:27.854 [INFO] [PID 6164] [TID 2] === Assist Quest Editor START === | Version=1.0.49.1-DIGESTION-THROUGHPUT-R1; Mode=User; BaseDirectory=D:\repo\assist_quest_editor\src\AssistQuestEditor.App\bin\Release\net10.0-windows\win-x64\; CurrentDirectory=D:\repo\assist_quest_editor\src\AssistQuestEditor.App\bin\Release\net10.0-windows\win-x64; LogPath=D:\repo\assist_quest_editor\MemoryAI\LOGS\assist_quest_editor.log
+2026-09-30 15:06:27.924 [INFO] [PID 6164] [TID 2] === Assist Quest Editor END ===
