@@ -1542,6 +1542,16 @@ input,select,textarea{padding:4px 5px;border-radius:4px;font-size:10px}textarea{
 .dualBarCumulative{position:absolute;top:0;bottom:0;background:#ffd400}
 .dualBarCumulative.fromEnd{right:0}
 .dualBarCumulative.fromStart{left:0}
+
+/* Жёлтая подпись «Истощение» под дорожкой шкалы.
+   Жёлтый — тот же, что у закреплённой части дорожки (--#ffd400): подпись и
+   полоса обязаны читаться как одно сообщение, и второй оттенок жёлтого
+   заставил бы искать разницу, которой нет.
+   Ноль единиц (vitalExhaustionNone) показан приглушённо: механизм виден
+   всегда, но тревоги при нуле нет. */
+.vitalExhaustion{margin-top:3px;font-size:8px;line-height:1.3;letter-spacing:.2px}
+.vitalExhaustionNone{color:rgba(255,212,0,.35)}
+.vitalExhaustionPresent{color:#ffd400;font-weight:700}
 .conditionBars{display:flex;flex-direction:column;gap:2px}
 .conditionRow{display:block}
 .conditionLegend{display:flex;justify-content:flex-end;margin-top:6px;font-size:8px;color:var(--muted)}

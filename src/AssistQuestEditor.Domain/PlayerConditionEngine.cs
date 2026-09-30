@@ -167,10 +167,26 @@ public static class PlayerConditionEngine
         CharacterVitalsTuning.FatigueBuildKilometers;
     public const double StressPerCumulativeFatiguePerHour =
         CharacterVitalsTuning.StressPerCumulativeFatiguePercentPerHour;
-    public const double CumulativeFatiguePerCriticalHour =
-        CharacterVitalsTuning.CumulativeFatiguePerCriticalHour;
-    public const double CumulativeStressPerCriticalHour =
-        CharacterVitalsTuning.CumulativeStressPerCriticalHour;
+
+    /// <summary>
+    /// Доля ПРИРОСТА усталости, превращающаяся в истощение усталости:
+    /// <see cref="CharacterVitalsTuning.FatigueExhaustionBelowFullShare"/> пока
+    /// усталость не дошла до 100%, <see cref="CharacterVitalsTuning.FatigueExhaustionShare"/>
+    /// на самой 100%.
+    ///
+    /// Почему ДОЛЯ, а не ставка за час. Автор задал механику пропорцией («при
+    /// усталости 100% попытка добавить усталость добавляет истощение 1:1»), и
+    /// почасовая ставка ей противоречила: она начисляла истощение даже когда
+    /// усталость стояла на месте, и НЕ начисляла при разовом рывке вверх.
+    /// </summary>
+    public const double FatigueExhaustionShare =
+        CharacterVitalsTuning.FatigueExhaustionShare;
+    public const double FatigueExhaustionBelowFullShare =
+        CharacterVitalsTuning.FatigueExhaustionBelowFullShare;
+
+    /// <summary>Доля ПРИРОСТА стресса, становящаяся истощением стресса (1:2).</summary>
+    public const double StressExhaustionShare =
+        CharacterVitalsTuning.StressExhaustionShare;
 
     public const double BurnoutFatigueBuildMultiplier =
         CharacterVitalsTuning.BurnoutFatigueBuildMultiplier;
@@ -258,6 +274,10 @@ public static class PlayerConditionEngine
                 ? remainingMeters * hours / totalHours
                 : 0d;
 
+            // МЯГКАЯ усталость запоминается ДО шага: истощение усталости — доля
+            // её ПРИРОСТА, поэтому нужна разница, а не итог.
+            var fatigueBefore = vitals.Fatigue;
+
             if (playerMoving && !sleeping)
             {
                 var multiplier = HasEffect(state, "burnout")
@@ -294,23 +314,39 @@ public static class PlayerConditionEngine
 
             vitals = ClampSoft(vitals, state);
 
+            var fatigueIncrease = Math.Max(0d, vitals.Fatigue - fatigueBefore);
             var totalFatiguePercent = TotalFatiguePercent(vitals, state);
             if (totalFatiguePercent > FatigueCriticalPercent)
             {
-                var counter = state.CriticalFatigueGameSeconds + hours * SecondsPerGameHour;
-                var wholeHours = Math.Floor(counter / SecondsPerGameHour);
-
-                state = wholeHours > 0d
-                    ? state with
+                // Истощение усталости — ДОЛЯ ПРИРОСТА: четверть до 100% и всё
+                // как есть на самой 100% (задано автором: «0,25 за каждую новую
+                // единицу; при 100% — 1:1»). Лавина
+                // (<see cref="CharacterVitalsEngine.CumulativeFatigueAccrualMultiplier"/>)
+                // живёт в ОДНОМ месте на два движка: своя копия здесь уже
+                // расходилась с начислением.
+                if (fatigueIncrease > 0d)
+                {
+                    var share = PlayerConditionScale.ToPercent(vitals.Fatigue) >= 100d
+                        ? FatigueExhaustionShare
+                        : FatigueExhaustionBelowFullShare;
+                    state = state with
                     {
                         CumulativeFatigue = Math.Clamp(
-                            state.CumulativeFatigue + PlayerConditionScale.FromPercent(
-                                wholeHours * CumulativeFatiguePerCriticalHour),
+                            state.CumulativeFatigue +
+                            fatigueIncrease * share *
+                            CharacterVitalsEngine.CumulativeFatigueAccrualMultiplier(state),
                             0d,
-                            PlayerConditionScale.Maximum),
-                        CriticalFatigueGameSeconds = counter - wholeHours * SecondsPerGameHour
-                    }
-                    : state with { CriticalFatigueGameSeconds = counter };
+                            PlayerConditionScale.Maximum)
+                    };
+                }
+
+                // Счётчик часов выше порога остаётся: по нему определяется ВХОД
+                // в критическую зону (выгорание выдаётся разово, не продлевается).
+                state = state with
+                {
+                    CriticalFatigueGameSeconds =
+                        state.CriticalFatigueGameSeconds + hours * SecondsPerGameHour
+                };
 
                 vitals = ClampSoft(vitals, state);
             }
@@ -329,31 +365,44 @@ public static class PlayerConditionEngine
 
             if (TotalStressPercent(state) > StressCriticalPercent)
             {
-                var counter = state.CriticalStressGameSeconds + hours * SecondsPerGameHour;
-                var wholeHours = Math.Floor(counter / SecondsPerGameHour);
-                state = wholeHours > 0d
-                    ? state with
+                // Истощение стресса — ДОЛЯ ПРИРОСТА: «на каждые 2 единицы
+                // стресса одна единица истощения». Ноль, когда стресс стоит,
+                // и ноль, пока суммарный стресс ниже порога — ниже 50% стресс
+                // переносится без последствий.
+                var exhaustionGain = stressGain * StressExhaustionShare;
+                if (exhaustionGain > 0d)
+                {
+                    state = state with
                     {
                         CumulativeStress = Math.Clamp(
-                            state.CumulativeStress + PlayerConditionScale.FromPercent(
-                                wholeHours * CumulativeStressPerCriticalHour),
+                            state.CumulativeStress + exhaustionGain,
                             0d,
-                            PlayerConditionScale.Maximum),
-                        CriticalStressGameSeconds = counter - wholeHours * SecondsPerGameHour
-                    }
-                    : state with { CriticalStressGameSeconds = counter };
+                            PlayerConditionScale.Maximum)
+                    };
+                }
+
+                state = state with
+                {
+                    CriticalStressGameSeconds =
+                        state.CriticalStressGameSeconds + hours * SecondsPerGameHour
+                };
             }
             else
             {
                 state = state with { CriticalStressGameSeconds = 0d };
             }
 
+            // Истощение задаёт НЕСНИЖАЕМЫЙ ОСТАТОК стресса: накопленный вред
+            // нельзя «стряхнуть» — шкала остаётся не ниже него, пока истощение
+            // не снято (отпуск). Верхний предел при этом НЕ снижается: раньше
+            // истощение стресса занимало место в шкале, и при 100% стресс было
+            // некуда копить — сам механизм себя блокировал.
             state = state with
             {
                 Stress = Math.Clamp(
                     state.Stress,
-                    0d,
-                    Math.Max(0d, PlayerConditionScale.Maximum - state.CumulativeStress))
+                    Math.Min(state.CumulativeStress, PlayerConditionScale.Maximum),
+                    PlayerConditionScale.Maximum)
             };
 
             var totalStressAfter = TotalStressPercent(state);
@@ -520,7 +569,14 @@ public static class PlayerConditionEngine
             Health = Math.Clamp(vitals.Health, 0d, EffectiveConsumableMax(vitals.MaxHealth, state.CumulativeHealth)),
             Energy = Math.Clamp(vitals.Energy, 0d, EffectiveConsumableMax(vitals.MaxEnergy, state.CumulativeEnergy)),
             Hydration = Math.Clamp(vitals.Hydration, 0d, EffectiveConsumableMax(vitals.MaxHydration, state.CumulativeHydration)),
-            Fatigue = Math.Clamp(vitals.Fatigue, 0d, Math.Max(0d, vitals.MaxFatigue - state.CumulativeFatigue))
+            // Усталость — НАКОПИТЕЛЬНАЯ шкала: истощение задаёт её НЕСНИЖАЕМЫЙ
+            // ОСТАТОК (нижняя граница), а не уменьшает потолок. Потолок, наоборот,
+            // остаётся полным: иначе при 100% истощения усталость некуда было бы
+            // набирать, и «больше устать» стало бы невозможно.
+            Fatigue = Math.Clamp(
+                vitals.Fatigue,
+                Math.Min(Math.Max(0d, state.CumulativeFatigue), vitals.MaxFatigue),
+                vitals.MaxFatigue)
         };
 
     private static double EffectiveConsumableMax(double maximum, double cumulativeUnits) =>

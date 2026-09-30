@@ -64,6 +64,12 @@ public static class ItemCatalogFactory
             "Еда",
             "#c8874a"),
         new ItemDefinition(
+            "ruslan.legendary_shashlik",
+            "Легендарный шашлык Руслана",
+            "Особый шашлык из спецмаринада. Единственный способ получить форсаж без препаратов: +25% к шкалам энергии и стресса сверх нормы.",
+            QuestItemCategory,
+            "#d9762f"),
+        new ItemDefinition(
             "note",
             "Записка",
             "Короткая записка, найденная в динамическом тайнике.",

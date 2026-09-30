@@ -318,7 +318,11 @@ public static class CharacterConsumableCatalog
             ["food.honey"] = new(30d, 99d, 5d),
             ["food.dark_chocolate"] = new(30d, 170d, 2d),
             ["meat"] = new(300d, 560d, 180d),
-            ["gosha.homemade_sausage"] = new(200d, 600d, 90d)
+            ["gosha.homemade_sausage"] = new(200d, 600d, 90d),
+            // «Легендарный шашлык Руслана» — квестовая награда, а не магазинная
+            // еда: порция крупная (шампур), поэтому и энергии в ней больше
+            // обычного мяса. Сам форсаж живёт в CharacterItemTuning.
+            ["ruslan.legendary_shashlik"] = new(300d, 700d, 120d)
         };
 
     /// <summary>

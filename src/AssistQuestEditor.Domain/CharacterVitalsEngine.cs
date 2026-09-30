@@ -835,6 +835,13 @@ public static class CharacterVitalsEngine
                 // счётчик растёт, поэтому «строго разово» соблюдено.
                 var enteringCriticalStress =
                     state.CriticalStressGameSeconds <= 0d;
+
+                // МЯГКИЙ стресс запоминается ДО шага: истощение стресса — доля его
+                // ПРИРОСТА, а не ставка за час (задано автором: «на каждые 2
+                // единицы обычного стресса будет выдаваться 1 единица истощения»).
+                var stressBefore =
+                    state.Stress;
+
                 AddStress(
                     ref state,
                     stepSeconds,
@@ -863,58 +870,56 @@ public static class CharacterVitalsEngine
                         (stepSeconds / 60d));
                 }
 
+                // ПРИРОСТ стресса за шаг — только он и превращается в истощение:
+                // при неизменном стрессе истощение не копится вовсе.
+                var stressGain =
+                    state.Stress -
+                    stressBefore;
                 var stressAfter =
                     TotalStressPercent(state);
 
                 if (stressAfter > StressCriticalPercent)
                 {
-                    var stressCounter =
-                        state.CriticalStressGameSeconds +
-                        stepSeconds;
-                    var wholeStressHours =
-                        Math.Floor(
-                            stressCounter /
-                            SecondsPerGameHour);
-
-                    if (wholeStressHours > 0d)
-                    {
-                        // ВО СНЕ ИСТОЩЕНИЕ НЕ НАКАПЛИВАЕТСЯ (Character_Vitals.md:
-                        // «во время сна не может накапливаться истощение каких-либо
-                        // показателей»). Без этой проверки сон, начатый с высоким
-                        // стрессом, копил кумулятивный стресс — а тот снимается
-                        // ТОЛЬКО отпуском, поэтому «после ночлега стресс остался»
-                        // было не багом отображения, а следствием этой дыры.
-                        if (!sleeping &&
-                            !HasEffect(state, "bull") &&
-                            !SkipNegativeRoll(
-                                ref state,
-                                resiliencePercent / 2d))
-                        {
-                            state = state with
-                            {
-                                CumulativeStress =
-                                    state.CumulativeStress +
-                                    UnitsFromPercentExact(
-                                        wholeStressHours)
-                            };
-                        }
-
-                        state = state with
-                        {
-                            CriticalStressGameSeconds =
-                                stressCounter -
-                                wholeStressHours *
-                                SecondsPerGameHour
-                        };
-                    }
-                    else
+                    // ВО СНЕ ИСТОЩЕНИЕ НЕ НАКАПЛИВАЕТСЯ (Character_Vitals.md:
+                    // «во время сна не может накапливаться истощение каких-либо
+                    // показателей»). Без этой проверки сон, начатый с высоким
+                    // стрессом, копил кумулятивный стресс — а тот снимается
+                    // ТОЛЬКО отпуском, поэтому «после ночлега стресс остался»
+                    // было не багом отображения, а следствием этой дыры.
+                    //
+                    // Бросок устойчивости делается разово на ПОРЦИЮ в 10 игровых
+                    // минут, а не на каждый шаг в 250 мс: иначе заданные
+                    // «R/2 процентов шанса» превратились бы в случайность с
+                    // совсем другой вероятностью.
+                    if (!sleeping &&
+                        stressGain > 0d &&
+                        !HasEffect(state, "bull") &&
+                        !SkipExhaustionPortion(
+                            ref state,
+                            stepSeconds /
+                            (SecondsPerGameHour /
+                             TenMinuteSpansPerHour),
+                            ExhaustionSkipChancePercent(
+                                resiliencePercent)))
                     {
                         state = state with
                         {
-                            CriticalStressGameSeconds =
-                                stressCounter
+                            CumulativeStress =
+                                state.CumulativeStress +
+                                stressGain *
+                                CharacterVitalsTuning
+                                    .StressExhaustionShare
                         };
                     }
+
+                    // Счётчик критических часов остаётся: по нему определяется
+                    // ВХОД в критическую зону (выгорание выдаётся разово).
+                    state = state with
+                    {
+                        CriticalStressGameSeconds =
+                            state.CriticalStressGameSeconds +
+                            stepSeconds
+                    };
                 }
                 else
                 {
@@ -969,62 +974,19 @@ public static class CharacterVitalsEngine
 
                 if (fatiguePercent > FatigueCriticalPercent)
                 {
-                    var counter =
-                        state.CriticalFatigueGameSeconds +
-                        stepSeconds;
-                    var wholeHours =
-                        Math.Floor(
-                            counter /
-                            SecondsPerGameHour);
-
-                    if (wholeHours > 0d)
+                    // Счётчик часов выше порога нужен только для определения
+                    // ВХОДА в критическую зону. Само истощение усталости здесь
+                    // больше НЕ начисляется: оно копится долей ПРИРОСТА усталости
+                    // в AddFatigueExhaustion, как и задал автор («0,25 за каждую
+                    // новую единицу усталости»). Прежняя ставка «1% в час»
+                    // начисляла истощение даже при стоящей на месте шкале и
+                    // пропускала разовые рывки.
+                    state = state with
                     {
-                        // Накопление усталости ускоряется по мере роста её
-                        // кумулятивной шкалы (см. CumulativeFatigueAccrualMultiplier).
-                        var cumulativeGain =
-                            UnitsFromPercentExact(
-                                wholeHours) *
-                            CumulativeFatigueAccrualMultiplier(state);
-
-                        // «Бык» прекращает ЛЮБОЕ негативное накопление, поэтому
-                        // почасовое истощение усталости не должно его обходить:
-                        // без этой проверки бафф гасил только пошаговое
-                        // истощение, а критическая усталость продолжала копить.
-                        //
-                        // Сон — тоже полный запрет на накопление истощения
-                        // (Character_Vitals.md): ночуя усталым, игрок не должен
-                        // просыпаться с новой порцией кумулятивной усталости,
-                        // которую сон как раз и обязан снимать.
-                        if (!sleeping &&
-                            !HasEffect(state, "bull") &&
-                            !SkipNegativeRoll(
-                                ref state,
-                                resiliencePercent / 2d))
-                        {
-                            state = state with
-                            {
-                                CumulativeFatigue =
-                                    state.CumulativeFatigue +
-                                    cumulativeGain
-                            };
-                        }
-
-                        state = state with
-                        {
-                            CriticalFatigueGameSeconds =
-                                counter -
-                                wholeHours *
-                                SecondsPerGameHour
-                        };
-                    }
-                    else
-                    {
-                        state = state with
-                        {
-                            CriticalFatigueGameSeconds =
-                                counter
-                        };
-                    }
+                        CriticalFatigueGameSeconds =
+                            state.CriticalFatigueGameSeconds +
+                            stepSeconds
+                    };
                 }
                 else
                 {
@@ -1899,6 +1861,23 @@ public static class CharacterVitalsEngine
             case "meat":
                 break;
 
+            // ФОРСАЖ ОТ ПРЕДМЕТА — единственный его источник у обычного игрока.
+            // Обычная еда и питьё форсажа НЕ дают, сколько бы их ни съесть
+            // (задано автором: «Форсаж... Сам по себе форсаж не возникает»),
+            // и это блюдо из квеста — ровно тот случай, о котором он говорит.
+            case "ruslan.legendary_shashlik":
+                AddOvercharge(
+                    ref conditions,
+                    "energy",
+                    CharacterItemTuning
+                        .LegendaryShashlikEnergyOverchargePercent);
+                AddOvercharge(
+                    ref conditions,
+                    "stress",
+                    CharacterItemTuning
+                        .LegendaryShashlikStressOverchargePercent);
+                break;
+
             case "gosha.homemade_sausage":
                 ReduceStress(
                     ref conditions,
@@ -2338,15 +2317,19 @@ public static class CharacterVitalsEngine
         // на 60% надбавки нет, на 75% она полная, выше 75% не растёт (там уже
         // работает пороговый эффект «выше коридора нормы»).
         //
-        // Бонус задан в «процентах за десять минут», поэтому переводится в час
-        // тем же множителем, что и база (иначе +1% превратился бы в +1% в ЧАС и
-        // бонус был бы в шесть раз слабее задуманного).
+        // Бонус задан в «процентах за ДЕСЯТЬ минут» и таковым и остаётся: он НЕ
+        // пересчитывается через <see cref="HealthRegenGameMinutesPerPercent"/>.
+        // Пока пересчёт был, «+1% за 10 минут» превращался в «1% за 10 минут,
+        // поделённые на интервал базы»: при интервале 10 минут число случайно
+        // совпадало, а при правке интервала до 5 минут надбавка удваивалась и
+        // обещанные автору «+1%» и «+2%» переставали быть теми числами, которые
+        // он задал. Размерность у надбавки своя, независимая от базы.
         value += ElevatedBonusShare(metabolism) *
             HealthRegenElevatedBonusPercent *
-            60d / HealthRegenGameMinutesPerPercent;
+            TenMinuteSpansPerHour;
         value += ElevatedBonusShare(resilience) *
             HealthRegenElevatedBonusPercent *
-            60d / HealthRegenGameMinutesPerPercent;
+            TenMinuteSpansPerHour;
 
         // «Бык» — ПЛОСКАЯ надбавка в тех же «процентах за десять минут», а не
         // множитель: только так обещанные автору «+2%» остаются +2% при любом
@@ -2354,8 +2337,7 @@ public static class CharacterVitalsEngine
         // что прибавляет движок.
         if (HasEffect(state, "bull"))
         {
-            value += HealthRegenBullBonusPercent *
-                60d / HealthRegenGameMinutesPerPercent;
+            value += HealthRegenBullBonusPercent * TenMinuteSpansPerHour;
         }
 
         if (TotalStressPercent(state) > 0d)
@@ -3757,6 +3739,7 @@ public static class CharacterVitalsEngine
             "food.meal",
             "meat",
             "gosha.homemade_sausage",
+            "ruslan.legendary_shashlik",
             "supplement.multivitamin",
             "vitamin.c",
             "vitamin.c_effervescent",
@@ -3880,11 +3863,18 @@ public static class CharacterVitalsEngine
             Fatigue =
                 Math.Clamp(
                     vitals.Fatigue,
-                    0d,
-                    Math.Max(
-                        0d,
-                        vitals.MaxFatigue -
-                        state.CumulativeFatigue))
+                    // Усталость — НАКОПИТЕЛЬНАЯ шкала: истощение задаёт её
+                    // НЕСНИЖАЕМЫЙ ОСТАТОК (нижняя граница), а не уменьшает потолок.
+                    // Автор: «если есть истощение, шкала должна показывать
+                    // 1500/10000 и ниже 1500 не опускается, пока игрок не уберёт
+                    // истощение». Потолок остаётся полным — иначе при 100%
+                    // истощения устать было бы уже невозможно.
+                    Math.Min(
+                        Math.Max(
+                            0d,
+                            state.CumulativeFatigue),
+                        vitals.MaxFatigue),
+                    vitals.MaxFatigue)
         };
 
     private static double EffectiveHealthMaximum(

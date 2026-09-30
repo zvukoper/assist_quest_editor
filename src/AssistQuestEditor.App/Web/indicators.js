@@ -605,11 +605,17 @@
     // двойная (кумулятивная) часть и форсаж совпадают с блоком состояния в
     // сайдбаре, поэтому «одна шкала» не выглядит двумя разными приборами.
     var bar=(v()&&v().barTrack)?v().barTrack(s,values):"";
+    // Жёлтая подпись «Истощение» — ТА ЖЕ функция, что рисует сайдбар
+    // (AssistVitals.exhaustionMarkup): подпись под дорожкой и полоса истощения
+    // обязаны совпадать в двух местах, и вторая копия правила разошлась бы при
+    // первой же правке формулировки.
+    var exhaustion=(v()&&v().exhaustionMarkup)?v().exhaustionMarkup(s,values):"";
     return "<section class='indicatorCard"+highlighted+"' data-scale-key='"+esc(key)+"'>"+
       "<div class='indicatorTopRow'><div class='indicatorName' data-game-tooltip=\""+esc(scaleDescription(s))+"\">"+esc(s.label)+"</div>"+
       "<div class='indicatorDynamics'>"+headerDynamics(key)+"</div>"+
       "<div class='indicatorValue'><div class='indicatorScale'>"+bar+"</div>"+
       "<div class='indicatorValueText'><span class='valueReal'>("+real+")</span> <span class='valuePercent'>"+display+"%</span></div></div></div>"+
+      exhaustion+
       "<div class='indicatorFactors'>"+dynamicChipRows(key)+
       dynamic.map(function(x){return renderDynamicFactor(x,key);}).join("")+
       active.map(function(x){return renderFactor(x,key);}).join("")+

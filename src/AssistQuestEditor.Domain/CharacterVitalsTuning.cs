@@ -173,16 +173,16 @@ public static class CharacterVitalsTuning
     // шкалы за час. Пример: (3750 / 5000) × 100 = 75% шкалы за игровой час.
 
     /// <summary>Расход ЭНЕРГИИ под нагрузкой относительно эталона (см. блок выше).</summary>
-    public const double EnergyLoadCoefficient = 1.5d;
+    public const double EnergyLoadCoefficient = 1.6d;
 
     /// <summary>Расход ЭНЕРГИИ в покое относительно эталона.</summary>
     public const double EnergyRestCoefficient = 1d;
 
     /// <summary>Расход ЖИДКОСТИ под нагрузкой относительно эталона.</summary>
-    public const double HydrationLoadCoefficient = 2d;
+    public const double HydrationLoadCoefficient = 3.5d;
 
     /// <summary>Расход ЖИДКОСТИ в покое относительно эталона.</summary>
-    public const double HydrationRestCoefficient = 1d;
+    public const double HydrationRestCoefficient = 2d;
 
     /// <summary>Норма расхода ЭНЕРГИИ при НАГРУЗКЕ (движение по маршруту), ккал/час.
     /// Эталон автора — 2500 ккал за 3 игровых часа — множится на коэффициент нагрузки.</summary>
@@ -247,13 +247,36 @@ public static class CharacterVitalsTuning
     /// <summary>Насколько растёт множитель за каждые накопленные 5% (см. выше).</summary>
     public const double CumulativeFatigueAccrualStepBonus = 0.5d;
 
-    /// <summary>Сколько КУМУЛЯТИВНОЙ усталости добавляет каждый час, проведённый
-    /// с усталостью выше критической (в процентах шкалы истощения, 1 — «1% в час»).</summary>
-    public const double CumulativeFatiguePerCriticalHour = 1d;
+    /// <summary>
+    /// Доля ПРИРОСТА усталости, превращающаяся в истощение усталости, ПОКА
+    /// усталость выше <see cref="FatigueExhaustionPercent"/>, но ещё не дошла до
+    /// 100% (0,25 — четверть).
+    ///
+    /// Почему доля прироста, а не ставка «1% в час». Автор задал механику как
+    /// ПРОПОРЦИЮ («при усталости 100% попытка добавить усталость добавляет
+    /// истощение 1:1»), и почасовая ставка её не выражала: она начисляла истощение
+    /// даже тогда, когда усталость стояла на месте (полная шкала — прирост ноль),
+    /// и НЕ начисляла, когда игрок в ту же секунду набирал усталость рывком.
+    /// </summary>
+    public const double FatigueExhaustionBelowFullShare = 0.25d;
 
-    /// <summary>Сколько КУМУЛЯТИВНОГО стресса добавляет каждый час, проведённый
-    /// со стрессом выше критического.</summary>
-    public const double CumulativeStressPerCriticalHour = 1d;
+    /// <summary>
+    /// Доля ПРИРОСТА усталости, превращающаяся в истощение, когда усталость
+    /// ДОШЛА до 100% (1,0 — «1:1»: сколько усталости добавилось, столько же
+    /// добавилось истощения).
+    /// </summary>
+    public const double FatigueExhaustionShare = 1d;
+
+    /// <summary>
+    /// Доля ПРИРОСТА СТРЕССА, превращающаяся в истощение стресса
+    /// (0,5 — «на каждые 2 единицы стресса одна единица истощения»).
+    ///
+    /// Истощение копится, ПОКА суммарный стресс выше
+    /// <see cref="StressCriticalPercent"/>: ниже порога стресс переносится без
+    /// последствий, выше — начинает изнашивать организм. Это правило задано
+    /// автором как пропорция, поэтому и живёт долей прироста, а не ставкой за час.
+    /// </summary>
+    public const double StressExhaustionShare = 0.5d;
 
     // ═══════════════════════════════════════════════════════════════════════
     // 5. ПИТЬЁ: «ЖАЖДА» И «ОБЕЗВОЖИВАНИЕ»
@@ -321,15 +344,15 @@ public static class CharacterVitalsTuning
 
     /// <summary>Цена восстановления здоровья: сколько единиц энергии тратит
     /// одна единица здоровья (1:1).</summary>
-    public const double HealthRegenEnergyPerHealthUnit = 1d;
+    public const double HealthRegenEnergyPerHealthUnit = 2d;
 
     /// <summary>Цена восстановления здоровья: сколько единиц жидкости тратит
     /// одна единица здоровья (1:2).</summary>
-    public const double HealthRegenHydrationPerHealthUnit = 2d;
+    public const double HealthRegenHydrationPerHealthUnit = 3d;
 
     /// <summary>Базовое восстановление здоровья: 1% за столько игровых минут.
     /// Больше — здоровье восстанавливается медленнее.</summary>
-    public const double HealthRegenGameMinutesPerPercent = 10d;
+    public const double HealthRegenGameMinutesPerPercent = 5d;
 
     /// <summary>Надбавка к восстановлению здоровья за каждое ПОВЫШЕННОЕ свойство
     /// (метаболизм выше 60%, устойчивость выше 60%), % за те же 10 минут.</summary>
@@ -510,15 +533,6 @@ public static class CharacterVitalsTuning
     // ═══════════════════════════════════════════════════════════════════════
     // 11. ИСТОЩЕНИЕ: пороги и скорость накопления
     // ═══════════════════════════════════════════════════════════════════════
-
-    /// <summary>При каком проценте усталости начинают копиться проблемы —
-    /// порог «критической» зоны уже посчитан, здесь про долю ПЕРЕрасхода,
-    /// которая становится истощением.</summary>
-    public const double FatigueExhaustionShare = 1d;
-
-    /// <summary>Доля перерасхода, превращающаяся в истощение, когда усталость
-    /// ещё НЕ дошла до 100% (0,25 — четверть). При 100% берётся 1,0.</summary>
-    public const double FatigueExhaustionBelowFullShare = 0.25d;
 
     /// <summary>Истощение ЭНЕРГИИ: множитель перерасхода (1,0 — как есть).</summary>
     public const double EnergyExhaustionMultiplier = 1d;

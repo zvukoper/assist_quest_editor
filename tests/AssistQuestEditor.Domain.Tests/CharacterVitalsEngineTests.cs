@@ -136,11 +136,15 @@ public sealed class CharacterVitalsEngineTests
             after.Conditions.OverchargeHydration;
 
         Assert.Equal(
-            energyResting + healthRestored * 1d,
+            energyResting +
+            healthRestored *
+            CharacterVitalsTuning.HealthRegenEnergyPerHealthUnit,
             energySpent,
             3);
         Assert.Equal(
-            hydrationResting + healthRestored * 2d,
+            hydrationResting +
+            healthRestored *
+            CharacterVitalsTuning.HealthRegenHydrationPerHealthUnit,
             hydrationSpent,
             3);
 
@@ -344,7 +348,6 @@ public sealed class CharacterVitalsEngineTests
                 continue;
 
             var declared = CharacterConsumableCatalog.GetProfile(item.Id).Kilocalories;
-
             // Ниже порога сверять нечего: у чашки чёрного кофе (10 ккал на 250 мл)
             // состав — следовые доли грамма, и ЛЮБОЕ округление до 0,1 г меняет
             // расчётную энергию вдвое. Это не ошибка таблицы, а предел точности
@@ -555,12 +558,71 @@ public sealed class CharacterVitalsEngineTests
     }
 
     [Fact]
-    public void StressAboveFiftyAddsOnePercentCumulativePerGameHour()
+    public void StressAboveFiftyTurnsHalfOfItsGainIntoExhaustion()
     {
+        // ЗАДАНО АВТОРОМ: «при стрессе от 50% и больше начинает накапливаться
+        // истощение по стрессу. На каждые 2 единицы обычного стресса будет
+        // выдаваться 1 единица истощения».
+        //
+        // Прежняя механика начисляла +1% истощения за каждый ЦЕЛЫЙ игровой час
+        // выше порога: это противоречило заданию трижды — не была пропорцией,
+        // работала даже при стоящем стресс (нечего превращать в истощение) и
+        // пропускала разовые рывки. Теперь истощение — ДОЛЯ ПРИРОСТА.
+        // Усталость взята 50%, а не 100%: прирост стресса обязан УМЕЩАТЬСЯ в
+        // шкалу. На 100% усталости час отдыха начислял столько стресса, что
+        // суммарный упирался в 100%, и измеренная разница «до/после» была уже
+        // не приростом, а ограничением шкалы — тест мерил бы потолок вместо
+        // пропорции. Ста порога (50%) достаточно, чтобы правило включилось, а
+        // запас шкалы остаётся.
         var conditions = PlayerConditionState.Empty with
         {
-            Stress = PlayerConditionScale.FromPercent(60d),
-            CumulativeFatigue = PlayerConditionScale.FromPercent(100d)
+            Stress = PlayerConditionScale.FromPercent(50d),
+            CumulativeFatigue = PlayerConditionScale.FromPercent(50d)
+        };
+
+        var update = CharacterVitalsEngine.Advance(
+            PlayerVitalsState.Default with { Resilience = 0d },
+            conditions,
+            Hour,
+            Hour,
+            playerMoving: false,
+            sleeping: false,
+            traveledMeters: 0d,
+            gameHourOfDay: 12d);
+
+        // Стресс вырос ОТ КУМУЛЯТИВНОЙ УСТАЛОСТИ (100% истощения даёт свой прирост),
+        // и половина этого прироста стала истощением — отношение проверяется по
+        // фактическим числам, а не по литералам.
+        //
+        // Прирост берётся на САМОЙ шкале стресса, а не на суммарном проценте:
+        // суммарный включает уже накопленное истощение, и с полом стресса
+        // «до/после» читаются на разных основаниях.
+        var gain =
+            update.Conditions.Stress -
+            conditions.Stress;
+
+        Assert.True(gain > 0d, "подготовка теста: стресс обязан вырасти");
+        Assert.Equal(
+            gain * CharacterVitalsTuning.StressExhaustionShare,
+            update.Conditions.CumulativeStress -
+            conditions.CumulativeStress,
+            3);
+
+        Assert.Contains(
+            update.Conditions.Effects,
+            effect => effect.Id == "burnout");
+    }
+
+    [Fact]
+    public void StressExhaustionBlocksStressFromFallingBelowItsAmount()
+    {
+        // ИСТОЩЕНИЕ — НЕСНИЖАЕМЫЙ ОСТАТОК (задано автором: «если есть истощение,
+        // шкала должна показывать 1500/10000 и ниже 1500 не опускается, пока
+        // игрок не уберёт истощение»). Отдых и снятие стресса предметами не могли
+        // опустить шкалу ниже накопленного истощения.
+        var conditions = PlayerConditionState.Empty with
+        {
+            CumulativeStress = PlayerConditionScale.FromPercent(15d)
         };
 
         var update = CharacterVitalsEngine.Advance(
@@ -574,13 +636,9 @@ public sealed class CharacterVitalsEngineTests
             gameHourOfDay: 12d);
 
         Assert.Equal(
-            PlayerConditionScale.FromPercent(1d),
-            update.Conditions.CumulativeStress,
+            PlayerConditionScale.FromPercent(15d),
+            update.Conditions.Stress,
             3);
-
-        Assert.Contains(
-            update.Conditions.Effects,
-            effect => effect.Id == "burnout");
     }
 
     [Fact]
@@ -912,12 +970,11 @@ public sealed class CharacterVitalsEngineTests
     }
 
     [Fact]
-    public void HealthRecoveryConsumesEnergyOneToOneAndHydrationOneToTwo()
+    public void HealthRecoveryConsumesEnergyAndHydrationPerHealthUnit()
     {
         // Сравниваем ДВА прогона с одинаковыми запасами: здоровье 100% (шкала
         // полна, восстанавливать нечего) и здоровье 50%. Разница в расходе
-        // энергии и жидкости — это и есть цена восстановления здоровья, и её
-        // отношение обязано быть 1:1 (энергия) и 1:2 (жидкость).
+        // энергии и жидкости — это и есть цена восстановления здоровья.
         var full = PlayerVitalsState.Default with
         {
             Health = PlayerConditionScale.FromPercent(100d),
@@ -950,18 +1007,19 @@ public sealed class CharacterVitalsEngineTests
         var energyCost = fullAfter.Energy - woundedAfter.Energy;
         var hydrationCost = fullAfter.Hydration - woundedAfter.Hydration;
 
+        // Отношение «расход / здоровье» обязано равняться ОБЪЯВЛЕННОЙ цене —
+        // именно это и есть контракт 1:1 и 1:2. Сама цена — предмет правки
+        // баланса, поэтому значение берётся из калибровки, а проверяется ПРАВИЛО:
+        // здоровье НЕ бесплатно и оплачивается ровно по своему коэффициенту,
+        // каким бы он ни стал.
         Assert.Equal(
-            healthGain * CharacterVitalsEngine.HealthRegenEnergyPerHealthUnit,
-            energyCost,
+            CharacterVitalsEngine.HealthRegenEnergyPerHealthUnit,
+            energyCost / healthGain,
             3);
         Assert.Equal(
-            healthGain * CharacterVitalsEngine.HealthRegenHydrationPerHealthUnit,
-            hydrationCost,
+            CharacterVitalsEngine.HealthRegenHydrationPerHealthUnit,
+            hydrationCost / healthGain,
             3);
-
-        // И сами коэффициенты: 1 единица здоровья = 1 энергия и 2 жидкости.
-        Assert.Equal(1d, CharacterVitalsEngine.HealthRegenEnergyPerHealthUnit, 6);
-        Assert.Equal(2d, CharacterVitalsEngine.HealthRegenHydrationPerHealthUnit, 6);
     }
 
     [Fact]
@@ -1019,12 +1077,40 @@ public sealed class CharacterVitalsEngineTests
             6);
     }
 
+    /// <summary>
+    /// Восстановление здоровья, которое движок ОБЪЯВЛЯЕТ, — в процентах за 10
+    /// игровых минут.
+    ///
+    /// Почему не фактический прирост за шаг. Факт ограничен ЗАПАСОМ энергии и
+    /// жидкости (1 единица здоровья стоит столько-то энергии и жидкости) и
+    /// свободным местом в шкале. При дорогой цене ограничение срезает часть
+    /// надбавки, и тест «база + надбавка» начинал мерить не правило, а остаток
+    /// ресурсов. Объявленная скорость — это и есть правило.
+    /// </summary>
+    private static double AdvertisedHealthRegenPerTenMinutes(
+        PlayerVitalsState vitals) =>
+        CharacterVitalsEngine
+            .RatesFrom(
+                vitals,
+                PlayerConditionState.Empty,
+                moving: false,
+                sleeping: false,
+                gameHourOfDay: 12d)
+            .HealthPerGameMinute *
+        10d /
+        // Скорости живут в ЕДИНИЦАХ шкалы (0..10000), а правила автора записаны
+        // в ПРОЦЕНТАХ: «1% за 10 минут». Без этого перевода «2% за 10 минут»
+        // читалось бы как 200 и любой ожидаемый процент не сходился бы.
+        PlayerConditionScale.UnitsPerPercent;
+
     [Fact]
-    public void HealthRecoversOnePercentPerTenGameMinutesAtNormalState()
+    public void HealthRecoversBasePercentPerTenGameMinutesAtNormalState()
     {
-        // Задано автором: 1% здоровья за 10 игровых минут при нормальном
-        // метаболизме и устойчивости (60%). Проверяем запас ресурсов, чтобы цена
-        // восстановления не стала ограничением и не подменила измерение.
+        // База восстановления задана автором как «1% за 10 игровых минут при
+        // нормальном метаболизме и устойчивости» — а САМ интервал живёт в
+        // калибровке (`HealthRegenGameMinutesPerPercent`), потому что это предмет
+        // правки баланса. Тест проверяет ПРАВИЛО («столько процентов за столько
+        // минут»), а не замороженное число, и читает его из ОБЪЯВЛЕННОЙ скорости.
         var vitals = PlayerVitalsState.Default with
         {
             Health = PlayerConditionScale.FromPercent(50d),
@@ -1032,18 +1118,10 @@ public sealed class CharacterVitalsEngineTests
             Hydration = PlayerConditionScale.FromPercent(90d)
         };
 
-        var update = CharacterVitalsEngine.Advance(
-            vitals,
-            PlayerConditionState.Empty,
-            gameSeconds: 600d,
-            realSeconds: 600d,
-            playerMoving: false,
-            sleeping: false,
-            traveledMeters: 0d,
-            gameHourOfDay: 12d);
-
-        var gained = PlayerConditionScale.ToPercent(update.Vitals.Health) - 50d;
-        Assert.Equal(1d, gained, 2);
+        Assert.Equal(
+            10d / CharacterVitalsTuning.HealthRegenGameMinutesPerPercent,
+            AdvertisedHealthRegenPerTenMinutes(vitals),
+            2);
     }
 
     [Fact]
@@ -1061,18 +1139,18 @@ public sealed class CharacterVitalsEngineTests
             Resilience = PlayerConditionScale.FromPercent(80d)
         };
 
-        var update = CharacterVitalsEngine.Advance(
-            vitals,
-            PlayerConditionState.Empty,
-            gameSeconds: 600d,
-            realSeconds: 600d,
-            playerMoving: false,
-            sleeping: false,
-            traveledMeters: 0d,
-            gameHourOfDay: 12d);
+        var gained = AdvertisedHealthRegenPerTenMinutes(vitals);
 
-        var gained = PlayerConditionScale.ToPercent(update.Vitals.Health) - 50d;
-        Assert.Equal(3d, gained, 2);
+        // База — «10/HealthRegenGameMinutesPerPercent процентов за десять минут»,
+        // а надбавки за свойства заданы автором ПЛОСКО: столько-то процентов
+        // ЗА ТЕ ЖЕ десять минут, независимо от интервала базы.
+        var perTenMinutes =
+            10d / CharacterVitalsTuning.HealthRegenGameMinutesPerPercent;
+        Assert.Equal(
+            perTenMinutes +
+            2d * CharacterVitalsTuning.HealthRegenElevatedBonusPercent,
+            gained,
+            2);
     }
 
     [Fact]
@@ -1131,17 +1209,7 @@ public sealed class CharacterVitalsEngineTests
                 Metabolism = PlayerConditionScale.FromPercent(percent)
             };
 
-            var update = CharacterVitalsEngine.Advance(
-                vitals,
-                PlayerConditionState.Empty,
-                gameSeconds: 600d,
-                realSeconds: 600d,
-                playerMoving: false,
-                sleeping: false,
-                traveledMeters: 0d,
-                gameHourOfDay: 12d);
-
-            return PlayerConditionScale.ToPercent(update.Vitals.Health) - 50d;
+            return AdvertisedHealthRegenPerTenMinutes(vitals);
         }
 
         var nominal = Gained(CharacterVitalsEngine.DefaultMetabolismPercent);
@@ -1152,14 +1220,25 @@ public sealed class CharacterVitalsEngineTests
             CharacterVitalsTuning.ElevatedBonusFullPercent);
         var beyond = Gained(95d);
 
-        // База — ровно 1% за 10 минут при номинале.
-        Assert.Equal(1d, nominal, 2);
+        // База — ровно «HealthRegenGameMinutesPerPercent минут на процент»
+        // при номинале; ожидания выводятся из калибровки (см. соседний тест).
+        var perTenMinutes =
+            10d / CharacterVitalsTuning.HealthRegenGameMinutesPerPercent;
+        Assert.Equal(perTenMinutes, nominal, 2);
 
-        // На половине шкалы роста — половина надбавки: 1 + 0,5 = 1,5%.
-        Assert.Equal(1.5d, midpoint, 2);
+        // На половине шкалы роста — половина надбавки.
+        Assert.Equal(
+            perTenMinutes +
+            0.5d * CharacterVitalsTuning.HealthRegenElevatedBonusPercent,
+            midpoint,
+            2);
 
-        // На 75% надбавка полная: 1 + 1 = 2%.
-        Assert.Equal(2d, full, 2);
+        // На 75% надбавка полная.
+        Assert.Equal(
+            perTenMinutes +
+            CharacterVitalsTuning.HealthRegenElevatedBonusPercent,
+            full,
+            2);
 
         // Выше порога надбавка НЕ растёт: 95% дают столько же, сколько 75%.
         Assert.Equal(full, beyond, 2);
@@ -1181,20 +1260,13 @@ public sealed class CharacterVitalsEngineTests
                 CharacterVitalsTuning.ElevatedBonusFullPercent)
         };
 
-        var update = CharacterVitalsEngine.Advance(
-            vitals,
-            PlayerConditionState.Empty,
-            gameSeconds: 600d,
-            realSeconds: 600d,
-            playerMoving: false,
-            sleeping: false,
-            traveledMeters: 0d,
-            gameHourOfDay: 12d);
-
-        // База 1% + метаболизм 1% + устойчивость 1% = 3% за 10 минут.
+        // База + метаболизм + устойчивость. База считается по интервалу, а
+        // надбавки — ПЛОСКИЕ «проценты за те же 10 минут» (как задано в
+        // калибровке), поэтому складываются они с базой напрямую.
         Assert.Equal(
-            3d,
-            PlayerConditionScale.ToPercent(update.Vitals.Health) - 50d,
+            10d / CharacterVitalsTuning.HealthRegenGameMinutesPerPercent +
+            2d * CharacterVitalsTuning.HealthRegenElevatedBonusPercent,
+            AdvertisedHealthRegenPerTenMinutes(vitals),
             2);
     }
 
@@ -1298,8 +1370,7 @@ public sealed class CharacterVitalsEngineTests
     public void BullAddsFlatTwoPercentPerTenMinutesToHealthRecovery()
     {
         // Задано автором: «Бык» даёт +2% восстановления здоровья. Бонус ПЛОСКИЙ
-        // (не множитель), поэтому читается прямо на десятиминутном шаге: база 1%
-        // плюс 2% = 3%. Иначе обещанные проценты зависели бы от метаболизма.
+        // (не множитель), поэтому читается прямо на десятиминутном шаге.
         var bull = PlayerConditionState.Empty with
         {
             Effects = new[]
@@ -1329,14 +1400,25 @@ public sealed class CharacterVitalsEngineTests
             traveledMeters: 0d,
             gameHourOfDay: 12d);
 
-        var gained =
-            PlayerConditionScale.ToPercent(update.Vitals.Health) - 50d;
+        var gained = CharacterVitalsEngine
+            .RatesFrom(
+                vitals,
+                bull,
+                moving: false,
+                sleeping: false,
+                gameHourOfDay: 12d)
+            .HealthPerGameMinute * 10d /
+            PlayerConditionScale.UnitsPerPercent;
 
-        Assert.Equal(3d, gained, 2);
+        // База плюс ПЛОСКИЕ «HealthRegenBullBonusPercent за те же минуты».
+        var perTenMinutes =
+            10d / CharacterVitalsTuning.HealthRegenGameMinutesPerPercent;
+        Assert.Equal(
+            perTenMinutes + CharacterVitalsTuning.HealthRegenBullBonusPercent,
+            gained,
+            2);
     }
 
-    /// <summary>
-    /// Таймеры эффектов идут по РЕАЛЬНОМУ времени, а не по игровому.
     ///
     /// ЖАЛОБА АВТОРА: «если в симуляторе бафф активирован на 15 реальных минут,
     /// то даже при выключенной симуляции эти 15 минут продолжают истекать». Пока

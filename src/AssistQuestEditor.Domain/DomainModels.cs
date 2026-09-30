@@ -348,11 +348,19 @@ public sealed record PlayerConditionState(
         CumulativeHealth = Math.Clamp(CumulativeHealth, 0d, PlayerConditionScale.Maximum),
         CumulativeEnergy = Math.Clamp(CumulativeEnergy, 0d, PlayerConditionScale.Maximum),
         CumulativeHydration = Math.Clamp(CumulativeHydration, 0d, PlayerConditionScale.Maximum),
+        // СТРЕСС: ИСТОЩЕНИЕ — НЕСНИЖАЕМЫЙ ОСТАТОК. Задано автором: «если есть
+        // истощение, шкала должна показывать 1500/10000 и ниже 1500 не
+        // опускается, пока игрок не уберёт истощение». Это ОБРАТНАЯ сторона
+        // правила здоровья, энергии и жидкости: там истощение вычитается ИЗ
+        // МАКСИМУМА (потолок), здесь — поднимает МИНИМУМ (пол). Прежняя модель
+        // ставила стрессу потолок «максимум минус истощение», из-за чего отдых
+        // показывал чистый ноль при накопленном истощении.
         Stress = Math.Clamp(
             Stress,
-            0d,
-            PlayerConditionScale.Maximum -
-                Math.Clamp(CumulativeStress, 0d, PlayerConditionScale.Maximum)),
+            Math.Min(
+                Math.Clamp(CumulativeStress, 0d, PlayerConditionScale.Maximum),
+                PlayerConditionScale.Maximum),
+            PlayerConditionScale.Maximum),
         CumulativeStress = Math.Clamp(CumulativeStress, 0d, PlayerConditionScale.Maximum),
         CumulativeFatigue = Math.Clamp(CumulativeFatigue, 0d, PlayerConditionScale.Maximum),
         OverchargeHealth = NormalizeOvercharge(OverchargeHealth),

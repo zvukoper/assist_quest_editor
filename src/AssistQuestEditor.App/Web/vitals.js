@@ -574,6 +574,50 @@
     "</div>";
   }
 
+  /**
+   * Жёлтая подпись «Истощение» под дорожкой шкалы — с КОЛИЧЕСТВОМ единиц.
+   *
+   * ЗАДАНО АВТОРОМ: «Истощение по усталости накопилось, но не учитывается. И
+   * визуально только на шкале. Нужно добавить жёлтую подпись "Истощение" и
+   * количество единиц истощения».
+   *
+   * Почему единицы, а не проценты. Жёлтая закреплённая часть дорожки говорит,
+   * ЧТО истощение есть, но не говорит СКОЛЬКО его. Процент округлил бы 1500
+   * единиц до «15%» и на малых значениях показывал бы ноль, а ровно эти
+   * значения автор и называл («условно истощение составляет 1500 единиц»).
+   *
+   * Сторона истощения у шкал разная (см. CUMULATIVE_SIDE), поэтому разной
+   * получается и СУТЬ надписи, и это видно в тексте:
+   *   • «end» (здоровье, энергия, жидкость) — истощение ВЫЧИТАЕТСЯ ИЗ
+   *     МАКСИМУМА, поэтому рядом показан доступный потолок;
+   *   • «start» (усталость, стресс) — истощение задаёт НЕСНИЖАЕМЫЙ ОСТАТОК,
+   *     поэтому сказано, что ниже него шкала не опускается.
+   * Одна общая формулировка неизбежно была бы неверна для половины шкал.
+   *
+   * Ноль единиц показывается как «нет»: строка нужна каждой шкале (чтобы место
+   * не прыгало при накоплении), но «Истощение 0» читалось бы как значение.
+   */
+  function exhaustionMarkup(scale, values) {
+    if (scale.derived)
+      return "";
+
+    var units = Math.round(values.cumulativeUnits || 0);
+    if (units <= 0) {
+      return "<div class='vitalExhaustion vitalExhaustionNone'>" +
+        "Истощение: нет</div>";
+    }
+
+    var note =
+      cumulativeClassFor(scale) === "fromEnd"
+        ? "доступно " +
+          Math.round(values.maximum - units) +
+          "/" + Math.round(values.maximum)
+        : "ниже не опускается";
+
+    return "<div class='vitalExhaustion vitalExhaustionPresent'>" +
+      "Истощение: " + units + " ед. (" + note + ")</div>";
+  }
+
   function barMarkup(scale, values, snapshot) {
     var surgeClass =
       hasEffect(snapshot, "power_surge")
@@ -594,6 +638,7 @@
         "<span>" + dynamics.markup + valueLabel(scale, values) + "</span>" +
       "</div>" +
       barTrack(scale, values) +
+      exhaustionMarkup(scale, values) +
     "</div>";
   }
 
@@ -760,6 +805,7 @@
     barTrack: barTrack,
     valueLabel: valueLabel,
     barMarkup: barMarkup,
+    exhaustionMarkup: exhaustionMarkup,
     markup: markup,
     fieldsMarkup: fieldsMarkup,
     effectDescription: effectDescription,
