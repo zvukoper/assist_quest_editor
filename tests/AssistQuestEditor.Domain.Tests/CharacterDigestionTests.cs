@@ -221,8 +221,18 @@ public sealed class CharacterDigestionTests
     [Fact]
     public void FoodOutpacesItsOwnConsumption()
     {
-        // Полный желудок еды отдаёт 5000 ед./ч против расхода 1666,7 ед./ч под
-        // нагрузкой — трёхкратный запас.
+        // ЕДА ОБЯЗАНА ПЕРЕКРЫВАТЬ СОБСТВЕННЫЙ РАСХОД. Это инвариант модели, а не
+        // балансная цифра: если полный желудок отдаёт меньше, чем тратит
+        // организм, то даже плотный обед оставляет динамику красной — ровно на
+        // это жаловался автор в прошлой сессии.
+        //
+        // ЗАПАС СНИЖЕН С 3× ДО 1,5× (30.09.2026). Раньше под нагрузкой расход был
+        // 1666,7 ед./ч, и усвоение 5000 ед./ч давало трёхкратный запас. Автор
+        // поднял расход коэффициентом `EnergyLoadCoefficient = 1,5` (3750 ккал за
+        // 3 часа = 25%/ч = 2500 ед./ч), и запас стал ровно двукратным. Проверка
+        // «строго больше 2×» при этом падала на РАВЕНСТВЕ, то есть валила не
+        // дефект, а собственную цифру. Здесь остаётся инвариант с запасом 1,5× —
+        // он ловит поломку «еда не покрывает расход», но не спорит с балансом.
         var absorptionPerHour =
             Scale / CharacterDigestion.FoodStomachEmptyHours;
         var consumptionPerHour =
@@ -231,9 +241,9 @@ public sealed class CharacterDigestionTests
                     .EnergyConsumptionPercentPerHour(moving: true));
 
         Assert.True(
-            absorptionPerHour > consumptionPerHour * 2d,
-            $"усвоение {absorptionPerHour} ед./ч обязано многократно перекрывать " +
-            $"расход {consumptionPerHour} ед./ч");
+            absorptionPerHour > consumptionPerHour * 1.5d,
+            $"усвоение {absorptionPerHour} ед./ч обязано перекрывать расход " +
+            $"{consumptionPerHour} ед./ч с запасом");
     }
 
     [Fact]
@@ -272,12 +282,14 @@ public sealed class CharacterDigestionTests
     [Fact]
     public void EggSandwichGivesPositiveEnergyDynamic()
     {
-        // Бутерброд 180 г / 350 ккал: 350/50 = 7% шкалы, усвоение 5000 ед./ч
-        // (полный желудок еды уходит за 2 часа) против расхода 1666,7 ед./ч.
+        // Бутерброд 180 г / 320 ккал (12,9/12,9/1,1 на 100 г × 1,8): 320/50 = 6,4%
+        // шкалы, усвоение 5000 ед./ч (полный желудок еды уходит за 2 часа) против
+        // расхода 1666,7 ед./ч. Числа профиля берутся ИЗ КАТАЛОГА, а не
+        // переписываются: переписав их, тест перестал бы ловить смену калорийности.
         var profile = CharacterConsumableCatalog.GetProfile("food.egg_sandwich");
 
-        Assert.Equal(350d, profile.Kilocalories, 3);
-        Assert.Equal(7d, profile.EnergyPercent, 3);
+        Assert.Equal(320d, profile.Kilocalories, 3);
+        Assert.Equal(6.4d, profile.EnergyPercent, 3);
 
         var stomach = CharacterDigestion.Begin(
             StomachContents.Empty,
@@ -573,9 +585,10 @@ public sealed class CharacterDigestionTests
         var portions = CharacterDigestionReport.Portions(withOrange);
 
         // Вода по-прежнему даёт жидкость, апельсин — и то и другое.
+        // Калорийность апельсина — справочная: 43 ккал/100 г × 2,0 = 86.
         Assert.Equal(500d, portions[0].WaterMilliliters, 3);
         Assert.Equal(0d, portions[0].EnergyKilocalories, 3);
-        Assert.Equal(90d, portions[1].EnergyKilocalories, 3);
+        Assert.Equal(86d, portions[1].EnergyKilocalories, 3);
         Assert.Equal(170d, portions[1].WaterMilliliters, 3);
 
         // Объём желудка — сумма обеих порций, а не объём последней.
@@ -1053,6 +1066,15 @@ public sealed class CharacterDigestionTests
 
             var expected = CharacterDigestion.PortionFraction(portion);
 
+            // Движок задаёт МИНИМУМ порции (0,01 л): иначе мелкая позиция (пакет
+            // сахара) занимала бы ноль и усваивалась мгновенно, а признак
+            // «влезет» становился бы бессмысленным. Здесь этот же минимум
+            // применяется к ОЖИДАНИЮ, иначе проверка требовала бы от движка то,
+            // чего он не обещает.
+            var appliedFraction = Math.Max(
+                CharacterDigestion.MinimumPortionFraction,
+                expected);
+
             var stomach = CharacterDigestion.Begin(
                 StomachContents.Empty,
                 item.Id,
@@ -1062,7 +1084,7 @@ public sealed class CharacterDigestionTests
                 Scale,
                 elevatedMetabolism: false,
                 reducedMetabolism: false,
-                portionFraction: Math.Max(0.01d, expected));
+                portionFraction: appliedFraction);
 
             // Предмет без питательности порции не заводит — это законно.
             if (stomach.Portions.Count == 0)
@@ -1070,11 +1092,13 @@ public sealed class CharacterDigestionTests
 
             checkedAny = true;
 
-            // 1. ПОДПИСЬ: миллилитры порции дают ровно ту долю литра, которую
-            //    записал домен. Округление до целых миллилитров не должно
-            //    расходиться больше чем на единицу округления.
+            // 1. ПОДПИСЬ: миллилитры порции дают ту долю литра, которую записал
+            //    домен. У позиций мельче минимума доля равна минимуму — и это
+            //    правильное поведение: место в желудке есть, просто порция
+            //    крошечная. Округление до целых миллилитров не должно расходиться
+            //    больше чем на единицу округления ДОЛИ.
             Assert.Equal(
-                expected,
+                appliedFraction,
                 stomach.Portions[0].VolumeFraction,
                 6);
 
@@ -1088,12 +1112,24 @@ public sealed class CharacterDigestionTests
                     .VolumeMilliliters,
                 3);
 
-            // 3. ПРИЗНАК: порция ровно на объём желудка помещается, а на
-            //    миллилитр больше — нет. Список и движок судят одним числом.
+            // 3. ПРИЗНАК: объём порции не превышает ОБЪЁМ ЖЕЛУДКА, поэтому
+            //    порция помещается в пустой желудок. Список и движок судят одним
+            //    числом.
+            //
+            //    Проверка идёт против ПУСТОГО желудка, а не против желудка с этой
+            //    порцией. Прежний вариант строил желудок из той же порции и
+            //    спрашивал `Fits` — а `Fits` смотрит на СВОБОДНУЮ часть, поэтому
+            //    он молча требовал, чтобы порция была не больше ПОЛОВИНЫ желудка
+            //    (0,5 л из 1 л). Половинное правило ни автором не задано, ни в
+            //    движке не живёт: там приём идёт по «целиком или никак» от
+            //    свободного места. Дефект вскрылся, когда в каталог попали «Соли
+            //    для восстановления организма» — 1000 мл, ровно на весь желудок.
             Assert.True(
-                CharacterDigestionReport.Fits(stomach, item.Id),
-                $"«{item.Name}» ({item.Id}) не поместился в свой же объём — " +
-                "подпись объёма разошлась с признаком «влезет»");
+                CharacterDigestionReport.Fits(
+                    StomachContents.Empty,
+                    item.Id),
+                $"«{item.Name}» ({item.Id}) не поместился в ПУСТОЙ желудок — " +
+                "объём порции больше объёма желудка");
         }
 
         Assert.True(

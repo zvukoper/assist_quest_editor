@@ -116,6 +116,23 @@
   .itemDescription { font-size:11px; line-height:1.45; color:rgba(233,237,242,.82); overflow-wrap:anywhere; }
   .itemNutrition { font-size:11px; line-height:1.5; }
   .itemNutrition .itemNutritionLabel { color:var(--muted); }
+  /* БЖУ и атрибуты — те же строки мелкого текста, но с ВЕРХНЕЙ ЛИНИЕЙ: они
+     рассказывают о составе и качестве, а не о том, что предмет даёт шкалам, и
+     без разделителя читались бы как продолжение пищевой ценности. */
+  .itemMacros { font-size:11px; line-height:1.5; }
+  .itemMacros .itemNutritionLabel { color:var(--muted); }
+  .itemAttributes {
+    font-size:11px;
+    line-height:1.5;
+    color:var(--muted);
+    border-top:1px solid var(--border);
+    margin-top:3px;
+    padding-top:3px;
+  }
+  /* Цена позиции. Отдельная строка и отдельный цвет: это не пищевая ценность и
+     не свойство предмета, а ЕГО СТОИМОСТЬ, и слипшись с «Пищевой ценностью»
+     строка читалась бы как ещё одна характеристика еды. */
+  .itemPrice { font-size:11px; line-height:1.5; color:#e8c46a; }
   .itemFooter { display:flex; align-items:center; gap:5px; flex-wrap:wrap; }
   .itemQtyInput {
     width:56px;
@@ -159,6 +176,17 @@
       <input type="checkbox" id="itemsOnlyEdible" aria-label="Только съедобное">
       <span>только съедобное</span>
     </label>
+    <!-- Две обратные галочки рядом: «несъедобное» и «квестовое». Все три
+         фильтруют ОДИН список, поэтому каждая подписана своим словом, а не
+         «фильтр 2/3»: подписи читаются без подсказки. -->
+    <label class="itemsEdibleFilter" title="Показать только предметы, которые не употребляют в пищу">
+      <input type="checkbox" id="itemsOnlyInedible" aria-label="Только несъедобное">
+      <span>только несъедобное</span>
+    </label>
+    <label class="itemsEdibleFilter" title="Показать только предметы, которые выдают квесты и которые никогда не продаются">
+      <input type="checkbox" id="itemsOnlyQuest" aria-label="Квестовое">
+      <span>квестовое</span>
+    </label>
   </div>
   <div class="itemsError" id="itemsError"></div>
   <div class="itemsBody" id="itemsBody"></div>
@@ -166,6 +194,6 @@
 <script src="web_log.js?v=18763af3"></script>
 <script src="dom_reconcile.js?v=b4a5a022"></script>
 <script src="vitals.js?v=2eae4807"></script>
-<script src="items.js?v=75bac53c"></script>
+<script src="items.js?v=a18ee556"></script>
 </body>
 </html>

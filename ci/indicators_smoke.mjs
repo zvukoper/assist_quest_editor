@@ -137,6 +137,26 @@ try{
   check(!cardData.some(c=>(c.key==="energy"||c.key==="hydration")&&c.value.includes("10000")),"физическая шкала показывает внутренний потолок 10000");
   check(energy&&energy.factors.some(x=>x.text.includes("Базовый расход энергии")),"нет базового фактора энергии");
   check(energy&&energy.factors.some(x=>x.cls.includes("permanentInactive")),"нет неактивных постоянных факторов");
+
+  // ── Строка «Базовый расход» берёт числа У ДОМЕНА, а не из литералов ──────
+  //
+  // Дефект автора: он поправил нормы расхода в `CharacterVitalsTuning`, строка
+  // динамики за ним пошла, а «Базовый расход энергии/жидкости» осталась с
+  // прежними 13,9 ккал и 5 мл — страница считала её по СВОЕЙ таблице чисел и
+  // правку калибровки не замечала вовсе.
+  //
+  // Сторож берёт нормы, которые страница знать не может (они «пришли» из
+  // conditionRates): −41,67 ед./мин — это ровно 20,8 ккал/мин при потолке 5000,
+  // а −10,5 ед./мин — 3,1 мл/мин при потолке 3000. Оба числа выведены из ДАННЫХ
+  // фикстуры, а не из калибровки, поэтому проверка ловит именно дублирование
+  // норм в JavaScript: пока они там есть, строка показывает старые 13,9 ккал и
+  // 5 мл и краснеет.
+  const baseRow=card=>card.factors.find(x=>x.text.includes("Базовый расход"));
+  const energyBase=baseRow(energy), hydrationBase=baseRow(hydration);
+  check(!!energyBase&&energyBase.text.includes("20.8 ккал/мин"),
+    "базовый расход энергии не совпал с доменной нормой: "+(energyBase?energyBase.text.trim():"строка не найдена"));
+  check(!!hydrationBase&&hydrationBase.text.includes("3.1 мл/мин"),
+    "базовый расход жидкости не совпал с доменной нормой: "+(hydrationBase?hydrationBase.text.trim():"строка не найдена"));
   const chips=await page.$$eval(".indicatorChip",nodes=>nodes.map(n=>({text:n.textContent.trim(),perk:n.getAttribute("data-perk-link"),item:n.getAttribute("data-item-link")})));
   check(chips.some(x=>x.text==="Бык"&&x.perk),"бафф «Бык» не кликабелен");
   check(chips.some(x=>x.text==="Паёк"&&x.item),"предмет не кликабелен");

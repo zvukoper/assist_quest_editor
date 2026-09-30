@@ -119,8 +119,11 @@ public static class CharacterVitalsEngine
     /// Расход энергии в ПРОЦЕНТАХ шкалы за игровой час при данной нагрузке.
     ///
     /// Единая точка пересчёта «физическая норма → проценты шкалы»: и движок, и
-    /// подсказка монитора обязаны брать одно число. При нагрузке это 16,67%/ч,
-    /// в покое — 6,25%/ч.
+    /// подсказка монитора обязаны брать одно число. При нагрузке это 75%/ч
+    /// (3750 ккал за 3 часа), в покое — 6,25%/ч (2500 ккал за 8 часов).
+    ///
+    /// Нормы — ПСЕВДОНИМЫ калибровки, поэтому подсказка интерфейса никогда не
+    /// повторяет числа: она берёт ГОТОВЫЙ процент из этого метода.
     /// </summary>
     public static double EnergyConsumptionPercentPerHour(bool moving) =>
         (moving
@@ -131,7 +134,8 @@ public static class CharacterVitalsEngine
 
     /// <summary>
     /// Расход жидкости в ПРОЦЕНТАХ шкалы за игровой час при данной нагрузке
-    /// (нагрузка — 10%/ч, покой — 4%/ч при шкале 3000 мл).
+    /// (нагрузка — 20%/ч при 600 мл/ч, покой — 4%/ч при 120 мл/ч и шкале
+    /// 3000 мл).
     /// </summary>
     public static double HydrationConsumptionPercentPerHour(bool moving) =>
         (moving
@@ -139,6 +143,28 @@ public static class CharacterVitalsEngine
             : HydrationMillilitersRestingPerHour) /
         CharacterDigestion.HydrationScaleMilliliters *
         100d;
+
+    /// <summary>
+    /// Множитель расхода от МЕТАБОЛИЗМА и баффа «Бык»: 0,9 при пониженном
+    /// (метаболизм ниже 45%), 1,25 при повышенном (от 75%), иначе 1. «Бык»
+    /// умножает результат ещё на 0,5 — «расходует как при пониженном».
+    ///
+    /// Метод ОТКРЫТ нарочно: тем же числом монитор показателей раскладывает
+    /// расход на вклады. Вклад «Метаболизм ≥75%: расход ×1,25» обязан совпасть с
+    /// начислением до последнего знака, а вторая такая же формула в JavaScript
+    /// разошлась бы с движком при первой правке границ 45/75.
+    /// </summary>
+    public static double MetabolismConsumptionFactor(
+        double metabolismPercent,
+        bool bull) =>
+        (metabolismPercent < ReducedMetabolismPercent
+            ? CharacterVitalsTuning.ReducedMetabolismConsumptionFactor
+            : metabolismPercent >= ElevatedMetabolismPercent
+                ? CharacterVitalsTuning.ElevatedMetabolismConsumptionFactor
+                : 1d) *
+        (bull
+            ? CharacterVitalsTuning.BullMetabolismConsumptionFactor
+            : 1d);
 
     public const double SleepConsumptionMultiplier =
         CharacterVitalsTuning.SleepConsumptionMultiplier;
@@ -385,9 +411,13 @@ public static class CharacterVitalsEngine
         // Нагрузка — источник расхода энергии и жидкости: нормы заданы автором
         // отдельно для движения и покоя (см. EnergyConsumptionPercentPerHour и
         // HydrationConsumptionPercentPerHour). Сон поверх нагрузки замедляет
-        // расход ещё втрое.
-        var energyBasePerHour = EnergyConsumptionPercentPerHour(moving);
-        var hydrationBasePerHour = HydrationConsumptionPercentPerHour(moving);
+        // расход ещё втрое — и ЭТОТ МНОЖИТЕЛЬ ВХОДИТ В БАЗУ, ровно как в
+        // Advance (`energyDemand`). Иначе раскладка монитора «Нормальном
+        // состоянии × метаболизм × сон» не сложилась бы в показанную скорость.
+        var energyBasePerHour =
+            EnergyConsumptionPercentPerHour(moving) * sleepFactor;
+        var hydrationBasePerHour =
+            HydrationConsumptionPercentPerHour(moving) * sleepFactor;
 
         // «Жажда» и «Обезвоживание» ускоряют накопление стресса. По единому
         // языку автора («процент от шкалы в минуту») жажда — АДДИТИВНАЯ
@@ -415,18 +445,33 @@ public static class CharacterVitalsEngine
         // поэтому тот же расход обязан попасть в скорость этих шкал. Иначе
         // подсказка показывала бы только трату жизнедеятельности, и игрок не
         // понял бы, почему энергия падает при лежании без движения.
+        //
+        // Цена восстановления уменьшается на запас ФОРСАЖА: он расходуется
+        // первым, и пока его хватает, базовые шкалы не двигаются (см.
+        // SpendScaleOrOvercharge). Без этой поправки подсказка обещала бы
+        // расход базовой шкалы, которого на самом деле нет.
         var healthRegenPerHour = HealthRegenPerHour(vitals, conditions);
+        var energyOvercharge =
+            GetOvercharge(conditions, "energy");
+        var hydrationOvercharge =
+            GetOvercharge(conditions, "hydration");
 
         var energyPerHour =
             -energyBasePerHour *
             metabolismFactor *
             sleepFactor -
-            healthRegenPerHour * HealthRegenEnergyPerHealthUnit;
+            Math.Max(
+                0d,
+                healthRegenPerHour * HealthRegenEnergyPerHealthUnit -
+                energyOvercharge);
         var hydrationPerHour =
             -hydrationBasePerHour *
             metabolismFactor *
             sleepFactor -
-            healthRegenPerHour * HealthRegenHydrationPerHealthUnit;
+            Math.Max(
+                0d,
+                healthRegenPerHour * HealthRegenHydrationPerHealthUnit -
+                hydrationOvercharge);
 
         // Пищеварение даёт ПОЛОЖИТЕЛЬНУЮ скорость, пока в желудке есть
         // неусвоенное: пока идёт насыщение, энергия и жидкость растут, и
@@ -1343,6 +1388,30 @@ public static class CharacterVitalsEngine
             AddConsumedPortion(ref vitals, ref conditions, profile);
         }
 
+        // ЦЕННОСТЬ БЛЮДА КАФЕ (A-B-C-D) — часть механики, а не вкуса.
+        //
+        // Питательность у позиций кафе уже начислена профилем выше (B — голод и
+        // C — жажда переведены в ккал и мл в каталоге). Здесь остаются ДВА
+        // вклада, у которых в нынешней модели нет другого места:
+        //   A «Польза для здоровья»   → +A% шкалы здоровья;
+        //   D «Тонизирующий эффект»   → −D% усталости («снимает 10% усталости»).
+        // Оба — ПОСЛЕ порции, чтобы «Пробуждение»/«Прилив сил» и правила
+        // желудка видели уже готовое состояние, как и у прочих предметов.
+        var cafeValue = CharacterConsumableCatalog.GetCafeValue(id);
+        if (cafeValue.HealthPercent > 0d)
+        {
+            vitals = vitals with
+            {
+                Health = Math.Min(
+                    EffectiveHealthMaximum(vitals, conditions),
+                    vitals.Health +
+                    UnitsFromPercentExact(cafeValue.HealthPercent))
+            };
+        }
+
+        if (cafeValue.TonicPercent > 0d)
+            ReduceFatigue(ref vitals, cafeValue.TonicPercent);
+
         switch (id.ToLowerInvariant())
         {
             case "food.milk":
@@ -2111,9 +2180,16 @@ public static class CharacterVitalsEngine
                         vitals,
                         state) -
                     vitals.Health);
+
+            // Запас считается С УЧЁТОМ ФОРСАЖА: пока он есть, восстановление
+            // здоровья оплачивается им, а базовые шкалы не трогаются. Без этой
+            // добавки игрок с полным форсажем видел бы, что базовые энергия и
+            // жидкость падают, хотя форсажа хватало с запасом.
             var affordable = Math.Min(
-                vitals.Energy / HealthRegenEnergyPerHealthUnit,
-                vitals.Hydration / HealthRegenHydrationPerHealthUnit);
+                (vitals.Energy + GetOvercharge(state, "energy")) /
+                HealthRegenEnergyPerHealthUnit,
+                (vitals.Hydration + GetOvercharge(state, "hydration")) /
+                HealthRegenHydrationPerHealthUnit);
             var restored = Math.Max(
                 0d,
                 Math.Min(
@@ -2124,18 +2200,24 @@ public static class CharacterVitalsEngine
             {
                 vitals = vitals with
                 {
-                    Health = vitals.Health + restored,
-                    Energy = Math.Max(
-                        0d,
-                        vitals.Energy -
-                        restored *
-                        HealthRegenEnergyPerHealthUnit),
-                    Hydration = Math.Max(
-                        0d,
-                        vitals.Hydration -
-                        restored *
-                        HealthRegenHydrationPerHealthUnit)
+                    Health = vitals.Health + restored
                 };
+
+                // Цена восстановления списывается ТЕМ ЖЕ правилом, что и любой
+                // другой расход: сперва форсаж, затем базовое число (см.
+                // SpendScaleOrOvercharge). Автор: «форсажные единицы — это
+                // дополнительные единицы сверх нормы, которые расходуются
+                // первыми, а базовые не расходуются».
+                SpendScaleOrOvercharge(
+                    ref vitals,
+                    ref state,
+                    "energy",
+                    restored * HealthRegenEnergyPerHealthUnit);
+                SpendScaleOrOvercharge(
+                    ref vitals,
+                    ref state,
+                    "hydration",
+                    restored * HealthRegenHydrationPerHealthUnit);
             }
         }
 
@@ -2688,27 +2770,18 @@ public static class CharacterVitalsEngine
         PlayerConditionState state) =>
         PlayerConditionEngine.TotalStressPercent(state);
 
+    /// <summary>
+    /// Множитель расхода по текущим виталам и эффектам: короткая обёртка над
+    /// открытым <see cref="MetabolismConsumptionFactor(double, bool)"/>, чтобы у
+    /// правила был РОВНО ОДИН экземпляр (границы 45/75 заданы калибровкой).
+    /// </summary>
     private static double MetabolismConsumptionFactor(
         PlayerVitalsState vitals,
-        PlayerConditionState state)
-    {
-        var metabolism =
+        PlayerConditionState state) =>
+        MetabolismConsumptionFactor(
             PlayerConditionScale.ToPercent(
-                vitals.Metabolism);
-
-        var factor =
-            metabolism < ReducedMetabolismPercent
-                ? CharacterVitalsTuning
-                    .ReducedMetabolismConsumptionFactor
-                : metabolism >= ElevatedMetabolismPercent
-                    ? CharacterVitalsTuning
-                        .ElevatedMetabolismConsumptionFactor
-                    : 1d;
-
-        return HasEffect(state, "bull")
-            ? factor * CharacterVitalsTuning.BullMetabolismConsumptionFactor
-            : factor;
-    }
+                vitals.Metabolism),
+            HasEffect(state, "bull"));
 
     private static double TimeOfDayFatigueMultiplier(
         double hour)
@@ -2918,6 +2991,81 @@ public static class CharacterVitalsEngine
         }
 
         return units - consumed;
+    }
+
+    /// <summary>
+    /// ЕДИНЫЙ КОШЕЛЁК негативного изменения шкалы: сперва форсаж, затем базовое
+    /// число. ЕДИНСТВЕННОЕ место, где расход может коснуться базовой шкалы.
+    ///
+    /// Зачем отдельный помощник. Правило автора («форсаж расходуется ПЕРВЫМ, а
+    /// базовые единицы не расходуются, пока есть форсаж») выполнялось только в
+    /// ДВУХ из трёх путей расхода: периодический расход шага шёл через
+    /// <see cref="ApplyNegativeChange"/>, накопление стресса — через собственный
+    /// вызов <c>ConsumeOvercharge</c>, а ВОССТАНОВЛЕНИЕ ЗДОРОВЬЯ списывало
+    /// энергию и жидкость НАПРЯМУЮ (`vitals with { Energy = … }`). Из-за этого
+    /// игрок с полным форсажем видел, что «Энергия имеет форсаж, но расходуется
+    /// из 5000 базовых»: подсказка обещала расход из форсажа, а базовое число
+    /// падало от каждого часа восстановления здоровья.
+    ///
+    /// Возвращает, сколько в итоге списано с БАЗОВОЙ шкалы (0, если всё покрыл
+    /// форсаж) — по нему вызывающая сторона решает, пополнять ли истощение.
+    /// </summary>
+    private static double SpendScaleOrOvercharge(
+        ref PlayerVitalsState vitals,
+        ref PlayerConditionState state,
+        string key,
+        double units)
+    {
+        if (units <= 0d)
+            return 0d;
+
+        var remaining =
+            ConsumeOvercharge(
+                ref state,
+                key,
+                units);
+
+        if (remaining <= 0d)
+            return 0d;
+
+        if (key.Equals(
+                "energy",
+                StringComparison.OrdinalIgnoreCase))
+        {
+            vitals = vitals with
+            {
+                Energy =
+                    Math.Max(
+                        0d,
+                        vitals.Energy - remaining)
+            };
+        }
+        else if (key.Equals(
+                     "hydration",
+                     StringComparison.OrdinalIgnoreCase))
+        {
+            vitals = vitals with
+            {
+                Hydration =
+                    Math.Max(
+                        0d,
+                        vitals.Hydration - remaining)
+            };
+        }
+        else if (key.Equals(
+                     "health",
+                     StringComparison.OrdinalIgnoreCase))
+        {
+            vitals = vitals with
+            {
+                Health =
+                    Math.Max(
+                        0d,
+                        vitals.Health - remaining)
+            };
+        }
+
+        return remaining;
     }
 
     /// <summary>
@@ -3469,6 +3617,23 @@ public static class CharacterVitalsEngine
             "skin.ointment",
             "water.bottle"
         };
+
+    /// <summary>
+    /// Все Id, которые движок умеет употреблять: пищевой профиль ИЛИ ветка
+    /// эффектов. Перечень МЕХАНИКИ.
+    ///
+    /// Каждый обязан иметь описание в КАТАЛОГЕ (<see cref="ItemCatalogFactory"/>),
+    /// иначе окно «Предметы» соберётся без него, и предмет исчезнет из игры.
+    /// Прежний контракт стерёг только одно направление — «у каждого пункта
+    /// каталога механика СРАБОТАЛА» (тест `EveryCatalogConsumableActuallyAppliesItsMechanics`),
+    /// а обратное молча нарушалось: девять предметов с полной механикой в
+    /// каталог не попали. Сторож — тест
+    /// `EveryItemWithMechanicsIsDescribedInTheCatalog`.
+    /// </summary>
+    public static IEnumerable<string> ConsumableItemIds =>
+        CharacterConsumableCatalog.KnownItemIds
+            .Concat(ConsumableEffectItems)
+            .Distinct(StringComparer.OrdinalIgnoreCase);
 
     private static void ReduceFatigue(        ref PlayerVitalsState vitals,
         double percent) =>

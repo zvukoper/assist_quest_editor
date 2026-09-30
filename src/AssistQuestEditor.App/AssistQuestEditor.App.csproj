@@ -11,10 +11,10 @@
     <Prefer32Bit>false</Prefer32Bit>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
 
-    <Version>1.0.46.1</Version>
-    <AssemblyVersion>1.0.46.1</AssemblyVersion>
-    <FileVersion>1.0.46.1</FileVersion>
-    <AssemblyInformationalVersion>1.0.46.1-ITEM-CHIP-FLICKER-R1</AssemblyInformationalVersion>
+    <Version>1.0.47.1</Version>
+    <AssemblyVersion>1.0.47.1</AssemblyVersion>
+    <FileVersion>1.0.47.1</FileVersion>
+    <AssemblyInformationalVersion>1.0.48.1-ITEM-DATA-QUALITY-R1</AssemblyInformationalVersion>
     <PublishSingleFile>true</PublishSingleFile>
     <SelfContained>true</SelfContained>
     <RuntimeIdentifier>win-x64</RuntimeIdentifier>

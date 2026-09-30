@@ -316,19 +316,36 @@ public sealed class CharacterVitalsTuningTests
     [Fact]
     public void ConsumptionNormsProduceThePromisedPercentPerHour()
     {
+        // Нормы заданы КОЭФФИЦИЕНТАМИ над эталоном (2500 ккал за 3 часа, 300 мл
+        // за час, 2500 ккал за 8 часов, 120 мл за час): менять расход удобно
+        // коэффициентом, а не переписыванием нормы. Проверяется вся цепочка
+        // «коэффициент → норма → процент шкалы».
+        Assert.Equal(
+            2500d * CharacterVitalsTuning.EnergyLoadCoefficient / 3d,
+            CharacterVitalsTuning.EnergyKilocaloriesMovingPerHour);
+        Assert.Equal(
+            2500d * CharacterVitalsTuning.EnergyRestCoefficient / 8d,
+            CharacterVitalsTuning.EnergyKilocaloriesRestingPerHour);
+        Assert.Equal(
+            300d * CharacterVitalsTuning.HydrationLoadCoefficient,
+            CharacterVitalsTuning.HydrationMillilitersMovingPerHour);
+        Assert.Equal(
+            120d * CharacterVitalsTuning.HydrationRestCoefficient,
+            CharacterVitalsTuning.HydrationMillilitersRestingPerHour);
+
         // Норма в физических величинах переводится в проценты шкалы тем же
         // отношением, что и в движке: норма / размер шкалы × 100.
         Assert.Equal(
-            100d * (2500d / 3d) / 5000d,
+            100d * (2500d * 1.5d / 3d) / 5000d,
             CharacterVitalsEngine.EnergyConsumptionPercentPerHour(moving: true));
         Assert.Equal(
-            100d * (2500d / 8d) / 5000d,
+            100d * (2500d * 1d / 8d) / 5000d,
             CharacterVitalsEngine.EnergyConsumptionPercentPerHour(moving: false));
         Assert.Equal(
-            100d * 300d / 3000d,
+            100d * (300d * 2d) / 3000d,
             CharacterVitalsEngine.HydrationConsumptionPercentPerHour(moving: true));
         Assert.Equal(
-            100d * 120d / 3000d,
+            100d * (120d * 1d) / 3000d,
             CharacterVitalsEngine.HydrationConsumptionPercentPerHour(moving: false));
 
         // Обещания автора в читаемом виде: под нагрузкой расход быстрее покоя.

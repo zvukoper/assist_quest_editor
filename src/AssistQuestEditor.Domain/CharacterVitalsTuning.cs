@@ -126,25 +126,49 @@ public static class CharacterVitalsTuning
     // 3. РАСХОД ЭНЕРГИИ И ЖИДКОСТИ (зависит от нагрузки)
     // ═══════════════════════════════════════════════════════════════════════
     //
-    // Формула расхода: взять норму ниже → поделить на размер шкалы → получить
-    // процент шкалы за час. Подставив 2500/3 ккал и шкалу 5000, получаем
-    // (833,3 / 5000) × 100 = 16,67% шкалы за игровой час.
+    // Коэффициенты — ГЛАВНЫЕ ручки расхода: ими задано, во сколько раз норма
+    // отличается от эталона. Эталон — 2500 ккал за 3 часа и 300 мл за час под
+    // нагрузкой, 2500 ккал за 8 часов и 120 мл за час в покое. Менять расход
+    // удобно ЗДЕСЬ, коэффициентами:
+    //   • EnergyLoadCoefficient   (1,5 → 3750 ккал/ч = 75%/ч шкалы 5000);
+    //   • EnergyRestCoefficient   (1   → 312,5 ккал/ч = 6,25%/ч);
+    //   • HydrationLoadCoefficient(2   → 600 мл/ч = 20%/ч шкалы 3000);
+    //   • HydrationRestCoefficient(1   → 120 мл/ч = 4%/ч).
+    //
+    // Формула: взять норму ниже → поделить на размер шкалы → получить процент
+    // шкалы за час. Пример: (3750 / 5000) × 100 = 75% шкалы за игровой час.
+
+    /// <summary>Расход ЭНЕРГИИ под нагрузкой относительно эталона (см. блок выше).</summary>
+    public const double EnergyLoadCoefficient = 1.5d;
+
+    /// <summary>Расход ЭНЕРГИИ в покое относительно эталона.</summary>
+    public const double EnergyRestCoefficient = 1d;
+
+    /// <summary>Расход ЖИДКОСТИ под нагрузкой относительно эталона.</summary>
+    public const double HydrationLoadCoefficient = 2d;
+
+    /// <summary>Расход ЖИДКОСТИ в покое относительно эталона.</summary>
+    public const double HydrationRestCoefficient = 1d;
 
     /// <summary>Норма расхода ЭНЕРГИИ при НАГРУЗКЕ (движение по маршруту), ккал/час.
-    /// Задано автором: 2500 ккал за 3 игровых часа.</summary>
-    public const double EnergyKilocaloriesMovingPerHour = 2500d / 3d;
+    /// Эталон автора — 2500 ккал за 3 игровых часа — множится на коэффициент нагрузки.</summary>
+    public const double EnergyKilocaloriesMovingPerHour =
+        2500d * EnergyLoadCoefficient / 3d;
 
     /// <summary>Норма расхода ЭНЕРГИИ В ПОКОЕ, ккал/час.
-    /// Задано автором: 2500 ккал за 8 игровых часов.</summary>
-    public const double EnergyKilocaloriesRestingPerHour = 2500d / 8d;
+    /// Эталон автора — 2500 ккал за 8 игровых часов — множится на коэффициент покоя.</summary>
+    public const double EnergyKilocaloriesRestingPerHour =
+        2500d * EnergyRestCoefficient / 8d;
 
     /// <summary>Норма расхода ЖИДКОСТИ при НАГРУЗКЕ, мл/час.
-    /// Задано автором: 150 мл за 30 игровых минут (то есть 300 мл/час).</summary>
-    public const double HydrationMillilitersMovingPerHour = 300d;
+    /// Эталон автора — 150 мл за 30 игровых минут (то есть 300 мл/час) — множится на коэффициент нагрузки.</summary>
+    public const double HydrationMillilitersMovingPerHour =
+        300d * HydrationLoadCoefficient;
 
     /// <summary>Норма расхода ЖИДКОСТИ В ПОКОЕ, мл/час.
-    /// Задано автором: 60 мл за 30 игровых минут (то есть 120 мл/час).</summary>
-    public const double HydrationMillilitersRestingPerHour = 120d;
+    /// Эталон автора — 60 мл за 30 игровых минут (то есть 120 мл/час) — множится на коэффициент покоя.</summary>
+    public const double HydrationMillilitersRestingPerHour =
+        120d * HydrationRestCoefficient;
 
     /// <summary>
     /// Во сколько раз расход ПАДАЕТ во сне (1/3 — втрое меньше). Общий для

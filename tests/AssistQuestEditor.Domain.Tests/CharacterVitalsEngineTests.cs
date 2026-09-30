@@ -12,6 +12,493 @@ public sealed class CharacterVitalsEngineTests
     private static double Units(double percent) =>
         percent * PlayerConditionScale.UnitsPerPercent;
 
+    /// <summary>
+    /// ЗАМЕР (не рассуждение) на живых данных: форсаж обязан расходоваться
+    /// ПЕРВЫМ, а базовые шкалы — НЕ трогаться, пока запас форсажа не исчерпан.
+    ///
+    /// Автор: «Странное поведение форсажа. Расходуется не накопленная форсажем
+    /// величина, а базовые единицы.» Проверяются ОБА пути расхода, потому что
+    /// симптом мог прийти из любого:
+    ///   1. периодический расход шага (`Advance` → `ApplyNegativeChange`);
+    ///   2. восстановление здоровья, которое списывает энергию и жидкость
+    ///      НАПРЯМУЮ (`HealthRegenAndExhaustionDrain`).
+    /// </summary>
+    [Fact]
+    public void OverchargeIsSpentBeforeBaseScaleOnEveryDrainPath()
+    {
+        // Форсаж на ПОЛНУЮ шкалу: его хватает на весь час расхода с запасом,
+        // поэтому падение базового числа будет означать, что форсаж пропущен.
+        var conditions = PlayerConditionState.Empty with
+        {
+            OverchargeEnergy = PlayerConditionScale.FromPercent(100d),
+            OverchargeHydration = PlayerConditionScale.FromPercent(100d)
+        };
+
+        var vitals = PlayerVitalsState.Default with
+        {
+            Energy = PlayerConditionScale.FromPercent(80d),
+            Hydration = PlayerConditionScale.FromPercent(80d),
+            Resilience = 0d
+        };
+
+        var after = CharacterVitalsEngine.Advance(
+            vitals,
+            conditions,
+            Hour,
+            Hour,
+            playerMoving: true,
+            sleeping: false,
+            traveledMeters: 0d,
+            gameHourOfDay: 12d);
+
+        Assert.Equal(
+            PlayerConditionScale.FromPercent(80d),
+            after.Vitals.Energy,
+            3);
+
+        Assert.Equal(
+            PlayerConditionScale.FromPercent(80d),
+            after.Vitals.Hydration,
+            3);
+
+        Assert.True(
+            after.Conditions.OverchargeEnergy < conditions.OverchargeEnergy);
+        Assert.True(
+            after.Conditions.OverchargeHydration <
+            conditions.OverchargeHydration);
+    }
+
+    /// <summary>
+    /// Второй путь того же правила: восстановление здоровья тратит энергию и
+    /// жидкость, и тратить обязано ФОРСАЖ, а не базовые шкалы.
+    ///
+    /// Отдельная проверка нужна потому, что этот расход идёт своим кодом
+    /// (`HealthRegenAndExhaustionDrain`), а не через общий кошелёк негативных
+    /// изменений, — и именно он дал симптом автора «Энергия имеет форсаж, но
+    /// расходуется из 5000 базовых».
+    ///
+    /// Замер сравнивает ТРИ величины: сколько ушло из базовой шкалы, сколько
+    /// ушло из форсажа и во сколько обошлось восстановление здоровья. Стоимость
+    /// берётся из правила автора (1 здоровье = 1 энергия + 2 жидкости), поэтому
+    /// «сколько обязано списаться» не подгоняется под ответ.
+    /// </summary>
+    [Fact]
+    public void HealthRegenerationSpendsOverchargeBeforeBaseScale()
+    {
+        // Запас форсажа взят с большим излишком (80% шкалы), поэтому весь расход
+        // часа обязан покрыться им одним.
+        var conditions = PlayerConditionState.Empty with
+        {
+            OverchargeEnergy = PlayerConditionScale.FromPercent(80d),
+            OverchargeHydration = PlayerConditionScale.FromPercent(80d)
+        };
+
+        var vitals = PlayerVitalsState.Default with
+        {
+            Health = PlayerConditionScale.FromPercent(50d),
+            Energy = PlayerConditionScale.FromPercent(80d),
+            Hydration = PlayerConditionScale.FromPercent(80d),
+            Resilience = 0d
+        };
+
+        var after = CharacterVitalsEngine.Advance(
+            vitals,
+            conditions,
+            Hour,
+            Hour,
+            playerMoving: false,
+            sleeping: false,
+            traveledMeters: 0d,
+            gameHourOfDay: 12d);
+
+        // Здоровье обязано вырасти — иначе замер бессмыслен.
+        var healthRestored = after.Vitals.Health - vitals.Health;
+        Assert.True(
+            healthRestored > 0d,
+            "здоровье не восстановилось — замер бесполезен");
+
+        // Цена восстановления по правилу автора: 1 энергия и 2 жидкости на
+        // единицу здоровья. Плюс обычный расход часа в покое.
+        var energyResting =
+            Units(CharacterVitalsEngine.EnergyConsumptionPercentPerHour(moving: false));
+        var hydrationResting =
+            Units(CharacterVitalsEngine.HydrationConsumptionPercentPerHour(moving: false));
+
+        var energySpent =
+            vitals.Energy +
+            conditions.OverchargeEnergy -
+            after.Vitals.Energy -
+            after.Conditions.OverchargeEnergy;
+        var hydrationSpent =
+            vitals.Hydration +
+            conditions.OverchargeHydration -
+            after.Vitals.Hydration -
+            after.Conditions.OverchargeHydration;
+
+        Assert.Equal(
+            energyResting + healthRestored * 1d,
+            energySpent,
+            3);
+        Assert.Equal(
+            hydrationResting + healthRestored * 2d,
+            hydrationSpent,
+            3);
+
+        // ГЛАВНОЕ: пока форсажа хватает, базовые шкалы не двигаются ВООБЩЕ —
+        // ни на восстановление здоровья, ни на расход жизнедеятельности. Это
+        // дословное правило автора: «форсажные единицы — дополнительные единицы
+        // сверх нормы, которые расходуются первыми, а базовые не расходуются».
+        Assert.Equal(vitals.Energy, after.Vitals.Energy, 3);
+        Assert.Equal(vitals.Hydration, after.Vitals.Hydration, 3);
+
+        // И это покрыл форсаж — он обязан быть израсходован.
+        Assert.True(
+            after.Conditions.OverchargeEnergy <
+            conditions.OverchargeEnergy,
+            "форсаж энергии не израсходован");
+        Assert.True(
+            after.Conditions.OverchargeHydration <
+            conditions.OverchargeHydration,
+            "форсаж жидкости не израсходован");
+    }
+
+    /// <summary>
+    /// ЦЕННОСТЬ БЛЮДА КАФЕ (A-B-C-D) обязана дойти до шкал, а цена — остаться
+    /// числом автора.
+    ///
+    /// Проверка идёт на позиции, где НИ ОДНО значение не упирается в потолок или
+    /// в ноль: тогда сравнение точное, а не «стало больше». «Тархун» (30-5-90-10)
+    /// выбран именно поэтому: здоровье 40+30, усталость 50−10, а жажда и голод
+    /// видны остатком в желудке.
+    ///
+    /// Цена проверяется отдельно: это единственное число, которое автор задал в
+    /// рублях, и подменять его «средним по рынку» нельзя.
+    /// </summary>
+    [Fact]
+    public void CafeMenuValuesApplyAndPricesStayAuthors()
+    {
+        var tarkhun = CharacterConsumableCatalog.GetCafeValue("cafe.tarkhun");
+        Assert.Equal(50, tarkhun.PriceRubles);
+
+        var vitals = (PlayerVitalsState.Default with
+        {
+            Health = PlayerConditionScale.FromPercent(40d),
+            Fatigue = PlayerConditionScale.FromPercent(50d),
+            Resilience = 0d
+        }).Normalize();
+
+        var after = CharacterVitalsEngine.UseItem(
+            "cafe.tarkhun",
+            vitals,
+            PlayerConditionState.Empty);
+
+        // A «Польза для здоровья»: 40% + 30% = 70%.
+        Assert.Equal(
+            PlayerConditionScale.FromPercent(70d),
+            after.Vitals.Health,
+            3);
+
+        // D «Тонизирующий эффект»: 50% − 10% = 40%.
+        Assert.Equal(
+            PlayerConditionScale.FromPercent(40d),
+            after.Vitals.Fatigue,
+            3);
+
+        // C «Утоление жажды»: 90% шкалы жидкости уходит в желудок.
+        Assert.Equal(
+            PlayerConditionScale.FromPercent(90d),
+            after.Conditions.Stomach.HydrationRemaining,
+            3);
+
+        // B «Утоление голода»: 5% шкалы энергии.
+        Assert.Equal(
+            PlayerConditionScale.FromPercent(5d),
+            after.Conditions.Stomach.EnergyRemaining,
+            3);
+    }
+
+    /// <summary>
+    /// У КАЖДОЙ позиции меню кафе есть цена, и все цены — числа автора.
+    ///
+    /// Сторож нужен потому, что цена просится «прикинуть»: без него следующая
+    /// правка легко заменит 250 ₽ на «среднюю по рынку», и в игре окажется число,
+    /// которого автор не задавал.
+    /// </summary>
+    [Fact]
+    public void EveryCafeMenuItemKeepsItsAuthorsPrice()
+    {
+        var authored = new (string Id, int Price)[]
+        {
+            ("cafe.borscht", 250),
+            ("cafe.cabbage_soup", 200),
+            ("cafe.ramen", 350),
+            ("cafe.chicken_broth", 150),
+            ("cafe.dumplings", 300),
+            ("cafe.fried_potato", 200),
+            ("cafe.mashed_potato_cutlet", 250),
+            ("cafe.chicken_shawarma", 180),
+            ("cafe.doner", 220),
+            ("cafe.olivier", 90),
+            ("cafe.herring_under_coat", 120),
+            ("cafe.mimosa_salad", 85),
+            ("cafe.assam_tea", 50),
+            ("cafe.americano", 130),
+            ("cafe.latte", 150),
+            ("cafe.cappuccino", 140),
+            ("cafe.green_tea", 50),
+            ("cafe.milk", 20),
+            ("cafe.sugar", 10),
+            ("cafe.fruit_syrup", 10),
+            ("cafe.sparkling_water", 70),
+            ("cafe.still_water", 50),
+            ("cafe.cola", 70),
+            ("cafe.tarkhun", 50),
+            ("cafe.dushes", 60),
+            ("cafe.napkins", 15),
+            ("cafe.wet_wipes", 25),
+            ("cafe.cigarettes", 200)
+        };
+
+        var catalog = ItemCatalogFactory.Items
+            .Select(item => item.Id)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var (id, price) in authored)
+        {
+            Assert.True(
+                catalog.Contains(id),
+                $"позиция меню кафе {id} пропала из каталога");
+
+            Assert.Equal(
+                price,
+                CharacterConsumableCatalog.GetCafeValue(id).PriceRubles);
+        }
+    }
+
+    /// <summary>
+    /// У КАЖДОГО предмета каталога есть цена — либо явная, либо «не продаётся».
+    ///
+    /// Автор: «найти в интернете или вычислить по открытым источникам цену всех
+    /// предметов каталога, всех съедобных порций, всех несъедобных предметов,
+    /// КРОМЕ квестовых, которые никогда не продаются». Поэтому проверка требует
+    /// ровно двух состояний и запрещает третье, самое опасное — ЗАБЫТОЕ: предмет
+    /// без цены не должен молча выглядеть как «непродаваемый».
+    /// </summary>
+    [Fact]
+    public void EveryCatalogItemIsEitherPricedOrDeliberatelyUnsellable()
+    {
+        var unpriced = new List<string>();
+
+        foreach (var item in ItemCatalogFactory.Items)
+        {
+            var questOnly = ItemCatalogFactory.IsQuestOnly(item.Category);
+            var price = ItemCatalogFactory.PriceRubles(item);
+            var raw = ItemData.PriceRubles(item.Id);
+
+            if (questOnly)
+            {
+                // Квестовое не продаётся НИКОГДА: цена обязана быть отсечена.
+                Assert.Equal(0, price);
+                continue;
+            }
+
+            if (price <= 0)
+                unpriced.Add($"{item.Id} ({raw})");
+        }
+
+        Assert.True(
+            unpriced.Count == 0,
+            "предметы без цены вне квестовых: " + string.Join("; ", unpriced));
+    }
+
+    /// <summary>
+    /// У КАЖДОЙ еды, которая НЕСЁТ энергию, есть БЖУ, и его энергия не
+    /// противоречит калорийности.
+    ///
+    /// ПОЧЕМУ НЕ ВСЯ ЕДА. БЖУ и калорийность — СВЯЗАННЫЕ величины одного
+    /// источника, и сверять их осмысленно только там, где источник вообще дал
+    /// калорийность:
+    ///   • у воды сверять нечего (0 ккал, 0 БЖУ);
+    ///   • у квестового «мяса Руслана» пищевой профиль — игровая награда, а не
+    ///     диетология: требовать от него табличной калорийности значит выдумывать
+    ///     её;
+    ///   • у позиций КАФЕ калорийность имеет ДРУГОЙ СМЫСЛ. Она задана автором как
+    ///     ценность блюда (второе число A-B-C-D — «сколько сытости в процентах»),
+    ///     и каталог переводит её в килокалории множителем 50. Это ЦЕНА СЫТОСТИ, а
+    ///     не энергия из справочника, поэтому расхождение с БЖУ здесь —
+    ///     норма, а не ошибка. Само БЖУ кафе проверяется ниже отдельным тестом.
+    ///
+    /// Исключения сделаны ВИДИМЫМИ списком, а не молчаливым `continue`: иначе
+    /// следующая позиция кафе тихо выпала бы из проверки, и правило перестало бы
+    /// что-либо ловить.
+    /// </summary>
+    [Fact]
+    public void EveryEnergyBearingFoodHasMacronutrientsMatchingItsEnergy()
+    {
+        var missing = new List<string>();
+        var mismatched = new List<string>();
+
+        foreach (var item in ItemCatalogFactory.Items)
+        {
+            if (IsCafeGameValue(item.Id))
+                continue;
+
+            var declared = CharacterConsumableCatalog.GetProfile(item.Id).Kilocalories;
+
+            // Ниже порога сверять нечего: у чашки чёрного кофе (10 ккал на 250 мл)
+            // состав — следовые доли грамма, и ЛЮБОЕ округление до 0,1 г меняет
+            // расчётную энергию вдвое. Это не ошибка таблицы, а предел точности
+            // справочника, поэтому такие напитки пропускаются, а не «подгоняются».
+            if (declared < TraceEnergyKilocalories)
+                continue;
+
+            // Спирт — отдельная статья: он даёт 7 ккал/г и в БЖУ не пишется вовсе.
+            // У пива 210 ккал на 500 мл против 84 по составу, и оба числа верны.
+            if (IsAlcoholic(item.Id))
+                continue;
+
+            var bju = ItemData.Nutrition(item.Id);
+
+            if (!bju.HasAny)
+            {
+                missing.Add($"{item.Id} ({Math.Round(declared)} ккал)");
+                continue;
+            }
+
+            var fromBju = bju.EnergyKilocalories;
+            var drift = Math.Abs(fromBju - declared) / Math.Max(declared, 1d);
+
+            if (drift > 0.35d)
+            {
+                mismatched.Add(
+                    $"{item.Id}: БЖУ {Math.Round(fromBju)} против ккал {Math.Round(declared)}");
+            }
+        }
+
+        Assert.True(
+            missing.Count == 0,
+            "еда с энергией, но без БЖУ: " + string.Join("; ", missing));
+
+        Assert.True(
+            mismatched.Count == 0,
+            "БЖУ и калорийность расходятся: " + string.Join("; ", mismatched));
+    }
+
+    /// <summary>
+    /// Энергия ниже этой — следовые количества, где состав не проверяется.
+    /// </summary>
+    private const double TraceEnergyKilocalories = 25d;
+
+    /// <summary>Предмет, чью энергию частично даёт спирт.</summary>
+    private static bool IsAlcoholic(string itemId) =>
+        itemId.Equals("drink.beer", StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// Позиция меню кафе: её «калорийность» — это ценность блюда, а не энергия.
+    /// </summary>
+    private static bool IsCafeGameValue(string itemId) =>
+        itemId.StartsWith("cafe.", StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// У КАЖДОЙ позиции кафе, которую едят, есть БЖУ.
+    ///
+    /// Отдельная проверка нужна потому, что предыдущий тест кафе исключает: там
+    /// сверяется энергия, а у кафе сверять нечего. Здесь проверяется само
+    /// НАЛИЧИЕ состава — автор просил «зафиксировать БЖУ для всех предметов»,
+    /// и пропущенная строка кафе иначе осталась бы незамеченной никем.
+    /// Еда кафе без состава = блюдо, которое будущая механика белка посчитает
+    /// пустым.
+    /// </summary>
+    [Fact]
+    public void EveryCafeFoodItemHasMacronutrients()
+    {
+        // Напитки-«пустышки» и предметы сервировки состава не имеют.
+        var withoutMacros = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            "cafe.sparkling_water", "cafe.still_water",
+            "cafe.napkins", "cafe.wet_wipes", "cafe.cigarettes"
+        };
+
+        var missing = new List<string>();
+
+        foreach (var item in ItemCatalogFactory.Items)
+        {
+            if (!IsCafeGameValue(item.Id) || withoutMacros.Contains(item.Id))
+                continue;
+
+            if (!CharacterVitalsEngine.CanConsume(item.Id))
+                continue;
+
+            if (!ItemData.Nutrition(item.Id).HasAny)
+                missing.Add(item.Id);
+        }
+
+        Assert.True(
+            missing.Count == 0,
+            "позиции кафе без БЖУ: " + string.Join("; ", missing));
+    }
+
+    /// <summary>
+    /// Качество и состояние выставлены ВСЕМ: качество «Обычное», состояние —
+    /// «Свежее» у еды и «Без повреждений» у прочего.
+    ///
+    /// Это задел: у предмета не может быть ПУСТОГО качества, иначе первая же
+    /// механика крафта получила бы неопределённость. Проверка дешёвая, но именно
+    /// она держит правило автора, заданное словами.
+    /// </summary>
+    [Fact]
+    public void EveryItemHasDefaultQualityAndConditionByEdibility()
+    {
+        foreach (var item in ItemCatalogFactory.Items)
+        {
+            var edible = CharacterVitalsEngine.CanConsume(item.Id);
+            var (quality, condition) = ItemData.Attributes(item.Id, edible);
+
+            Assert.Equal(ItemQuality.Common, quality);
+
+            Assert.Equal(
+                edible ? ItemCondition.Fresh : ItemCondition.Intact,
+                condition);
+
+            // Подписи обязаны быть непустыми: их читает окно и журнал.
+            Assert.False(string.IsNullOrWhiteSpace(
+                ItemAttributeLabels.Quality(quality)));
+            Assert.False(string.IsNullOrWhiteSpace(
+                ItemAttributeLabels.Condition(condition)));
+        }
+    }
+
+    /// <summary>
+    /// Каждый предмет, у которого ЕСТЬ механика, обязан иметь описание в
+    /// каталоге — иначе он недостижим для игрока.
+    ///
+    /// Зачем проверка. Окно «Предметы» собирается ИЗ КАТАЛОГА, а механика живёт
+    /// отдельно (пищевой профиль + ветка эффектов). Прежний контракт стерёг
+    /// только одно направление — «у каждого пункта каталога механика сработала».
+    /// Обратное нарушалось МОЛЧА: девять предметов (сыр, орехи, овощное рагу,
+    /// йогурт, свежее мясо, мультивитамины, шипучий витамин C, омега-3, сорбент)
+    /// имели полную механику, но в каталог не попали, поэтому игрок не мог их
+    /// получить или найти. Смоуки этого не видели: они подавали эти Id СВОЕЙ
+    /// фикстурой, а не реальным каталогом.
+    /// </summary>
+    [Fact]
+    public void EveryItemWithMechanicsIsDescribedInTheCatalog()
+    {
+        var catalog = ItemCatalogFactory.Items
+            .Select(item => item.Id)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        var missing = CharacterVitalsEngine.ConsumableItemIds
+            .Where(id => !catalog.Contains(id))
+            .OrderBy(id => id, StringComparer.Ordinal)
+            .ToArray();
+
+        Assert.True(
+            missing.Length == 0,
+            "предметы с механикой, которых нет в каталоге (игрок их не увидит): " +
+            string.Join("; ", missing));
+    }
+
     [Fact]
     public void MovingConsumesEnergyHydrationAndBuildsFatigue()
     {

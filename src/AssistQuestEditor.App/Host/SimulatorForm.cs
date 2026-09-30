@@ -411,6 +411,12 @@ public sealed class SimulatorForm : WebViewForm
             type = "snapshot",
             version = VersionInfo.InformationalVersion,
             snapshot,
+            // Виталы едут ОТДЕЛЬНО: монитор показателей раскладывает скорость
+            // энергии и жидкости на вклады «база × метаболизм × сон», а для
+            // этого ему нужен процент метаболизма. Он есть внутри `snapshot`,
+            // но у монитора снимок приходит и БЕЗ полного payload (live_state),
+            // и читать правило из одного места удобнее одним полем.
+            playerVitals = snapshot.PlayerVitals,
             conditionRates,
             // Желудок для монитора: порции в литрах/ккал/мл и их сроки.
             // Считает ДОМЕН — время до конца порции выводится из остатка и
@@ -682,7 +688,23 @@ public sealed class SimulatorForm : WebViewForm
             fatigue = rates.FatiguePerGameMinute,
             stress = rates.StressPerGameMinute,
             resilience = rates.ResiliencePerGameMinute,
-            metabolism = rates.MetabolismPerGameMinute
+            metabolism = rates.MetabolismPerGameMinute,
+            // Расход энергии и жидкости зависит от МЕТАБОЛИЗМА (0,9 при
+            // пониженном, 1,25 при повышенном) и от баффа «Бык» (ещё ×0,5).
+            // Монитор показателей раскладывает скорость на вклады и обязан
+            // применить ТОТ ЖЕ множитель: иначе базовая строка показывала бы
+            // норму без поправки и не сходилась бы с итогом. Считает домен,
+            // повторять условие «45/75» в JavaScript нельзя.
+            metabolismFactor = CharacterVitalsEngine.MetabolismConsumptionFactor(
+                PlayerConditionScale.ToPercent(snapshot.PlayerVitals.Metabolism),
+                snapshot.Conditions.Effects.Any(effect =>
+                    effect.Id.Equals("bull", StringComparison.OrdinalIgnoreCase) &&
+                    effect.RemainingRealSeconds > 0d)),
+            // Границы «пониженного» и «повышенного» метаболизма: по ним монитор
+            // подписывает вклады расхода. Числа заданы калибровкой — Web их не
+            // повторяет, иначе подпись разошлась бы с начислением.
+            reducedMetabolismPercent = CharacterVitalsEngine.ReducedMetabolismPercent,
+            elevatedMetabolismPercent = CharacterVitalsEngine.ElevatedMetabolismPercent
         };
     }
 
@@ -1132,6 +1154,10 @@ public sealed class SimulatorForm : WebViewForm
 
             inventory.Items.TryGetValue(item.Id, out var count);
 
+            var edible = CharacterVitalsEngine.CanConsume(item.Id);
+            var nutrients = ItemData.Nutrition(item.Id);
+            var (quality, condition) = ItemData.Attributes(item.Id, edible);
+
             return new
             {
                 id = item.Id,
@@ -1152,12 +1178,39 @@ public sealed class SimulatorForm : WebViewForm
                 // меню желудка — «110 мл» (вода в банане): два разных числа на один
                 // предмет. Теперь всюду одно и то же — объём порции.
                 milliliters = CharacterConsumableCatalog.GetPortionMilliliters(item.Id),
+                // А масса — отдельное, ФИЗИЧЕСКОЕ число, и путать её с объёмом
+                // нельзя: у литра воды это 1000 г и 1000 мл, а у 30 г мёда — 30 г
+                // против 5 мл воды в нём. Прежде окно рисовало только объём, и
+                // «сколько весит» в рюкзаке нигде не было видно.
                 grams = profile.Grams,
+                // БЖУ порции, граммы. Пустое у несъедобного: у таблетки нет
+                // состава, и рисовать ей «0 г белка» значило бы утверждать
+                // диетологический факт о предмете, который не едят.
+                proteinGrams = nutrients.HasAny ? nutrients.ProteinGrams : 0d,
+                fatGrams = nutrients.HasAny ? nutrients.FatGrams : 0d,
+                carbohydrateGrams = nutrients.HasAny ? nutrients.CarbohydrateGrams : 0d,
+                // Качество и состояние — задел для механик крафта и порчи. Сейчас
+                // у всех предметов значения по умолчанию, но они уже приходят в
+                // окно подписями: пустое место показало бы «неизвестно», а
+                // неизвестного нет.
+                quality = ItemAttributeLabels.Quality(quality),
+                condition = ItemAttributeLabels.Condition(condition),
+                // Цена — из справочника предметов, с отсечкой квестового внутри
+                // PriceRubles. Ноль означает «не продаётся»: у квестовых он
+                // по правилу автора, а «0 ₽» рисовать не нужно — бесплатного
+                // товара в мире нет. Покупка появится в механиках квестов; пока
+                // цена только ПОКАЗЫВАЕТСЯ, как и просил автор.
+                priceRubles = ItemCatalogFactory.PriceRubles(item),
+                // Квестовость отдаётся ОТДЕЛЬНЫМ флагом, а не выводится в окне из
+                // категории: правило «не продаётся» живёт в домене, и окно должно
+                // получать его решение, а не повторять строку категории у себя.
+                quest = ItemCatalogFactory.IsQuestOnly(item.Category),
                 // Съедобность считает ДОМЕН: у таблеток калорий нет, но они
                 // занимают желудок и действуют, поэтому «съедобно» — это не
-                // «есть калории», а «CanConsume». Галочка «только съедобное» и
-                // салатовая плашка обязаны означать ровно то же, что меню желудка.
-                edible = CharacterVitalsEngine.CanConsume(item.Id),
+                // «есть калории», а «CanConsume». Галочки «только съедобное» /
+                // «только несъедобное» и салатовая плашка обязаны означать ровно
+                // то же, что меню желудка.
+                edible,
                 kilocalories = profile.Kilocalories,
                 waterMilliliters = profile.WaterMilliliters,
                 energyPercent = profile.EnergyPercent,

@@ -28,6 +28,23 @@
   function resiliencePercent(){ return Math.round(num(vitals().resilience)/100); }
   function metabolismPercent(){ return Math.round(num(vitals().metabolism)/100); }
   /**
+   * Множитель расхода от метаболизма и «Быка» — ПРИСЛАН ДОМЕНОМ.
+   *
+   * Вторая такая же формула в Web разошлась бы с движком при первой правке
+   * границ 45/75 или множителей 0,9/1,25: границы живут в калибровке, и
+   * JavaScript их не повторяет. Старая версия страницы знала только «0,9/1,25»,
+   * литералами, и строка расхода перестала совпадать с итогом, когда автор
+   * поменял нормы в `CharacterVitalsTuning`.
+   */
+  function metabolismFactor(){
+    if(snapshot&&snapshot.conditionRates&&snapshot.conditionRates.metabolismFactor!=null)
+      return num(snapshot.conditionRates.metabolismFactor);
+    return 1;
+  }
+  /** Порог «пониженного» и «повышенного» метаболизма — тоже у домена. */
+  function reducedMetabolismPercent(){ return snapshot&&snapshot.conditionRates&&snapshot.conditionRates.reducedMetabolismPercent!=null?num(snapshot.conditionRates.reducedMetabolismPercent):45; }
+  function elevatedMetabolismPercent(){ return snapshot&&snapshot.conditionRates&&snapshot.conditionRates.elevatedMetabolismPercent!=null?num(snapshot.conditionRates.elevatedMetabolismPercent):75; }
+  /**
    * «В движении» = ВКЛЮЧЁННОЕ движение по маршруту, а не мгновенная скорость.
    *
    * Покой — это состояние, когда движение по маршруту ВЫКЛЮЧЕНО; только тогда
@@ -323,27 +340,45 @@
       return result;
     }
     if(key==="energy"||key==="hydration"){
-      // Нормы расхода ЗАВИСЯТ ОТ НАГРУЗКИ (задано автором): под нагрузкой
-      // 2500 ккал за 3 игровых часа и 150 мл за 30 игровых минут, в покое —
-      // 2500 ккал за 8 часов и 60 мл за 30 минут. В процентах шкалы это
-      // 16,67%/ч и 6,25%/ч для энергии (шкала 5000 ккал) и 10%/ч и 4%/ч для
-      // жидкости (шкала 3000 мл).
-      var moving=isMoving();
-      var percentPerHour=key==="energy"
-        ? (moving?100*(2500/3)/5000:100*(2500/8)/5000)
-        : (moving?100*300/3000:100*120/3000);
-      var normalBase=percentPerHour;
-      var m=metabolismPercent(), mf=m<45?0.9:m>=75?1.25:1;
-      var base=-normalBase*mf*100/60;
-      result.push(factor(key==="energy"?"Базовый расход энергии в Нормальном состоянии":"Базовый расход жидкости в Нормальном состоянии",key,base,"permanent",true));
+      // РАСКЛАДКА РАСХОДА. Числа берутся у ДОМЕНА, а не из таблицы констант в
+      // JavaScript.
+      //
+      // Что было не так. Строка «Базовый расход» считалась здесь по СВОИМ числам
+      // (2500/3, 300/3000…), и автор справедливо увидел расхождение: он поправил
+      // нормы в `CharacterVitalsTuning`, строка динамики за ним пошла, а ЭТА
+      // строка осталась со старыми 5 мл и 13,9 ккал — правку калибровки она не
+      // замечала, потому что норм в ней не было вовсе, был их литерал.
+      //
+      // Теперь норма ВЫВОДИТСЯ из итоговой скорости делением на поправку
+      // метаболизма, а сама поправка приходит полем `conditionRates.metabolismFactor`.
+      // Ни одного числа баланса в странице не осталось.
+      //
+      // Сон здесь не участвует: в этом симуляторе сон — РАЗОВЫЙ шаг (час за
+      // нажатие), а не длящееся состояние, и множителя «во сне» в скорости нет.
+      var speed=num(rateFor(key)), mf=metabolismFactor();
+      // Норма ЗА ИГРОВУЮ МИНУТУ — это скорость ДО поправки метаболизма, то есть
+      // speed / mf. Вклад измеряется в единицах шкалы за минуту, как и все
+      // вклады монитора: умножать на 60 здесь нельзя, иначе строка обещала бы
+      // «−1250 ккал/мин» вместо «−20,8».
+      var normalBase=speed/mf;
+      result.push(factor(key==="energy"?"Базовый расход энергии в Нормальном состоянии":"Базовый расход жидкости в Нормальном состоянии",key,normalBase,"permanent",true));
       var needs=num(vitals().health)<num(vitals().maxHealth);
       // Восстановление здоровья — ПОЛЕЗНО, но его цена — РАСХОД ценного
       // ресурса, и зелёный на ней вводил в заблуждение: автор видел «зелёный
       // минус». semanticOverride = -1 означает «знак минус опасен для игрока»,
       // поэтому цена красится красным, хотя она и есть плата за пользу.
       result.push(factor(key==="energy"?"Восстановление здоровья: 1:1 по энергии":"Восстановление здоровья: 1:2 по жидкости",key,needs?rate*0.15:0,"permanent",needs,-1));
-      result.push(factor("Метаболизм <45%: расход ×0,9",key,m<45?Math.abs(base)*0.1:0,"permanent",m<45,-1));
-      result.push(factor("Метаболизм ≥75%: расход ×1,25",key,m>=75?-Math.abs(base)*0.25:0,"permanent",m>=75,-1));
+      // ШТРАФ И БОНУС МЕТАБОЛИЗМА. Пороги (45 и 75) приходят от домена, а
+      // величина вклада выведена из ФАКТИЧЕСКОГО множителя: вклад равен разнице
+      // между скоростью и её «нормальным» значением speed / mf. При пониженном
+      // метаболизме вклад ПОЛОЖИТЕЛЕН (расход сэкономлен — игроку выгодно,
+      // поэтому строка зелёная), при повышенном — отрицателен (расход вырос).
+      // Оба знака — арифметические, и цвет ставится по ним, а не наоборот.
+      var metabolismContribution=speed-speed/mf;
+      var reduced=metabolismPercent()<reducedMetabolismPercent();
+      var elevated=!reduced&&mf>1;
+      result.push(factor("Метаболизм <"+fmt(reducedMetabolismPercent(),0)+"%: расход ×0,9",key,reduced?metabolismContribution:0,"permanent",reduced));
+      result.push(factor("Метаболизм ≥"+fmt(elevatedMetabolismPercent(),0)+"%: расход ×1,25",key,elevated?metabolismContribution:0,"permanent",elevated));
       return result;
     }
     if(key==="fatigue"){
@@ -1156,6 +1191,7 @@
     if(!message) return;
     if(message.type==="snapshot"){
       snapshot=message.snapshot||snapshot;
+      if(message.playerVitals) snapshot.playerVitals=message.playerVitals;
       if(Array.isArray(message.itemCatalog)) itemCatalog=message.itemCatalog;
       if(snapshot&&message.conditionRates) snapshot.conditionRates=message.conditionRates;
       if(snapshot&&message.digestion) snapshot.digestion=message.digestion;

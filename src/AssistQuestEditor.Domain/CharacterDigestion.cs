@@ -178,6 +178,18 @@ public sealed record StomachContents(
 public static class CharacterDigestion
 {
     /// <summary>
+    /// НИЖНЯЯ ГРАНИЦА ДОЛИ ПОРЦИИ: доля литрового желудка, которую занимает даже
+    /// самая мелкая позиция (пакет сахара 5 г, таблетка).
+    ///
+    /// Зачем граница. Без неё мелкая позиция занимала бы в желудке НОЛЬ и
+    /// усваивалась мгновенно: место не тратится, таймер пуст, а признак «влезет»
+    /// становится бессмысленным. Прежде это число стояло литералом (0,01) в
+    /// нескольких местах, и проверки повторяли литерал за движком; теперь минимум
+    /// назван один раз — по нему сверяются и приём, и признак «влезет», и тесты.
+    /// </summary>
+    public const double MinimumPortionFraction = 0.01d;
+
+    /// <summary>
     /// Сколько КИЛОКАЛОРИЙ вмещает полная шкала энергии (задано автором).
     ///
     /// Единицы хранения (0..10000) остались прежними, но теперь у них есть
@@ -756,7 +768,7 @@ public static class CharacterDigestionReport
     {
         var normalized = (contents ?? StomachContents.Empty).Normalize();
         var required = Math.Max(
-            0.01d,
+            CharacterDigestion.MinimumPortionFraction,
             CharacterConsumableCatalog.GetPortionFractionOrDefault(itemId));
         var free = Math.Max(0d, 1d - normalized.VolumeFraction);
 
