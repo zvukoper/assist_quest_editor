@@ -9,6 +9,14 @@
 html,body{height:100%;margin:0;overflow:hidden;background:#0d1014}
 .indicatorsWindow{height:100%;box-sizing:border-box;padding:8px;display:flex;flex-direction:column;min-height:0}
 .indicatorsHead{flex:0 0 auto;display:flex;align-items:baseline;gap:8px;padding:2px 2px 8px}
+/* Галочка «%/время»: уводится к ПРАВОМУ краю той же строки — она не часть
+   заголовка, а переключатель формата, и читается лучше отдельно от подписи
+   состояния. Курсор и подчёркивание пунктиром — те же приёмы, что у имён шкал,
+   чтобы «это можно нажать» было видно без наведения. */
+.percentUnitsToggle{margin-left:auto;display:inline-flex;align-items:center;gap:5px;font-size:12px;font-weight:600;color:#e8edf3;cursor:pointer;user-select:none;padding:1px 3px;border-radius:4px;white-space:nowrap;flex:0 0 auto}
+.percentUnitsToggle:hover{background:rgba(255,255,255,.06)}
+.percentUnitsToggle input{margin:0;cursor:pointer;accent-color:var(--accent)}
+.percentUnitsToggle span{text-decoration:underline dotted rgba(255,255,255,.32);text-underline-offset:2px}
 .indicatorsHead strong,.characterStateLabel,.characterStateValue{font-size:14px}
 .characterStateValue{font-weight:600}
 .stateCritical{color:var(--red)}.stateSevere{color:#ffd400}.stateUnsat{color:#ff8c00}.stateSatisfactory{color:var(--muted)}.stateNormal{color:#4fd66d}.statePositive,.stateExcellent{color:var(--lime)}
@@ -180,6 +188,13 @@ html,body{height:100%;margin:0;overflow:hidden;background:#0d1014}
     <span class="indicatorsDivider">|</span>
     <span class="characterStateLabel">Состояние персонажа:</span>
     <span id="characterStateValue" class="characterStateValue stateSatisfactory">Удовлетворительное</span>
+    <!-- Галочка «%/время» (задано автором). По умолчанию ВКЛЮЧЕНА. Узел стоит
+         в СТАТИЧНОЙ шапке, а не в теле монитора: тело перерисовывается раз в
+         секунду, и галочка теряла бы фокус/нажатие вместе со своей разметкой. -->
+    <label class="percentUnitsToggle" title="Скорости в процентах шкалы за игровую минуту и час">
+      <input type="checkbox" id="percentUnitsToggle" checked>
+      <span>%/время</span>
+    </label>
   </div>
   <div class="indicatorsBody" id="indicatorsBody"></div>
 </div>
@@ -195,6 +210,6 @@ html,body{height:100%;margin:0;overflow:hidden;background:#0d1014}
 <script src="web_log.js?v=18763af3"></script>
 <script src="dom_reconcile.js?v=b4a5a022"></script>
 <script src="vitals.js?v=41571d6f"></script>
-<script src="indicators.js?v=aa8836e5"></script>
+<script src="indicators.js?v=3aca2f6f"></script>
 </body>
 </html>

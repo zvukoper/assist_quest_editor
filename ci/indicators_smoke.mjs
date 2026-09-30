@@ -36,7 +36,10 @@ const snapshot={
     reducedMetabolismPercent:45,elevatedMetabolismPercent:75,
     defaultMetabolismPercent:60,defaultResiliencePercent:60,elevatedBonusFullPercent:75,
     exhaustionResilienceDivisor:2,bumResilienceCapPercent:50,
-    resilienceReturnPerQuarterHour:0.5,resilienceBumReturnPerQuarterHour:1}
+    resilienceReturnPerQuarterHour:0.5,resilienceBumReturnPerQuarterHour:1},
+  // Галочка «%/время» — из НАСТРОЕК Хоста: страница её не хранит, а рисует
+  // присланное. Фикстура подаёт включённое значение: оно же значение по умолчанию.
+  percentUnits:true
 };
 
 const {browser}=await openBrowser();
@@ -132,11 +135,14 @@ try{
   check(!/раст[ёе]т|падает/.test(all),"остались старые слова направления");
   const energy=cardData.find(c=>c.key==="energy");
   check(energy&&energy.dynamic.includes("▼"),"нет треугольника падения энергии");
-  // Скорость показывается в ФИЗИЧЕСКИХ единицах шкалы: −41,67 ед./мин при
-  // потолке 5000 ккал — это −20,8 ккал/мин (10000 единиц = 5000 ккал, значит
-  // одна килокалория = 2 единицы). «ед./мин» у энергии и жидкости заменены на
-  // ккал/мин и мл/мин: игрок должен читать цифру, которую видит на этикетке еды.
-  check(energy&&energy.dynamic.includes("20.8 ккал/мин"),"нет скорости энергии в ккал/мин: "+(energy?energy.dynamic:"нет карточки"));
+  // ВКЛЮЧЁННАЯ галочка (состояние по умолчанию) печатает скорость ПРОЦЕНТОМ за
+  // минуту и час: «−0,417%/мин (−25%/ч)». Проверку формата ведём НИЖЕ, где снимок
+  // подан с явно выключенной галочкой, а здесь держим главное следствие:
+  // физических единиц в шапке при включённой галочке быть не должно.
+  check(energy&&energy.dynamic.includes("/мин")&&energy.dynamic.includes("%/ч"),
+    "нет скорости энергии в %/мин и %/ч: "+(energy?energy.dynamic:"нет карточки"));
+  check(!/ккал\/мин|мл\/мин/.test(energy?energy.dynamic:""),
+    "с включённой галочкой скорость энергии осталась в ккал/мин: "+(energy?energy.dynamic:"нет карточки"));
   const hydrationCard=cardData.find(c=>c.key==="hydration");
   check(energy&&energy.value.includes("(")&&energy.value.endsWith("%"),"неверный формат значения энергии");
   // Потолок энергии — 5000 ккал, жидкости — 3000 мл: физические величины,
@@ -163,10 +169,79 @@ try{
   // 5 мл и краснеет.
   const baseRow=card=>card.factors.find(x=>x.text.includes("Базовый расход"));
   const energyBase=baseRow(energy), hydrationBase=baseRow(hydration);
-  check(!!energyBase&&energyBase.text.includes("20.8 ккал/мин"),
+  // С включённой галочкой вклад тоже в процентах: −41,67 ед./мин при потолке
+  // 10000 — это −0,417%/мин. Число выведено из ДАННЫХ фикстуры, поэтому проверка
+  // ловит дублирование норм в JavaScript.
+  check(!!energyBase&&energyBase.text.includes("-0.417%/мин"),
     "базовый расход энергии не совпал с доменной нормой: "+(energyBase?energyBase.text.trim():"строка не найдена"));
-  check(!!hydrationBase&&hydrationBase.text.includes("3.1 мл/мин"),
+  check(!!hydrationBase&&hydrationBase.text.includes("-0.105%/мин"),
     "базовый расход жидкости не совпал с доменной нормой: "+(hydrationBase?hydrationBase.text.trim():"строка не найдена"));
+
+  // ── Галочка «%/время» ───────────────────────────────────────────────────
+  //
+  // Задано автором: «Нужна галочка: "%/время". По умолчанию включена. Если
+  // галочка включена, то все единицы измерения в окне визуально заменяются на
+  // процент в минуту и процент в час соответственно: например 2%/мин (120%/ч).
+  // Если выключена, то как сейчас показываются полные единицы, миллилитры, кДж».
+  //
+  // С галочкой скорость шкалы печатается процентом ЗА МИНУТУ и за час; без неё —
+  // физической величиной (ккал/мин, мл/мин, ед./мин).
+  check(!cardData.some(c=>/ккал\/мин|мл\/мин/.test(c.dynamic)),
+    "с включённой галочкой скорость показана физической величиной: "+
+    cardData.map(c=>c.dynamic).filter(Boolean).join(" | "));
+  check(cardData.some(c=>/%\/мин/.test(c.dynamic)&&/%\/ч/.test(c.dynamic)),
+    "нет скорости ни в %/мин, ни в %/ч: "+cardData.map(c=>c.dynamic).join(" | "));
+
+  // Переключение галочки: узел СТАТИЧНЫЙ и живёт в шапке, а не в теле монитора,
+  // поэтому его состояние обязано переживать перерисовку тела (раз в секунду).
+  const toggleBefore=await page.$eval("#percentUnitsToggle",n=>({checked:n.checked,exists:true}));
+  check(toggleBefore.checked,"галочка «%/время» по умолчанию не включена");
+
+  await page.click("#percentUnitsToggle");
+  await page.waitForTimeout(150);
+  const offData=await page.$$eval(".indicatorCard[data-scale-key]",nodes=>nodes.map(node=>({
+    key:node.getAttribute("data-scale-key"),
+    dynamic:node.querySelector(".indicatorDynamics")?.textContent.trim()||"",
+    factors:[...node.querySelectorAll(".indicatorFact")].map(x=>x.textContent.trim())
+  })));
+  check(!offData.some(c=>/%\/мин/.test(c.dynamic)),
+    "после снятия галочки скорости остались в процентах: "+
+    offData.map(c=>c.dynamic).join(" | "));
+  check(offData.some(c=>/ккал\/мин|мл\/мин|ед\.\/мин/.test(c.dynamic)),
+    "после снятия галочки нет ни одной физической скорости: "+
+    offData.map(c=>c.dynamic).join(" | "));
+
+  // ТЕ ЖЕ вклады, что выше проверялись процентами, без галочки обязаны читаться
+  // в ФИЗИЧЕСКИХ единицах: −41,67 ед./мин при потолке 5000 ккал — это −20,8
+  // ккал/мин (10000 единиц = 5000 ккал, значит одна килокалория = 2 единицы),
+  // а −10,5 ед./мин — 3,1 мл/мин при потолке 3000. Оба числа выведены из данных
+  // фикстуры: пока нормы продублированы в JavaScript, строка показывает старые
+  // 13,9 ккал и 5 мл и краснеет.
+  const offEnergy=offData.find(c=>c.key==="energy");
+  const offHydration=offData.find(c=>c.key==="hydration");
+  check(offEnergy&&offEnergy.dynamic.includes("20.8 ккал/мин"),
+    "без галочки нет скорости энергии в ккал/мин: "+(offEnergy?offEnergy.dynamic:"нет карточки"));
+  const offBaseRow=(card,label)=>card?(card.factors.find(t=>t.includes("Базовый расход"))||""):"";
+  check(offBaseRow(offEnergy).includes("20.8 ккал/мин"),
+    "базовый расход энергии не совпал с доменной нормой: "+offBaseRow(offEnergy));
+  check(offBaseRow(offHydration).includes("3.1 мл/мин"),
+    "базовый расход жидкости не совпал с доменной нормой: "+offBaseRow(offHydration));
+
+  // Строка усвоения пищеварения без галочки — в ккал/мин, как и была.
+  const offStomach=await page.$eval(".stomachHead",n=>n.textContent);
+  check(/ккал\/мин/.test(offStomach),
+    "без галочки динамика усвоения не в ккал/мин: "+offStomach);
+
+  // Обратно: страница обязана вернуться к процентам БЕЗ перезагрузки.
+  await page.click("#percentUnitsToggle");
+  await page.waitForTimeout(150);
+  const backOn=await page.$$eval(".indicatorCard[data-scale-key]",nodes=>nodes.map(node=>node.querySelector(".indicatorDynamics")?.textContent.trim()||""));
+  check(backOn.some(t=>/%\/мин/.test(t)),"галочка не включила проценты обратно: "+backOn.join(" | "));
+
+  // Значения шкал галочке НЕ подчиняются (решение автора): «2750 / 5000 ккал»
+  // остаётся и при включённой галочке — это значение, а не скорость.
+  check(energy&&energy.value.includes("2750 / 5000 ккал"),
+    "значение энергии перестало показывать килокалории: "+(energy?energy.value:"нет карточки"));
   const chips=await page.$$eval(".indicatorChip",nodes=>nodes.map(n=>({text:n.textContent.trim(),perk:n.getAttribute("data-perk-link"),item:n.getAttribute("data-item-link")})));
   check(chips.some(x=>x.text==="Бык"&&x.perk),"бафф «Бык» не кликабелен");
   check(chips.some(x=>x.text==="Паёк"&&x.item),"предмет не кликабелен");
@@ -190,11 +265,11 @@ try{
   check(energyItemRow.includes("Паёк"),
     "в шкале энергии нет пайка, хотя он лежит в пищеварении: "+energyItemRow);
   // Вклад берётся У ПОРЦИИ, а не из общей суммы пищеварения. Паёк даёт 30 ед./мин
-  // энергии из 60 общих, то есть 15 ккал/мин, а не 30 ккал/мин.
-  check(/усваивается.*15 ккал\/мин/.test(energyItemRow),
+  // энергии из 60 общих, то есть 0,3%/мин, а не 0,6%/мин общей скорости желудка.
+  check(/усваивается.*0[.,]3%\/мин/.test(energyItemRow),
     "в строке предмета показана не его скорость, а общая по желудку: "+energyItemRow);
-  // Вода даёт 45 ед./мин жидкости из 75 общих, то есть 13,5 → 14 мл/мин.
-  check(/усваивается.*13[.,]5 мл\/мин/.test(hydrationItemRow),
+  // Вода даёт 45 ед./мин жидкости из 75 общих, то есть 0,45%/мин.
+  check(/усваивается.*0[.,]45%\/мин/.test(hydrationItemRow),
     "в строке воды показана не её скорость: "+hydrationItemRow);
 
   // ── Занятый и полный объём пищеварения ──────────────────────────────────
@@ -354,7 +429,7 @@ try{
     check(stomachBlock.title==="Пищеварение",
       "нет заголовка «Пищеварение»: "+stomachBlock.title);
     check(stomachBlock.dynamics.includes("Усвоение"),"нет общей динамики усвоения: "+stomachBlock.dynamics);
-    check(stomachBlock.dynamics.includes("ккал/мин"),"динамика усвоения не в ккал/мин: "+stomachBlock.dynamics);
+    check(stomachBlock.dynamics.includes("%/мин"),"динамика усвоения не в %/мин: "+stomachBlock.dynamics);
     check(stomachBlock.factors.includes("усвоение"),"влияние на усвоение не показано: "+stomachBlock.factors);
 
     // Подписанные участки (первые части) — по одному на предмет: именно они несут
@@ -1133,6 +1208,10 @@ try{
       path.join(root,"src","AssistQuestEditor.Domain","DomainModels.cs"),"utf8");
     const indicators=fs.readFileSync(
       path.join(root,"src","AssistQuestEditor.App","Web","indicators.js"),"utf8");
+    // Файл НАСТРОЕК читается статически: галочка «%/время» обязана быть в нём
+    // полем, а не в localStorage страницы (см. проверку в конце блока).
+    const preferences=fs.readFileSync(
+      path.join(root,"src","AssistQuestEditor.App","Core","AppUiPreferencesStore.cs"),"utf8");
 
     check(/occupiedMilliliters/.test(simulatorForm)&&/totalMilliliters/.test(simulatorForm),
       "Хост не присылает занятый и полный объём пищеварения в миллилитрах: подпись " +
@@ -1201,6 +1280,26 @@ try{
       /exhaustionResilienceDivisor/.test(simulatorForm),
       "шанс устойчивости не показывается игроку: это её сильнейший эффект, и он " +
       "обязан быть виден строкой монитора");
+    // ГАЛОЧКА «%/время» — настройка ХОСТА, а не страницы. Если её состояние
+    // начнёт жить в localStorage, оно снова сломается при смене профиля WebView2:
+    // профиль собирается по отпечатку сборки, а настройки переживают обновление
+    // версии именно потому, что лежат в файле.
+    check(/percentUnits/.test(simulatorForm) && /AppUiPreferencesStore/.test(simulatorForm),
+      "галочка «%/время» больше не сохраняется в настройках: она обязана переживать " +
+      "перезапуск и смену профиля WebView2, как раскрытые разделы сайдбара");
+    check(/PercentUnits/.test(preferences),
+      "в пользовательских настройках нет поля PercentUnits: галочка не переживёт " +
+      "перезапуск");
+    check(!/localStorage[^\n]*percentUnits/.test(indicators),
+      "состояние галочки хранится в localStorage страницы: он живёт в профиле " +
+      "WebView2 и теряется при обновлении версии");
+    // Узел галочки СТАТИЧНЫЙ: тело монитора перерисовывается раз в секунду, и
+    // галочка внутри него теряла бы нажатие вместе со своей разметкой.
+    check(/id="percentUnitsToggle"/.test(html),
+      "в шапке монитора нет узла галочки: обработчик включения не к чему привязать");
+    check(/percentUnitsToggle/.test(indicators) && !/percentUnitsToggle/.test(
+      indicators.split("function init()")[1]?.split("function render()")[0] || ""),
+      "галочка перерисовывается вместе с телом монитора: она теряла бы нажатие");
   }
 
   if(failures.length){console.error("Indicators smoke: FAIL");failures.forEach(x=>console.error("  ✗ "+x));process.exitCode=1;}

@@ -56,6 +56,17 @@ public sealed class SimulatorForm : WebViewForm
     private List<string> _sidebarSections = new();
 
     /// <summary>
+    /// Показывать ли в мониторе показателей скорости шкал В ПРОЦЕНТАХ («2%/мин»)
+    /// вместо физических величин (ккал/мин, мл/мин). Галочка в шапке монитора.
+    ///
+    /// Состояние принадлежит НАСТРОЙКАМ, а не странице: оно обязано переживать
+    /// перезапуск и обновление версии, а localStorage живёт в профиле WebView2,
+    /// который меняется вместе с отпечатком сборки. Страница лишь рисует то, что
+    /// прислал Хост, — ровно как с раскрытыми разделами сайдбара.
+    /// </summary>
+    private bool _percentUnits = true;
+
+    /// <summary>
     /// Позиция игрока на прошлом тике начисления условий.
     ///
     /// Нужна, чтобы считать ПРОЙДЕННУЮ дистанцию: усталость растёт и по
@@ -191,6 +202,7 @@ public sealed class SimulatorForm : WebViewForm
         _sidebarSections = preferences.SidebarSections is { } savedSections
             ? new List<string>(savedSections)
             : new List<string>();
+        _percentUnits = preferences.PercentUnits;
         Opacity = 0;
         GlobalHotKeyPressed += SimulatorForm_GlobalHotKeyPressed;
         _questGraph.Changed += QuestGraph_Changed;
@@ -464,6 +476,10 @@ public sealed class SimulatorForm : WebViewForm
             // рисует присланное. Так разделы переживают перезапуск и не зависят
             // от того, менялся ли профиль WebView2.
             sidebarSections = _sidebarSections,
+            // Галочка «%/время» едет со снимком ПО ТОЙ ЖЕ причине: её состояние
+            // тоже живёт в настройках, и монитор обязан показать то, что реально
+            // сохранено, а не свою догадку.
+            percentUnits = _percentUnits,
             // Режим визуализации Location едет вместе со снимком: снимок
             // перерисовывает всю карту, и без этого набор точек исчезал бы
             // через доли секунды после нажатия «Показать в симуляторе».
@@ -1966,6 +1982,15 @@ public sealed class SimulatorForm : WebViewForm
 
                 case "set_sidebar_sections":
                     SetSidebarSections(root);
+                    break;
+
+                // Галочка «%/время» в шапке монитора показателей: страница сообщает
+                // о переключении, Хост запоминает его в настройках и ОТВЕЧАЕТ
+                // свежим снимком. Ответ обязателен: без него страница осталась бы
+                // с собственной догадкой о состоянии, а она после перезапуска
+                // разошлась бы с файлом настроек.
+                case "set_percent_units":
+                    SetPercentUnits(root);
                     break;
                 case "open_journal":
                     OpenJournalWindow();
@@ -5017,6 +5042,41 @@ public sealed class SimulatorForm : WebViewForm
             DateTimeOffset.UtcNow,
             String(root, "source", "Simulator"),
             payload));
+    }
+
+    /// <summary>
+    /// Запоминает выбор галочки «%/время» и возвращает монитору свежий снимок.
+    ///
+    /// Пишется только ИЗМЕНЕНИЕ: щелчок по галочке — редкое действие, но
+    /// сравнение всё равно нужно — без него повторное сообщение с тем же значением
+    /// переписывало бы файл настроек на диск.
+    /// </summary>
+    private void SetPercentUnits(JsonElement root)
+    {
+        if (!root.TryGetProperty("value", out var valueNode) ||
+            (valueNode.ValueKind != JsonValueKind.True &&
+             valueNode.ValueKind != JsonValueKind.False))
+        {
+            return;
+        }
+
+        var requested = valueNode.GetBoolean();
+
+        if (requested == _percentUnits)
+            return;
+
+        _percentUnits = requested;
+
+        var preferences = AppUiPreferencesStore.Load();
+        AppUiPreferencesStore.Save(preferences with { PercentUnits = _percentUnits });
+
+        AppLogger.Info(
+            "SimulatorForm: единицы монитора показателей переключены.",
+            $"percentUnits={_percentUnits}");
+
+        // Снимок возвращается СРАЗУ: галочка — мгновенное действие, и ожидание
+        // следующего тика (до секунды) читалось бы как «не сработало».
+        RequestSnapshot("percent units changed");
     }
 
     /// <summary>

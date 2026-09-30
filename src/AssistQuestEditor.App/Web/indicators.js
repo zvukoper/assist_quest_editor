@@ -4,6 +4,20 @@
   var highlightKey = "", highlightTimer = null, lastMarkup = "";
   var GOOD_DIRECTION = {health:1,energy:1,hydration:1,stress:-1,fatigue:-1,resilience:1,metabolism:1};
   var FLAT_RATE_EPSILON = 0.05;
+  /**
+   * ПОКАЗЫВАТЬ ЛИ СКОРОСТИ В ПРОЦЕНТАХ («−0,417%/мин (−25%/ч)»).
+   *
+   * Состояние владельца — НАСТРОЙКИ Хоста (`ui-settings.json`), а не страница:
+   * галочка обязана переживать перезапуск и обновление версии, а localStorage
+   * живёт в профиле WebView2, который меняется вместе с отпечатком сборки. Здесь
+   * лишь зеркало последнего присланного значения; значение по умолчанию —
+   * включено, и оно совпадает с настройкой домена.
+   *
+   * Процент — единственная величина, СОПОСТАВИМАЯ между шкалами: у каждой свой
+   * потолок (5000 ккал, 3000 мл, 10000 единиц), и «−13,9 ккал/мин» рядом с
+   * «−41,7 ед./мин» не читаются как одно и то же.
+   */
+  var percentUnits = true;
 
   function v(){ return global.AssistVitals; }
   function num(value){ var n=Number(value); return Number.isFinite(n)?n:0; }
@@ -189,13 +203,22 @@
     var good=semanticOverride==null?(GOOD_DIRECTION[key]||0):semanticOverride;
     var useful=Math.abs(rate)<FLAT_RATE_EPSILON?null:good!==0&&((rate>0)===(good>0));
     var physicalPerMinute=unit==="ед."?rate:rate/physicalFactor(key);
-    return {unitsPerHour:unitsPerHour,percentPerHour:percentPerHour,useful:useful,physicalPerMinute:physicalPerMinute,unit:unit};
+    // Процент за МИНУТУ — та же величина, что и `percentPerHour`, но за минуту:
+    // именно её печатает главное число при включённой галочке. Считается от той же
+    // базы, поэтому два знака об одном не могут разойтись.
+    var percentPerMinute=percentPerHour/60;
+    return {unitsPerHour:unitsPerHour,percentPerHour:percentPerHour,percentPerMinute:percentPerMinute,useful:useful,physicalPerMinute:physicalPerMinute,unit:unit};
   }
   function contributionHtml(rate,key,semanticOverride){
     var c=contribution(rate,key,semanticOverride);
     var cls=Math.abs(rate)<FLAT_RATE_EPSILON?"factorContribution factorNeutral":c.useful?"factorContribution factorGood":"factorContribution factorBad";
-    // Главное число — в единицах шкалы (ккал/мл, если они есть), рядом в скобках
-    // остаётся скорость в единицах хранения и в процентах за час.
+    // Галочка «%/время»: главное число — процент за минуту, в скобках — он же за
+    // час. Без галочки остаётся физическая величина (ккал/мин, мл/мин), а рядом в
+    // скобках — единицы хранения и проценты за час, как было до неё.
+    if(percentUnits){
+      return "<strong class='"+cls+"'>"+(rate>0?"+":"")+fmt(c.percentPerMinute,3)+"%/мин ("+
+        (c.percentPerHour>0?"+":"")+fmt(c.percentPerHour,1)+"%/ч)</strong>";
+    }
     return "<strong class='"+cls+"'>"+(rate>0?"+":"")+fmt(c.physicalPerMinute,1)+" "+c.unit+"/мин ("+
       (c.unitsPerHour>0?"+":"")+fmt(c.unitsPerHour,1)+" ед./час; "+
       (c.percentPerHour>0?"+":"")+fmt(c.percentPerHour,1)+"%/ч)</strong>";
@@ -501,10 +524,23 @@
   }
   function headerDynamics(key){
     var rate=rateFor(key);
-    if(!Number.isFinite(rate)||Math.abs(rate)<FLAT_RATE_EPSILON) return "<span class='trendFlat'>— 0 "+rateUnit(key)+"/мин (0 ед./час)</span>";
+    if(!Number.isFinite(rate)||Math.abs(rate)<FLAT_RATE_EPSILON){
+      // Нулевая скорость тоже подчиняется галочке: иначе «0 ккал/мин» рядом с
+      // «0%/мин» в остальных строках читались бы как два разных формата в одном
+      // блоке.
+      return percentUnits
+        ? "<span class='trendFlat'>— 0%/мин (0%/ч)</span>"
+        : "<span class='trendFlat'>— 0 "+rateUnit(key)+"/мин (0 ед./час)</span>";
+    }
     var rising=rate>0, good=GOOD_DIRECTION[key]||0, positive=good!==0&&rising===(good>0);
     // Физическая скорость в шапке: −13,9 ккал/мин читается лучше, чем −41,7 ед./мин.
     var c=contribution(rate,key);
+    // Галочка «%/время»: процент за минуту и за час — обе величины видны сразу,
+    // и по ним шкалы сравнимы между собой.
+    if(percentUnits){
+      return "<span class='"+(positive?"trendGood":"trendBad")+"'>"+(rising?"▲":"▼")+" "+(rate>0?"+":"")+
+        fmt(c.percentPerMinute,3)+"%/мин ("+(c.percentPerHour>0?"+":"")+fmt(c.percentPerHour,1)+"%/ч)</span>";
+    }
     return "<span class='"+(positive?"trendGood":"trendBad")+"'>"+(rising?"▲":"▼")+" "+(rate>0?"+":"")+fmt(c.physicalPerMinute,1)+" "+c.unit+"/мин ("+(rate*60>0?"+":"")+fmt(rate*60,1)+" ед./час)</span>";
   }
   function stateFromRates(){
@@ -527,6 +563,29 @@
     var node=document.getElementById("characterStateValue"); if(!node) return;
     var state=stateFromRates(); node.className="characterStateValue "+state.className;
     node.textContent=state.text; node.title="Суммарная оценка динамики: "+fmt(state.score,1)+"/100";
+  }
+  /**
+   * Галочка «%/время» в шапке окна.
+   *
+   * Автор: «Нужна галочка: "%/время". По умолчанию включена. Если галочка
+   * включена, то все единицы измерения в окне визуально заменяются на процент в
+   * минуту и процент в час соответственно: например 2%/мин (120%/ч). Если
+   * выключена, то как сейчас показываются полные единицы, миллилитры, кДж и т.п.»
+   *
+   * Разметка СТАТИЧНАЯ (лежит в indicators.html рядом с шапкой), поэтому
+   * обработчик вешается на неё один раз при инициализации: render() перерисовывает
+   * только ТЕЛО монитора и кнопки не касается — то же правило, по которому живёт
+   * кнопка «Содержимое».
+   */
+  function percentUnitsCheckbox(){ return document.getElementById("percentUnitsToggle"); }
+  function renderPercentUnits(){
+    var node=percentUnitsCheckbox(); if(!node) return;
+    if(node.checked!==percentUnits) node.checked=percentUnits;
+    // Подсказка объясняет ОБА состояния: без неё непонятно, что именно
+    // переключает галочка, а «%/время» читается неоднозначно.
+    node.title=percentUnits
+      ? "Скорости показаны в процентах шкалы за игровую минуту и час. Снять — показать килокалории, миллилитры и единицы."
+      : "Скорости показаны в килокалориях, миллилитрах и единицах. Поставить — показать проценты шкалы за минуту и час.";
   }
   function renderCard(key){
     var s=scale(key); if(!s) return "";
@@ -1001,12 +1060,22 @@
     });
     if(!inner) inner="<div class='stomachAreaEmpty'>Пищеварение пусто. ПКМ — употребить предмет.</div>";
 
-    // Общая динамика усвоения — в ФИЗИЧЕСКИХ величинах, как и шкалы в карточках:
-    // «+10 ккал/мин» игрок сверяет с этикеткой еды, а «+21 ед./мин» — ни с чем.
+    // Общая динамика усвоения — в тех же единицах, что и шкалы: по умолчанию в
+    // ПРОЦЕНТАХ (галочка «%/время»), без неё — в физических величинах, как и
+    // раньше («+10 ккал/мин» игрок сверяет с этикеткой еды).
     var energyPerMinute=num(d.energyPerMinute), hydrationPerMinute=num(d.hydrationPerMinute);
     var dynamics=[];
-    if(energyPerMinute>0) dynamics.push("+"+fmt(energyPerMinute/2,1)+" ккал/мин");
-    if(hydrationPerMinute>0) dynamics.push("+"+fmt(hydrationPerMinute*0.3,0)+" мл/мин");
+    if(percentUnits){
+      // Единицы шкалы за минуту → проценты. Потолки берутся из ТЕХ ЖЕ полей
+      // домена, что и у карточек шкал, поэтому вторых констант не заводится.
+      var energyMax=num((valuesFor("energy")||{}).maximum)||10000;
+      var hydrationMax=num((valuesFor("hydration")||{}).maximum)||10000;
+      if(energyPerMinute>0) dynamics.push("+"+fmt(energyPerMinute/energyMax*100,3)+"%/мин энергии");
+      if(hydrationPerMinute>0) dynamics.push("+"+fmt(hydrationPerMinute/hydrationMax*100,3)+"%/мин жидкости");
+    } else {
+      if(energyPerMinute>0) dynamics.push("+"+fmt(energyPerMinute/2,1)+" ккал/мин");
+      if(hydrationPerMinute>0) dynamics.push("+"+fmt(hydrationPerMinute*0.3,0)+" мл/мин");
+    }
     var dynamicsHtml=dynamics.length
       ? "<span class='stomachDynamics'>Усвоение: "+dynamics.join(", ")+"</span>"
       : "<span class='stomachDynamics'>Усвоение: —</span>";
@@ -1225,6 +1294,9 @@
 
   function render(){
     if(!body||!snapshot||!v()) return;
+    // Галочка синхронизируется ДО разметки: от неё зависит формат каждой строки, и
+    // переключение обязано перерисовать тело тем же проходом.
+    renderPercentUnits();
     var markup=(v().SCALES||[]).map(function(s){return renderCard(s.key);}).join("");
     // Блок пищеварения — ПЕРВЫМ: он во всю ширину, и шкалы выстраиваются под ним.
     markup=stomachMarkup()+markup;
@@ -1269,6 +1341,10 @@
       if(snapshot&&message.digestion) snapshot.digestion=message.digestion;
       if(Array.isArray(message.consumables)) snapshot.consumables=message.consumables;
       if(message.daylight) snapshot.daylight=message.daylight;
+      // Галочка «%/время» — из НАСТРОЕК Хоста: страница лишь рисует то, что
+      // реально сохранено. Без этой строки после перезапуска галочка показывала бы
+      // состояние по умолчанию, а числа — присланные, и они разошлись бы.
+      if(typeof message.percentUnits==="boolean") percentUnits=message.percentUnits;
       // Признак маршрута приходит РЯДОМ со снимком и должен пережить полное
       // обновление: без этого «покой» возвращался на каждом снимке.
       applyRoute(message);
@@ -1343,6 +1419,23 @@
       if(!node) return;
       send({action:"use_stomach_item",itemId:node.getAttribute("data-use-item")||""});
       hideMenu();
+    });
+
+    // ── Галочка «%/время» ───────────────────────────────────────────────────
+    //
+    // Узел СТАТИЧНЫЙ (в шапке, вне тела монитора), поэтому обработчик вешается
+    // один раз. Страница НЕ хранит настройку: она сообщает о щелчке Хосту, а тот
+    // пишет файл настроек и возвращает снимок с фактическим значением — тот же
+    // путь, по которому живут раскрытые разделы сайдбара.
+    //
+    // Локальное значение ставится СРАЗУ (оптимистично): ждать снимок до секунды
+    // игрок воспринимал бы как «галочка не работает». Пришедший снимок всё равно
+    // перезапишет его фактическим значением — расхождение живёт доли секунды.
+    var toggle=percentUnitsCheckbox();
+    if(toggle) toggle.addEventListener("change",function(){
+      percentUnits=!!toggle.checked;
+      send({action:"set_percent_units",value:percentUnits});
+      render();
     });
 
     // ── Окно «Содержимое пищеварения» ───────────────────────────────────────
