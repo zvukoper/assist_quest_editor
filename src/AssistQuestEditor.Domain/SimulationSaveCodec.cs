@@ -468,6 +468,15 @@ public static class SimulationSaveCodec
             writer.Write(conditions.RandomSequence);
         }
 
+        // v17: накопитель дробных порций броска устойчивости. Без него перезапуск
+        // обнулял бы уже накопленную долю десятиминутной порции, и шанс
+        // «не получить порцию штрафа» зависел бы от того, как часто игрок
+        // сохраняется.
+        if (formatVersion >= 17)
+        {
+            WriteDouble(writer, conditions.ExhaustionRollPending);
+        }
+
         if (formatVersion >= 12)
         {
             WriteDouble(writer, conditions.CaffeineLoadMg);
@@ -499,16 +508,33 @@ public static class SimulationSaveCodec
         // ставки НЕ пишутся: они выводятся из состава при загрузке
         // (<see cref="CharacterDigestion.Normalize"/>). Иначе файл «запомнил» бы
         // скорости на момент записи, и пищеварение после загрузки вело бы себя
-        // иначе, чем в непрерывной игре. Вместе с ними пишутся признаки
-        // метаболизма — без них ставки после загрузки пересчитались бы по
-        // «нормальной» пропускной способности и разъехались с игрой.
+        // иначе, чем в непрерывной игре.
+        //
+        // v17: вместо признаков «повышенный/пониженный» пишется САМ ПРОЦЕНТ
+        // метаболизма. Флаги фиксировали скорость на моменте приёма еды и давали
+        // эксплоит; теперь пищеварение пересчитывается под текущее состояние на
+        // каждом шаге, поэтому в файле достаточно последнего значения.
         if (formatVersion >= 16)
         {
             var portions = conditions.Stomach.Portions ??
                 Array.Empty<StomachPortion>();
 
-            writer.Write(conditions.Stomach.ElevatedMetabolism);
-            writer.Write(conditions.Stomach.ReducedMetabolism);
+            if (formatVersion >= 17)
+            {
+                WriteDouble(writer, conditions.Stomach.MetabolismPercent);
+            }
+            else
+            {
+                // Запись v16 в точности: два признака, затем счётчик. Признаки
+                // выводятся из процента по тем же границам калибровки, поэтому
+                // переходный файл читается обратно без потери поправки.
+                var percent = conditions.Stomach.MetabolismPercent;
+                writer.Write(
+                    percent >= CharacterVitalsEngine.ElevatedMetabolismPercent);
+                writer.Write(
+                    percent < CharacterVitalsEngine.ReducedMetabolismPercent);
+            }
+
             writer.Write(portions.Count);
             foreach (var portion in portions)
             {
@@ -587,6 +613,14 @@ public static class SimulationSaveCodec
             };
         }
 
+        if (formatVersion >= 17)
+        {
+            state = state with
+            {
+                ExhaustionRollPending = ReadDouble(reader)
+            };
+        }
+
         if (formatVersion >= 12)
         {
             state = state with
@@ -620,8 +654,23 @@ public static class SimulationSaveCodec
 
         if (formatVersion >= 16)
         {
-            var elevated = reader.ReadBoolean();
-            var reduced = reader.ReadBoolean();
+            // v16 писал ДВА признака метаболизма ПЕРЕД счётчиком порций — они
+            // читаются здесь, чтобы порядок полей старого файла не поехал.
+            double metabolismPercent;
+            if (formatVersion >= 17)
+            {
+                metabolismPercent = ReadDouble(reader);
+            }
+            else
+            {
+                var elevated = reader.ReadBoolean();
+                var reduced = reader.ReadBoolean();
+                metabolismPercent = reduced
+                    ? CharacterVitalsEngine.ReducedMetabolismPercent
+                    : elevated
+                        ? CharacterVitalsEngine.ElevatedMetabolismPercent
+                        : CharacterVitalsTuning.DefaultMetabolismPercent;
+            }
 
             var portions = new List<StomachPortion>();
             var portionCount = reader.ReadInt32();
@@ -642,8 +691,7 @@ public static class SimulationSaveCodec
                 Stomach = state.Stomach with
                 {
                     Portions = portions,
-                    ElevatedMetabolism = elevated,
-                    ReducedMetabolism = reduced
+                    MetabolismPercent = metabolismPercent
                 }
             };
         }

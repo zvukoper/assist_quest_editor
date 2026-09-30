@@ -46,8 +46,11 @@ public sealed record StomachPortion(
     // у воды энергия остаётся НУЛЕВОЙ (иначе вода заводила бы восстановление
     // энергии, и в пищеварении появлялась бы «чужая» шкала).
     //
-    // Фиксируется НА ПОРЦИИ в момент приёма, а не читается заново: иначе уже
-    // съеденное «дорожало» бы при каждом изменении метаболизма.
+    // ВЫЧИСЛЯЕМОЕ поле, а не зафиксированное: его переписывает
+    // <see cref="CharacterDigestion.Materialize"/> под ТЕКУЩИЙ метаболизм на
+    // каждом шаге пищеварения. Раньше оно застывало на моменте приёма, и тот же
+    // эксплоит, что закрыт у скорости, работал на объёме: поесть при 80% и
+    // получить +0,5% навсегда, потом упасть до 20%.
     double YieldBonusFraction,
     double PerGameSecond)
 {
@@ -206,24 +209,25 @@ public sealed record StomachContents(
         Array.Empty<StomachPortion>();
 
     /// <summary>
-    /// Метаболизм на момент расчёта ставок: он меняет ПРОПУСКНУЮ СПОСОБНОСТЬ
-    /// (повышенный — в 2,5 раза быстрее, пониженный — в 1,5 раза медленнее).
+    /// ТЕКУЩИЙ метаболизм, влияющий на пищеварение ПРЯМО СЕЙЧАС, %.
     ///
-    /// Хранится при содержимом, а не пересчитывается на лету, потому что ставки
-    /// ВЫВОДЯТСЯ из состава (<see cref="CharacterDigestion.Distribute"/>), а
-    /// состав обязан знать, с какой пропускной способностью он считается. Иначе
-    /// монитор после загрузки сохранения показал бы скорость «нормального»
-    /// метаболизма, тогда как в шкалы еда шла бы с поправкой.
+    /// Раньше здесь лежала пара флагов (<c>ElevatedMetabolism</c> и
+    /// <c>ReducedMetabolism</c>), снятых в МОМЕНТ ПРИЁМА пищи, и ставки порций
+    /// оставались такими навсегда. Это давало эксплоит: игрок знал, что сейчас
+    /// примет препарат, роняющий метаболизм, — и ел заранее, при высоком
+    /// метаболизме. Еда получала «сохранённую» скорость ×2,5 и отрабатывала по
+    /// ней при нулевом метаболизме, то есть смысл механики терялся.
+    ///
+    /// Теперь хранится ЧИСЛО, и движок подаёт его на КАЖДОМ шаге
+    /// (<see cref="CharacterDigestion.Advance"/>): состав пересчитывается под
+    /// фактическое состояние, и заранее «запасённой» скорости не существует.
     /// </summary>
-    public bool ElevatedMetabolism { get; init; }
-
-    public bool ReducedMetabolism { get; init; }
+    public double MetabolismPercent { get; init; } =
+        CharacterVitalsTuning.DefaultMetabolismPercent;
 
     /// <summary>Во сколько раз метаболизм меняет пропускную способность.</summary>
     public double ThroughputFactor =>
-        CharacterDigestion.MetabolismThroughputFactor(
-            ElevatedMetabolism,
-            ReducedMetabolism);
+        CharacterDigestion.MetabolismThroughputFactor(MetabolismPercent);
 
     /// <summary>
     /// Id предмета для ПОРЦИЙ ИЗ СТАРЫХ СОХРАНЕНИЙ (форматы до v15).
@@ -516,8 +520,7 @@ public static class CharacterDigestion
         double portionMilliliters,
         double waterMilliliters,
         double kilocalories,
-        bool elevatedMetabolism,
-        bool reducedMetabolism)
+        double metabolismPercent)
     {
         var contents = (current ?? StomachContents.Empty).Normalize();
 
@@ -557,20 +560,12 @@ public static class CharacterDigestion
             MassRemaining: mass,
             KilocaloriesTotal: kcal,
             WaterMillilitersTotal: water,
-            // Метаболизм в момент приёма: повышенный вытянет из той же еды на
-            // 0,5% шкалы больше, пониженный — на столько же меньше. Число
-            // фиксируется на порции, а не читается заново: прежняя модель вела
-            // себя так же, а иначе уже съеденное «дорожало» бы при каждом
-            // изменении метаболизма.
-            YieldBonusFraction: MetabolismYieldBonus(
-                elevatedMetabolism,
-                reducedMetabolism),
+            // Текущий метаболизм подставляется БЕЗ фиксации: поле переписывается
+            // при каждом пересчёте состава (см. Materialize).
+            YieldBonusFraction: MetabolismYieldBonus(metabolismPercent),
             PerGameSecond: 0d));
 
-        return Materialize(
-            portions,
-            elevatedMetabolism,
-            reducedMetabolism);
+        return Materialize(portions, metabolismPercent);
     }
 
     /// <summary>
@@ -587,7 +582,8 @@ public static class CharacterDigestion
     /// </summary>
     public static DigestionStep Advance(
         StomachContents current,
-        double gameSeconds)
+        double gameSeconds,
+        double metabolismPercent)
     {
         var contents = (current ?? StomachContents.Empty).Normalize();
         var seconds = Math.Max(
@@ -632,10 +628,7 @@ public static class CharacterDigestion
         }
 
         return new DigestionStep(
-            Materialize(
-                portions,
-                contents.ElevatedMetabolism,
-                contents.ReducedMetabolism),
+            Materialize(portions, metabolismPercent),
             energyGain,
             hydrationGain);
     }
@@ -650,13 +643,13 @@ public static class CharacterDigestion
     /// </summary>
     private static StomachContents Materialize(
         IReadOnlyList<StomachPortion> portions,
-        bool elevatedMetabolism,
-        bool reducedMetabolism)
+        double metabolismPercent,
+        bool applyMetabolismYield = true)
     {
         var distributed = Distribute(
             portions,
-            elevatedMetabolism,
-            reducedMetabolism);
+            metabolismPercent,
+            applyMetabolismYield);
 
         var energy = 0d;
         var hydration = 0d;
@@ -681,8 +674,7 @@ public static class CharacterDigestion
             Math.Clamp(mass / CapacityMilliliters, 0d, 1d))
         {
             Portions = distributed,
-            ElevatedMetabolism = elevatedMetabolism,
-            ReducedMetabolism = reducedMetabolism
+            MetabolismPercent = metabolismPercent
         };
     }
 
@@ -715,8 +707,8 @@ public static class CharacterDigestion
     /// </summary>
     private static IReadOnlyList<StomachPortion> Distribute(
         IReadOnlyList<StomachPortion> portions,
-        bool elevatedMetabolism,
-        bool reducedMetabolism)
+        double metabolismPercent,
+        bool applyMetabolismYield = true)
     {
         if (portions.Count == 0)
             return Array.Empty<StomachPortion>();
@@ -737,7 +729,17 @@ public static class CharacterDigestion
 
         var throughput =
             DryThroughputMillilitersPerSecond *
-            MetabolismThroughputFactor(elevatedMetabolism, reducedMetabolism);
+            MetabolismThroughputFactor(metabolismPercent);
+
+        // Надбавка объёма ПЕРЕСЧИТЫВАЕТСЯ здесь, а не берётся из порции: именно
+        // этот вызов обслуживает каждый шаг пищеварения, поэтому текущий
+        // метаболизм правит и объёмом, и скоростью — без «запасённой» величины.
+        //
+        // Исключение — порция из СТАРОГО формата: там суммы шкал уже были
+        // посчитаны вместе с бонусом, и вторая надбавка удвоила бы эффект.
+        var yieldBonus = applyMetabolismYield
+            ? MetabolismYieldBonus(metabolismPercent)
+            : 0d;
 
         foreach (var portion in portions)
         {
@@ -748,7 +750,11 @@ public static class CharacterDigestion
                 ? 0d
                 : throughput * mass * lightness / massTotal;
 
-            result.Add(portion with { PerGameSecond = rate });
+            result.Add(portion with
+            {
+                PerGameSecond = rate,
+                YieldBonusFraction = yieldBonus
+            });
         }
 
         return result;
@@ -801,22 +807,22 @@ public static class CharacterDigestion
                 PerGameSecond = 0d
             });
         }
-
         // Фолбэк для СТАРЫХ сохранений (v13/v14): там порций ещё не было, и
         // пищеварение описывалось одними суммами. Превращаем их в одну порцию под
         // Id последнего предмета — иначе загрузка обнулила бы пищеварение, то есть
         // игрок потерял бы уже съеденное.
-        if (portions.Count == 0)
+        var legacy = portions.Count == 0;
+        if (legacy)
         {
-            var legacy = LegacyPortion(contents);
-            if (legacy is not null)
-                portions.Add(legacy);
+            var legacyPortion = LegacyPortion(contents);
+            if (legacyPortion is not null)
+                portions.Add(legacyPortion);
         }
 
         return Materialize(
             portions,
-            contents.ElevatedMetabolism,
-            contents.ReducedMetabolism);
+            contents.MetabolismPercent,
+            applyMetabolismYield: !legacy);
     }
 
     /// <summary>
@@ -848,7 +854,8 @@ public static class CharacterDigestion
             KilocaloriesTotal: KilocaloriesFromUnits(energy),
             WaterMillilitersTotal: MillilitersFromUnits(hydration),
             // У порции из старого формата бонуса метаболизма нет: там суммы шкал
-            // УЖЕ были посчитаны с его учётом, и вторая поправка удвоила бы эффект.
+            // УЖЕ были посчитаны с его учётом, и вторая поправка удвоила бы эффект
+            // (за это отвечает <c>applyMetabolismYield</c> в Materialize).
             YieldBonusFraction: 0d,
             PerGameSecond: 0d);
     }
@@ -872,13 +879,14 @@ public static class CharacterDigestion
     /// <summary>
     /// ВО СКОЛЬКО РАЗ метаболизм меняет пропускную способность. Повышенный —
     /// в 2,5 раза быстрее, пониженный — в 1,5 раза медленнее.
+    ///
+    /// Берёт ПРОЦЕНТ, а не флаги: ставки пересчитываются на каждом шаге под
+    /// фактическое состояние (см. <see cref="StomachContents.MetabolismPercent"/>).
     /// </summary>
-    public static double MetabolismThroughputFactor(
-        bool elevatedMetabolism,
-        bool reducedMetabolism) =>
-        elevatedMetabolism
+    public static double MetabolismThroughputFactor(double metabolismPercent) =>
+        metabolismPercent >= CharacterVitalsTuning.ElevatedMetabolismPercent
             ? 1d / ElevatedMetabolismSpeedFactor
-            : reducedMetabolism
+            : metabolismPercent < CharacterVitalsTuning.ReducedMetabolismPercent
                 ? 1d / ReducedMetabolismSpeedFactor
                 : 1d;
 
@@ -886,13 +894,14 @@ public static class CharacterDigestion
     /// ВО СКОЛЬКО РАЗ метаболизм меняет ОБЪЁМ восстановления из той же еды,
     /// как ДОЛЯ МАКСИМУМА ШКАЛЫ. Повышенный даёт +0,5% шкалы, пониженный
     /// отнимает столько же.
+    ///
+    /// Величина ОСТАЁТСЯ пороговой (а не растёт с процентом, как надбавка к
+    /// здоровью): задана автором именно как «+0,5% объёма при повышенном».
     /// </summary>
-    private static double MetabolismYieldBonus(
-        bool elevatedMetabolism,
-        bool reducedMetabolism) =>
-        elevatedMetabolism
+    private static double MetabolismYieldBonus(double metabolismPercent) =>
+        metabolismPercent >= CharacterVitalsTuning.ElevatedMetabolismPercent
             ? ElevatedMetabolismVolumeBonus
-            : reducedMetabolism
+            : metabolismPercent < CharacterVitalsTuning.ReducedMetabolismPercent
                 ? -ReducedMetabolismVolumePenalty
                 : 0d;
 
@@ -1062,11 +1071,12 @@ public static class CharacterDigestionReport
     /// Список возвращает домен, а не интерфейс: правило «повышенный метаболизм
     /// ускоряет в 2,5 раза» задано здесь, и вторая его версия в JavaScript
     /// неизбежно разошлась бы с этой.
+    ///
+    /// Берётся ТЕКУЩИЙ метаболизм: он же правит ставками на каждом шаге, поэтому
+    /// подсказка и начисление не могут разойтись даже через секунду после еды.
     /// </summary>
     public static IReadOnlyList<DigestionFactor> MetabolismFactors(
-        double metabolismPercent,
-        bool elevatedMetabolism,
-        bool reducedMetabolism)
+        double metabolismPercent)
     {
         var result = new List<DigestionFactor>();
 
@@ -1084,7 +1094,8 @@ public static class CharacterDigestionReport
             " мл/ч воды",
             Useful: true));
 
-        if (elevatedMetabolism)
+        if (metabolismPercent >=
+            CharacterVitalsTuning.ElevatedMetabolismPercent)
         {
             result.Add(new DigestionFactor(
                 "Метаболизм " +
@@ -1097,7 +1108,8 @@ public static class CharacterDigestionReport
                 // Быстрее усваивается и больше восстанавливается — игроку выгодно.
                 Useful: true));
         }
-        else if (reducedMetabolism)
+        else if (metabolismPercent <
+            CharacterVitalsTuning.ReducedMetabolismPercent)
         {
             result.Add(new DigestionFactor(
                 "Метаболизм " +

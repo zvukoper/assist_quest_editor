@@ -30,6 +30,14 @@ public static class CharacterVitalsEngine
     private const double SecondsPerGameHour = 3600d;
     private const double SecondsPerGameQuarterHour = 900d;
 
+    /// <summary>Сколько ЧЕТВЕРТЕЙ ЧАСА в часе. Калибровка задаёт часть скоростей
+    /// как «% за 15 минут» (так их называл автор), а движок считает в «% в час».</summary>
+    private const double QuarterHoursPerHour = 4d;
+
+    /// <summary>Сколько промежутков по 10 минут в часе — перевод «% за 10 минут»
+    /// (жажда, обезвоживание) в «% в час».</summary>
+    private const double TenMinuteSpansPerHour = 6d;
+
     // ── ЧИСЛА КАЛИБРОВКИ ────────────────────────────────────────────────────
     //
     // Все значения ниже — ПСЕВДОНИМЫ констант из <see cref="CharacterVitalsTuning"/>,
@@ -598,12 +606,17 @@ public static class CharacterVitalsEngine
             if (!HasEffect(state, "power_surge"))
             {
                 // Пищеварение: желудок отдаёт шкалам ровно то, что успело
-                // усвоиться за шаг. Именно здесь восстановление становится
+                // усвоить за шаг. Именно здесь восстановление становится
                 // ПОСТЕПЕННЫМ — еда и питьё больше не начисляют энергию и
                 // жидкость мгновенно (см. CharacterDigestion).
+                //
+                // Метаболизм подаётся КАЖДЫЙ ШАГ: он правит и скоростью
+                // усвоения, и надбавкой объёма, поэтому «запасённой» при приёме
+                // скорости не существует (см. StomachContents.MetabolismPercent).
                 var digestion = CharacterDigestion.Advance(
                     state.Stomach,
-                    stepSeconds);
+                    stepSeconds,
+                    PlayerConditionScale.ToPercent(vitals.Metabolism));
 
                 state = state with
                 {
@@ -1034,7 +1047,7 @@ public static class CharacterVitalsEngine
 
                 UpdateResilienceAndMetabolism(
                     ref vitals,
-                    state,
+                    ref state,
                     stepSeconds,
                     sleeping,
                     playerMoving);
@@ -2251,6 +2264,30 @@ public static class CharacterVitalsEngine
     }
 
     /// <summary>
+    /// КАКАЯ ДОЛЯ надбавки за «свойство выше номинала» заработана при данном
+    /// проценте шкалы: 0 при номинале и ниже, 1 при
+    /// <see cref="CharacterVitalsTuning.ElevatedBonusFullPercent"/> и выше,
+    /// линейно между ними.
+    ///
+    /// Одна функция на метаболизм И устойчивость: правило авторское («выше
+    /// нормы идёт надбавка») одинаково для обоих, и вторая его версия неизбежно
+    /// разошлась бы с первой при правке границ.
+    /// </summary>
+    private static double ElevatedBonusShare(double percent)
+    {
+        var span =
+            CharacterVitalsTuning.ElevatedBonusFullPercent -
+            DefaultMetabolismPercent;
+
+        return span <= 0d
+            ? percent > DefaultMetabolismPercent ? 1d : 0d
+            : Math.Clamp(
+                (percent - DefaultMetabolismPercent) / span,
+                0d,
+                1d);
+    }
+
+    /// <summary>
     /// Скорость восстановления здоровья в процентах за игровой час.
     ///
     /// Модель (задана автором): базово 1% за 10 игровых минут = 6% в час, ровно
@@ -2259,6 +2296,11 @@ public static class CharacterVitalsEngine
     /// ускоряет восстановление, не удорожая его. «Бык» даёт ПЛОСКИЕ +2% на тех же
     /// десяти минутах. Стресс замедляет (×0,75), а кумулятивный стресс — ещё
     /// сильнее (×0,5).
+    ///
+    /// Надбавка за свойство выше нормы РАСТЁТ С ПРОЦЕНТОМ (см.
+    /// <see cref="ElevatedBonusShare"/>): на 61% она нулевая, на 75% — полная.
+    /// Так «процент шкалы влияет на величину восстановления» становится правдой
+    /// буквально, а не только на словах.
     ///
     /// Стоимость восстановления (1 энергия и 2 жидкости на единицу здоровья)
     /// кладётся на скорость не здесь, а в <see cref="RatesFrom"/>: подсказке
@@ -2285,16 +2327,24 @@ public static class CharacterVitalsEngine
                 vitals,
                 state);
 
-        // «Норма» обоих свойств — 60%: выше нормы бонус, ниже — без бонуса.
+        // «Норма» обоих свойств — 60%: выше нормы идёт надбавка, ниже — нет.
+        //
+        // ВЕЛИЧИНА НАДБАВКИ РАСТЁТ С ПРОЦЕНТОМ (задано автором: «процент шкалы
+        // влияет на величину, на которую восстанавливается здоровье»). Прежняя
+        // модель включала её ФЛАГОМ: 61% и 100% давали ровно одно и то же, и
+        // переход через номинал читался как щелчок, а не как плавный рост.
+        //
+        // Шкала роста — от номинала 60% до <see cref="ElevatedBonusFullPercent"/>:
+        // на 60% надбавки нет, на 75% она полная, выше 75% не растёт (там уже
+        // работает пороговый эффект «выше коридора нормы»).
+        //
         // Бонус задан в «процентах за десять минут», поэтому переводится в час
         // тем же множителем, что и база (иначе +1% превратился бы в +1% в ЧАС и
         // бонус был бы в шесть раз слабее задуманного).
-        var elevatedCount = 0;
-        if (metabolism > DefaultMetabolismPercent)
-            elevatedCount++;
-        if (resilience > DefaultResiliencePercent)
-            elevatedCount++;
-        value += elevatedCount *
+        value += ElevatedBonusShare(metabolism) *
+            HealthRegenElevatedBonusPercent *
+            60d / HealthRegenGameMinutesPerPercent;
+        value += ElevatedBonusShare(resilience) *
             HealthRegenElevatedBonusPercent *
             60d / HealthRegenGameMinutesPerPercent;
 
@@ -2391,9 +2441,20 @@ public static class CharacterVitalsEngine
         }
     }
 
+    /// <summary>
+    /// КАКАЯ ДОЛЯ ШКАЛЫ УСТОЙЧИВОСТИ превращается в ШАНС пропустить порцию
+    /// истощения: «R/2 процентов шанса не получить очередную порцию» (задано
+    /// автором). Сама величина делителя — в калибровке, чтобы монитор мог
+    /// назвать игроку это число: это самый сильный эффект устойчивости в игре,
+    /// и раньше он не был виден ни в одной подписи.
+    /// </summary>
+    private static double ExhaustionSkipChancePercent(double resiliencePercent) =>
+        resiliencePercent /
+        CharacterVitalsTuning.ExhaustionResilienceDivisor;
+
     private static void UpdateResilienceAndMetabolism(
         ref PlayerVitalsState vitals,
-        PlayerConditionState state,
+        ref PlayerConditionState state,
         double gameSeconds,
         bool sleeping,
         bool playerMoving)
@@ -2416,11 +2477,19 @@ public static class CharacterVitalsEngine
                 : CharacterVitalsTuning
                     .ResilienceReturnPercentPerQuarterHour;
 
+        // Под «Бомжом» устойчивость ТОЛЬКО СНИЖАЕТСЯ до потолка (задано автором:
+        // «не поднимается выше 50% и снижается до 50% быстрее в 2 раза»).
+        // Прежний двусторонний Math.Clamp ещё и ПОДНИМАЛ шкалу к 50%, если она
+        // упала ниже (например, от обезвоживания) — дебафф работал как бафф.
         var resilienceDelta =
             Math.Clamp(
                 targetResilience - resilience,
-                -resilienceRatePerQuarter * quarters,
-                resilienceRatePerQuarter * quarters);
+                HasEffect(state, "bum")
+                    ? -resilienceRatePerQuarter * quarters
+                    : -resilienceRatePerQuarter * quarters,
+                HasEffect(state, "bum")
+                    ? 0d
+                    : resilienceRatePerQuarter * quarters);
 
         var metabolism =
             PlayerConditionScale.ToPercent(
@@ -2471,10 +2540,23 @@ public static class CharacterVitalsEngine
                     : 0d;
             if (perTenMinutesDelta > 0d)
             {
-                metabolismDelta -=
-                    perTenMinutesDelta *
-                    // «За 10 минут» — это 6 раз по 10 минут в игровом часу.
-                    (gameSeconds / 600d);
+                // ШАНС УСТОЙЧИВОСТИ на ПОРЦИЮ ШТРАФА (задано автором: «шанс не
+                // получить очередную порцию негативного эффекта»). Бросок
+                // делается на каждую десятиминутную порцию, а не на факт
+                // наличия дебаффа: дебафф — это ПОРОГОВОЕ состояние, и бросок
+                // на него заставлял бы значок мигать несколько раз в секунду.
+                var perTenMinutes = gameSeconds / 600d;
+                if (!SkipExhaustionPortion(
+                        ref state,
+                        perTenMinutes,
+                        ExhaustionSkipChancePercent(
+                            PlayerConditionScale.ToPercent(
+                                vitals.Resilience))))
+                {
+                    metabolismDelta -=
+                        perTenMinutesDelta *
+                        perTenMinutes;
+                }
             }
         }
 
@@ -2491,9 +2573,12 @@ public static class CharacterVitalsEngine
                 EffectiveHydrationMaximum(vitals, state)) <
             DehydrationThresholdPercent)
         {
+            // СТРОГО 1:1 с НОРМОЙ расхода жидкости — без множителя метаболизма.
+            // Прежний множитель ускорял падение на 25% при повышенном
+            // метаболизме: игрок, выпивший энергетик, терял устойчивость
+            // быстрее, хотя автор задал простое «падает вместе с расходом».
             var hydrationDrainPercentPerHour =
-                HydrationConsumptionPercentPerHour(playerMoving) *
-                MetabolismConsumptionFactor(vitals, state);
+                HydrationConsumptionPercentPerHour(playerMoving);
 
             resilienceDelta -=
                 hydrationDrainPercentPerHour *
@@ -2519,6 +2604,48 @@ public static class CharacterVitalsEngine
                         0d,
                         100d))
         };
+    }
+
+    /// <summary>
+    /// Бросок устойчивости на ПОРЦИЮ истощения.
+    ///
+    /// В отличие от <see cref="SkipNegativeRoll"/>, этот бросок ОДИН на всю
+    /// порцию (а не на каждую дробную единицу внутри неё) и умеет работать с
+    /// долями: счётчик накапливает дробное число порций, а когда набирается
+    /// целая — бросается кубик. Иначе шаг в 250 мс давал бы по четыре броска в
+    /// секунду, и вероятность пропуска не имела бы отношения к заданным «R/2».
+    ///
+    /// Возвращает <c>true</c>, если порция ПРОПУЩЕНА целиком.
+    /// </summary>
+    private static bool SkipExhaustionPortion(
+        ref PlayerConditionState state,
+        double portions,
+        double chancePercent)
+    {
+        if (portions <= 0d)
+            return false;
+
+        var pending = state.ExhaustionRollPending + portions;
+        var whole = Math.Floor(pending);
+
+        if (whole <= 0d)
+        {
+            state = state with { ExhaustionRollPending = pending };
+            return false;
+        }
+
+        state = state with { ExhaustionRollPending = pending - whole };
+
+        var skipped = 0d;
+        for (var index = 0d; index < whole; index += 1d)
+        {
+            if (SkipNegativeRoll(ref state, chancePercent))
+                skipped += 1d;
+        }
+
+        // Пропущенной считается только ЦЕЛАЯ порция: дробить штраф не на что —
+        // либо игрок получает свои −1%/−2%, либо не получает вовсе.
+        return skipped >= whole;
     }
 
     /// <summary>
@@ -2802,6 +2929,20 @@ public static class CharacterVitalsEngine
                 : CharacterVitalsTuning.DeepNightFatigueMultiplier;
     }
 
+    /// <summary>
+    /// Скорость изменения УСТОЙЧИВОСТИ, ПРОЦЕНТОВ ЗА ИГРОВОЙ ЧАС.
+    ///
+    /// ЕДИНАЯ РАЗМЕРНОСТЬ — ЭТО ОБЯЗАТЕЛЬНОЕ УСЛОВИЕ. Раньше метод возвращал
+    /// СМЕСЬ: возврат к номиналу — «% за четверть часа» (из
+    /// <see cref="CharacterVitalsTuning.ResilienceReturnPercentPerQuarterHour"/>),
+    /// а обезвоживание — уже «% за минуту». Потребитель делил результат на 60,
+    /// считая его часовым, поэтому:
+    ///   • возврат оказывался занижен ровно в 4 раза;
+    ///   • падение от обезвоживания — в 60 раз, и его вклад НЕ ПЕРЕКРЫВАЛ
+    ///     возврат, из-за чего подсказка показывала РОСТ шкалы там, где она
+    ///     на самом деле падает.
+    /// Теперь все слагаемые — «% в час», и подсказка сходится с начислением.
+    /// </summary>
     private static double ResilienceDirection(
         PlayerVitalsState vitals,
         PlayerConditionState state,
@@ -2814,37 +2955,53 @@ public static class CharacterVitalsEngine
             HasEffect(state, "bum")
                 ? CharacterVitalsTuning.BumResilienceCapPercent
                 : DefaultResiliencePercent;
+        // Четвертьчасовые скорости приводятся к часовым ОДНИМ множителем, а не
+        // переписыванием констант: в калибровке они и должны читаться как
+        // «% за 15 минут» — так их задавал автор.
         var rate =
-            HasEffect(state, "bum")
+            (HasEffect(state, "bum")
                 ? CharacterVitalsTuning
                     .ResilienceBumReturnPercentPerQuarterHour
                 : CharacterVitalsTuning
-                    .ResilienceReturnPercentPerQuarterHour;
+                    .ResilienceReturnPercentPerQuarterHour) *
+            CharacterVitalsEngine.QuarterHoursPerHour;
 
-        var direction =
-            Math.Clamp(
-                target - current,
-                -rate,
-                rate);
+        // «Бомж» ТОЛЬКО ТЯНЕТ УСТОЙЧИВОСТЬ ВНИЗ (задано автором: «устойчивость не
+        // поднимается выше 50% и СНИЖАЕТСЯ до 50% быстрее в 2 раза»). Прежнее
+        // Math.Clamp работало в обе стороны: шкала, упавшая ниже 50%
+        // (например, от обезвоживания), ПОЛЗЛА ОБРАТНО ВВЕРХ — чего дебафф не
+        // делает.
+        var direction = Math.Clamp(
+            target - current,
+            HasEffect(state, "bum") ? -rate : 0d,
+            rate);
 
-        // «Обезвоживание»: устойчивость падает 1:1 с расходом жидкости (задано
-        // автором) в ДОПОЛНЕНИЕ к возврату к номиналу. Подсказка обязана
-        // показать это тем же числом, что и движок: скорость берётся из нормы
-        // расхода жидкости и переводится из «% в час» в «% в минуту».
+        // «Обезвоживание»: устойчивость падает 1:1 с нормой расхода жидкости
+        // (задано автором) в ДОПОЛНЕНИЕ к возврату.
+        //
+        // Без множителя метаболизма: правило задано как «1:1 с расходом
+        // жидкости», и ускорять падение при повышенном метаболизме автор не
+        // заказывал. Опасное состояние не должно зависеть от того, что игрок
+        // только что выпил энергетик.
         if (Percent(
                 vitals.Hydration,
                 EffectiveHydrationMaximum(vitals, state)) <
             DehydrationThresholdPercent)
         {
             direction -=
-                HydrationConsumptionPercentPerHour(moving) *
-                MetabolismConsumptionFactor(vitals, state) /
-                60d;
+                HydrationConsumptionPercentPerHour(moving);
         }
 
         return direction;
     }
 
+    /// <summary>
+    /// Скорость изменения МЕТАБОЛИЗМА, ПРОЦЕНТОВ ЗА ИГРОВОЙ ЧАС.
+    ///
+    /// Раньше возвращал смесь размерностей (возврат и штраф истощения — «за
+    /// четверть часа», жажда — «за минуту»), а потребитель делил результат на 60.
+    /// Теперь все слагаемые — «% в час» (см. <see cref="ResilienceDirection"/>).
+    /// </summary>
     private static double MetabolismDirection(
         PlayerVitalsState vitals,
         PlayerConditionState state)
@@ -2856,31 +3013,33 @@ public static class CharacterVitalsEngine
         var value =
             Math.Clamp(
                 DefaultMetabolismPercent - current,
-                -MetabolismRecoveryPercentPerHour /
-                 4d,
-                MetabolismRecoveryPercentPerHour /
-                 4d);
+                -MetabolismRecoveryPercentPerHour,
+                MetabolismRecoveryPercentPerHour);
 
         var direction =
             value -
             ExhaustionScales(state) *
-            MetabolismExhaustionPenaltyPerQuarterHour;
+            MetabolismExhaustionPenaltyPerQuarterHour *
+            CharacterVitalsEngine.QuarterHoursPerHour;
 
         // «Жажда» и «Обезвоживание» в подсказке обязаны читаться теми же
-        // числами, что и начисляются: 1% и 2% за 10 игровых минут. Делим на 15
-        // (четверть часа в минутах — 15), потому что подсказка показывает
-        // процент за ЧЕТВЕРТЬ часа, как и штраф истощения выше.
+        // числами, что и начисляются: 1% и 2% за 10 игровых минут. В часу шесть
+        // таких промежутков, поэтому множитель — шесть, а не 1,5 (1,5 давало
+        // процент за четверть часа — верный для прежней размерности, но не для
+        // этой).
         var hydrationPercent = Percent(
             vitals.Hydration,
             EffectiveHydrationMaximum(vitals, state));
-        var debuffPerQuarterHour = hydrationPercent <
+        var debuffPerHour = hydrationPercent <
             DehydrationThresholdPercent
-            ? DehydrationMetabolismPercentPerTenMinutes * 1.5d
+            ? DehydrationMetabolismPercentPerTenMinutes *
+              CharacterVitalsEngine.TenMinuteSpansPerHour
             : hydrationPercent < ThirstThresholdPercent
-                ? ThirstMetabolismPercentPerTenMinutes * 1.5d
+                ? ThirstMetabolismPercentPerTenMinutes *
+                  CharacterVitalsEngine.TenMinuteSpansPerHour
                 : 0d;
 
-        return direction - debuffPerQuarterHour;
+        return direction - debuffPerHour;
     }
 
     private static double EffectiveResiliencePercent(
@@ -3471,8 +3630,10 @@ public static class CharacterVitalsEngine
                             state.LastConsumedItemId)),
                 waterMilliliters: water,
                 kilocalories: kilocalories,
-                elevatedMetabolism: metabolism >= ElevatedMetabolismPercent,
-                reducedMetabolism: metabolism < ReducedMetabolismPercent)
+                // Метаболизм НА МОМЕНТ ПРИЁМА нужен только чтобы сразу показать
+                // верную ставку в мониторе. Дальше его переписывает КАЖДЫЙ шаг
+                // пищеварения, поэтому заранее «запасённой» скорости не бывает.
+                metabolismPercent: metabolism)
         };
     }
 

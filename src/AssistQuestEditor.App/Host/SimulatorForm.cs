@@ -602,6 +602,11 @@ public sealed class SimulatorForm : WebViewForm
     {
         var conditions = snapshot.Conditions;
         var stomach = conditions.Stomach;
+        // Метаболизм берётся ТЕКУЩИЙ: пищеварение пересчитывает ставки на каждом
+        // шаге под фактическое состояние, поэтому подсказка обязана читать то же
+        // число. Раньше здесь подавался текущий метаболизм, а ставки порций были
+        // зафиксированы при приёме еды — съел при 80%, упал до 50%, и строка
+        // продолжала обещать «×2,5».
         var metabolismPercent = PlayerConditionScale.ToPercent(
             snapshot.PlayerVitals.Metabolism);
 
@@ -636,12 +641,7 @@ public sealed class SimulatorForm : WebViewForm
             .ToArray();
 
         var factors = CharacterDigestionReport
-            .MetabolismFactors(
-                metabolismPercent,
-                elevatedMetabolism: metabolismPercent >=
-                    CharacterVitalsEngine.ElevatedMetabolismPercent,
-                reducedMetabolism: metabolismPercent <
-                    CharacterVitalsEngine.ReducedMetabolismPercent)
+            .MetabolismFactors(metabolismPercent)
             .Select(factor => new
             {
                 text = factor.Text,
@@ -713,7 +713,30 @@ public sealed class SimulatorForm : WebViewForm
             // подписывает вклады расхода. Числа заданы калибровкой — Web их не
             // повторяет, иначе подпись разошлась бы с начислением.
             reducedMetabolismPercent = CharacterVitalsEngine.ReducedMetabolismPercent,
-            elevatedMetabolismPercent = CharacterVitalsEngine.ElevatedMetabolismPercent
+            elevatedMetabolismPercent = CharacterVitalsEngine.ElevatedMetabolismPercent,
+            // НОМИНАЛЫ: раньше монитор зашивал «60» двумя литералами, и правка
+            // калибровки до него не доезжала — ровно тот дефект, ради которого
+            // 45 и 75 уже приходили полями. Теперь от домена приходит и номинал,
+            // и процент, на котором пропорциональная надбавка к здоровью
+            // становится полной (см. ElevatedBonusShare).
+            defaultMetabolismPercent = CharacterVitalsEngine.DefaultMetabolismPercent,
+            defaultResiliencePercent = CharacterVitalsEngine.DefaultResiliencePercent,
+            elevatedBonusFullPercent =
+                CharacterVitalsTuning.ElevatedBonusFullPercent,
+            // ДЕЛИТЕЛЬ ШАНСА УСТОЙЧИВОСТИ: по нему монитор считает и подписывает
+            // «R/2 = 30% шанс не получить порцию истощения». Самый сильный эффект
+            // устойчивости раньше не был виден игроку ни в одной строке.
+            exhaustionResilienceDivisor =
+                CharacterVitalsTuning.ExhaustionResilienceDivisor,
+            // Потолок и скорости возврата устойчивости: монитор показывает их
+            // вкладом, и числа обязаны приходить от домена — иначе правка
+            // калибровки снова разошлась бы с подписью.
+            bumResilienceCapPercent =
+                CharacterVitalsTuning.BumResilienceCapPercent,
+            resilienceReturnPerQuarterHour =
+                CharacterVitalsTuning.ResilienceReturnPercentPerQuarterHour,
+            resilienceBumReturnPerQuarterHour =
+                CharacterVitalsTuning.ResilienceBumReturnPercentPerQuarterHour
         };
     }
 
@@ -889,15 +912,15 @@ public sealed class SimulatorForm : WebViewForm
             conditions with
             {
                 // Суммы и ставки пересчитываются из оставшихся порций
-                // (Normalize → Materialize). Признаки метаболизма берутся У
-                // САМОГО содержимого: без них ставки пересчитались бы по
-                // «нормальной» пропускной способности, и оставшаяся еда пошла бы
-                // в шкалы не с той скоростью, с какой шла до удаления.
+                // (Normalize → Materialize). Метаболизм берётся У САМОГО
+                // содержимого: без него ставки пересчитались бы по «нормальной»
+                // пропускной способности, и оставшаяся еда пошла бы в шкалы не с
+                // той скоростью, с какой шла до удаления. Дальше его переписывает
+                // каждый шаг пищеварения, поэтому «запасённой» скорости нет.
                 Stomach = new StomachContents(0d, 0d, 0d, 0d, 0d)
                 {
                     Portions = remaining,
-                    ElevatedMetabolism = conditions.Stomach.ElevatedMetabolism,
-                    ReducedMetabolism = conditions.Stomach.ReducedMetabolism
+                    MetabolismPercent = conditions.Stomach.MetabolismPercent
                 }.Normalize()
             },
             "Удаление порции из пищеварения");

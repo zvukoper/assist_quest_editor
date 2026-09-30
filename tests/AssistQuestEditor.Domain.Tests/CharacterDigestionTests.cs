@@ -56,8 +56,18 @@ public sealed class CharacterDigestionTests
             milliliters,
             waterMilliliters,
             kilocalories,
-            elevated,
-            reduced);
+            Metabolizm(elevated, reduced));
+
+    /// <summary>
+    /// Процент метаболизма по прежним флагам фикстур: «повышенный» — граница
+    /// коридора, «пониженный» — на процент ниже нижней границы, иначе номинал.
+    /// </summary>
+    private static double Metabolizm(bool elevated, bool reduced) =>
+        reduced
+            ? CharacterVitalsEngine.ReducedMetabolismPercent - 1d
+            : elevated
+                ? CharacterVitalsEngine.ElevatedMetabolismPercent
+                : CharacterVitalsTuning.DefaultMetabolismPercent;
 
     /// <summary>Порция ЕДЫ «как с этикетки»: объём и калорийность, воды нет.</summary>
     private static StomachContents BeginFood(
@@ -101,7 +111,10 @@ public sealed class CharacterDigestionTests
         // постоянна), поэтому длительность набирается точно.
         while (!contents.IsEmpty && seconds < 200d * Hour)
         {
-            var step = CharacterDigestion.Advance(contents, Minute);
+            var step = CharacterDigestion.Advance(
+                contents,
+                Minute,
+                CharacterVitalsTuning.DefaultMetabolismPercent);
             energy += step.EnergyGain;
             hydration += step.HydrationGain;
             seconds += Minute;
@@ -234,8 +247,7 @@ public sealed class CharacterDigestionTests
             1000d,
             0d,
             2500d,
-            false,
-            false);
+            CharacterVitalsTuning.DefaultMetabolismPercent);
 
         var totalPerHour = 0d;
         foreach (var portion in contents.Portions)
@@ -270,8 +282,7 @@ public sealed class CharacterDigestionTests
             1000d,
             0d,
             2500d,
-            false,
-            false);
+            CharacterVitalsTuning.DefaultMetabolismPercent);
 
         var food = withWater.Portions[1];
 
@@ -302,8 +313,7 @@ public sealed class CharacterDigestionTests
             1000d,
             0d,
             2500d,
-            false,
-            false);
+            CharacterVitalsTuning.DefaultMetabolismPercent);
 
         Assert.True(
             contents.Portions[0].PerGameSecond >
@@ -325,8 +335,7 @@ public sealed class CharacterDigestionTests
             1800d,
             0d,
             4500d,
-            false,
-            false);
+            CharacterVitalsTuning.DefaultMetabolismPercent);
 
         var expected = 0d;
         var massTotal = 0d;
@@ -471,8 +480,7 @@ public sealed class CharacterDigestionTests
             CharacterConsumableCatalog.GetPortionMilliliters("water.bottle"),
             profile.WaterMilliliters,
             profile.Kilocalories,
-            false,
-            false);
+            CharacterVitalsTuning.DefaultMetabolismPercent);
 
         var netPerHour =
             stomach.HydrationPerGameSecond * Hour -
@@ -502,8 +510,7 @@ public sealed class CharacterDigestionTests
             CharacterConsumableCatalog.GetPortionMilliliters("food.egg_sandwich"),
             profile.WaterMilliliters,
             profile.Kilocalories,
-            false,
-            false);
+            CharacterVitalsTuning.DefaultMetabolismPercent);
 
         var netPerHour =
             stomach.EnergyPerGameSecond * Hour -
@@ -560,7 +567,10 @@ public sealed class CharacterDigestionTests
 
         // За первую МИНУТУ пищеварение отдаёт ровно одну шестидесятую часа, то
         // есть меньше всей порции, поэтому восстановление постепенное.
-        var step = CharacterDigestion.Advance(contents, Minute);
+        var step = CharacterDigestion.Advance(
+            contents,
+            Minute,
+            CharacterVitalsTuning.DefaultMetabolismPercent);
 
         Assert.Equal(
             contents.EnergyPerGameSecond * Minute,
@@ -651,8 +661,7 @@ public sealed class CharacterDigestionTests
             200d,
             40d,
             95d,
-            false,
-            false);
+            CharacterVitalsTuning.DefaultMetabolismPercent);
 
         var normalized = contents.Normalize();
 
@@ -679,21 +688,28 @@ public sealed class CharacterDigestionTests
     [Fact]
     public void MetabolismIsRememberedWithContentsAndRestoresRatesAfterNormalize()
     {
-        // Метаболизм меняет ПРОПУСКНУЮ СПОСОБНОСТЬ, а ставки выводятся из
-        // состава. Поэтому признак метаболизма хранится ВМЕСТЕ с содержимым:
-        // без него загрузка сохранения пересчитала бы ставки по «нормальному»
+        // Метаболизм правит ПРОПУСКНУЮ СПОСОБНОСТЬ, а ставки выводятся из
+        // состава. Поэтому ТЕКУЩИЙ процент хранится вместе с содержимым: без
+        // него загрузка сохранения пересчитала бы ставки по «нормальному»
         // метаболизму, и монитор показывал бы не то, что начисляется.
         var elevated = BeginWater(1000d, elevated: true);
         var reduced = BeginWater(1000d, reduced: true);
 
-        Assert.True(elevated.ElevatedMetabolism);
-        Assert.False(elevated.ReducedMetabolism);
-        Assert.True(reduced.ReducedMetabolism);
-        Assert.False(reduced.ElevatedMetabolism);
+        Assert.Equal(
+            CharacterVitalsEngine.ElevatedMetabolismPercent,
+            elevated.MetabolismPercent,
+            6);
+        Assert.Equal(
+            CharacterVitalsEngine.ReducedMetabolismPercent - 1d,
+            reduced.MetabolismPercent,
+            6);
 
         // Пересчёт после Normalize сохраняет поправку метаболизма.
         var normalizedElevated = elevated.Normalize();
-        Assert.True(normalizedElevated.ElevatedMetabolism);
+        Assert.Equal(
+            CharacterVitalsEngine.ElevatedMetabolismPercent,
+            normalizedElevated.MetabolismPercent,
+            6);
         Assert.Equal(
             elevated.Portions[0].PerGameSecond,
             normalizedElevated.Portions[0].PerGameSecond,
@@ -705,6 +721,43 @@ public sealed class CharacterDigestionTests
             2.5d * 1.5d,
             normalizedElevated.Portions[0].PerGameSecond /
             reduced.Normalize().Portions[0].PerGameSecond,
+            6);
+    }
+
+    [Fact]
+    public void ChangingMetabolismMidDigestionRepricesRatesAndBonusImmediately()
+    {
+        // ЗАКРЫТИЕ ЭКСПЛОИТА. Раньше метаболизм фиксировался на порции в момент
+        // приёма: игрок мог поесть при 80% и получить ставку ×2,5 НАВСЕГДА,
+        // даже если метаболизм тут же падал до нуля. Теперь и скорость, и
+        // надбавка объёма читаются из ТЕКУЩЕГО процента на каждом шаге.
+        var contents = BeginWater(1000d, elevated: true);
+        var fast = contents.Portions[0].PerGameSecond;
+
+        // Один шаг при НИЗКОМ метаболизме обязан пересчитать ставку вниз.
+        var step = CharacterDigestion.Advance(
+            contents,
+            Minute,
+            CharacterVitalsEngine.ReducedMetabolismPercent - 1d);
+
+        Assert.True(
+            step.Contents.Portions[0].PerGameSecond < fast,
+            "ставка обязана упасть вместе с метаболизмом: " +
+            step.Contents.Portions[0].PerGameSecond);
+
+        Assert.Equal(
+            fast / (2.5d * 1.5d),
+            step.Contents.Portions[0].PerGameSecond,
+            6);
+
+        // Надбавка объёма тоже пересчиталась: была +0,5% шкалы, стала −0,5%.
+        Assert.Equal(
+            CharacterVitalsEngine.ReducedMetabolismPercent - 1d,
+            step.Contents.MetabolismPercent,
+            6);
+        Assert.Equal(
+            CharacterDigestion.ReducedMetabolismVolumePenalty,
+            -step.Contents.Portions[0].YieldBonusFraction,
             6);
     }
 
@@ -720,7 +773,10 @@ public sealed class CharacterDigestionTests
         Assert.Equal(expected, contents.EnergyRemaining, 3);
 
         // Шаг БОЛЬШЕ времени переваривания: отдать больше остатка невозможно.
-        var step = CharacterDigestion.Advance(contents, 60d * Hour);
+        var step = CharacterDigestion.Advance(
+            contents,
+            60d * Hour,
+            CharacterVitalsTuning.DefaultMetabolismPercent);
 
         Assert.Equal(expected, step.EnergyGain, 3);
         Assert.True(step.Contents.IsEmpty);
@@ -731,7 +787,10 @@ public sealed class CharacterDigestionTests
         Assert.Equal(0d, step.Contents.VolumeFraction, 6);
 
         // Пустое пищеварение ничего не отдаёт даже на огромном шаге.
-        var idle = CharacterDigestion.Advance(step.Contents, 100d * Hour);
+        var idle = CharacterDigestion.Advance(
+            step.Contents,
+            100d * Hour,
+            CharacterVitalsTuning.DefaultMetabolismPercent);
         Assert.Equal(0d, idle.EnergyGain);
         Assert.Equal(0d, idle.HydrationGain);
     }
@@ -752,15 +811,22 @@ public sealed class CharacterDigestionTests
             1800d,
             0d,
             4000d,
-            false,
-            false);
+            CharacterVitalsTuning.DefaultMetabolismPercent);
 
-        var oneHour = CharacterDigestion.Advance(contents, Hour);
+        var defaultMetabolism = CharacterVitalsTuning.DefaultMetabolismPercent;
+        var oneHour = CharacterDigestion.Advance(
+            contents,
+            Hour,
+            defaultMetabolism);
 
-        var firstHalf = CharacterDigestion.Advance(contents, Hour / 2d);
+        var firstHalf = CharacterDigestion.Advance(
+            contents,
+            Hour / 2d,
+            defaultMetabolism);
         var secondHalf = CharacterDigestion.Advance(
             firstHalf.Contents,
-            Hour / 2d);
+            Hour / 2d,
+            defaultMetabolism);
 
         Assert.Equal(
             oneHour.EnergyGain,
@@ -793,8 +859,7 @@ public sealed class CharacterDigestionTests
             100d,
             0d,
             0d,
-            false,
-            false);
+            CharacterVitalsTuning.DefaultMetabolismPercent);
 
         Assert.True(pill.IsEmpty);
         Assert.Empty(pill.Portions);
@@ -821,8 +886,7 @@ public sealed class CharacterDigestionTests
             1500d,
             0d,
             3750d,
-            false,
-            false);
+            CharacterVitalsTuning.DefaultMetabolismPercent);
 
         // Объём и энергия не изменились: порция не съедена.
         Assert.Equal(0.75d, second.VolumeFraction, 6);
@@ -837,8 +901,7 @@ public sealed class CharacterDigestionTests
             500d,
             0d,
             1250d,
-            false,
-            false);
+            CharacterVitalsTuning.DefaultMetabolismPercent);
 
         Assert.Equal(1d, third.VolumeFraction, 6);
         Assert.Equal(2, third.Portions.Count);
@@ -851,8 +914,7 @@ public sealed class CharacterDigestionTests
             1500d,
             0d,
             3750d,
-            false,
-            false);
+            CharacterVitalsTuning.DefaultMetabolismPercent);
 
         Assert.Equal(third.EnergyRemaining, fourth.EnergyRemaining, 6);
     }
@@ -873,8 +935,7 @@ public sealed class CharacterDigestionTests
             CharacterConsumableCatalog.GetPortionMilliliters("water.bottle"),
             CharacterConsumableCatalog.GetProfile("water.bottle").WaterMilliliters,
             0d,
-            false,
-            false);
+            CharacterVitalsTuning.DefaultMetabolismPercent);
 
         var withOrange = CharacterDigestion.Begin(
             water,
@@ -882,8 +943,7 @@ public sealed class CharacterDigestionTests
             CharacterConsumableCatalog.GetPortionMilliliters("food.orange"),
             CharacterConsumableCatalog.GetProfile("food.orange").WaterMilliliters,
             CharacterConsumableCatalog.GetProfile("food.orange").Kilocalories,
-            false,
-            false);
+            CharacterVitalsTuning.DefaultMetabolismPercent);
 
         // ОБЕ порции в пищеварении, в порядке употребления.
         Assert.Equal(2, withOrange.Portions.Count);
@@ -930,17 +990,22 @@ public sealed class CharacterDigestionTests
             200d,
             68d,
             86d,
-            false,
-            false);
+            CharacterVitalsTuning.DefaultMetabolismPercent);
 
         Assert.Equal(2, both.Portions.Count);
 
         // Малый шаг: обе порции ещё в пищеварении.
-        var early = CharacterDigestion.Advance(both, Minute * 5);
+        var early = CharacterDigestion.Advance(
+            both,
+            Minute * 5,
+            CharacterVitalsTuning.DefaultMetabolismPercent);
         Assert.Equal(2, early.Contents.Portions.Count);
 
         // Полное переваривание очищает список целиком.
-        var finished = CharacterDigestion.Advance(both, 60d * Hour);
+        var finished = CharacterDigestion.Advance(
+            both,
+            60d * Hour,
+            CharacterVitalsTuning.DefaultMetabolismPercent);
         Assert.True(finished.Contents.IsEmpty);
         Assert.Empty(finished.Contents.Portions);
         Assert.Equal(0d, finished.Contents.VolumeFraction, 6);
@@ -1142,9 +1207,7 @@ public sealed class CharacterDigestionTests
         Assert.Equal(2000d, CharacterDigestionReport.StomachCapacityMilliliters, 6);
 
         var factors = CharacterDigestionReport.MetabolismFactors(
-            CharacterVitalsEngine.DefaultMetabolismPercent,
-            elevatedMetabolism: true,
-            reducedMetabolism: false);
+            CharacterVitalsEngine.ElevatedMetabolismPercent);
 
         var text = string.Join(" ", factors.Select(f => f.Text));
 
@@ -1152,8 +1215,14 @@ public sealed class CharacterDigestionTests
         Assert.All(factors, f => Assert.False(string.IsNullOrWhiteSpace(f.Text)));
 
         // Повышенный метаболизм добавляет свой фактор и помечен как полезный.
+        // Номинальный метаболизм такого фактора НЕ даёт: в коридоре нормы
+        // пищеварение идёт обычной скоростью, и подсказывать нечего.
         Assert.Equal(2, factors.Count);
         Assert.True(factors[1].Useful);
+
+        Assert.Single(
+            CharacterDigestionReport.MetabolismFactors(
+                CharacterVitalsEngine.DefaultMetabolismPercent));
     }
 
     // --- Объём порции: одно число на всех ---
@@ -1203,8 +1272,7 @@ public sealed class CharacterDigestionTests
                 applied,
                 profile.WaterMilliliters,
                 profile.Kilocalories,
-                false,
-                false);
+                CharacterVitalsTuning.DefaultMetabolismPercent);
 
             // Предмет без питательности порции не заводит — это законно.
             if (stomach.Portions.Count == 0)
@@ -1291,8 +1359,7 @@ public sealed class CharacterDigestionTests
                 expected,
                 profile.WaterMilliliters,
                 profile.Kilocalories,
-                false,
-                false);
+                CharacterVitalsTuning.DefaultMetabolismPercent);
 
             var added = contents.Portions
                 .Where(p => p.ItemId == item.Id)

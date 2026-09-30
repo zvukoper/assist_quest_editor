@@ -332,3 +332,270 @@
 2026-09-30 15:00:28.655 [INFO] [PID 12200] [TID 2] === Assist Quest Editor END ===
 2026-09-30 15:06:27.854 [INFO] [PID 6164] [TID 2] === Assist Quest Editor START === | Version=1.0.49.1-DIGESTION-THROUGHPUT-R1; Mode=User; BaseDirectory=D:\repo\assist_quest_editor\src\AssistQuestEditor.App\bin\Release\net10.0-windows\win-x64\; CurrentDirectory=D:\repo\assist_quest_editor\src\AssistQuestEditor.App\bin\Release\net10.0-windows\win-x64; LogPath=D:\repo\assist_quest_editor\MemoryAI\LOGS\assist_quest_editor.log
 2026-09-30 15:06:27.924 [INFO] [PID 6164] [TID 2] === Assist Quest Editor END ===
+2026-09-30 16:27:53.072 [INFO] [PID 31420] [TID 2] SimulatorForm: формирование snapshot. | points=5192; selected=<none>; player=WorldCoordinate { X = 165584,2198816024, Y = 89,5193, Z = -78859,24945241431 }
+2026-09-30 16:27:53.080 [INFO] [PID 31420] [TID 2] SimulatorForm: отправляю snapshot в WebView2. | jsonChars=1743012; points=5192
+2026-09-30 16:27:53.141 [INFO] [PID 31420] [TID 2] WEB: Simulator получил snapshot. | {"points":5192,"selectedPointId":null,"player":{"x":165584.2198816024,"y":89.5193,"z":-78859.24945241431},"version":"1.0.49.1-DIGESTION-THROUGHPUT-R1"}
+2026-09-30 16:27:53.322 [INFO] [PID 31420] [TID 2] SimulatorForm: формирование snapshot. | points=5192; selected=<none>; player=WorldCoordinate { X = 165584,2198816024, Y = 89,5193, Z = -78859,24945241431 }
+2026-09-30 16:27:53.330 [INFO] [PID 31420] [TID 2] SimulatorForm: отправляю snapshot в WebView2. | jsonChars=1743012; points=5192
+2026-09-30 16:27:53.390 [INFO] [PID 31420] [TID 2] WEB: Simulator получил snapshot. | {"points":5192,"selectedPointId":null,"player":{"x":165584.2198816024,"y":89.5193,"z":-78859.24945241431},"version":"1.0.49.1-DIGESTION-THROUGHPUT-R1"}
+2026-09-30 16:27:53.574 [INFO] [PID 31420] [TID 2] SimulatorForm: формирование snapshot. | points=5192; selected=<none>; player=WorldCoordinate { X = 165584,2198816024, Y = 89,5193, Z = -78859,24945241431 }
+2026-09-30 16:27:53.581 [INFO] [PID 31420] [TID 2] SimulatorForm: отправляю snapshot в WebView2. | jsonChars=1743012; points=5192
+2026-09-30 16:27:53.644 [INFO] [PID 31420] [TID 2] WEB: Simulator получил snapshot. | {"points":5192,"selectedPointId":null,"player":{"x":165584.2198816024,"y":89.5193,"z":-78859.24945241431},"version":"1.0.49.1-DIGESTION-THROUGHPUT-R1"}
+2026-09-30 16:27:53.822 [INFO] [PID 31420] [TID 2] SimulatorForm: формирование snapshot. | points=5192; selected=<none>; player=WorldCoordinate { X = 165584,2198816024, Y = 89,5193, Z = -78859,24945241431 }
+2026-09-30 16:27:53.829 [INFO] [PID 31420] [TID 2] SimulatorForm: отправляю snapshot в WebView2. | jsonChars=1743012; points=5192
+2026-09-30 16:27:53.891 [INFO] [PID 31420] [TID 2] WEB: Simulator получил snapshot. | {"points":5192,"selectedPointId":null,"player":{"x":165584.2198816024,"y":89.5193,"z":-78859.24945241431},"version":"1.0.49.1-DIGESTION-THROUGHPUT-R1"}
+2026-09-30 16:27:54.073 [INFO] [PID 31420] [TID 2] SimulatorForm: формирование snapshot. | points=5192; selected=<none>; player=WorldCoordinate { X = 165584,2198816024, Y = 89,5193, Z = -78859,24945241431 }
+2026-09-30 16:27:54.080 [INFO] [PID 31420] [TID 2] SimulatorForm: отправляю snapshot в WebView2. | jsonChars=1743012; points=5192
+2026-09-30 16:27:54.143 [INFO] [PID 31420] [TID 2] WEB: Simulator получил snapshot. | {"points":5192,"selectedPointId":null,"player":{"x":165584.2198816024,"y":89.5193,"z":-78859.24945241431},"version":"1.0.49.1-DIGESTION-THROUGHPUT-R1"}
+2026-09-30 16:27:54.323 [INFO] [PID 31420] [TID 2] SimulatorForm: формирование snapshot. | points=5192; selected=<none>; player=WorldCoordinate { X = 165584,2198816024, Y = 89,5193, Z = -78859,24945241431 }
+2026-09-30 16:27:54.330 [INFO] [PID 31420] [TID 2] SimulatorForm: отправляю snapshot в WebView2. | jsonChars=1743012; points=5192
+2026-09-30 16:27:54.527 [INFO] [PID 31420] [TID 2] WEB: Simulator получил snapshot. | {"points":5192,"selectedPointId":null,"player":{"x":165584.2198816024,"y":89.5193,"z":-78859.24945241431},"version":"1.0.49.1-DIGESTION-THROUGHPUT-R1"}
+2026-09-30 16:27:54.573 [INFO] [PID 31420] [TID 2] SimulatorForm: формирование snapshot. | points=5192; selected=<none>; player=WorldCoordinate { X = 165584,2198816024, Y = 89,5193, Z = -78859,24945241431 }
+2026-09-30 16:27:54.580 [INFO] [PID 31420] [TID 2] SimulatorForm: отправляю snapshot в WebView2. | jsonChars=1743012; points=5192
+2026-09-30 16:27:54.641 [INFO] [PID 31420] [TID 2] WEB: Simulator получил snapshot. | {"points":5192,"selectedPointId":null,"player":{"x":165584.2198816024,"y":89.5193,"z":-78859.24945241431},"version":"1.0.49.1-DIGESTION-THROUGHPUT-R1"}
+2026-09-30 16:27:54.825 [INFO] [PID 31420] [TID 2] SimulatorForm: формирование snapshot. | points=5192; selected=<none>; player=WorldCoordinate { X = 165584,2198816024, Y = 89,5193, Z = -78859,24945241431 }
+2026-09-30 16:27:54.836 [INFO] [PID 31420] [TID 2] SimulatorForm: отправляю snapshot в WebView2. | jsonChars=1743012; points=5192
+2026-09-30 16:27:54.919 [INFO] [PID 31420] [TID 2] WEB: Simulator получил snapshot. | {"points":5192,"selectedPointId":null,"player":{"x":165584.2198816024,"y":89.5193,"z":-78859.24945241431},"version":"1.0.49.1-DIGESTION-THROUGHPUT-R1"}
+2026-09-30 16:27:55.084 [INFO] [PID 31420] [TID 2] SimulatorForm: формирование snapshot. | points=5192; selected=<none>; player=WorldCoordinate { X = 165584,2198816024, Y = 89,5193, Z = -78859,24945241431 }
+2026-09-30 16:27:55.097 [INFO] [PID 31420] [TID 2] SimulatorForm: отправляю snapshot в WebView2. | jsonChars=1743013; points=5192
+2026-09-30 16:27:55.195 [INFO] [PID 31420] [TID 2] WEB: Simulator получил snapshot. | {"points":5192,"selectedPointId":null,"player":{"x":165584.2198816024,"y":89.5193,"z":-78859.24945241431},"version":"1.0.49.1-DIGESTION-THROUGHPUT-R1"}
+2026-09-30 16:27:55.322 [INFO] [PID 31420] [TID 2] SimulatorForm: формирование snapshot. | points=5192; selected=<none>; player=WorldCoordinate { X = 165584,2198816024, Y = 89,5193, Z = -78859,24945241431 }
+2026-09-30 16:27:55.329 [INFO] [PID 31420] [TID 2] SimulatorForm: отправляю snapshot в WebView2. | jsonChars=1743012; points=5192
+2026-09-30 16:27:55.391 [INFO] [PID 31420] [TID 2] WEB: Simulator получил snapshot. | {"points":5192,"selectedPointId":null,"player":{"x":165584.2198816024,"y":89.5193,"z":-78859.24945241431},"version":"1.0.49.1-DIGESTION-THROUGHPUT-R1"}
+2026-09-30 16:27:55.573 [INFO] [PID 31420] [TID 2] SimulatorForm: формирование snapshot. | points=5192; selected=<none>; player=WorldCoordinate { X = 165584,2198816024, Y = 89,5193, Z = -78859,24945241431 }
+2026-09-30 16:27:55.580 [INFO] [PID 31420] [TID 2] SimulatorForm: отправляю snapshot в WebView2. | jsonChars=1743012; points=5192
+2026-09-30 16:27:55.652 [INFO] [PID 31420] [TID 2] WEB: Simulator получил snapshot. | {"points":5192,"selectedPointId":null,"player":{"x":165584.2198816024,"y":89.5193,"z":-78859.24945241431},"version":"1.0.49.1-DIGESTION-THROUGHPUT-R1"}
+2026-09-30 16:27:55.821 [INFO] [PID 31420] [TID 2] SimulatorForm: формирование snapshot. | points=5192; selected=<none>; player=WorldCoordinate { X = 165584,2198816024, Y = 89,5193, Z = -78859,24945241431 }
+2026-09-30 16:27:55.828 [INFO] [PID 31420] [TID 2] SimulatorForm: отправляю snapshot в WebView2. | jsonChars=1743012; points=5192
+2026-09-30 16:27:55.892 [INFO] [PID 31420] [TID 2] WEB: Simulator получил snapshot. | {"points":5192,"selectedPointId":null,"player":{"x":165584.2198816024,"y":89.5193,"z":-78859.24945241431},"version":"1.0.49.1-DIGESTION-THROUGHPUT-R1"}
+2026-09-30 16:27:56.074 [INFO] [PID 31420] [TID 2] SimulatorForm: формирование snapshot. | points=5192; selected=<none>; player=WorldCoordinate { X = 165584,2198816024, Y = 89,5193, Z = -78859,24945241431 }
+2026-09-30 16:27:56.081 [INFO] [PID 31420] [TID 2] SimulatorForm: отправляю snapshot в WebView2. | jsonChars=1743012; points=5192
+2026-09-30 16:27:56.154 [INFO] [PID 31420] [TID 2] WEB: Simulator получил snapshot. | {"points":5192,"selectedPointId":null,"player":{"x":165584.2198816024,"y":89.5193,"z":-78859.24945241431},"version":"1.0.49.1-DIGESTION-THROUGHPUT-R1"}
+2026-09-30 16:27:56.322 [INFO] [PID 31420] [TID 2] SimulatorForm: формирование snapshot. | points=5192; selected=<none>; player=WorldCoordinate { X = 165584,2198816024, Y = 89,5193, Z = -78859,24945241431 }
+2026-09-30 16:27:56.329 [INFO] [PID 31420] [TID 2] SimulatorForm: отправляю snapshot в WebView2. | jsonChars=1743012; points=5192
+2026-09-30 16:27:56.390 [INFO] [PID 31420] [TID 2] WEB: Simulator получил snapshot. | {"points":5192,"selectedPointId":null,"player":{"x":165584.2198816024,"y":89.5193,"z":-78859.24945241431},"version":"1.0.49.1-DIGESTION-THROUGHPUT-R1"}
+2026-09-30 16:27:56.571 [INFO] [PID 31420] [TID 2] SimulatorForm: формирование snapshot. | points=5192; selected=<none>; player=WorldCoordinate { X = 165584,2198816024, Y = 89,5193, Z = -78859,24945241431 }
+2026-09-30 16:27:56.578 [INFO] [PID 31420] [TID 2] SimulatorForm: отправляю snapshot в WebView2. | jsonChars=1743012; points=5192
+2026-09-30 16:27:56.648 [INFO] [PID 31420] [TID 2] WEB: Simulator получил snapshot. | {"points":5192,"selectedPointId":null,"player":{"x":165584.2198816024,"y":89.5193,"z":-78859.24945241431},"version":"1.0.49.1-DIGESTION-THROUGHPUT-R1"}
+2026-09-30 16:27:56.822 [INFO] [PID 31420] [TID 2] SimulatorForm: формирование snapshot. | points=5192; selected=<none>; player=WorldCoordinate { X = 165584,2198816024, Y = 89,5193, Z = -78859,24945241431 }
+2026-09-30 16:27:56.830 [INFO] [PID 31420] [TID 2] SimulatorForm: отправляю snapshot в WebView2. | jsonChars=1743012; points=5192
+2026-09-30 16:27:56.891 [INFO] [PID 31420] [TID 2] WEB: Simulator получил snapshot. | {"points":5192,"selectedPointId":null,"player":{"x":165584.2198816024,"y":89.5193,"z":-78859.24945241431},"version":"1.0.49.1-DIGESTION-THROUGHPUT-R1"}
+2026-09-30 16:27:57.074 [INFO] [PID 31420] [TID 2] SimulatorForm: формирование snapshot. | points=5192; selected=<none>; player=WorldCoordinate { X = 165584,2198816024, Y = 89,5193, Z = -78859,24945241431 }
+2026-09-30 16:27:57.084 [INFO] [PID 31420] [TID 2] SimulatorForm: отправляю snapshot в WebView2. | jsonChars=1743013; points=5192
+2026-09-30 16:27:57.147 [INFO] [PID 31420] [TID 2] WEB: Simulator получил snapshot. | {"points":5192,"selectedPointId":null,"player":{"x":165584.2198816024,"y":89.5193,"z":-78859.24945241431},"version":"1.0.49.1-DIGESTION-THROUGHPUT-R1"}
+2026-09-30 16:27:57.324 [INFO] [PID 31420] [TID 2] SimulatorForm: формирование snapshot. | points=5192; selected=<none>; player=WorldCoordinate { X = 165584,2198816024, Y = 89,5193, Z = -78859,24945241431 }
+2026-09-30 16:27:57.332 [INFO] [PID 31420] [TID 2] SimulatorForm: отправляю snapshot в WebView2. | jsonChars=1743012; points=5192
+2026-09-30 16:27:57.409 [INFO] [PID 31420] [TID 2] WEB: Simulator получил snapshot. | {"points":5192,"selectedPointId":null,"player":{"x":165584.2198816024,"y":89.5193,"z":-78859.24945241431},"version":"1.0.49.1-DIGESTION-THROUGHPUT-R1"}
+2026-09-30 16:27:57.581 [INFO] [PID 31420] [TID 2] SimulatorForm: формирование snapshot. | points=5192; selected=<none>; player=WorldCoordinate { X = 165584,2198816024, Y = 89,5193, Z = -78859,24945241431 }
+2026-09-30 16:27:57.589 [INFO] [PID 31420] [TID 2] SimulatorForm: отправляю snapshot в WebView2. | jsonChars=1743012; points=5192
+2026-09-30 16:27:57.659 [INFO] [PID 31420] [TID 2] WEB: Simulator получил snapshot. | {"points":5192,"selectedPointId":null,"player":{"x":165584.2198816024,"y":89.5193,"z":-78859.24945241431},"version":"1.0.49.1-DIGESTION-THROUGHPUT-R1"}
+2026-09-30 16:27:57.823 [INFO] [PID 31420] [TID 2] SimulatorForm: формирование snapshot. | points=5192; selected=<none>; player=WorldCoordinate { X = 165584,2198816024, Y = 89,5193, Z = -78859,24945241431 }
+2026-09-30 16:27:57.830 [INFO] [PID 31420] [TID 2] SimulatorForm: отправляю snapshot в WebView2. | jsonChars=1743012; points=5192
+2026-09-30 16:27:57.893 [INFO] [PID 31420] [TID 2] WEB: Simulator получил snapshot. | {"points":5192,"selectedPointId":null,"player":{"x":165584.2198816024,"y":89.5193,"z":-78859.24945241431},"version":"1.0.49.1-DIGESTION-THROUGHPUT-R1"}
+2026-09-30 16:27:58.074 [INFO] [PID 31420] [TID 2] SimulatorForm: формирование snapshot. | points=5192; selected=<none>; player=WorldCoordinate { X = 165584,2198816024, Y = 89,5193, Z = -78859,24945241431 }
+2026-09-30 16:27:58.083 [INFO] [PID 31420] [TID 2] SimulatorForm: отправляю snapshot в WebView2. | jsonChars=1743012; points=5192
+2026-09-30 16:27:58.145 [INFO] [PID 31420] [TID 2] WEB: Simulator получил snapshot. | {"points":5192,"selectedPointId":null,"player":{"x":165584.2198816024,"y":89.5193,"z":-78859.24945241431},"version":"1.0.49.1-DIGESTION-THROUGHPUT-R1"}
+2026-09-30 16:27:58.322 [INFO] [PID 31420] [TID 2] SimulatorForm: формирование snapshot. | points=5192; selected=<none>; player=WorldCoordinate { X = 165584,2198816024, Y = 89,5193, Z = -78859,24945241431 }
+2026-09-30 16:27:58.330 [INFO] [PID 31420] [TID 2] SimulatorForm: отправляю snapshot в WebView2. | jsonChars=1743012; points=5192
+2026-09-30 16:27:58.391 [INFO] [PID 31420] [TID 2] WEB: Simulator получил snapshot. | {"points":5192,"selectedPointId":null,"player":{"x":165584.2198816024,"y":89.5193,"z":-78859.24945241431},"version":"1.0.49.1-DIGESTION-THROUGHPUT-R1"}
+2026-09-30 16:27:58.584 [INFO] [PID 31420] [TID 2] SimulatorForm: формирование snapshot. | points=5192; selected=<none>; player=WorldCoordinate { X = 165584,2198816024, Y = 89,5193, Z = -78859,24945241431 }
+2026-09-30 16:27:58.592 [INFO] [PID 31420] [TID 2] SimulatorForm: отправляю snapshot в WebView2. | jsonChars=1743012; points=5192
+2026-09-30 16:27:58.680 [INFO] [PID 31420] [TID 2] WEB: Simulator получил snapshot. | {"points":5192,"selectedPointId":null,"player":{"x":165584.2198816024,"y":89.5193,"z":-78859.24945241431},"version":"1.0.49.1-DIGESTION-THROUGHPUT-R1"}
+2026-09-30 16:27:58.822 [INFO] [PID 31420] [TID 2] SimulatorForm: формирование snapshot. | points=5192; selected=<none>; player=WorldCoordinate { X = 165584,2198816024, Y = 89,5193, Z = -78859,24945241431 }
+2026-09-30 16:27:58.829 [INFO] [PID 31420] [TID 2] SimulatorForm: отправляю snapshot в WebView2. | jsonChars=1743012; points=5192
+2026-09-30 16:27:58.892 [INFO] [PID 31420] [TID 2] WEB: Simulator получил snapshot. | {"points":5192,"selectedPointId":null,"player":{"x":165584.2198816024,"y":89.5193,"z":-78859.24945241431},"version":"1.0.49.1-DIGESTION-THROUGHPUT-R1"}
+2026-09-30 16:27:59.073 [INFO] [PID 31420] [TID 2] SimulatorForm: формирование snapshot. | points=5192; selected=<none>; player=WorldCoordinate { X = 165584,2198816024, Y = 89,5193, Z = -78859,24945241431 }
+2026-09-30 16:27:59.080 [INFO] [PID 31420] [TID 2] SimulatorForm: отправляю snapshot в WebView2. | jsonChars=1743013; points=5192
+2026-09-30 16:27:59.142 [INFO] [PID 31420] [TID 2] WEB: Simulator получил snapshot. | {"points":5192,"selectedPointId":null,"player":{"x":165584.2198816024,"y":89.5193,"z":-78859.24945241431},"version":"1.0.49.1-DIGESTION-THROUGHPUT-R1"}
+2026-09-30 16:27:59.321 [INFO] [PID 31420] [TID 2] SimulatorForm: формирование snapshot. | points=5192; selected=<none>; player=WorldCoordinate { X = 165584,2198816024, Y = 89,5193, Z = -78859,24945241431 }
+2026-09-30 16:27:59.329 [INFO] [PID 31420] [TID 2] SimulatorForm: отправляю snapshot в WebView2. | jsonChars=1743012; points=5192
+2026-09-30 16:27:59.389 [INFO] [PID 31420] [TID 2] WEB: Simulator получил snapshot. | {"points":5192,"selectedPointId":null,"player":{"x":165584.2198816024,"y":89.5193,"z":-78859.24945241431},"version":"1.0.49.1-DIGESTION-THROUGHPUT-R1"}
+2026-09-30 16:27:59.574 [INFO] [PID 31420] [TID 2] SimulatorForm: формирование snapshot. | points=5192; selected=<none>; player=WorldCoordinate { X = 165584,2198816024, Y = 89,5193, Z = -78859,24945241431 }
+2026-09-30 16:27:59.582 [INFO] [PID 31420] [TID 2] SimulatorForm: отправляю snapshot в WebView2. | jsonChars=1743012; points=5192
+2026-09-30 16:27:59.659 [INFO] [PID 31420] [TID 2] WEB: Simulator получил snapshot. | {"points":5192,"selectedPointId":null,"player":{"x":165584.2198816024,"y":89.5193,"z":-78859.24945241431},"version":"1.0.49.1-DIGESTION-THROUGHPUT-R1"}
+2026-09-30 16:27:59.827 [INFO] [PID 31420] [TID 2] SimulatorForm: формирование snapshot. | points=5192; selected=<none>; player=WorldCoordinate { X = 165584,2198816024, Y = 89,5193, Z = -78859,24945241431 }
+2026-09-30 16:27:59.834 [INFO] [PID 31420] [TID 2] SimulatorForm: отправляю snapshot в WebView2. | jsonChars=1743012; points=5192
+2026-09-30 16:27:59.900 [INFO] [PID 31420] [TID 2] WEB: Simulator получил snapshot. | {"points":5192,"selectedPointId":null,"player":{"x":165584.2198816024,"y":89.5193,"z":-78859.24945241431},"version":"1.0.49.1-DIGESTION-THROUGHPUT-R1"}
+2026-09-30 16:28:00.074 [INFO] [PID 31420] [TID 2] SimulatorForm: формирование snapshot. | points=5192; selected=<none>; player=WorldCoordinate { X = 165584,2198816024, Y = 89,5193, Z = -78859,24945241431 }
+2026-09-30 16:28:00.081 [INFO] [PID 31420] [TID 2] SimulatorForm: отправляю snapshot в WebView2. | jsonChars=1743012; points=5192
+2026-09-30 16:28:00.143 [INFO] [PID 31420] [TID 2] WEB: Simulator получил snapshot. | {"points":5192,"selectedPointId":null,"player":{"x":165584.2198816024,"y":89.5193,"z":-78859.24945241431},"version":"1.0.49.1-DIGESTION-THROUGHPUT-R1"}
+2026-09-30 16:28:00.323 [INFO] [PID 31420] [TID 2] SimulatorForm: формирование snapshot. | points=5192; selected=<none>; player=WorldCoordinate { X = 165584,2198816024, Y = 89,5193, Z = -78859,24945241431 }
+2026-09-30 16:28:00.332 [INFO] [PID 31420] [TID 2] SimulatorForm: отправляю snapshot в WebView2. | jsonChars=1743012; points=5192
+2026-09-30 16:28:00.403 [INFO] [PID 31420] [TID 2] WEB: Simulator получил snapshot. | {"points":5192,"selectedPointId":null,"player":{"x":165584.2198816024,"y":89.5193,"z":-78859.24945241431},"version":"1.0.49.1-DIGESTION-THROUGHPUT-R1"}
+2026-09-30 16:28:00.572 [INFO] [PID 31420] [TID 2] SimulatorForm: формирование snapshot. | points=5192; selected=<none>; player=WorldCoordinate { X = 165584,2198816024, Y = 89,5193, Z = -78859,24945241431 }
+2026-09-30 16:28:00.579 [INFO] [PID 31420] [TID 2] SimulatorForm: отправляю snapshot в WebView2. | jsonChars=1743012; points=5192
+2026-09-30 16:28:00.639 [INFO] [PID 31420] [TID 2] WEB: Simulator получил snapshot. | {"points":5192,"selectedPointId":null,"player":{"x":165584.2198816024,"y":89.5193,"z":-78859.24945241431},"version":"1.0.49.1-DIGESTION-THROUGHPUT-R1"}
+2026-09-30 16:28:00.823 [INFO] [PID 31420] [TID 2] SimulatorForm: формирование snapshot. | points=5192; selected=<none>; player=WorldCoordinate { X = 165584,2198816024, Y = 89,5193, Z = -78859,24945241431 }
+2026-09-30 16:28:00.829 [INFO] [PID 31420] [TID 2] SimulatorForm: отправляю snapshot в WebView2. | jsonChars=1743012; points=5192
+2026-09-30 16:28:00.892 [INFO] [PID 31420] [TID 2] WEB: Simulator получил snapshot. | {"points":5192,"selectedPointId":null,"player":{"x":165584.2198816024,"y":89.5193,"z":-78859.24945241431},"version":"1.0.49.1-DIGESTION-THROUGHPUT-R1"}
+2026-09-30 16:28:01.072 [INFO] [PID 31420] [TID 2] SimulatorForm: формирование snapshot. | points=5192; selected=<none>; player=WorldCoordinate { X = 165584,2198816024, Y = 89,5193, Z = -78859,24945241431 }
+2026-09-30 16:28:01.082 [INFO] [PID 31420] [TID 2] SimulatorForm: отправляю snapshot в WebView2. | jsonChars=1743012; points=5192
+2026-09-30 16:28:01.143 [INFO] [PID 31420] [TID 2] WEB: Simulator получил snapshot. | {"points":5192,"selectedPointId":null,"player":{"x":165584.2198816024,"y":89.5193,"z":-78859.24945241431},"version":"1.0.49.1-DIGESTION-THROUGHPUT-R1"}
+2026-09-30 16:28:01.323 [INFO] [PID 31420] [TID 2] SimulatorForm: формирование snapshot. | points=5192; selected=<none>; player=WorldCoordinate { X = 165584,2198816024, Y = 89,5193, Z = -78859,24945241431 }
+2026-09-30 16:28:01.330 [INFO] [PID 31420] [TID 2] SimulatorForm: отправляю snapshot в WebView2. | jsonChars=1743012; points=5192
+2026-09-30 16:28:01.398 [INFO] [PID 31420] [TID 2] WEB: Simulator получил snapshot. | {"points":5192,"selectedPointId":null,"player":{"x":165584.2198816024,"y":89.5193,"z":-78859.24945241431},"version":"1.0.49.1-DIGESTION-THROUGHPUT-R1"}
+2026-09-30 16:28:01.573 [INFO] [PID 31420] [TID 2] SimulatorForm: формирование snapshot. | points=5192; selected=<none>; player=WorldCoordinate { X = 165584,2198816024, Y = 89,5193, Z = -78859,24945241431 }
+2026-09-30 16:28:01.579 [INFO] [PID 31420] [TID 2] SimulatorForm: отправляю snapshot в WebView2. | jsonChars=1743012; points=5192
+2026-09-30 16:28:01.641 [INFO] [PID 31420] [TID 2] WEB: Simulator получил snapshot. | {"points":5192,"selectedPointId":null,"player":{"x":165584.2198816024,"y":89.5193,"z":-78859.24945241431},"version":"1.0.49.1-DIGESTION-THROUGHPUT-R1"}
+2026-09-30 16:28:01.829 [INFO] [PID 31420] [TID 2] SimulatorForm: формирование snapshot. | points=5192; selected=<none>; player=WorldCoordinate { X = 165584,2198816024, Y = 89,5193, Z = -78859,24945241431 }
+2026-09-30 16:28:01.836 [INFO] [PID 31420] [TID 2] SimulatorForm: отправляю snapshot в WebView2. | jsonChars=1743013; points=5192
+2026-09-30 16:28:01.909 [INFO] [PID 31420] [TID 2] WEB: Simulator получил snapshot. | {"points":5192,"selectedPointId":null,"player":{"x":165584.2198816024,"y":89.5193,"z":-78859.24945241431},"version":"1.0.49.1-DIGESTION-THROUGHPUT-R1"}
+2026-09-30 16:28:02.075 [INFO] [PID 31420] [TID 2] SimulatorForm: формирование snapshot. | points=5192; selected=<none>; player=WorldCoordinate { X = 165584,2198816024, Y = 89,5193, Z = -78859,24945241431 }
+2026-09-30 16:28:02.082 [INFO] [PID 31420] [TID 2] SimulatorForm: отправляю snapshot в WebView2. | jsonChars=1743012; points=5192
+2026-09-30 16:28:02.149 [INFO] [PID 31420] [TID 2] WEB: Simulator получил snapshot. | {"points":5192,"selectedPointId":null,"player":{"x":165584.2198816024,"y":89.5193,"z":-78859.24945241431},"version":"1.0.49.1-DIGESTION-THROUGHPUT-R1"}
+2026-09-30 16:28:02.323 [INFO] [PID 31420] [TID 2] SimulatorForm: формирование snapshot. | points=5192; selected=<none>; player=WorldCoordinate { X = 165584,2198816024, Y = 89,5193, Z = -78859,24945241431 }
+2026-09-30 16:28:02.330 [INFO] [PID 31420] [TID 2] SimulatorForm: отправляю snapshot в WebView2. | jsonChars=1743012; points=5192
+2026-09-30 16:28:02.393 [INFO] [PID 31420] [TID 2] WEB: Simulator получил snapshot. | {"points":5192,"selectedPointId":null,"player":{"x":165584.2198816024,"y":89.5193,"z":-78859.24945241431},"version":"1.0.49.1-DIGESTION-THROUGHPUT-R1"}
+2026-09-30 16:28:02.573 [INFO] [PID 31420] [TID 2] SimulatorForm: формирование snapshot. | points=5192; selected=<none>; player=WorldCoordinate { X = 165584,2198816024, Y = 89,5193, Z = -78859,24945241431 }
+2026-09-30 16:28:02.580 [INFO] [PID 31420] [TID 2] SimulatorForm: отправляю snapshot в WebView2. | jsonChars=1743012; points=5192
+2026-09-30 16:28:02.649 [INFO] [PID 31420] [TID 2] WEB: Simulator получил snapshot. | {"points":5192,"selectedPointId":null,"player":{"x":165584.2198816024,"y":89.5193,"z":-78859.24945241431},"version":"1.0.49.1-DIGESTION-THROUGHPUT-R1"}
+2026-09-30 16:28:02.821 [INFO] [PID 31420] [TID 2] SimulatorForm: формирование snapshot. | points=5192; selected=<none>; player=WorldCoordinate { X = 165584,2198816024, Y = 89,5193, Z = -78859,24945241431 }
+2026-09-30 16:28:02.828 [INFO] [PID 31420] [TID 2] SimulatorForm: отправляю snapshot в WebView2. | jsonChars=1743012; points=5192
+2026-09-30 16:28:02.889 [INFO] [PID 31420] [TID 2] WEB: Simulator получил snapshot. | {"points":5192,"selectedPointId":null,"player":{"x":165584.2198816024,"y":89.5193,"z":-78859.24945241431},"version":"1.0.49.1-DIGESTION-THROUGHPUT-R1"}
+2026-09-30 16:28:03.073 [INFO] [PID 31420] [TID 2] SimulatorForm: формирование snapshot. | points=5192; selected=<none>; player=WorldCoordinate { X = 165584,2198816024, Y = 89,5193, Z = -78859,24945241431 }
+2026-09-30 16:28:03.086 [INFO] [PID 31420] [TID 2] SimulatorForm: отправляю snapshot в WebView2. | jsonChars=1743012; points=5192
+2026-09-30 16:28:03.160 [INFO] [PID 31420] [TID 2] WEB: Simulator получил snapshot. | {"points":5192,"selectedPointId":null,"player":{"x":165584.2198816024,"y":89.5193,"z":-78859.24945241431},"version":"1.0.49.1-DIGESTION-THROUGHPUT-R1"}
+2026-09-30 16:28:03.328 [INFO] [PID 31420] [TID 2] SimulatorForm: формирование snapshot. | points=5192; selected=<none>; player=WorldCoordinate { X = 165584,2198816024, Y = 89,5193, Z = -78859,24945241431 }
+2026-09-30 16:28:03.337 [INFO] [PID 31420] [TID 2] SimulatorForm: отправляю snapshot в WebView2. | jsonChars=1743012; points=5192
+2026-09-30 16:28:03.401 [INFO] [PID 31420] [TID 2] WEB: Simulator получил snapshot. | {"points":5192,"selectedPointId":null,"player":{"x":165584.2198816024,"y":89.5193,"z":-78859.24945241431},"version":"1.0.49.1-DIGESTION-THROUGHPUT-R1"}
+2026-09-30 16:28:03.572 [INFO] [PID 31420] [TID 2] SimulatorForm: формирование snapshot. | points=5192; selected=<none>; player=WorldCoordinate { X = 165584,2198816024, Y = 89,5193, Z = -78859,24945241431 }
+2026-09-30 16:28:03.580 [INFO] [PID 31420] [TID 2] SimulatorForm: отправляю snapshot в WebView2. | jsonChars=1743012; points=5192
+2026-09-30 16:28:03.649 [INFO] [PID 31420] [TID 2] WEB: Simulator получил snapshot. | {"points":5192,"selectedPointId":null,"player":{"x":165584.2198816024,"y":89.5193,"z":-78859.24945241431},"version":"1.0.49.1-DIGESTION-THROUGHPUT-R1"}
+2026-09-30 16:28:03.822 [INFO] [PID 31420] [TID 2] SimulatorForm: формирование snapshot. | points=5192; selected=<none>; player=WorldCoordinate { X = 165584,2198816024, Y = 89,5193, Z = -78859,24945241431 }
+2026-09-30 16:28:03.830 [INFO] [PID 31420] [TID 2] SimulatorForm: отправляю snapshot в WebView2. | jsonChars=1743012; points=5192
+2026-09-30 16:28:03.891 [INFO] [PID 31420] [TID 2] WEB: Simulator получил snapshot. | {"points":5192,"selectedPointId":null,"player":{"x":165584.2198816024,"y":89.5193,"z":-78859.24945241431},"version":"1.0.49.1-DIGESTION-THROUGHPUT-R1"}
+2026-09-30 16:28:04.086 [INFO] [PID 31420] [TID 2] SimulatorForm: формирование snapshot. | points=5192; selected=<none>; player=WorldCoordinate { X = 165584,2198816024, Y = 89,5193, Z = -78859,24945241431 }
+2026-09-30 16:28:04.094 [INFO] [PID 31420] [TID 2] SimulatorForm: отправляю snapshot в WebView2. | jsonChars=1743012; points=5192
+2026-09-30 16:28:04.162 [INFO] [PID 31420] [TID 2] WEB: Simulator получил snapshot. | {"points":5192,"selectedPointId":null,"player":{"x":165584.2198816024,"y":89.5193,"z":-78859.24945241431},"version":"1.0.49.1-DIGESTION-THROUGHPUT-R1"}
+2026-09-30 16:28:04.323 [INFO] [PID 31420] [TID 2] SimulatorForm: формирование snapshot. | points=5192; selected=<none>; player=WorldCoordinate { X = 165584,2198816024, Y = 89,5193, Z = -78859,24945241431 }
+2026-09-30 16:28:04.330 [INFO] [PID 31420] [TID 2] SimulatorForm: отправляю snapshot в WebView2. | jsonChars=1743012; points=5192
+2026-09-30 16:28:04.393 [INFO] [PID 31420] [TID 2] WEB: Simulator получил snapshot. | {"points":5192,"selectedPointId":null,"player":{"x":165584.2198816024,"y":89.5193,"z":-78859.24945241431},"version":"1.0.49.1-DIGESTION-THROUGHPUT-R1"}
+2026-09-30 16:28:04.572 [INFO] [PID 31420] [TID 2] SimulatorForm: формирование snapshot. | points=5192; selected=<none>; player=WorldCoordinate { X = 165584,2198816024, Y = 89,5193, Z = -78859,24945241431 }
+2026-09-30 16:28:04.579 [INFO] [PID 31420] [TID 2] SimulatorForm: отправляю snapshot в WebView2. | jsonChars=1743012; points=5192
+2026-09-30 16:28:04.642 [INFO] [PID 31420] [TID 2] WEB: Simulator получил snapshot. | {"points":5192,"selectedPointId":null,"player":{"x":165584.2198816024,"y":89.5193,"z":-78859.24945241431},"version":"1.0.49.1-DIGESTION-THROUGHPUT-R1"}
+2026-09-30 16:28:04.822 [INFO] [PID 31420] [TID 2] SimulatorForm: формирование snapshot. | points=5192; selected=<none>; player=WorldCoordinate { X = 165584,2198816024, Y = 89,5193, Z = -78859,24945241431 }
+2026-09-30 16:28:04.829 [INFO] [PID 31420] [TID 2] SimulatorForm: отправляю snapshot в WebView2. | jsonChars=1743012; points=5192
+2026-09-30 16:28:04.890 [INFO] [PID 31420] [TID 2] WEB: Simulator получил snapshot. | {"points":5192,"selectedPointId":null,"player":{"x":165584.2198816024,"y":89.5193,"z":-78859.24945241431},"version":"1.0.49.1-DIGESTION-THROUGHPUT-R1"}
+2026-09-30 16:28:05.072 [INFO] [PID 31420] [TID 2] SimulatorForm: формирование snapshot. | points=5192; selected=<none>; player=WorldCoordinate { X = 165584,2198816024, Y = 89,5193, Z = -78859,24945241431 }
+2026-09-30 16:28:05.080 [INFO] [PID 31420] [TID 2] SimulatorForm: отправляю snapshot в WebView2. | jsonChars=1743012; points=5192
+2026-09-30 16:28:05.143 [INFO] [PID 31420] [TID 2] WEB: Simulator получил snapshot. | {"points":5192,"selectedPointId":null,"player":{"x":165584.2198816024,"y":89.5193,"z":-78859.24945241431},"version":"1.0.49.1-DIGESTION-THROUGHPUT-R1"}
+2026-09-30 16:28:05.322 [INFO] [PID 31420] [TID 2] SimulatorForm: формирование snapshot. | points=5192; selected=<none>; player=WorldCoordinate { X = 165584,2198816024, Y = 89,5193, Z = -78859,24945241431 }
+2026-09-30 16:28:05.329 [INFO] [PID 31420] [TID 2] SimulatorForm: отправляю snapshot в WebView2. | jsonChars=1743012; points=5192
+2026-09-30 16:28:05.392 [INFO] [PID 31420] [TID 2] WEB: Simulator получил snapshot. | {"points":5192,"selectedPointId":null,"player":{"x":165584.2198816024,"y":89.5193,"z":-78859.24945241431},"version":"1.0.49.1-DIGESTION-THROUGHPUT-R1"}
+2026-09-30 16:28:05.575 [INFO] [PID 31420] [TID 2] SimulatorForm: формирование snapshot. | points=5192; selected=<none>; player=WorldCoordinate { X = 165584,2198816024, Y = 89,5193, Z = -78859,24945241431 }
+2026-09-30 16:28:05.583 [INFO] [PID 31420] [TID 2] SimulatorForm: отправляю snapshot в WebView2. | jsonChars=1743012; points=5192
+2026-09-30 16:28:05.645 [INFO] [PID 31420] [TID 2] WEB: Simulator получил snapshot. | {"points":5192,"selectedPointId":null,"player":{"x":165584.2198816024,"y":89.5193,"z":-78859.24945241431},"version":"1.0.49.1-DIGESTION-THROUGHPUT-R1"}
+2026-09-30 16:28:05.823 [INFO] [PID 31420] [TID 2] SimulatorForm: формирование snapshot. | points=5192; selected=<none>; player=WorldCoordinate { X = 165584,2198816024, Y = 89,5193, Z = -78859,24945241431 }
+2026-09-30 16:28:05.830 [INFO] [PID 31420] [TID 2] SimulatorForm: отправляю snapshot в WebView2. | jsonChars=1743013; points=5192
+2026-09-30 16:28:05.895 [INFO] [PID 31420] [TID 2] WEB: Simulator получил snapshot. | {"points":5192,"selectedPointId":null,"player":{"x":165584.2198816024,"y":89.5193,"z":-78859.24945241431},"version":"1.0.49.1-DIGESTION-THROUGHPUT-R1"}
+2026-09-30 16:28:06.074 [INFO] [PID 31420] [TID 2] SimulatorForm: формирование snapshot. | points=5192; selected=<none>; player=WorldCoordinate { X = 165584,2198816024, Y = 89,5193, Z = -78859,24945241431 }
+2026-09-30 16:28:06.081 [INFO] [PID 31420] [TID 2] SimulatorForm: отправляю snapshot в WebView2. | jsonChars=1743012; points=5192
+2026-09-30 16:28:06.147 [INFO] [PID 31420] [TID 2] WEB: Simulator получил snapshot. | {"points":5192,"selectedPointId":null,"player":{"x":165584.2198816024,"y":89.5193,"z":-78859.24945241431},"version":"1.0.49.1-DIGESTION-THROUGHPUT-R1"}
+2026-09-30 16:28:06.325 [INFO] [PID 31420] [TID 2] SimulatorForm: формирование snapshot. | points=5192; selected=<none>; player=WorldCoordinate { X = 165584,2198816024, Y = 89,5193, Z = -78859,24945241431 }
+2026-09-30 16:28:06.332 [INFO] [PID 31420] [TID 2] SimulatorForm: отправляю snapshot в WebView2. | jsonChars=1743012; points=5192
+2026-09-30 16:28:06.393 [INFO] [PID 31420] [TID 2] WEB: Simulator получил snapshot. | {"points":5192,"selectedPointId":null,"player":{"x":165584.2198816024,"y":89.5193,"z":-78859.24945241431},"version":"1.0.49.1-DIGESTION-THROUGHPUT-R1"}
+2026-09-30 16:28:06.573 [INFO] [PID 31420] [TID 2] SimulatorForm: формирование snapshot. | points=5192; selected=<none>; player=WorldCoordinate { X = 165584,2198816024, Y = 89,5193, Z = -78859,24945241431 }
+2026-09-30 16:28:06.580 [INFO] [PID 31420] [TID 2] SimulatorForm: отправляю snapshot в WebView2. | jsonChars=1743012; points=5192
+2026-09-30 16:28:06.659 [INFO] [PID 31420] [TID 2] WEB: Simulator получил snapshot. | {"points":5192,"selectedPointId":null,"player":{"x":165584.2198816024,"y":89.5193,"z":-78859.24945241431},"version":"1.0.49.1-DIGESTION-THROUGHPUT-R1"}
+2026-09-30 16:28:06.824 [INFO] [PID 31420] [TID 2] SimulatorForm: формирование snapshot. | points=5192; selected=<none>; player=WorldCoordinate { X = 165584,2198816024, Y = 89,5193, Z = -78859,24945241431 }
+2026-09-30 16:28:06.830 [INFO] [PID 31420] [TID 2] SimulatorForm: отправляю snapshot в WebView2. | jsonChars=1743012; points=5192
+2026-09-30 16:28:06.893 [INFO] [PID 31420] [TID 2] WEB: Simulator получил snapshot. | {"points":5192,"selectedPointId":null,"player":{"x":165584.2198816024,"y":89.5193,"z":-78859.24945241431},"version":"1.0.49.1-DIGESTION-THROUGHPUT-R1"}
+2026-09-30 16:28:07.073 [INFO] [PID 31420] [TID 2] SimulatorForm: формирование snapshot. | points=5192; selected=<none>; player=WorldCoordinate { X = 165584,2198816024, Y = 89,5193, Z = -78859,24945241431 }
+2026-09-30 16:28:07.080 [INFO] [PID 31420] [TID 2] SimulatorForm: отправляю snapshot в WebView2. | jsonChars=1743012; points=5192
+2026-09-30 16:28:07.140 [INFO] [PID 31420] [TID 2] WEB: Simulator получил snapshot. | {"points":5192,"selectedPointId":null,"player":{"x":165584.2198816024,"y":89.5193,"z":-78859.24945241431},"version":"1.0.49.1-DIGESTION-THROUGHPUT-R1"}
+2026-09-30 16:28:07.321 [INFO] [PID 31420] [TID 2] SimulatorForm: формирование snapshot. | points=5192; selected=<none>; player=WorldCoordinate { X = 165584,2198816024, Y = 89,5193, Z = -78859,24945241431 }
+2026-09-30 16:28:07.328 [INFO] [PID 31420] [TID 2] SimulatorForm: отправляю snapshot в WebView2. | jsonChars=1743012; points=5192
+2026-09-30 16:28:07.391 [INFO] [PID 31420] [TID 2] WEB: Simulator получил snapshot. | {"points":5192,"selectedPointId":null,"player":{"x":165584.2198816024,"y":89.5193,"z":-78859.24945241431},"version":"1.0.49.1-DIGESTION-THROUGHPUT-R1"}
+2026-09-30 16:28:07.572 [INFO] [PID 31420] [TID 2] SimulatorForm: формирование snapshot. | points=5192; selected=<none>; player=WorldCoordinate { X = 165584,2198816024, Y = 89,5193, Z = -78859,24945241431 }
+2026-09-30 16:28:07.579 [INFO] [PID 31420] [TID 2] SimulatorForm: отправляю snapshot в WebView2. | jsonChars=1743012; points=5192
+2026-09-30 16:28:07.641 [INFO] [PID 31420] [TID 2] WEB: Simulator получил snapshot. | {"points":5192,"selectedPointId":null,"player":{"x":165584.2198816024,"y":89.5193,"z":-78859.24945241431},"version":"1.0.49.1-DIGESTION-THROUGHPUT-R1"}
+2026-09-30 16:28:07.823 [INFO] [PID 31420] [TID 2] SimulatorForm: формирование snapshot. | points=5192; selected=<none>; player=WorldCoordinate { X = 165584,2198816024, Y = 89,5193, Z = -78859,24945241431 }
+2026-09-30 16:28:07.830 [INFO] [PID 31420] [TID 2] SimulatorForm: отправляю snapshot в WebView2. | jsonChars=1743012; points=5192
+2026-09-30 16:28:07.891 [INFO] [PID 31420] [TID 2] WEB: Simulator получил snapshot. | {"points":5192,"selectedPointId":null,"player":{"x":165584.2198816024,"y":89.5193,"z":-78859.24945241431},"version":"1.0.49.1-DIGESTION-THROUGHPUT-R1"}
+2026-09-30 16:28:08.072 [INFO] [PID 31420] [TID 2] SimulatorForm: формирование snapshot. | points=5192; selected=<none>; player=WorldCoordinate { X = 165584,2198816024, Y = 89,5193, Z = -78859,24945241431 }
+2026-09-30 16:28:08.079 [INFO] [PID 31420] [TID 2] SimulatorForm: отправляю snapshot в WebView2. | jsonChars=1743012; points=5192
+2026-09-30 16:28:08.141 [INFO] [PID 31420] [TID 2] WEB: Simulator получил snapshot. | {"points":5192,"selectedPointId":null,"player":{"x":165584.2198816024,"y":89.5193,"z":-78859.24945241431},"version":"1.0.49.1-DIGESTION-THROUGHPUT-R1"}
+2026-09-30 16:28:08.322 [INFO] [PID 31420] [TID 2] SimulatorForm: формирование snapshot. | points=5192; selected=<none>; player=WorldCoordinate { X = 165584,2198816024, Y = 89,5193, Z = -78859,24945241431 }
+2026-09-30 16:28:08.329 [INFO] [PID 31420] [TID 2] SimulatorForm: отправляю snapshot в WebView2. | jsonChars=1743012; points=5192
+2026-09-30 16:28:08.390 [INFO] [PID 31420] [TID 2] WEB: Simulator получил snapshot. | {"points":5192,"selectedPointId":null,"player":{"x":165584.2198816024,"y":89.5193,"z":-78859.24945241431},"version":"1.0.49.1-DIGESTION-THROUGHPUT-R1"}
+2026-09-30 16:28:08.575 [INFO] [PID 31420] [TID 2] SimulatorForm: формирование snapshot. | points=5192; selected=<none>; player=WorldCoordinate { X = 165584,2198816024, Y = 89,5193, Z = -78859,24945241431 }
+2026-09-30 16:28:08.587 [INFO] [PID 31420] [TID 2] SimulatorForm: отправляю snapshot в WebView2. | jsonChars=1743012; points=5192
+2026-09-30 16:28:08.658 [INFO] [PID 31420] [TID 2] WEB: Simulator получил snapshot. | {"points":5192,"selectedPointId":null,"player":{"x":165584.2198816024,"y":89.5193,"z":-78859.24945241431},"version":"1.0.49.1-DIGESTION-THROUGHPUT-R1"}
+2026-09-30 16:28:08.823 [INFO] [PID 31420] [TID 2] SimulatorForm: формирование snapshot. | points=5192; selected=<none>; player=WorldCoordinate { X = 165584,2198816024, Y = 89,5193, Z = -78859,24945241431 }
+2026-09-30 16:28:08.829 [INFO] [PID 31420] [TID 2] SimulatorForm: отправляю snapshot в WebView2. | jsonChars=1743012; points=5192
+2026-09-30 16:28:08.890 [INFO] [PID 31420] [TID 2] WEB: Simulator получил snapshot. | {"points":5192,"selectedPointId":null,"player":{"x":165584.2198816024,"y":89.5193,"z":-78859.24945241431},"version":"1.0.49.1-DIGESTION-THROUGHPUT-R1"}
+2026-09-30 16:28:09.072 [INFO] [PID 31420] [TID 2] SimulatorForm: формирование snapshot. | points=5192; selected=<none>; player=WorldCoordinate { X = 165584,2198816024, Y = 89,5193, Z = -78859,24945241431 }
+2026-09-30 16:28:09.080 [INFO] [PID 31420] [TID 2] SimulatorForm: отправляю snapshot в WebView2. | jsonChars=1743012; points=5192
+2026-09-30 16:28:09.140 [INFO] [PID 31420] [TID 2] WEB: Simulator получил snapshot. | {"points":5192,"selectedPointId":null,"player":{"x":165584.2198816024,"y":89.5193,"z":-78859.24945241431},"version":"1.0.49.1-DIGESTION-THROUGHPUT-R1"}
+2026-09-30 16:28:09.323 [INFO] [PID 31420] [TID 2] SimulatorForm: формирование snapshot. | points=5192; selected=<none>; player=WorldCoordinate { X = 165584,2198816024, Y = 89,5193, Z = -78859,24945241431 }
+2026-09-30 16:28:09.330 [INFO] [PID 31420] [TID 2] SimulatorForm: отправляю snapshot в WebView2. | jsonChars=1743013; points=5192
+2026-09-30 16:28:09.395 [INFO] [PID 31420] [TID 2] WEB: Simulator получил snapshot. | {"points":5192,"selectedPointId":null,"player":{"x":165584.2198816024,"y":89.5193,"z":-78859.24945241431},"version":"1.0.49.1-DIGESTION-THROUGHPUT-R1"}
+2026-09-30 16:28:09.574 [INFO] [PID 31420] [TID 2] SimulatorForm: формирование snapshot. | points=5192; selected=<none>; player=WorldCoordinate { X = 165584,2198816024, Y = 89,5193, Z = -78859,24945241431 }
+2026-09-30 16:28:09.581 [INFO] [PID 31420] [TID 2] SimulatorForm: отправляю snapshot в WebView2. | jsonChars=1743013; points=5192
+2026-09-30 16:28:09.655 [INFO] [PID 31420] [TID 2] WEB: Simulator получил snapshot. | {"points":5192,"selectedPointId":null,"player":{"x":165584.2198816024,"y":89.5193,"z":-78859.24945241431},"version":"1.0.49.1-DIGESTION-THROUGHPUT-R1"}
+2026-09-30 16:28:09.822 [INFO] [PID 31420] [TID 2] SimulatorForm: формирование snapshot. | points=5192; selected=<none>; player=WorldCoordinate { X = 165584,2198816024, Y = 89,5193, Z = -78859,24945241431 }
+2026-09-30 16:28:09.829 [INFO] [PID 31420] [TID 2] SimulatorForm: отправляю snapshot в WebView2. | jsonChars=1743012; points=5192
+2026-09-30 16:28:09.901 [INFO] [PID 31420] [TID 2] WEB: Simulator получил snapshot. | {"points":5192,"selectedPointId":null,"player":{"x":165584.2198816024,"y":89.5193,"z":-78859.24945241431},"version":"1.0.49.1-DIGESTION-THROUGHPUT-R1"}
+2026-09-30 16:28:10.074 [INFO] [PID 31420] [TID 2] SimulatorForm: формирование snapshot. | points=5192; selected=<none>; player=WorldCoordinate { X = 165584,2198816024, Y = 89,5193, Z = -78859,24945241431 }
+2026-09-30 16:28:10.082 [INFO] [PID 31420] [TID 2] SimulatorForm: отправляю snapshot в WebView2. | jsonChars=1743012; points=5192
+2026-09-30 16:28:10.143 [INFO] [PID 31420] [TID 2] WEB: Simulator получил snapshot. | {"points":5192,"selectedPointId":null,"player":{"x":165584.2198816024,"y":89.5193,"z":-78859.24945241431},"version":"1.0.49.1-DIGESTION-THROUGHPUT-R1"}
+2026-09-30 16:28:10.322 [INFO] [PID 31420] [TID 2] SimulatorForm: формирование snapshot. | points=5192; selected=<none>; player=WorldCoordinate { X = 165584,2198816024, Y = 89,5193, Z = -78859,24945241431 }
+2026-09-30 16:28:10.329 [INFO] [PID 31420] [TID 2] SimulatorForm: отправляю snapshot в WebView2. | jsonChars=1743012; points=5192
+2026-09-30 16:28:10.392 [INFO] [PID 31420] [TID 2] WEB: Simulator получил snapshot. | {"points":5192,"selectedPointId":null,"player":{"x":165584.2198816024,"y":89.5193,"z":-78859.24945241431},"version":"1.0.49.1-DIGESTION-THROUGHPUT-R1"}
+2026-09-30 16:28:10.579 [INFO] [PID 31420] [TID 2] SimulatorForm: формирование snapshot. | points=5192; selected=<none>; player=WorldCoordinate { X = 165584,2198816024, Y = 89,5193, Z = -78859,24945241431 }
+2026-09-30 16:28:10.589 [INFO] [PID 31420] [TID 2] SimulatorForm: отправляю snapshot в WebView2. | jsonChars=1743012; points=5192
+2026-09-30 16:28:10.684 [INFO] [PID 31420] [TID 2] WEB: Simulator получил snapshot. | {"points":5192,"selectedPointId":null,"player":{"x":165584.2198816024,"y":89.5193,"z":-78859.24945241431},"version":"1.0.49.1-DIGESTION-THROUGHPUT-R1"}
+2026-09-30 16:28:10.826 [INFO] [PID 31420] [TID 2] SimulatorForm: формирование snapshot. | points=5192; selected=<none>; player=WorldCoordinate { X = 165584,2198816024, Y = 89,5193, Z = -78859,24945241431 }
+2026-09-30 16:28:10.839 [INFO] [PID 31420] [TID 2] SimulatorForm: отправляю snapshot в WebView2. | jsonChars=1743012; points=5192
+2026-09-30 16:28:10.927 [INFO] [PID 31420] [TID 2] WEB: Simulator получил snapshot. | {"points":5192,"selectedPointId":null,"player":{"x":165584.2198816024,"y":89.5193,"z":-78859.24945241431},"version":"1.0.49.1-DIGESTION-THROUGHPUT-R1"}
+2026-09-30 16:28:11.078 [INFO] [PID 31420] [TID 2] SimulatorForm: формирование snapshot. | points=5192; selected=<none>; player=WorldCoordinate { X = 165584,2198816024, Y = 89,5193, Z = -78859,24945241431 }
+2026-09-30 16:28:11.091 [INFO] [PID 31420] [TID 2] SimulatorForm: отправляю snapshot в WebView2. | jsonChars=1743012; points=5192
+2026-09-30 16:28:11.160 [INFO] [PID 31420] [TID 2] WEB: Simulator получил snapshot. | {"points":5192,"selectedPointId":null,"player":{"x":165584.2198816024,"y":89.5193,"z":-78859.24945241431},"version":"1.0.49.1-DIGESTION-THROUGHPUT-R1"}
+2026-09-30 16:28:11.322 [INFO] [PID 31420] [TID 2] SimulatorForm: формирование snapshot. | points=5192; selected=<none>; player=WorldCoordinate { X = 165584,2198816024, Y = 89,5193, Z = -78859,24945241431 }
+2026-09-30 16:28:11.329 [INFO] [PID 31420] [TID 2] SimulatorForm: отправляю snapshot в WebView2. | jsonChars=1743012; points=5192
+2026-09-30 16:28:11.391 [INFO] [PID 31420] [TID 2] WEB: Simulator получил snapshot. | {"points":5192,"selectedPointId":null,"player":{"x":165584.2198816024,"y":89.5193,"z":-78859.24945241431},"version":"1.0.49.1-DIGESTION-THROUGHPUT-R1"}
+2026-09-30 16:28:11.571 [INFO] [PID 31420] [TID 2] SimulatorForm: формирование snapshot. | points=5192; selected=<none>; player=WorldCoordinate { X = 165584,2198816024, Y = 89,5193, Z = -78859,24945241431 }
+2026-09-30 16:28:11.578 [INFO] [PID 31420] [TID 2] SimulatorForm: отправляю snapshot в WebView2. | jsonChars=1743013; points=5192
+2026-09-30 16:28:11.644 [INFO] [PID 31420] [TID 2] WEB: Simulator получил snapshot. | {"points":5192,"selectedPointId":null,"player":{"x":165584.2198816024,"y":89.5193,"z":-78859.24945241431},"version":"1.0.49.1-DIGESTION-THROUGHPUT-R1"}
+2026-09-30 16:28:11.821 [INFO] [PID 31420] [TID 2] SimulatorForm: формирование snapshot. | points=5192; selected=<none>; player=WorldCoordinate { X = 165584,2198816024, Y = 89,5193, Z = -78859,24945241431 }
+2026-09-30 16:28:11.828 [INFO] [PID 31420] [TID 2] SimulatorForm: отправляю snapshot в WebView2. | jsonChars=1743012; points=5192
+2026-09-30 16:28:11.891 [INFO] [PID 31420] [TID 2] WEB: Simulator получил snapshot. | {"points":5192,"selectedPointId":null,"player":{"x":165584.2198816024,"y":89.5193,"z":-78859.24945241431},"version":"1.0.49.1-DIGESTION-THROUGHPUT-R1"}
+2026-09-30 16:28:12.073 [INFO] [PID 31420] [TID 2] SimulatorForm: формирование snapshot. | points=5192; selected=<none>; player=WorldCoordinate { X = 165584,2198816024, Y = 89,5193, Z = -78859,24945241431 }
+2026-09-30 16:28:12.081 [INFO] [PID 31420] [TID 2] SimulatorForm: отправляю snapshot в WebView2. | jsonChars=1743012; points=5192
+2026-09-30 16:28:12.142 [INFO] [PID 31420] [TID 2] WEB: Simulator получил snapshot. | {"points":5192,"selectedPointId":null,"player":{"x":165584.2198816024,"y":89.5193,"z":-78859.24945241431},"version":"1.0.49.1-DIGESTION-THROUGHPUT-R1"}
+2026-09-30 16:28:12.321 [INFO] [PID 31420] [TID 2] SimulatorForm: формирование snapshot. | points=5192; selected=<none>; player=WorldCoordinate { X = 165584,2198816024, Y = 89,5193, Z = -78859,24945241431 }
+2026-09-30 16:28:12.328 [INFO] [PID 31420] [TID 2] SimulatorForm: отправляю snapshot в WebView2. | jsonChars=1743013; points=5192
+2026-09-30 16:28:12.389 [INFO] [PID 31420] [TID 2] WEB: Simulator получил snapshot. | {"points":5192,"selectedPointId":null,"player":{"x":165584.2198816024,"y":89.5193,"z":-78859.24945241431},"version":"1.0.49.1-DIGESTION-THROUGHPUT-R1"}
+2026-09-30 16:28:12.572 [INFO] [PID 31420] [TID 2] SimulatorForm: формирование snapshot. | points=5192; selected=<none>; player=WorldCoordinate { X = 165584,2198816024, Y = 89,5193, Z = -78859,24945241431 }
+2026-09-30 16:28:12.579 [INFO] [PID 31420] [TID 2] SimulatorForm: отправляю snapshot в WebView2. | jsonChars=1743012; points=5192
+2026-09-30 16:28:12.642 [INFO] [PID 31420] [TID 2] WEB: Simulator получил snapshot. | {"points":5192,"selectedPointId":null,"player":{"x":165584.2198816024,"y":89.5193,"z":-78859.24945241431},"version":"1.0.49.1-DIGESTION-THROUGHPUT-R1"}
+2026-09-30 16:28:12.823 [INFO] [PID 31420] [TID 2] SimulatorForm: формирование snapshot. | points=5192; selected=<none>; player=WorldCoordinate { X = 165584,2198816024, Y = 89,5193, Z = -78859,24945241431 }
+2026-09-30 16:28:12.830 [INFO] [PID 31420] [TID 2] SimulatorForm: отправляю snapshot в WebView2. | jsonChars=1743012; points=5192
+2026-09-30 16:28:12.892 [INFO] [PID 31420] [TID 2] WEB: Simulator получил snapshot. | {"points":5192,"selectedPointId":null,"player":{"x":165584.2198816024,"y":89.5193,"z":-78859.24945241431},"version":"1.0.49.1-DIGESTION-THROUGHPUT-R1"}
+2026-09-30 16:28:13.080 [INFO] [PID 31420] [TID 2] SimulatorForm: формирование snapshot. | points=5192; selected=<none>; player=WorldCoordinate { X = 165584,2198816024, Y = 89,5193, Z = -78859,24945241431 }
+2026-09-30 16:28:13.094 [INFO] [PID 31420] [TID 2] SimulatorForm: отправляю snapshot в WebView2. | jsonChars=1743012; points=5192
+2026-09-30 16:28:13.175 [INFO] [PID 31420] [TID 2] WEB: Simulator получил snapshot. | {"points":5192,"selectedPointId":null,"player":{"x":165584.2198816024,"y":89.5193,"z":-78859.24945241431},"version":"1.0.49.1-DIGESTION-THROUGHPUT-R1"}
+2026-09-30 16:28:13.321 [INFO] [PID 31420] [TID 2] SimulatorForm: формирование snapshot. | points=5192; selected=<none>; player=WorldCoordinate { X = 165584,2198816024, Y = 89,5193, Z = -78859,24945241431 }
+2026-09-30 16:28:13.328 [INFO] [PID 31420] [TID 2] SimulatorForm: отправляю snapshot в WebView2. | jsonChars=1743012; points=5192
+2026-09-30 16:28:13.388 [INFO] [PID 31420] [TID 2] WEB: Simulator получил snapshot. | {"points":5192,"selectedPointId":null,"player":{"x":165584.2198816024,"y":89.5193,"z":-78859.24945241431},"version":"1.0.49.1-DIGESTION-THROUGHPUT-R1"}
+2026-09-30 16:28:13.572 [INFO] [PID 31420] [TID 2] SimulatorForm: формирование snapshot. | points=5192; selected=<none>; player=WorldCoordinate { X = 165584,2198816024, Y = 89,5193, Z = -78859,24945241431 }
+2026-09-30 16:28:13.579 [INFO] [PID 31420] [TID 2] SimulatorForm: отправляю snapshot в WebView2. | jsonChars=1743012; points=5192
+2026-09-30 16:28:13.641 [INFO] [PID 31420] [TID 2] WEB: Simulator получил snapshot. | {"points":5192,"selectedPointId":null,"player":{"x":165584.2198816024,"y":89.5193,"z":-78859.24945241431},"version":"1.0.49.1-DIGESTION-THROUGHPUT-R1"}
+2026-09-30 16:28:13.823 [INFO] [PID 31420] [TID 2] SimulatorForm: формирование snapshot. | points=5192; selected=<none>; player=WorldCoordinate { X = 165584,2198816024, Y = 89,5193, Z = -78859,24945241431 }
+2026-09-30 16:28:13.830 [INFO] [PID 31420] [TID 2] SimulatorForm: отправляю snapshot в WebView2. | jsonChars=1743013; points=5192
+2026-09-30 16:28:13.893 [INFO] [PID 31420] [TID 2] WEB: Simulator получил snapshot. | {"points":5192,"selectedPointId":null,"player":{"x":165584.2198816024,"y":89.5193,"z":-78859.24945241431},"version":"1.0.49.1-DIGESTION-THROUGHPUT-R1"}
+2026-09-30 16:28:14.072 [INFO] [PID 31420] [TID 2] SimulatorForm: формирование snapshot. | points=5192; selected=<none>; player=WorldCoordinate { X = 165584,2198816024, Y = 89,5193, Z = -78859,24945241431 }
+2026-09-30 16:28:14.079 [INFO] [PID 31420] [TID 2] SimulatorForm: отправляю snapshot в WebView2. | jsonChars=1743012; points=5192
+2026-09-30 16:28:14.142 [INFO] [PID 31420] [TID 2] WEB: Simulator получил snapshot. | {"points":5192,"selectedPointId":null,"player":{"x":165584.2198816024,"y":89.5193,"z":-78859.24945241431},"version":"1.0.49.1-DIGESTION-THROUGHPUT-R1"}
+2026-09-30 16:28:14.322 [INFO] [PID 31420] [TID 2] SimulatorForm: формирование snapshot. | points=5192; selected=<none>; player=WorldCoordinate { X = 165584,2198816024, Y = 89,5193, Z = -78859,24945241431 }
+2026-09-30 16:28:14.329 [INFO] [PID 31420] [TID 2] SimulatorForm: отправляю snapshot в WebView2. | jsonChars=1743012; points=5192
+2026-09-30 16:28:14.389 [INFO] [PID 31420] [TID 2] WEB: Simulator получил snapshot. | {"points":5192,"selectedPointId":null,"player":{"x":165584.2198816024,"y":89.5193,"z":-78859.24945241431},"version":"1.0.49.1-DIGESTION-THROUGHPUT-R1"}
+2026-09-30 16:28:14.573 [INFO] [PID 31420] [TID 2] SimulatorForm: формирование snapshot. | points=5192; selected=<none>; player=WorldCoordinate { X = 165584,2198816024, Y = 89,5193, Z = -78859,24945241431 }
+2026-09-30 16:28:14.580 [INFO] [PID 31420] [TID 2] SimulatorForm: отправляю snapshot в WebView2. | jsonChars=1743012; points=5192
+2026-09-30 16:28:14.641 [INFO] [PID 31420] [TID 2] WEB: Simulator получил snapshot. | {"points":5192,"selectedPointId":null,"player":{"x":165584.2198816024,"y":89.5193,"z":-78859.24945241431},"version":"1.0.49.1-DIGESTION-THROUGHPUT-R1"}
+2026-09-30 16:28:14.822 [INFO] [PID 31420] [TID 2] SimulatorForm: формирование snapshot. | points=5192; selected=<none>; player=WorldCoordinate { X = 165584,2198816024, Y = 89,5193, Z = -78859,24945241431 }
+2026-09-30 16:28:14.829 [INFO] [PID 31420] [TID 2] SimulatorForm: отправляю snapshot в WebView2. | jsonChars=1743012; points=5192
+2026-09-30 16:28:14.891 [INFO] [PID 31420] [TID 2] WEB: Simulator получил snapshot. | {"points":5192,"selectedPointId":null,"player":{"x":165584.2198816024,"y":89.5193,"z":-78859.24945241431},"version":"1.0.49.1-DIGESTION-THROUGHPUT-R1"}
+2026-09-30 16:28:15.076 [INFO] [PID 31420] [TID 2] SimulatorForm: формирование snapshot. | points=5192; selected=<none>; player=WorldCoordinate { X = 165584,2198816024, Y = 89,5193, Z = -78859,24945241431 }
+2026-09-30 16:28:15.090 [INFO] [PID 31420] [TID 2] SimulatorForm: отправляю snapshot в WebView2. | jsonChars=1743012; points=5192
+2026-09-30 16:28:15.164 [INFO] [PID 31420] [TID 2] WEB: Simulator получил snapshot. | {"points":5192,"selectedPointId":null,"player":{"x":165584.2198816024,"y":89.5193,"z":-78859.24945241431},"version":"1.0.49.1-DIGESTION-THROUGHPUT-R1"}

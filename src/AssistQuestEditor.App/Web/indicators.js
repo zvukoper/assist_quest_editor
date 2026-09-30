@@ -45,6 +45,38 @@
   function reducedMetabolismPercent(){ return snapshot&&snapshot.conditionRates&&snapshot.conditionRates.reducedMetabolismPercent!=null?num(snapshot.conditionRates.reducedMetabolismPercent):45; }
   function elevatedMetabolismPercent(){ return snapshot&&snapshot.conditionRates&&snapshot.conditionRates.elevatedMetabolismPercent!=null?num(snapshot.conditionRates.elevatedMetabolismPercent):75; }
   /**
+   * НОМИНАЛЫ метаболизма и устойчивости — от ДОМЕНА, а не литералами «60».
+   *
+   * Раньше здесь стояло `metabolismPercent()>60`, и правка границ в калибровке
+   * до этой строки не доезжала: 45 и 75 приходили полями именно ради того,
+   * чтобы «подпись не разошлась с начислением», а номинал оставался исключением.
+   */
+  function defaultMetabolismPercent(){ return snapshot&&snapshot.conditionRates&&snapshot.conditionRates.defaultMetabolismPercent!=null?num(snapshot.conditionRates.defaultMetabolismPercent):60; }
+  function defaultResiliencePercent(){ return snapshot&&snapshot.conditionRates&&snapshot.conditionRates.defaultResiliencePercent!=null?num(snapshot.conditionRates.defaultResiliencePercent):60; }
+  /** Процент, на котором пропорциональная надбавка к здоровью становится полной. */
+  function elevatedBonusFullPercent(){ return snapshot&&snapshot.conditionRates&&snapshot.conditionRates.elevatedBonusFullPercent!=null?num(snapshot.conditionRates.elevatedBonusFullPercent):75; }
+  /** Делитель шанса устойчивости: «R / ЭТО процентов» — шанс не получить порцию истощения. */
+  function exhaustionResilienceDivisor(){ return snapshot&&snapshot.conditionRates&&snapshot.conditionRates.exhaustionResilienceDivisor!=null?num(snapshot.conditionRates.exhaustionResilienceDivisor):2; }
+  /** До какого потолка дебафф «Бомж» ОПУСКАЕТ устойчивость (%). */
+  function bumResilienceCapPercent(){ return snapshot&&snapshot.conditionRates&&snapshot.conditionRates.bumResilienceCapPercent!=null?num(snapshot.conditionRates.bumResilienceCapPercent):50; }
+  /** Насколько устойчивость тянется к потолку за 15 игр. мин: обычный режим. */
+  function resilienceReturnPerQuarterHour(){ return snapshot&&snapshot.conditionRates&&snapshot.conditionRates.resilienceReturnPerQuarterHour!=null?num(snapshot.conditionRates.resilienceReturnPerQuarterHour):0.5; }
+  /** То же под «Бомжом» — вдвое быстрее. */
+  function resilienceBumReturnPerQuarterHour(){ return snapshot&&snapshot.conditionRates&&snapshot.conditionRates.resilienceBumReturnPerQuarterHour!=null?num(snapshot.conditionRates.resilienceBumReturnPerQuarterHour):1; }
+  /**
+   * ДОЛЯ надбавки за «свойство выше номинала» при данном проценте ШКАЛЫ:
+   * 0 на номинале, 1 на elevatedBonusFullPercent, линейно между ними.
+   *
+   * Повторяет <c>ElevatedBonusShare</c> домена. Иначе строка вклада показывала
+   * бы полный размер надбавки уже с 61%, тогда как движок начисляет его
+   * пропорционально.
+   */
+  function elevatedBonusShare(percent){
+    var span=elevatedBonusFullPercent()-defaultMetabolismPercent();
+    if(span<=0) return percent>defaultMetabolismPercent()?1:0;
+    return Math.max(0,Math.min(1,(percent-defaultMetabolismPercent())/span));
+  }
+  /**
    * «В движении» = ВКЛЮЧЁННОЕ движение по маршруту, а не мгновенная скорость.
    *
    * Покой — это состояние, когда движение по маршруту ВЫКЛЮЧЕНО; только тогда
@@ -251,13 +283,17 @@
     else if(wanted==="burnout"&&key==="fatigue") value=Math.abs(rate)*0.10;
     // «Жажда» и «Обезвоживание»: вклад показан ТЕМ ЖЕ числом, что начисляет
     // домен. Жажда даёт аддитивные +0,5 %/мин к стрессу (то есть 0,5% шкалы =
-    // 50 ед./мин при шкале 10000), обезвоживание множит скорость стресса на
-    // 1,25 и отнимает метаболизм 2% за 10 минут (2% = 200 ед. за 10 мин =
-    // 200/10/60 ед./мин).
+    // 50 ед./мин при шкале 10000), обезвоживание множит скорость стресса на 1,25.
+    // Штрафы метаболизма заданы «за 10 игр. мин», поэтому 1% = 100 ед./10 мин =
+    // 10 ед./мин, а 2% — 20 ед./мин.
     else if(wanted==="thirst"&&key==="stress") value=50;
-    else if(wanted==="thirst"&&key==="metabolism") value=-200/60;
+    // ВКЛАДЫ В ЕДИНИЦАХ ШКАЛЫ ЗА МИНУТУ. Жажда: 1% за 10 минут = 100 ед./10 мин
+    // = 10 ед./мин. Обезвоживание: 2% за 10 минут = 20 ед./мин. Раньше стояло
+    // −200/60 у обоих — потеря смысла размерности и одинаковое число для разной
+    // по замыслу скорости.
+    else if(wanted==="thirst"&&key==="metabolism") value=-100/10;
     else if(wanted==="dehydration"&&key==="stress") value=Math.abs(rate)*0.25;
-    else if(wanted==="dehydration"&&key==="metabolism") value=-200/60;
+    else if(wanted==="dehydration"&&key==="metabolism") value=-200/10;
     else if(wanted==="dehydration"&&key==="resilience") value=-Math.abs(rateFor("hydration"));
     else if(wanted==="drowsiness"&&key==="fatigue") value=Math.abs(rate)*0.10;
     else if(wanted==="alcohol_aftereffect"&&(key==="hydration"||key==="fatigue")) value=-Math.abs(rate)*0.10;
@@ -323,17 +359,25 @@
       // за любой и ещё ×0,5 за кумулятивный.
       var healthMax=Math.max(1,num(vitals().maxHealth)||10000);
       var canRegen=num(vitals().health)<healthMax;
-      var elevatedMetabolism=metabolismPercent()>60;
-      var elevatedResilience=resiliencePercent()>60;
+      // НАДБАВКА РАСТЁТ С ПРОЦЕНТОМ — повторяет ElevatedBonusShare домена.
+      // Единицы вклада — те же, что у базовой строки «1% за 10 мин» (=10 ед./мин),
+      // поэтому доля умножается на 10.
+      var metabolismShare=elevatedBonusShare(metabolismPercent());
+      var resilienceShare=elevatedBonusShare(resiliencePercent());
       var bull=hasEffect("bull");
-      var perTen=1+(elevatedMetabolism?1:0)+(elevatedResilience?1:0)+(bull?2:0);
+      var perTen=1+metabolismShare+resilienceShare+(bull?2:0);
       var baseUnitsPerMinute=perTen*10;
       var afterAnyStress=baseUnitsPerMinute*(totalStressPercent()>0?0.75:1);
       var effective=afterAnyStress*(num(conditions().cumulativeStress)>0?0.5:1);
 
       result.push(factor("Базовое восстановление: 1% за 10 игр. мин",key,canRegen?10:0,"permanent",canRegen));
-      result.push(factor("Повышенный метаболизм: восстановление +1% за 10 игр. мин",key,elevatedMetabolism?10:0,"permanent",elevatedMetabolism));
-      result.push(factor("Повышенная устойчивость: восстановление +1% за 10 игр. мин",key,elevatedResilience?10:0,"permanent",elevatedResilience));
+      // НАЗВАНИЯ ДВУХ СОСТОЯНИЙ РАЗНЫЕ НАМЕРЕННО: «выше номинала» — про
+      // регенерацию здоровья, «повышенный» — про выход за коридор нормы
+      // (расход, пищеварение, объём, заживление). Одним словом они обозначали
+      // две разные вещи, и автор справедливо не мог понять, повышен у него
+      // метаболизм или нет.
+      result.push(factor("Метаболизм выше номинала ("+fmt(defaultMetabolismPercent(),0)+"–"+fmt(elevatedBonusFullPercent(),0)+"%): восстановление +"+fmt(metabolismShare,2)+"% за 10 игр. мин",key,canRegen?metabolismShare*10:0,"permanent",metabolismShare>0));
+      result.push(factor("Устойчивость выше номинала: восстановление +"+fmt(resilienceShare,2)+"% за 10 игр. мин",key,canRegen?resilienceShare*10:0,"permanent",resilienceShare>0));
       result.push(factor("«Бык»: восстановление +2% за 10 игр. мин",key,bull?20:0,"permanent",bull));
       result.push(factor("Любой стресс: восстановление ×0,75",key,canRegen?afterAnyStress-baseUnitsPerMinute:0,"permanent",canRegen&&totalStressPercent()>0));
       result.push(factor("Кумулятивный стресс: дополнительно ×0,5",key,canRegen?effective-afterAnyStress:0,"permanent",canRegen&&num(conditions().cumulativeStress)>0));
@@ -402,26 +446,48 @@
       return result;
     }
     if(key==="resilience"){
-      var rp=resiliencePercent(), target=hasEffect("bum")?50:60;
-      var delta=target>rp?Math.min(0.8333,(target-rp)/15):-Math.min(0.8333,(rp-target)/15);
-      result.push(factor("Возврат к номиналу 60%",key,hasEffect("bum")?0:delta,"permanent",!hasEffect("bum")&&Math.abs(delta)>FLAT_RATE_EPSILON));
-      result.push(factor("Дебафф «Бомж» ограничивает устойчивость 50%",key,hasEffect("bum")?rate:0,"permanent",hasEffect("bum"),-1));
+      // РАЗМЕРНОСТЬ ВКЛАДОВ — ЕДИНИЦЫ ШКАЛЫ ЗА ИГРОВУЮ МИНУТУ, как у всех строк
+      // монитора. Калибровка задаёт возврат как «% за 15 минут», поэтому
+      // перевод в минуту — деление на 15, а не на 60.
+      //
+      // Раньше в шапке стояло деление на 60 (занижение в 4 раза), а падение от
+      // обезвоживания вычиталось уже ПОСЛЕ этого — как «% в минуту». Из-за
+      // разницы в размерности вклад обезвоживания не перекрывал возврат, и под
+      // обезвоживанием шапка показывала РОСТ шкалы, хотя она падает.
+      var rp=resiliencePercent(), target=hasEffect("bum")?bumResilienceCapPercent():defaultResiliencePercent();
+      var quarterRate=hasEffect("bum")?resilienceBumReturnPerQuarterHour():resilienceReturnPerQuarterHour();
+      // Под «Бомжом» шкала ТОЛЬКО падает до потолка (как и в движке).
+      var pull=hasEffect("bum")?-Math.min(quarterRate,Math.max(0,rp-target)):-Math.min(quarterRate,Math.abs(target-rp));
+      var ret=pull*100/15;
+      result.push(factor("Возврат к номиналу "+fmt(defaultResiliencePercent(),0)+"%",key,hasEffect("bum")?0:ret,"permanent",!hasEffect("bum")&&Math.abs(ret)>FLAT_RATE_EPSILON));
+      result.push(factor("Дебафф «Бомж» тянет устойчивость вниз до "+fmt(bumResilienceCapPercent(),0)+"%",key,hasEffect("bum")?ret:0,"permanent",hasEffect("bum"),-1));
+      // ШАНС УСТОЙЧИВОСТИ — её сильнейший эффект, и раньше он не был виден
+      // игроку вообще. Считается по тому же делителю, что и в движке (R/2).
+      var skip=rp/exhaustionResilienceDivisor();
+      result.push(factor("Шанс не получить порцию истощения: "+fmt(skip,1)+"% (устойчивость ÷ "+fmt(exhaustionResilienceDivisor(),0)+")",key,0,"permanent",skip>0));
       if(hasEffect("dehydration"))
-        result.push(factor("«Обезвоживание»: устойчивость падает вместе с расходом жидкости",key,-Math.abs(rateFor("hydration")),"permanent",true,-1));
+        result.push(factor("«Обезвоживание»: устойчивость падает вместе с нормой расхода жидкости",key,-Math.abs(rateFor("hydration")),"permanent",true,-1));
       return result;
     }
     if(key==="metabolism"){
       var mp2=metabolismPercent();
-      result.push(factor("Возврат к номиналу 60%",key,(60-mp2)*100/60/60,"permanent",Math.abs(60-mp2)>0));
+      // ВОЗВРАТ К НОМИНАЛУ: 1% в час = 100 единиц за 60 минут. Раньше стояло
+      // «(60−M)·100/60/60» — формула без физического смысла, дававшая в 240 раз
+      // меньше фактического возврата.
+      var recoveryDiff=(defaultMetabolismPercent()-mp2)*100;
+      var recovery=Math.max(-100/60,Math.min(100/60,recoveryDiff/60));
+      result.push(factor("Возврат к номиналу "+fmt(defaultMetabolismPercent(),0)+"%",key,recovery,"permanent",Math.abs(defaultMetabolismPercent()-mp2)>0));
       [['cumulativeStress',"Истощение стресса"],["cumulativeFatigue","Истощение усталости"],["cumulativeHydration","Истощение жидкости"],["cumulativeEnergy","Истощение энергии"]].forEach(function(entry){
         var active=num(conditions()[entry[0]])>0;
-        result.push(factor(entry[1]+": −2% за 15 игр. мин",key,active?-200/60:0,"permanent",active,1));
+        // 2% за 15 минут = 200 единиц / 15 минут = 13,33 ед./мин.
+        result.push(factor(entry[1]+": −2% за 15 игр. мин",key,active?-200/15:0,"permanent",active,1));
       });
-      // «Жажда» отнимает 1% за 10 игр. мин, «Обезвоживание» — вдвое быстрее, 2%.
+      // «Жажда» отнимает 1% за 10 игр. мин (=10 ед./мин), «Обезвоживание» —
+      // вдвое быстрее, 2% (=20 ед./мин). Те же делители, что у движка.
       if(hasEffect("dehydration"))
-        result.push(factor("«Обезвоживание»: метаболизм −2% за 10 игр. мин",key,-200/60,"permanent",true,1));
+        result.push(factor("«Обезвоживание»: метаболизм −2% за 10 игр. мин",key,-200/10,"permanent",true,1));
       else if(hasEffect("thirst"))
-        result.push(factor("«Жажда»: метаболизм −1% за 10 игр. мин",key,-100/60,"permanent",true,1));
+        result.push(factor("«Жажда»: метаболизм −1% за 10 игр. мин",key,-100/10,"permanent",true,1));
       return result;
     }
     return result;

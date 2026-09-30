@@ -30,7 +30,13 @@ const snapshot={
     lastConsumedItemId:"food.meal",
     effects:[{id:"bull",name:"Бык",remainingRealSeconds:3600,isDebuff:false}]},
   character:{buffs:[],debuffs:[],skills:[{id:"skill.medicine",name:"Фельдшер",level:2}]},
-  conditionRates:{health:0,energy:-41.67,hydration:-10.5,fatigue:92.6,stress:0.9,resilience:0,metabolism:-1.3}
+  conditionRates:{health:0,energy:-41.67,hydration:-10.5,fatigue:92.6,stress:0.9,resilience:0,metabolism:-1.3,
+    // НОМИНАЛЫ И ГРАНИЦЫ ПРИХОДЯТ ОТ ДОМЕНА. Раньше монитор зашивал «60»
+    // литералами, и правка калибровки до него не доезжала.
+    reducedMetabolismPercent:45,elevatedMetabolismPercent:75,
+    defaultMetabolismPercent:60,defaultResiliencePercent:60,elevatedBonusFullPercent:75,
+    exhaustionResilienceDivisor:2,bumResilienceCapPercent:50,
+    resilienceReturnPerQuarterHour:0.5,resilienceBumReturnPerQuarterHour:1}
 };
 
 const {browser}=await openBrowser();
@@ -1121,6 +1127,12 @@ try{
       path.join(root,"src","AssistQuestEditor.App","Host","SimulatorForm.cs"),"utf8");
     const digestion=fs.readFileSync(
       path.join(root,"src","AssistQuestEditor.Domain","CharacterDigestion.cs"),"utf8");
+    const engine=fs.readFileSync(
+      path.join(root,"src","AssistQuestEditor.Domain","CharacterVitalsEngine.cs"),"utf8");
+    const models=fs.readFileSync(
+      path.join(root,"src","AssistQuestEditor.Domain","DomainModels.cs"),"utf8");
+    const indicators=fs.readFileSync(
+      path.join(root,"src","AssistQuestEditor.App","Web","indicators.js"),"utf8");
 
     check(/occupiedMilliliters/.test(simulatorForm)&&/totalMilliliters/.test(simulatorForm),
       "Хост не присылает занятый и полный объём пищеварения в миллилитрах: подпись " +
@@ -1154,6 +1166,41 @@ try{
     check(/WaterContentSpeedFactor/.test(digestion),
       "исчез коэффициент «лёгкости» воды: скорость усвоения перестала бы зависеть " +
       "от содержания жидкости в порции");
+    // МЕТАБОЛИЗМ ПИЩЕВАРЕНИЯ — ЧИСЛО, А НЕ ФЛАГ. С флагами игрок мог поесть при
+    // высоком метаболизме и получить ставку ×2,5 навсегда — эксплоит, который
+    // автор назвал прямо: «метаболизм будет на нуле, а пища отработает по норме».
+    check(/double metabolismPercent\)/.test(digestion) &&
+      /MetabolismPercent/.test(digestion),
+      "пищеварение снова принимает метаболизм ПРИЗНАКОМ: тогда поесть заранее при " +
+      "высоком метаболизме снова даст ставку ×2,5 на всё переваривание");
+    check(/double\.IsFinite\(ExhaustionRollPending\)/.test(models),
+      "в состоянии нет накопителя дробных порций броска устойчивости: шанс «не " +
+      "получить порцию истощения» стал бы зависеть от размера шага симуляции");
+    // СКОРОСТИ УСТОЙЧИВОСТИ И МЕТАБОЛИЗМА — В «% В ЧАС». Смесь размерностей
+    // («за четверть часа» плюс «за минуту») показывала рост там, где шкала падает.
+    check(/QuarterHoursPerHour/.test(engine) && /TenMinuteSpansPerHour/.test(engine),
+      "движок снова смешивает размерности скоростей устойчивости и метаболизма: " +
+      "подсказка покажет рост шкалы там, где она на самом деле падает");
+    check(/ElevatedBonusShare/.test(engine),
+      "надбавка за свойство выше номинала снова включается ФЛАГОМ: 61% и 100% " +
+      "давали бы одно и то же, хотя автор просил пропорциональность");
+    // ПРОПОРЦИОНАЛЬНОСТЬ НАДБАВКИ В МОНИТОРЕ: если страница снова зашьёт «>60»,
+    // строка обещала бы полный +1% уже с 61%.
+    check(/elevatedBonusShare/.test(indicators),
+      "монитор не считает ДОЛЮ надбавки: строка обещала бы полный размер уже при " +
+      "61%, тогда как движок начисляет пропорционально");
+    // Проверяем именно КОД, а не комментарий: в пояснении к функции нарочно
+    // оставлена запись «было `metabolismPercent()>60`».
+    const indicatorsCode=indicators.replace(/\/\*[\s\S]*?\*\//g,"")
+      .replace(/^\s*\/\/.*$/gm,"");
+    check(!/metabolismPercent\(\)>60/.test(indicatorsCode) &&
+      !/resiliencePercent\(\)>60/.test(indicatorsCode),
+      "монитор снова зашивает номинал 60 ДВУМЯ литералами: правка калибровки до " +
+      "этих строк не доедет, хотя 45 и 75 уже приходят полями");
+    check(/exhaustionResilienceDivisor/.test(indicators) &&
+      /exhaustionResilienceDivisor/.test(simulatorForm),
+      "шанс устойчивости не показывается игроку: это её сильнейший эффект, и он " +
+      "обязан быть виден строкой монитора");
   }
 
   if(failures.length){console.error("Indicators smoke: FAIL");failures.forEach(x=>console.error("  ✗ "+x));process.exitCode=1;}

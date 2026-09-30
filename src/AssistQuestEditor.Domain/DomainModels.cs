@@ -298,6 +298,18 @@ public sealed record PlayerConditionState(
 
     public double SkinIssuesGameSeconds { get; init; }
     public long RandomSequence { get; init; }
+
+    /// <summary>
+    /// Накопитель ДРОБНЫХ порций броска устойчивости: сколько «десятиминутных
+    /// порций» штрафа ещё не разыграно.
+    ///
+    /// Нужен потому, что шаг симуляции (250 мс) много меньше порции (10 игровых
+    /// минут): без накопителя бросок делался бы четыре раза в секунду по
+    /// дробной доле, и заданное «R/2 процентов шанса» превратилось бы в
+    /// случайность с совсем другой вероятностью. Хранится в сохранении: иначе
+    /// перезапуск обнулял бы уже накопленную долю порции.
+    /// </summary>
+    public double ExhaustionRollPending { get; init; }
     public double CaffeineLoadMg { get; init; }
     public double CaffeineDailyMg { get; init; }
     public double CaffeineDaySeconds { get; init; }
@@ -352,6 +364,10 @@ public sealed record PlayerConditionState(
             .Where(pair => !string.IsNullOrWhiteSpace(pair.Key))
             .ToDictionary(pair => pair.Key, pair => Math.Max(0, pair.Value), StringComparer.OrdinalIgnoreCase),
         SkinIssuesGameSeconds = Math.Max(0d, double.IsFinite(SkinIssuesGameSeconds) ? SkinIssuesGameSeconds : 0d),
+        ExhaustionRollPending = Math.Clamp(
+            double.IsFinite(ExhaustionRollPending) ? ExhaustionRollPending : 0d,
+            0d,
+            1d),
         CaffeineLoadMg = NormalizeNonNegative(CaffeineLoadMg),
         CaffeineDailyMg = NormalizeNonNegative(CaffeineDailyMg),
         CaffeineDaySeconds = Math.Max(0d, double.IsFinite(CaffeineDaySeconds) ? CaffeineDaySeconds : 0d),

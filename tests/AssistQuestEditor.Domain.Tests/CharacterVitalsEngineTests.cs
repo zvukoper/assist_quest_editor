@@ -1111,6 +1111,190 @@ public sealed class CharacterVitalsEngineTests
     }
 
     [Fact]
+    public void HealthBonusGrowsProportionallyBetweenNominalAndElevatedThreshold()
+    {
+        // ЗАДАНО АВТОРОМ: «процент шкалы влияет на ВЕЛИЧИНУ, на которую
+        // восстанавливается здоровье». Прежняя модель включала надбавку флагом, и
+        // 61% давали ровно то же, что 100%.
+        //
+        // Шкала роста — от номинала 60% до 75%: на 60% надбавки нет, на 75% она
+        // полная (+1% за 10 минут), выше не растёт.
+        double Gained(double percent)
+        {
+            var vitals = PlayerVitalsState.Default with
+            {
+                Health = PlayerConditionScale.FromPercent(50d),
+                Energy = PlayerConditionScale.FromPercent(90d),
+                Hydration = PlayerConditionScale.FromPercent(90d),
+                Resilience = PlayerConditionScale.FromPercent(
+                    CharacterVitalsEngine.DefaultResiliencePercent),
+                Metabolism = PlayerConditionScale.FromPercent(percent)
+            };
+
+            var update = CharacterVitalsEngine.Advance(
+                vitals,
+                PlayerConditionState.Empty,
+                gameSeconds: 600d,
+                realSeconds: 600d,
+                playerMoving: false,
+                sleeping: false,
+                traveledMeters: 0d,
+                gameHourOfDay: 12d);
+
+            return PlayerConditionScale.ToPercent(update.Vitals.Health) - 50d;
+        }
+
+        var nominal = Gained(CharacterVitalsEngine.DefaultMetabolismPercent);
+        var midpoint = Gained(
+            (CharacterVitalsEngine.DefaultMetabolismPercent +
+             CharacterVitalsTuning.ElevatedBonusFullPercent) / 2d);
+        var full = Gained(
+            CharacterVitalsTuning.ElevatedBonusFullPercent);
+        var beyond = Gained(95d);
+
+        // База — ровно 1% за 10 минут при номинале.
+        Assert.Equal(1d, nominal, 2);
+
+        // На половине шкалы роста — половина надбавки: 1 + 0,5 = 1,5%.
+        Assert.Equal(1.5d, midpoint, 2);
+
+        // На 75% надбавка полная: 1 + 1 = 2%.
+        Assert.Equal(2d, full, 2);
+
+        // Выше порога надбавка НЕ растёт: 95% дают столько же, сколько 75%.
+        Assert.Equal(full, beyond, 2);
+    }
+
+    [Fact]
+    public void ResilienceAndMetabolismBonusesStackProportionally()
+    {
+        // Оба свойства считаются по одной шкале роста, поэтому их надбавки
+        // складываются, а не «побеждает большее».
+        var vitals = PlayerVitalsState.Default with
+        {
+            Health = PlayerConditionScale.FromPercent(50d),
+            Energy = PlayerConditionScale.FromPercent(90d),
+            Hydration = PlayerConditionScale.FromPercent(90d),
+            Resilience = PlayerConditionScale.FromPercent(
+                CharacterVitalsTuning.ElevatedBonusFullPercent),
+            Metabolism = PlayerConditionScale.FromPercent(
+                CharacterVitalsTuning.ElevatedBonusFullPercent)
+        };
+
+        var update = CharacterVitalsEngine.Advance(
+            vitals,
+            PlayerConditionState.Empty,
+            gameSeconds: 600d,
+            realSeconds: 600d,
+            playerMoving: false,
+            sleeping: false,
+            traveledMeters: 0d,
+            gameHourOfDay: 12d);
+
+        // База 1% + метаболизм 1% + устойчивость 1% = 3% за 10 минут.
+        Assert.Equal(
+            3d,
+            PlayerConditionScale.ToPercent(update.Vitals.Health) - 50d,
+            2);
+    }
+
+    [Fact]
+    public void ResilienceRatesAreReportedInUnitsPerMinuteNotPerHour()
+    {
+        // РАЗМЕРНОСТЬ «ТЕКУЩЕЙ ДИНАМИКИ». Раньше возврат устойчивости считался
+        // «% за четверть часа», а потребитель делил его на 60 — занижение в
+        // 4 раза. Фактическая скорость — 0,5% за 15 минут, то есть 3,33 ед./мин.
+        var vitals = PlayerVitalsState.Default with
+        {
+            Resilience = PlayerConditionScale.FromPercent(30d)
+        };
+
+        var rates = CharacterVitalsEngine.RatesFrom(
+            vitals,
+            PlayerConditionState.Empty,
+            moving: false,
+            sleeping: false,
+            gameHourOfDay: 12d);
+
+        var expected =
+            PlayerConditionScale.RateFromPercent(
+                CharacterVitalsTuning.ResilienceReturnPercentPerQuarterHour *
+                4d / 60d);
+
+        Assert.Equal(expected, rates.ResiliencePerGameMinute, 6);
+        Assert.Equal(3.3333d, rates.ResiliencePerGameMinute, 3);
+    }
+
+    [Fact]
+    public void DehydrationRateShowsResilienceFallingNotRising()
+    {
+        // ЗНАК ПОДСКАЗКИ. Из-за смеси размерностей вклад обезвоживания не
+        // перекрывал возврат, и шапка показывала РОСТ шкалы там, где она падает.
+        // Норма расхода жидкости в покое — 4% в час, возврат — 2% в час, значит
+        // итог обязан быть отрицательным.
+        var vitals = PlayerVitalsState.Default with
+        {
+            Resilience = PlayerConditionScale.FromPercent(30d),
+            Hydration = PlayerConditionScale.FromPercent(10d)
+        };
+
+        var rates = CharacterVitalsEngine.RatesFrom(
+            vitals,
+            PlayerConditionState.Empty,
+            moving: false,
+            sleeping: false,
+            gameHourOfDay: 12d);
+
+        Assert.True(
+            rates.ResiliencePerGameMinute < 0d,
+            "под обезвоживанием устойчивость падает, а не растёт: " +
+            rates.ResiliencePerGameMinute);
+
+        var expected =
+            PlayerConditionScale.RateFromPercent(
+                (CharacterVitalsTuning.ResilienceReturnPercentPerQuarterHour *
+                 4d -
+                 CharacterVitalsEngine.HydrationConsumptionPercentPerHour(
+                     moving: false)) / 60d);
+
+        Assert.Equal(expected, rates.ResiliencePerGameMinute, 6);
+    }
+
+    [Fact]
+    public void MetabolismRateShowsExhaustionPenaltyInUnitsPerMinute()
+    {
+        // Истощение отнимает 2% за каждую шкалу за 15 минут = 8% в час на одну
+        // шкалу. В единицах — 13,33 ед./мин. Раньше показывалось 3,33 (÷60).
+        var vitals = PlayerVitalsState.Default with
+        {
+            Metabolism = PlayerConditionScale.FromPercent(30d)
+        };
+
+        var conditions = PlayerConditionState.Empty with
+        {
+            CumulativeEnergy = PlayerConditionScale.FromPercent(10d)
+        };
+
+        var rates = CharacterVitalsEngine.RatesFrom(
+            vitals,
+            conditions,
+            moving: false,
+            sleeping: false,
+            gameHourOfDay: 12d);
+
+        // Возврат к номиналу (+1%/ч = 1,67 ед./мин) минус истощение
+        // (8%/ч = 13,33 ед./мин) = −11,67 ед./мин.
+        var expected =
+            PlayerConditionScale.RateFromPercent(
+                (CharacterVitalsTuning.MetabolismRecoveryPercentPerHour -
+                 CharacterVitalsTuning
+                     .MetabolismExhaustionPenaltyPerQuarterHour * 4d) / 60d);
+
+        Assert.Equal(expected, rates.MetabolismPerGameMinute, 6);
+        Assert.True(rates.MetabolismPerGameMinute < -10d);
+    }
+
+    [Fact]
     public void BullAddsFlatTwoPercentPerTenMinutesToHealthRecovery()
     {
         // Задано автором: «Бык» даёт +2% восстановления здоровья. Бонус ПЛОСКИЙ
