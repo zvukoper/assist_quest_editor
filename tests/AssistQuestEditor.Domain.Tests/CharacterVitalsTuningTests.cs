@@ -110,12 +110,18 @@ public sealed class CharacterVitalsTuningTests
         Assert.Equal(
             CharacterVitalsTuning.StressPerCumulativeFatiguePercentPerHour,
             PlayerConditionEngine.StressPerCumulativeFatiguePerHour);
+        // Истощение копится ДОЛЕЙ ПРИРОСТА шкалы, а не ставкой «% в час»:
+        // почасовая ставка начисляла истощение даже при стоящей на месте шкале
+        // и пропускала разовые рывки вверх.
         Assert.Equal(
-            CharacterVitalsTuning.CumulativeFatiguePerCriticalHour,
-            PlayerConditionEngine.CumulativeFatiguePerCriticalHour);
+            CharacterVitalsTuning.FatigueExhaustionShare,
+            PlayerConditionEngine.FatigueExhaustionShare);
         Assert.Equal(
-            CharacterVitalsTuning.CumulativeStressPerCriticalHour,
-            PlayerConditionEngine.CumulativeStressPerCriticalHour);
+            CharacterVitalsTuning.FatigueExhaustionBelowFullShare,
+            PlayerConditionEngine.FatigueExhaustionBelowFullShare);
+        Assert.Equal(
+            CharacterVitalsTuning.StressExhaustionShare,
+            PlayerConditionEngine.StressExhaustionShare);
         Assert.Equal(
             CharacterVitalsTuning.BurnoutFatigueBuildMultiplier,
             PlayerConditionEngine.BurnoutFatigueBuildMultiplier);
@@ -316,20 +322,49 @@ public sealed class CharacterVitalsTuningTests
     [Fact]
     public void ConsumptionNormsProduceThePromisedPercentPerHour()
     {
+        // Нормы заданы КОЭФФИЦИЕНТАМИ над эталоном (2500 ккал за 3 часа, 300 мл
+        // за час, 2500 ккал за 8 часов, 120 мл за час): менять расход удобно
+        // коэффициентом, а не переписыванием нормы. Проверяется вся цепочка
+        // «коэффициент → норма → процент шкалы».
+        Assert.Equal(
+            2500d * CharacterVitalsTuning.EnergyLoadCoefficient / 3d,
+            CharacterVitalsTuning.EnergyKilocaloriesMovingPerHour);
+        Assert.Equal(
+            2500d * CharacterVitalsTuning.EnergyRestCoefficient / 8d,
+            CharacterVitalsTuning.EnergyKilocaloriesRestingPerHour);
+        Assert.Equal(
+            300d * CharacterVitalsTuning.HydrationLoadCoefficient,
+            CharacterVitalsTuning.HydrationMillilitersMovingPerHour);
+        Assert.Equal(
+            120d * CharacterVitalsTuning.HydrationRestCoefficient,
+            CharacterVitalsTuning.HydrationMillilitersRestingPerHour);
+
         // Норма в физических величинах переводится в проценты шкалы тем же
         // отношением, что и в движке: норма / размер шкалы × 100.
+        //
+        // Ожидания ВЫВОДЯТСЯ из калибровки, а не выписаны числами: сами
+        // коэффициенты — предмет правки баланса («1,5» → «1,6» меняет расход без
+        // единой строки в движке), и замороженный литерал делал бы тест красным
+        // после каждой честной правки норм. Тест проверяет ПЕРЕСЧЁТ, а не значение.
         Assert.Equal(
-            100d * (2500d / 3d) / 5000d,
-            CharacterVitalsEngine.EnergyConsumptionPercentPerHour(moving: true));
+            100d * CharacterVitalsTuning.EnergyKilocaloriesMovingPerHour /
+            CharacterVitalsTuning.EnergyScaleKilocalories,
+            CharacterVitalsEngine.EnergyConsumptionPercentPerHour(moving: true),
+            9);        Assert.Equal(
+            100d * CharacterVitalsTuning.EnergyKilocaloriesRestingPerHour /
+            CharacterVitalsTuning.EnergyScaleKilocalories,
+            CharacterVitalsEngine.EnergyConsumptionPercentPerHour(moving: false),
+            9);
         Assert.Equal(
-            100d * (2500d / 8d) / 5000d,
-            CharacterVitalsEngine.EnergyConsumptionPercentPerHour(moving: false));
+            100d * CharacterVitalsTuning.HydrationMillilitersMovingPerHour /
+            CharacterVitalsTuning.HydrationScaleMilliliters,
+            CharacterVitalsEngine.HydrationConsumptionPercentPerHour(moving: true),
+            9);
         Assert.Equal(
-            100d * 300d / 3000d,
-            CharacterVitalsEngine.HydrationConsumptionPercentPerHour(moving: true));
-        Assert.Equal(
-            100d * 120d / 3000d,
-            CharacterVitalsEngine.HydrationConsumptionPercentPerHour(moving: false));
+            100d * CharacterVitalsTuning.HydrationMillilitersRestingPerHour /
+            CharacterVitalsTuning.HydrationScaleMilliliters,
+            CharacterVitalsEngine.HydrationConsumptionPercentPerHour(moving: false),
+            9);
 
         // Обещания автора в читаемом виде: под нагрузкой расход быстрее покоя.
         Assert.True(

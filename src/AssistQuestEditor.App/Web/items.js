@@ -20,6 +20,8 @@
   var errorNode = null;
   var searchNode = null;
   var edibleNode = null;
+  var inedibleNode = null;
+  var questNode = null;
   var payload = null;
 
   /**
@@ -39,6 +41,27 @@
    * бы негде, и фильтр превратился бы в потерю предметов.
    */
   var onlyEdible = false;
+
+  /**
+   * Галочка «только несъедобное» — ОБРАТНАЯ к предыдущей, и это не дубликат.
+   *
+   * Обе нужны автору: «съедобное» отвечает на вопрос «чем поесть», а
+   * «несъедобное» — «что лежит в рюкзаке и не портится». Переключать одну
+   * галочку в два состояния значило бы менять значение того же флажка, и игрок
+   * не увидел бы, что фильтр включён: галочка на экране одна, а смысл у неё
+   * разный.
+   */
+  var onlyInedible = false;
+
+  /**
+   * Галочка «квестовое» — это фильтр по ПРАВИЛУ МИРА, а не по строке категории.
+   *
+   * Признак приходит от Хоста (`quest`) вместе с ценой. Сравнивать категорию с
+   * текстом здесь нельзя было бы: правило «квестовое не продаётся» уже живёт в
+   * домене, и второе его написание в JavaScript разошлось бы с первым — окно
+   * показало бы цену у того, что продавать запрещено.
+   */
+  var onlyQuest = false;
 
   var highlightId = "";
   var HIGHLIGHT_MS = 4000;
@@ -90,8 +113,30 @@
     // Съедобность приходит от Хоста (`edible` = CharacterVitalsEngine.CanConsume),
     // а не выводится здесь из калорий: у таблеток и мыла калорий нет, но они
     // употребимы, и признак «есть ккал» отфильтровал бы их как неСъедобное.
+    //
+    // ВЗАИМНОПРОТИВОПОЛОЖНЫЕ ГАЛОЧКИ. «Только съедобное» и «только несъедобное»
+    // включённые вместе дают ПУСТЫЙ список: предмет не бывает одновременно едой
+    // и не-едой. Пустой список с внятной подписью («фильтры исключают друг
+    // друга») честнее молчаливого выбора одной из галочек: игрок видит, что
+    // именно он включил, а не думает, что каталог опустел.
+    if (onlyEdible && onlyInedible) {
+      return [];
+    }
+
     if (onlyEdible) {
       source = source.filter(function (entry) { return entry.edible === true; });
+    }
+
+    if (onlyInedible) {
+      source = source.filter(function (entry) { return entry.edible !== true; });
+    }
+
+    // Квестовость — ОТДЕЛЬНАЯ ось, и она складывается с предыдущими по «И»:
+    // «квестовое» + «съедобное» = съедобные квестовые предметы. Пересечение
+    // осмысленно (квестовый предмет бывает едой), поэтому оно не запрещается, а
+    // просто сужает список.
+    if (onlyQuest) {
+      source = source.filter(function (entry) { return entry.quest === true; });
     }
 
     if (!query) return source;
@@ -120,8 +165,16 @@
   function nutritionHtml(entry) {
     var parts = [];
 
+    // ОБЪЁМ и МАССА печатаются рядом и раздельно (требование автора: «не только
+    // объём, но и массу в граммах»). Это действительно РАЗНЫЕ числа: у 500 мл
+    // воды масса 500 г, а у 30 г мёда объём 5 мл. Одно число вместо двух
+    // заставляло бы гадать, в чём измерен вес в рюкзаке.
     if (num(entry.milliliters) > 0) {
       parts.push("Объём порции " + fmt(entry.milliliters) + " мл");
+    }
+
+    if (num(entry.grams) > 0) {
+      parts.push("Масса " + fmt(entry.grams) + " г");
     }
 
     if (entry.feeds) {
@@ -143,6 +196,55 @@
   }
 
   /**
+   * БЖУ порции: белки, жиры и углеводы в граммах.
+   *
+   * Печатается ОТДЕЛЬНОЙ строкой от «пищевой ценности»: та рассказывает, что
+   * предмет даёт ШКАЛАМ (ккал, вода, проценты), а БЖУ — это состав, который
+   * сегодня на шкалы не влияет и понадобится будущим механикам (белок для мышц,
+   * жиры для сытости). Смешав их в одну строку, игрок прочитал бы состав как
+   * ещё один эффект.
+   *
+   * Строка появляется ТОЛЬКО если состав есть: у мыла и таблеток его нет, и
+   * «БЖУ: 0 / 0 / 0 г» утверждало бы диетологический факт о предмете, который не
+   * едят.
+   */
+  function macrosHtml(entry) {
+    var protein = num(entry.proteinGrams);
+    var fat = num(entry.fatGrams);
+    var carbs = num(entry.carbohydrateGrams);
+
+    if (protein <= 0 && fat <= 0 && carbs <= 0) return "";
+
+    return "<div class='itemMacros'><span class='itemNutritionLabel'>" +
+      "БЖУ порции: </span>б " + escapeHtml(fmt(protein)) + " г · ж " +
+      escapeHtml(fmt(fat)) + " г · у " + escapeHtml(fmt(carbs)) + " г</div>";
+  }
+
+  /**
+   * Качество изготовления и состояние.
+   *
+   * Оба значения приходят подписями от Хоста. Сейчас они у всех предметов
+   * одинаковы (качество «Обычное», состояние «Свежее» у еды и «Без повреждений»
+   * у прочего) — это ЗАДЕЛ под механики крафта и порчи, и автор прямо просил
+   * завести свойства заранее. Печатаются они поэтому всегда, а не только когда
+   * отличаются от умолчания: иначе механика, поменяв качество, впервые показала
+   * бы строку — и игрок решил бы, что предмет получил свойство из ниоткуда.
+   */
+  function attributesHtml(entry) {
+    var quality = String(entry.quality || "");
+    var condition = String(entry.condition || "");
+
+    if (!quality && !condition) return "";
+
+    var parts = [];
+    if (quality) parts.push("Качество: " + quality);
+    if (condition) parts.push("Состояние: " + condition);
+
+    return "<div class='itemAttributes'>" +
+      escapeHtml(parts.join(" · ")) + "</div>";
+  }
+
+  /**
    * Ключ карточки для сверки узлов.
    *
    * Сверка (`AssistDom.reconcile`) ключуется по `id` и ключевым `data-`атрибутам.
@@ -156,6 +258,23 @@
    * уже стоял в разметке и раньше (по нему ищет подсветка), и сверка читает его
    * тоже, но порядок перебора оставлен явным.
    */
+  /**
+   * Цена позиции в рублях.
+   *
+   * Число приходит от Хоста (`priceRubles`) и является ценой АВТОРА (меню кафе
+   * «У Дороги»), а не средней по рынку. Ноль означает «цены нет» — предмет
+   * выдаётся квестом или добывается, и «0 ₽» в карточке читалось бы как
+   * «бесплатно». Покупка в этом окне НЕ совершается: механики покупки ещё нет,
+   * поэтому цена только показывается.
+   */
+  function priceHtml(entry) {
+    var price = Math.round(num(entry.priceRubles));
+    if (price <= 0) return "";
+
+    return "<div class='itemPrice'>Цена: " +
+      escapeHtml(String(price)) + " ₽</div>";
+  }
+
   function cardHtml(entry) {
     var classes = "itemCard";
 
@@ -176,6 +295,9 @@
         "</div>" +
         "<div class='itemDescription'>" + escapeHtml(entry.description) + "</div>" +
         nutritionHtml(entry) +
+        macrosHtml(entry) +
+        attributesHtml(entry) +
+        priceHtml(entry) +
         "<div class='itemFooter'>" +
           "<span class='itemInInventory'>В инвентаре:</span>" +
           "<input class='itemQtyInput' type='number' min='0' max='999' step='1'" +
@@ -209,9 +331,10 @@
    * вовсе.
    *
    * Признак намеренно берётся из ТЕХ ЖЕ полей, что печатает карточка
-   * (название, количество, съедобность, объём, ккал, вода, категория, описание,
-   * цвет): любое поле, влияющее на показ, обязано сбрасывать список, иначе
-   * карточка осталась бы со старым содержимым.
+   * (название, количество, съедобность, объём, масса, ккал, вода, БЖУ, качество,
+   * состояние, цена, квестовость, категория, описание, цвет): любое поле,
+   * влияющее на показ, обязано сбрасывать список, иначе карточка осталась бы со
+   * старым содержимым.
    */
   function entriesSignature(list) {
     var parts = [];
@@ -220,10 +343,37 @@
       parts.push([entry.id, entry.name, entry.category, entry.description,
         entry.color, entry.letter, entry.edible === true ? 1 : 0,
         Math.max(0, Math.round(num(entry.quantity))),
-        num(entry.milliliters), num(entry.kilocalories), num(entry.waterMilliliters)]
+        num(entry.milliliters), num(entry.grams), num(entry.kilocalories),
+        num(entry.waterMilliliters), num(entry.proteinGrams),
+        num(entry.fatGrams), num(entry.carbohydrateGrams),
+        entry.quality, entry.condition, num(entry.priceRubles),
+        entry.quest === true ? 1 : 0]
         .join("\u0001"));
     }
     return parts.join("\u0002");
+  }
+
+  /**
+   * Подпись ПУСТОГО списка.
+   *
+   * Пустой список бывает по четырём РАЗНЫМ причинам, и одна общая надпись
+   * «ничего не найдено» заставляла бы гадать, что именно пусто. Особенно важен
+   * случай взаимоисключающих галочек: там пустота — ПРАВИЛЬНЫЙ ответ, и надпись
+   * обязана сказать это прямо, иначе выглядит как поломка каталога.
+   */
+  function emptyMessage() {
+    if (onlyEdible && onlyInedible) {
+      return "Галочки «только съедобное» и «только несъедобное» исключают друг " +
+        "друга — снимите одну.";
+    }
+
+    if (query) return "Ничего не найдено по запросу.";
+
+    if (onlyEdible) return "Нет съедобных предметов в каталоге.";
+    if (onlyInedible) return "Нет несъедобных предметов в каталоге.";
+    if (onlyQuest) return "Нет квестовых предметов в каталоге.";
+
+    return entries().length ? "Ничего не найдено." : "Каталог предметов пуст.";
   }
 
   function render() {
@@ -239,12 +389,7 @@
 
     var markup = list.length
       ? list.map(cardHtml).join("")
-      : "<div class='itemsEmpty'>" +
-        (onlyEdible && !query
-          ? "Нет съедобных предметов в каталоге."
-          : entries().length
-            ? "Ничего не найдено по запросу."
-            : "Каталог предметов пуст.") +
+      : "<div class='itemsEmpty'>" + emptyMessage() +
         "</div>";
 
     // Разметка ставится СВЕРКОЙ УЗЛОВ, а не `innerHTML`.
@@ -290,13 +435,18 @@
     highlightTimer = null;
 
     // Ссылку из журнала не должен прятать фильтр: иначе клик по названию не
-    // показал бы ничего, и выглядело бы это как сломанная ссылка. Галочку
-    // «только съедобное» снимаем по той же причине — ссылка может вести на мазь.
-    if (highlightId && (query || onlyEdible)) {
+    // показал бы ничего, и выглядело бы это как сломанная ссылка. Галочки
+    // фильтров снимаем по той же причине — ссылка может вести на мазь или на
+    // квестовую записку.
+    if (highlightId && (query || onlyEdible || onlyInedible || onlyQuest)) {
       query = "";
       onlyEdible = false;
+      onlyInedible = false;
+      onlyQuest = false;
       if (searchNode) searchNode.value = "";
       if (edibleNode) edibleNode.checked = false;
+      if (inedibleNode) inedibleNode.checked = false;
+      if (questNode) questNode.checked = false;
     }
 
     render();
@@ -356,6 +506,8 @@
     errorNode = document.getElementById("itemsError");
     searchNode = document.getElementById("itemsSearch");
     edibleNode = document.getElementById("itemsOnlyEdible");
+    inedibleNode = document.getElementById("itemsOnlyInedible");
+    questNode = document.getElementById("itemsOnlyQuest");
     if (!body) return;
 
     if (searchNode) {
@@ -365,16 +517,29 @@
       });
     }
 
-    // Галочка «только съедобное» — фильтр ПОКАЗА, как и поиск: она скрывает
-    // неСъедобное из СПИСКА, а каталог остаётся полным. Снимать её при выделении
-    // из журнала не нужно: ссылка может вести на мазь, и галочка спрятала бы
-    // предмет, на который сослался игрок.
-    if (edibleNode) {
-      edibleNode.addEventListener("change", function () {
-        onlyEdible = edibleNode.checked === true;
+    // Галочки фильтров — фильтры ПОКАЗА, как и поиск: они скрывают предметы из
+    // СПИСКА, а каталог остаётся полным. Снимать их при выделении из журнала не
+    // нужно: ссылка может вести на мазь, и галочка спрятала бы предмет, на
+    // который сослался игрок.
+    //
+    // Подписка одна на все три: разметка у них общая, и три одинаковых обработчика
+    // разошлись бы при первой же правке. Флаг выбирается по `id` поля, а не по
+    // порядку в массиве, — порядок в разметке может измениться.
+    var toggles = [
+      [edibleNode, function (on) { onlyEdible = on; }],
+      [inedibleNode, function (on) { onlyInedible = on; }],
+      [questNode, function (on) { onlyQuest = on; }]
+    ];
+
+    toggles.forEach(function (pair) {
+      var node = pair[0];
+      if (!node) return;
+
+      node.addEventListener("change", function () {
+        pair[1](node.checked === true);
         render();
       });
-    }
+    });
 
     // Делегирование, а не подписка на каждый узел: разметка пересобирается на
     // каждом обновлении, и обработчики на узлах терялись бы вместе с ней.

@@ -11,6 +11,44 @@ public static class ItemCatalogFactory
 {
     public static IReadOnlyList<ItemDefinition> CreateStarter() => Items;
 
+    /// <summary>
+    /// Категории, которые НИКОГДА не продаются: их выдают квесты и события, и
+    /// цена у них означала бы покупку, которой в мире нет.
+    ///
+    /// Признак задан КАТЕГОРИЕЙ, а не списком Id: автор сформулировал правило как
+    /// «кроме квестовых, которые никогда не продаются», и новая квестовая вещь
+    /// должна попадать под него сама, без правки второй таблицы.
+    /// </summary>
+    public static bool IsQuestOnly(string? category) =>
+        string.Equals(
+            category,
+            QuestItemCategory,
+            StringComparison.OrdinalIgnoreCase);
+
+    public const string QuestItemCategory = "Квестовый предмет";
+
+    /// <summary>Определение по Id. null — такого предмета в каталоге нет.</summary>
+    public static ItemDefinition? Find(string? itemId) =>
+        string.IsNullOrWhiteSpace(itemId)
+            ? null
+            : Items.FirstOrDefault(item =>
+                item.Id.Equals(itemId, StringComparison.OrdinalIgnoreCase));
+
+    /// <summary>
+    /// Цена предмета в рублях с учётом правила «квестовое не продаётся».
+    ///
+    /// Проверка стоит ЗДЕСЬ, а не в таблице цен: одна забытая строка в таблице
+    /// вернула бы цену квестовой вещи, и игрок увидел бы у неё ценник. Отказ
+    /// должен зависеть от КАТЕГОРИИ, то есть от того, что автор задал словами.
+    /// </summary>
+    public static int PriceRubles(ItemDefinition? item)
+    {
+        if (item is null || IsQuestOnly(item.Category))
+            return 0;
+
+        return ItemData.PriceRubles(item.Id);
+    }
+
     public static IReadOnlyList<ItemDefinition> Items =>
     [
         new ItemDefinition(
@@ -25,6 +63,12 @@ public static class ItemCatalogFactory
             "Колбаса домашнего приготовления от Гоши. Еда: восстанавливает немного энергии.",
             "Еда",
             "#c8874a"),
+        new ItemDefinition(
+            "ruslan.legendary_shashlik",
+            "Легендарный шашлык Руслана",
+            "Особый шашлык из спецмаринада. Единственный способ получить форсаж без препаратов: +25% к шкалам энергии и стресса сверх нормы.",
+            QuestItemCategory,
+            "#d9762f"),
         new ItemDefinition(
             "note",
             "Записка",

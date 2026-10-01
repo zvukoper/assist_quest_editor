@@ -30,7 +30,16 @@ const snapshot={
     lastConsumedItemId:"food.meal",
     effects:[{id:"bull",name:"Бык",remainingRealSeconds:3600,isDebuff:false}]},
   character:{buffs:[],debuffs:[],skills:[{id:"skill.medicine",name:"Фельдшер",level:2}]},
-  conditionRates:{health:0,energy:-41.67,hydration:-10.5,fatigue:92.6,stress:0.9,resilience:0,metabolism:-1.3}
+  conditionRates:{health:0,energy:-41.67,hydration:-10.5,fatigue:92.6,stress:0.9,resilience:0,metabolism:-1.3,
+    // НОМИНАЛЫ И ГРАНИЦЫ ПРИХОДЯТ ОТ ДОМЕНА. Раньше монитор зашивал «60»
+    // литералами, и правка калибровки до него не доезжала.
+    reducedMetabolismPercent:45,elevatedMetabolismPercent:75,
+    defaultMetabolismPercent:60,defaultResiliencePercent:60,elevatedBonusFullPercent:75,
+    exhaustionResilienceDivisor:2,bumResilienceCapPercent:50,
+    resilienceReturnPerQuarterHour:0.5,resilienceBumReturnPerQuarterHour:1},
+  // Галочка «%/время» — из НАСТРОЕК Хоста: страница её не хранит, а рисует
+  // присланное. Фикстура подаёт включённое значение: оно же значение по умолчанию.
+  percentUnits:true
 };
 
 const {browser}=await openBrowser();
@@ -38,7 +47,7 @@ try{
   const page=await browser.newPage({viewport:{width:1000,height:900}});
   const errors=[]; page.on("pageerror",e=>errors.push(String(e)));
   await page.goto("file:///"+path.join(web,"index.html").replace(/\\/g,"/"));
-  // Первый снимок подаёт ЖЕЛУДОК С ПОРЦИЯМИ, а не одну «последнюю съеденную»
+  // Первый снимок подаёт ПИЩЕВАРЕНИЕ С ПОРЦИЯМИ, а не одну «последнюю съеденную»
   // строку. Раньше строка предмета в шкале бралась из `lastConsumedItemId`, и
   // автор справедливо указал, что предметов может быть НЕСКОЛЬКО: пока вода
   // переваривается, съеденный апельсин подписывал восстановление, а сама вода из
@@ -46,7 +55,11 @@ try{
   // шкале. `lastConsumedItemId` оставлен в фикстуре нарочно: если он снова
   // начнёт влиять на строку, проверки покраснеют.
   const mealDigestion={
-    occupiedLiters:0.4,totalLiters:1,occupiedMilliliters:400,totalMilliliters:1000,
+    // Вместимость — 2000 мл (задано автором: «увеличиваем с 1000 до 2000»).
+    occupiedLiters:0.4,totalLiters:2,occupiedMilliliters:400,totalMilliliters:2000,
+    // Пропускная способность — первое влияние в списке: игрок обязан видеть
+    // лимит, из которого считаются сроки порций.
+    dryThroughputMillilitersPerHour:1000,
     energyPerMinute:60,hydrationPerMinute:75,
     portions:[
       {itemId:"water.bottle",volumeLiters:0.5,volumeMilliliters:500,kilocalories:0,waterMilliliters:500,
@@ -67,9 +80,9 @@ try{
   });
   await page.waitForTimeout(80);
 
-  // Карточки ШКАЛ, а не все `.indicatorCard`. Блок желудка тоже несёт класс
-  // `indicatorCard` и стоит в разметке ПЕРВЫМ (он во всю ширину), поэтому
-  // выборка без фильтра по `data-scale-key` брала бы желудок как «первую шкалу»
+  // Карточки ШКАЛ, а не все `.indicatorCard`. Блок пищеварения тоже несёт класс
+  // `indicatorCard` и стоит в разметке ПЕРВЫМ, поэтому выборка без фильтра по
+  // `data-scale-key` брала бы его как «первую шкалу»
   // и падала на отсутствии `.indicatorName` — так это и всплыло после правок.
   const cardData=await page.$$eval(".indicatorCard[data-scale-key]",nodes=>nodes.map(node=>({
     key:node.getAttribute("data-scale-key"),
@@ -122,11 +135,14 @@ try{
   check(!/раст[ёе]т|падает/.test(all),"остались старые слова направления");
   const energy=cardData.find(c=>c.key==="energy");
   check(energy&&energy.dynamic.includes("▼"),"нет треугольника падения энергии");
-  // Скорость показывается в ФИЗИЧЕСКИХ единицах шкалы: −41,67 ед./мин при
-  // потолке 5000 ккал — это −20,8 ккал/мин (10000 единиц = 5000 ккал, значит
-  // одна килокалория = 2 единицы). «ед./мин» у энергии и жидкости заменены на
-  // ккал/мин и мл/мин: игрок должен читать цифру, которую видит на этикетке еды.
-  check(energy&&energy.dynamic.includes("20.8 ккал/мин"),"нет скорости энергии в ккал/мин: "+(energy?energy.dynamic:"нет карточки"));
+  // ВКЛЮЧЁННАЯ галочка (состояние по умолчанию) печатает скорость ПРОЦЕНТОМ за
+  // минуту и час: «−0,417%/мин (−25%/ч)». Проверку формата ведём НИЖЕ, где снимок
+  // подан с явно выключенной галочкой, а здесь держим главное следствие:
+  // физических единиц в шапке при включённой галочке быть не должно.
+  check(energy&&energy.dynamic.includes("/мин")&&energy.dynamic.includes("%/ч"),
+    "нет скорости энергии в %/мин и %/ч: "+(energy?energy.dynamic:"нет карточки"));
+  check(!/ккал\/мин|мл\/мин/.test(energy?energy.dynamic:""),
+    "с включённой галочкой скорость энергии осталась в ккал/мин: "+(energy?energy.dynamic:"нет карточки"));
   const hydrationCard=cardData.find(c=>c.key==="hydration");
   check(energy&&energy.value.includes("(")&&energy.value.endsWith("%"),"неверный формат значения энергии");
   // Потолок энергии — 5000 ккал, жидкости — 3000 мл: физические величины,
@@ -137,6 +153,95 @@ try{
   check(!cardData.some(c=>(c.key==="energy"||c.key==="hydration")&&c.value.includes("10000")),"физическая шкала показывает внутренний потолок 10000");
   check(energy&&energy.factors.some(x=>x.text.includes("Базовый расход энергии")),"нет базового фактора энергии");
   check(energy&&energy.factors.some(x=>x.cls.includes("permanentInactive")),"нет неактивных постоянных факторов");
+
+  // ── Строка «Базовый расход» берёт числа У ДОМЕНА, а не из литералов ──────
+  //
+  // Дефект автора: он поправил нормы расхода в `CharacterVitalsTuning`, строка
+  // динамики за ним пошла, а «Базовый расход энергии/жидкости» осталась с
+  // прежними 13,9 ккал и 5 мл — страница считала её по СВОЕЙ таблице чисел и
+  // правку калибровки не замечала вовсе.
+  //
+  // Сторож берёт нормы, которые страница знать не может (они «пришли» из
+  // conditionRates): −41,67 ед./мин — это ровно 20,8 ккал/мин при потолке 5000,
+  // а −10,5 ед./мин — 3,1 мл/мин при потолке 3000. Оба числа выведены из ДАННЫХ
+  // фикстуры, а не из калибровки, поэтому проверка ловит именно дублирование
+  // норм в JavaScript: пока они там есть, строка показывает старые 13,9 ккал и
+  // 5 мл и краснеет.
+  const baseRow=card=>card.factors.find(x=>x.text.includes("Базовый расход"));
+  const energyBase=baseRow(energy), hydrationBase=baseRow(hydration);
+  // С включённой галочкой вклад тоже в процентах: −41,67 ед./мин при потолке
+  // 10000 — это −0,417%/мин. Число выведено из ДАННЫХ фикстуры, поэтому проверка
+  // ловит дублирование норм в JavaScript.
+  check(!!energyBase&&energyBase.text.includes("-0.417%/мин"),
+    "базовый расход энергии не совпал с доменной нормой: "+(energyBase?energyBase.text.trim():"строка не найдена"));
+  check(!!hydrationBase&&hydrationBase.text.includes("-0.105%/мин"),
+    "базовый расход жидкости не совпал с доменной нормой: "+(hydrationBase?hydrationBase.text.trim():"строка не найдена"));
+
+  // ── Галочка «%/время» ───────────────────────────────────────────────────
+  //
+  // Задано автором: «Нужна галочка: "%/время". По умолчанию включена. Если
+  // галочка включена, то все единицы измерения в окне визуально заменяются на
+  // процент в минуту и процент в час соответственно: например 2%/мин (120%/ч).
+  // Если выключена, то как сейчас показываются полные единицы, миллилитры, кДж».
+  //
+  // С галочкой скорость шкалы печатается процентом ЗА МИНУТУ и за час; без неё —
+  // физической величиной (ккал/мин, мл/мин, ед./мин).
+  check(!cardData.some(c=>/ккал\/мин|мл\/мин/.test(c.dynamic)),
+    "с включённой галочкой скорость показана физической величиной: "+
+    cardData.map(c=>c.dynamic).filter(Boolean).join(" | "));
+  check(cardData.some(c=>/%\/мин/.test(c.dynamic)&&/%\/ч/.test(c.dynamic)),
+    "нет скорости ни в %/мин, ни в %/ч: "+cardData.map(c=>c.dynamic).join(" | "));
+
+  // Переключение галочки: узел СТАТИЧНЫЙ и живёт в шапке, а не в теле монитора,
+  // поэтому его состояние обязано переживать перерисовку тела (раз в секунду).
+  const toggleBefore=await page.$eval("#percentUnitsToggle",n=>({checked:n.checked,exists:true}));
+  check(toggleBefore.checked,"галочка «%/время» по умолчанию не включена");
+
+  await page.click("#percentUnitsToggle");
+  await page.waitForTimeout(150);
+  const offData=await page.$$eval(".indicatorCard[data-scale-key]",nodes=>nodes.map(node=>({
+    key:node.getAttribute("data-scale-key"),
+    dynamic:node.querySelector(".indicatorDynamics")?.textContent.trim()||"",
+    factors:[...node.querySelectorAll(".indicatorFact")].map(x=>x.textContent.trim())
+  })));
+  check(!offData.some(c=>/%\/мин/.test(c.dynamic)),
+    "после снятия галочки скорости остались в процентах: "+
+    offData.map(c=>c.dynamic).join(" | "));
+  check(offData.some(c=>/ккал\/мин|мл\/мин|ед\.\/мин/.test(c.dynamic)),
+    "после снятия галочки нет ни одной физической скорости: "+
+    offData.map(c=>c.dynamic).join(" | "));
+
+  // ТЕ ЖЕ вклады, что выше проверялись процентами, без галочки обязаны читаться
+  // в ФИЗИЧЕСКИХ единицах: −41,67 ед./мин при потолке 5000 ккал — это −20,8
+  // ккал/мин (10000 единиц = 5000 ккал, значит одна килокалория = 2 единицы),
+  // а −10,5 ед./мин — 3,1 мл/мин при потолке 3000. Оба числа выведены из данных
+  // фикстуры: пока нормы продублированы в JavaScript, строка показывает старые
+  // 13,9 ккал и 5 мл и краснеет.
+  const offEnergy=offData.find(c=>c.key==="energy");
+  const offHydration=offData.find(c=>c.key==="hydration");
+  check(offEnergy&&offEnergy.dynamic.includes("20.8 ккал/мин"),
+    "без галочки нет скорости энергии в ккал/мин: "+(offEnergy?offEnergy.dynamic:"нет карточки"));
+  const offBaseRow=(card,label)=>card?(card.factors.find(t=>t.includes("Базовый расход"))||""):"";
+  check(offBaseRow(offEnergy).includes("20.8 ккал/мин"),
+    "базовый расход энергии не совпал с доменной нормой: "+offBaseRow(offEnergy));
+  check(offBaseRow(offHydration).includes("3.1 мл/мин"),
+    "базовый расход жидкости не совпал с доменной нормой: "+offBaseRow(offHydration));
+
+  // Строка усвоения пищеварения без галочки — в ккал/мин, как и была.
+  const offStomach=await page.$eval(".stomachHead",n=>n.textContent);
+  check(/ккал\/мин/.test(offStomach),
+    "без галочки динамика усвоения не в ккал/мин: "+offStomach);
+
+  // Обратно: страница обязана вернуться к процентам БЕЗ перезагрузки.
+  await page.click("#percentUnitsToggle");
+  await page.waitForTimeout(150);
+  const backOn=await page.$$eval(".indicatorCard[data-scale-key]",nodes=>nodes.map(node=>node.querySelector(".indicatorDynamics")?.textContent.trim()||""));
+  check(backOn.some(t=>/%\/мин/.test(t)),"галочка не включила проценты обратно: "+backOn.join(" | "));
+
+  // Значения шкал галочке НЕ подчиняются (решение автора): «2750 / 5000 ккал»
+  // остаётся и при включённой галочке — это значение, а не скорость.
+  check(energy&&energy.value.includes("2750 / 5000 ккал"),
+    "значение энергии перестало показывать килокалории: "+(energy?energy.value:"нет карточки"));
   const chips=await page.$$eval(".indicatorChip",nodes=>nodes.map(n=>({text:n.textContent.trim(),perk:n.getAttribute("data-perk-link"),item:n.getAttribute("data-item-link")})));
   check(chips.some(x=>x.text==="Бык"&&x.perk),"бафф «Бык» не кликабелен");
   check(chips.some(x=>x.text==="Паёк"&&x.item),"предмет не кликабелен");
@@ -158,23 +263,23 @@ try{
   check(hydrationItemRow.includes("Вода"),
     "в шкале жидкости нет воды, хотя она лежит в желудке: "+hydrationItemRow);
   check(energyItemRow.includes("Паёк"),
-    "в шкале энергии нет пайка, хотя он лежит в желудке: "+energyItemRow);
-  // Вклад берётся У ПОРЦИИ, а не из общей суммы желудка. Паёк даёт 30 ед./мин
-  // энергии из 60 общих, то есть 15 ккал/мин, а не 30 ккал/мин.
-  check(/усваивается.*15 ккал\/мин/.test(energyItemRow),
+    "в шкале энергии нет пайка, хотя он лежит в пищеварении: "+energyItemRow);
+  // Вклад берётся У ПОРЦИИ, а не из общей суммы пищеварения. Паёк даёт 30 ед./мин
+  // энергии из 60 общих, то есть 0,3%/мин, а не 0,6%/мин общей скорости желудка.
+  check(/усваивается.*0[.,]3%\/мин/.test(energyItemRow),
     "в строке предмета показана не его скорость, а общая по желудку: "+energyItemRow);
-  // Вода даёт 45 ед./мин жидкости из 75 общих, то есть 13,5 → 14 мл/мин.
-  check(/усваивается.*13[.,]5 мл\/мин/.test(hydrationItemRow),
+  // Вода даёт 45 ед./мин жидкости из 75 общих, то есть 0,45%/мин.
+  check(/усваивается.*0[.,]45%\/мин/.test(hydrationItemRow),
     "в строке воды показана не её скорость: "+hydrationItemRow);
 
-  // ── Занятый и полный объём желудка ──────────────────────────────────────
+  // ── Занятый и полный объём пищеварения ──────────────────────────────────
   // Автор: «нужно справа от желудка также показывать занятый объём и через слеш
-  // весь объём желудка» + «объём желудка отображать в миллилитрах». Миллилитры,
+  // весь объём» + «объём отображать в миллилитрах». Миллилитры,
   // а не литры: 5 мл мёда игрок обязан видеть как «5 мл», иначе дробные объёмы
   // округляются до «0 л» и разница между предметами исчезает.
   const volume=await page.$eval(".stomachVolume",n=>n.textContent.trim());
-  check(/^400\s*\/\s*1000\s*мл$/.test(volume),
-    "объём желудка не показан в миллилитрах как «занято / всего»: "+volume);
+  check(/^400\s*\/\s*2000\s*мл$/.test(volume),
+    "объём пищеварения не показан в миллилитрах как «занято / всего»: "+volume);
   const state=await page.$eval("#characterStateValue",n=>({text:n.textContent.trim(),cls:n.className,title:n.title}));
   check(state.text&&/state[A-Z]/.test(state.cls)&&state.title.includes("/100"),"не рассчитано состояние персонажа");
   const grid=await page.$eval(".indicatorTopRow",n=>getComputedStyle(n).gridTemplateColumns);
@@ -223,20 +328,25 @@ try{
     (window.chrome.webview.listeners.get("message")||[]).forEach(fn=>fn({data:JSON.stringify(payload)}));
   },data);
 
-  // ── Блок «Желудок» ──────────────────────────────────────────────────────
+  // ── Блок «Пищеварение» ───────────────────────────────────────────────────
   //
   // Прямой тест дефекта автора: «использовал воду, затем Апельсин — вода
   // исчезла». Блок обязан показать СРАЗУ ОБЕ порции, каждую со своим таймером,
-  // и занимать всю ширину монитора — его площадь и есть объём желудка.
+  // и занимать всю ширину монитора — его площадь и есть объём.
+  //
+  // Вместимость — 2000 мл (задано автором), поэтому и «занято / всего»,
+  // и сумма миллилитров участков считаются против нового числа.
   const stomach={...snapshot,digestion:{
-    volumeFraction:0.7,occupiedLiters:0.7,totalLiters:1,
-    occupiedMilliliters:700,totalMilliliters:1000,
+    volumeFraction:0.35,occupiedLiters:0.7,totalLiters:2,
+    occupiedMilliliters:700,totalMilliliters:2000,
+    dryThroughputMillilitersPerHour:1000,
     energyPerMinute:60,hydrationPerMinute:100,
     portions:[
-      {itemId:"water.bottle",volumeFraction:0.5,volumeLiters:0.5,volumeMilliliters:500,kilocalories:0,waterMilliliters:500,remainingGameSeconds:1200,remainingGameMinutes:20},
-      {itemId:"food.orange",volumeFraction:0.2,volumeLiters:0.2,volumeMilliliters:200,kilocalories:90,waterMilliliters:170,remainingGameSeconds:2400,remainingGameMinutes:40}
+      {itemId:"water.bottle",volumeFraction:0.25,volumeLiters:0.5,volumeMilliliters:500,kilocalories:0,waterMilliliters:500,remainingGameSeconds:1200,remainingGameMinutes:20,waterContent:1},
+      {itemId:"food.orange",volumeFraction:0.1,volumeLiters:0.2,volumeMilliliters:200,kilocalories:90,waterMilliliters:170,remainingGameSeconds:2400,remainingGameMinutes:40,waterContent:0.85}
     ],
-    factors:[{text:"Метаболизм 75%: усвоение ×2,5 и +0,5% объёма",useful:true}]
+    factors:[{text:"Пропускная способность: 1000 мл/ч сухого, 1350 мл/ч воды",useful:true},
+      {text:"Метаболизм 75%: усвоение ×2,5 и +0,5% объёма",useful:true}]
   }};
   await push({
     type:"snapshot",snapshot:stomach,conditionRates:snapshot.conditionRates,digestion:stomach.digestion,
@@ -305,7 +415,7 @@ try{
     };
   });
 
-  check(stomachBlock!==null,"блок «Желудок» не отрисован");
+  check(stomachBlock!==null,"блок «Пищеварение» не отрисован");
   if(stomachBlock){
     // ПРЕДМЕТОВ должно быть РОВНО два: подмена цикла на «только последняя» —
     // ровно тот дефект, который видел автор. Участков (прямоугольников) может
@@ -313,12 +423,13 @@ try{
     // предмет — «Апельсин стёр Воду» от этого не возвращается.
     const stomachItems=[...new Set(stomachBlock.portions.map(p=>p.item))];
     check(stomachItems.length===2,
-      "в желудке не 2 предмета, а "+stomachItems.length+": "+stomachItems.join(","));
+      "в пищеварении не 2 предмета, а "+stomachItems.length+": "+stomachItems.join(","));
     check(stomachItems.includes("water.bottle")&&stomachItems.includes("food.orange"),
-      "в желудке не вода и апельсин: "+stomachItems.join(","));
-    check(stomachBlock.title==="Желудок","нет заголовка «Желудок»: "+stomachBlock.title);
+      "в пищеварении не вода и апельсин: "+stomachItems.join(","));
+    check(stomachBlock.title==="Пищеварение",
+      "нет заголовка «Пищеварение»: "+stomachBlock.title);
     check(stomachBlock.dynamics.includes("Усвоение"),"нет общей динамики усвоения: "+stomachBlock.dynamics);
-    check(stomachBlock.dynamics.includes("ккал/мин"),"динамика усвоения не в ккал/мин: "+stomachBlock.dynamics);
+    check(stomachBlock.dynamics.includes("%/мин"),"динамика усвоения не в %/мин: "+stomachBlock.dynamics);
     check(stomachBlock.factors.includes("усвоение"),"влияние на усвоение не показано: "+stomachBlock.factors);
 
     // Подписанные участки (первые части) — по одному на предмет: именно они несут
@@ -333,48 +444,44 @@ try{
     check(first&&second&&first.timer&&second.timer,"у порции нет таймера усвоения");
     check(first&&second&&first.timer!==second.timer,"таймеры порций совпали — таймер не по порции");
 
-    // ── ОБЛАСТЬ ЖЕЛУДКА: 4 строки по 35px, площадь = объём ──────────────────
-    // Автор: «предлагаю сделать желудок прямоугольной областью, такой же как
-    // другие блоки шкалы, и встроить в общую сетку со шкалами. Объём желудка
-    // визуально будет состоять из 4 строк высотой по 35px. То есть 1 литр
-    // желудка нужно распределить по области размером 470x140px. Предметы должны
-    // в этой области располагаться плиткой без пересечения или наложения.
+    // ── ОБЛАСТЬ ПИЩЕВАРЕНИЯ: 4 строки по 35px, площадь = объём ─────────────
+    // Автор: «объём нужно распределить по области размером 470x140px. Предметы
+    // должны в этой области располагаться плиткой без пересечения или наложения.
     // Занятое и свободное пространство в этой области должно строго
-    // соответствовать занятым и свободным миллилитрам желудка.»
+    // соответствовать занятым и свободным миллилитрам».
+    //
+    // Строк по-прежнему ЧЕТЫРЕ (высота 140px задана автором), а вместимость
+    // выросла вдвое — поэтому на строку теперь приходится 500 мл, а не 250.
     check(stomachBlock.portionPosition==="absolute",
       "порция не позиционирована укладчиком: "+stomachBlock.portionPosition);
     check(stomachBlock.areaPosition==="relative",
-      "область желудка не является системой координат для плиток: "+stomachBlock.areaPosition);
+      "область пищеварения не является системой координат для плиток: "+stomachBlock.areaPosition);
     // Высота области: 4 строки по 35px + отступы. Именно ЖЁСТКАЯ, а не по
-    // содержимому: при высоте «по контенту» область не отвечала бы литру, и
+    // содержимому: при высоте «по контенту» область не отвечала бы объёму, и
     // «занято 1 из 1» показывалось бы при видимой пустоте — дефект автора.
     check(Math.abs(stomachBlock.areaHeight-140)<=2,
-      "область желудка не 140px (4 строки по 35px): "+stomachBlock.areaHeight);
+      "область пищеварения не 140px (4 строки по 35px): "+stomachBlock.areaHeight);
     check(Math.abs(stomachBlock.cardWidth-500)<=1,
-      "блок желудка не шириной как карточка шкалы: "+stomachBlock.cardWidth);
+      "блок пищеварения не шириной как карточка шкалы: "+stomachBlock.cardWidth);
 
-    // Пропорция пикселей: 250 мл = внутренняя ширина ряда. Внутренняя — потому
+    // Пропорция пикселей: 500 мл = внутренняя ширина ряда. Внутренняя — потому
     // что укладчик вычитает отступ области (7px с каждой стороны), и брать
     // clientWidth напрямую значило бы проверять не ту формулу, которой
     // пользуется страница.
-    const pxPerMl=(stomachBlock.areaInnerWidth-14)/250;
-    // Вода (500 мл) — ДВА участка по 250 мл; апельсин (200 мл) — один на 200.
+    const pxPerMl=(stomachBlock.areaInnerWidth-14)/500;
+    // Вода (500 мл) занимает РОВНО один ряд; апельсин (200 мл) — один участок.
+    // При прежней вместимости вода делилась на два участка по 250 мл; теперь
+    // 500 мл — это целый ряд, и деление начинается только с 501 мл.
     const waterParts=stomachBlock.portions.filter(p=>p.item==="water.bottle");
     const orangeParts=stomachBlock.portions.filter(p=>p.item==="food.orange");
-    check(waterParts.length===2,
-      "вода 500 мл не разложена на два участка (250+250): "+waterParts.length);
+    check(waterParts.length===1,
+      "вода 500 мл не занимает целый ряд: "+waterParts.length);
     check(orangeParts.length===1,
       "апельсин 200 мл разложен не одним участком: "+orangeParts.length);
-    // Подпись и таймер несёт ТОЛЬКО первый участок: иначе один предмет читался
-    // бы как два («Вода» стояла бы дважды).
-    check(waterParts[0]&&waterParts[0].name==="Вода"&&waterParts[1]&&!waterParts[1].name,
-      "подпись повторена у продолжения крупной порции: "+
-      JSON.stringify(waterParts.map(p=>p.name)));
-    check(waterParts[0]&&waterParts[1]&&waterParts[0].timer&&!waterParts[1].timer,
-      "таймер повторён у продолжения крупной порции");
-    // Объём, записанный в участке, — объём всего предмета, а не ряда: 500 мл у
-    // воды в каждом из двух участков. Так список содержимого и подсказка берут
-    // объём предмета, а не ряда.
+    // Подпись несёт первый (и единственный) участок.
+    check(waterParts[0]&&waterParts[0].name==="Вода",
+      "вода не подписана: "+JSON.stringify(waterParts.map(p=>p.name)));
+    // Объём, записанный в участке, — объём всего предмета, а не ряда.
     check(waterParts.every(p=>Math.abs(p.ml-500)<1),
       "объём воды в участках не 500 мл: "+waterParts.map(p=>p.ml).join(","));
 
@@ -393,7 +500,7 @@ try{
     });
 
     // Ни один участок не шире ряда: иначе он вылез бы за область.
-    check(stomachBlock.portions.every(p=>p.width<=pxPerMl*250+2),
+    check(stomachBlock.portions.every(p=>p.width<=pxPerMl*500+2),
       "участок шире ряда: "+stomachBlock.portions.map(p=>p.width).join(","));
 
     // НАЛОЖЕНИЙ НЕТ: внутри одного ряда участки не пересекаются.
@@ -408,21 +515,21 @@ try{
           (prev.item+" кончается на "+(prev.left+prev.width)+", а "+cur.item+" начинается на "+cur.left));
       }
     });
-    // Ряды укладываются в четыре: значит область отвечает ровно литру.
+    // Ряды укладываются в четыре: значит область отвечает ровно вместимости.
     check(stomachBlock.portions.every(p=>p.row>=0&&p.row<4),
       "участок вне четырёх рядов области: "+stomachBlock.portions.map(p=>p.row).join(","));
     // Высота участка — 35px минус зазор: одна из четырёх строк.
     check(stomachBlock.portions.every(p=>Math.abs(p.height-32)<=2),
-      "высота участка не равна строке желудка: "+stomachBlock.portions.map(p=>p.height).join(","));
+      "высота участка не равна строке: "+stomachBlock.portions.map(p=>p.height).join(","));
 
     // Занятое место в шапке — В МИЛЛИЛИТРАХ (требование автора) и совпадает с
     // суммой объёмов порций: площадь области и число обязаны сходиться.
-    check(/^700\s*\/\s*1000\s*мл$/.test(stomachBlock.volumeText),
-      "объём желудка не показан в миллилитрах: «"+stomachBlock.volumeText+"»");
+    check(/^700\s*\/\s*2000\s*мл$/.test(stomachBlock.volumeText),
+      "объём пищеварения не показан в миллилитрах: «"+stomachBlock.volumeText+"»");
 
     // Тултип по наведению: список веществ.
     const orangePresent=await page.$("[data-stomach-item='food.orange']");
-    check(!!orangePresent,"порции апельсина нет в разметке желудка");
+    check(!!orangePresent,"порции апельсина нет в разметке пищеварения");
     if(orangePresent){
       await page.hover("[data-stomach-item='food.orange']");
       await page.waitForTimeout(60);
@@ -512,19 +619,21 @@ try{
       "объём не стоит первым в подписи пункта: «"+metaOf("food.meal")+"»");
 
     // ── Что НЕ помещается — серое и неактивное ──────────────────────────────
-    // Желудок занят на 700 мл (вода 500 + апельсин 200), то есть свободно 300 мл.
-    // Паёк (400 мл) не помещается: пункт обязан быть в списке, но погашенным —
-    // и настоящим `disabled`, чтобы щелчок не мог отправить употребление.
+    // Пищеварение занято на 700 мл (вода 500 + апельсин 200) из 2000, то есть
+    // свободно 1300 мл. Паёк (400 мл) в такое свободное место КАК РАЗ помещается,
+    // поэтому «непомещающийся» пункт задаётся фикстурой `fits:false`, а не
+    // размером: проверяем, что страница ЧИТАЕТ признак домена, а не считает его
+    // сама. Свободный объём в подсказке при этом берётся из снимка — 1300 мл.
     const mealState=menuVisible.states.find(s=>s.id==="food.meal");
     check(mealState&&mealState.disabled,
-      "пункт пайка не отключён, хотя места в желудке нет: "+(mealState?JSON.stringify(mealState):"нет"));
+      "пункт пайка не отключён, хотя домен прислал fits:false: "+(mealState?JSON.stringify(mealState):"нет"));
     check(mealState&&String(mealState.aria)==="true",
       "у непомещающегося пункта нет aria-disabled: "+(mealState?JSON.stringify(mealState):"нет"));
     check(mealState&&mealState.cls.includes("stomachMenuItemDisabled"),
       "у непомещающегося пункта нет класса «серый»: "+(mealState?mealState.cls:"нет"));
-    // Подсказка объясняет ПРИЧИНУ и называет СВОБОДНЫЙ объём — это и есть
-    // «желудок полон»: 300 мл свободно, порция 400 мл.
-    check(mealState&&/свободно\s+300\s+мл/.test(mealState.title),
+    // Подсказка объясняет ПРИЧИНУ и называет СВОБОДНЫЙ объём: 1300 мл свободно,
+    // порция 400 мл.
+    check(mealState&&/свободно\s+1300\s+мл/.test(mealState.title),
       "в подсказке непомещающегося пункта нет свободного объёма: "+(mealState?mealState.title:"нет"));
     check(mealState&&/400\s+мл/.test(mealState.title),
       "в подсказке нет объёма порции: "+(mealState?mealState.title:"нет"));
@@ -1093,27 +1202,104 @@ try{
       path.join(root,"src","AssistQuestEditor.App","Host","SimulatorForm.cs"),"utf8");
     const digestion=fs.readFileSync(
       path.join(root,"src","AssistQuestEditor.Domain","CharacterDigestion.cs"),"utf8");
+    const engine=fs.readFileSync(
+      path.join(root,"src","AssistQuestEditor.Domain","CharacterVitalsEngine.cs"),"utf8");
+    const models=fs.readFileSync(
+      path.join(root,"src","AssistQuestEditor.Domain","DomainModels.cs"),"utf8");
+    const indicators=fs.readFileSync(
+      path.join(root,"src","AssistQuestEditor.App","Web","indicators.js"),"utf8");
+    // Файл НАСТРОЕК читается статически: галочка «%/время» обязана быть в нём
+    // полем, а не в localStorage страницы (см. проверку в конце блока).
+    const preferences=fs.readFileSync(
+      path.join(root,"src","AssistQuestEditor.App","Core","AppUiPreferencesStore.cs"),"utf8");
 
     check(/occupiedMilliliters/.test(simulatorForm)&&/totalMilliliters/.test(simulatorForm),
-      "Хост не присылает занятый и полный объём желудка в миллилитрах: подпись " +
+      "Хост не присылает занятый и полный объём пищеварения в миллилитрах: подпись " +
       "«занято / всего» осталась бы в литрах, а дробные объёмы округлялись бы до нуля");
     check(/volumeMilliliters\s*=/.test(simulatorForm),
       "Хост не присылает объём порции в миллилитрах: плитка не смогла бы отвечать " +
       "объёму, и площадь области разошлась бы с числом «занято»");
     check(/fits\s*=\s*CharacterDigestionReport\.Fits\(/.test(simulatorForm),
-      "Хост не считает признак «влезет» доменом: меню желудка серым гасило бы не то, " +
+      "Хост не считает признак «влезет» доменом: меню серым гасило бы не то, " +
       "что фактически примет начисление");
     check(/StomachCapacityMilliliters/.test(simulatorForm),
-      "Хост не берёт вместимость желудка из домена: вторая такая же константа в Хосте " +
-      "разошлась бы с пищеварением");
+      "Хост не берёт вместимость пищеварения из домена: вторая такая же константа " +
+      "в Хосте разошлась бы с пищеварением");
+    // Пропускная способность обязана приходить из ДОМЕНА: страница не знает ни
+    // литров в час, ни коэффициента воды, и её собственная формула разошлась бы
+    // с начислением при первой правке физиологии.
+    check(/dryThroughputMillilitersPerHour/.test(simulatorForm),
+      "Хост не присылает пропускную способность пищеварения: подпись о лимите " +
+      "не сходилась бы с фактическими сроками порций");
     // Правило «целиком или никак» живёт в Begin: без него в порцию записывалась бы
     // урезанная доля, и «110 мл банана» снова стало бы «20 мл».
-    check(/if \(portionFraction > freeFraction \+ 1e-9d\)/.test(digestion),
+    check(/if \(mass > free \+ 1e-9d\)/.test(digestion),
       "пищеварение снова принимает порцию ЧАСТЬЮ: тогда в порции окажется не объём " +
-      "предмета, а остаток желудка — «110 мл банана» снова станет «20 мл»");
-    check(/VolumeFraction: portionFraction/.test(digestion),
-      "в порции записывается не объём предмета: площадь плитки перестанет отвечать " +
-      "подписи «N мл»");
+      "предмета, а остаток вместимости — «110 мл банана» снова станет «20 мл»");
+    // Ставка порции — ОБЩАЯ пропускная способность, поделённая по «весу» порций.
+    // Это ядро новой модели: без него вернулся бы «свой таймер у каждой порции»,
+    // и смесь продуктов перестала бы замедлять каждую из них.
+    check(/throughput\s*\*\s*mass\s*\*\s*lightness\s*\/\s*massTotal/.test(digestion),
+      "ставка порции не считается из ОБЩЕЙ пропускной способности: смесь продуктов " +
+      "перестала бы замедлять каждую порцию, а вода — обгонять сухую еду");
+    check(/WaterContentSpeedFactor/.test(digestion),
+      "исчез коэффициент «лёгкости» воды: скорость усвоения перестала бы зависеть " +
+      "от содержания жидкости в порции");
+    // МЕТАБОЛИЗМ ПИЩЕВАРЕНИЯ — ЧИСЛО, А НЕ ФЛАГ. С флагами игрок мог поесть при
+    // высоком метаболизме и получить ставку ×2,5 навсегда — эксплоит, который
+    // автор назвал прямо: «метаболизм будет на нуле, а пища отработает по норме».
+    check(/double metabolismPercent\)/.test(digestion) &&
+      /MetabolismPercent/.test(digestion),
+      "пищеварение снова принимает метаболизм ПРИЗНАКОМ: тогда поесть заранее при " +
+      "высоком метаболизме снова даст ставку ×2,5 на всё переваривание");
+    check(/double\.IsFinite\(ExhaustionRollPending\)/.test(models),
+      "в состоянии нет накопителя дробных порций броска устойчивости: шанс «не " +
+      "получить порцию истощения» стал бы зависеть от размера шага симуляции");
+    // СКОРОСТИ УСТОЙЧИВОСТИ И МЕТАБОЛИЗМА — В «% В ЧАС». Смесь размерностей
+    // («за четверть часа» плюс «за минуту») показывала рост там, где шкала падает.
+    check(/QuarterHoursPerHour/.test(engine) && /TenMinuteSpansPerHour/.test(engine),
+      "движок снова смешивает размерности скоростей устойчивости и метаболизма: " +
+      "подсказка покажет рост шкалы там, где она на самом деле падает");
+    check(/ElevatedBonusShare/.test(engine),
+      "надбавка за свойство выше номинала снова включается ФЛАГОМ: 61% и 100% " +
+      "давали бы одно и то же, хотя автор просил пропорциональность");
+    // ПРОПОРЦИОНАЛЬНОСТЬ НАДБАВКИ В МОНИТОРЕ: если страница снова зашьёт «>60»,
+    // строка обещала бы полный +1% уже с 61%.
+    check(/elevatedBonusShare/.test(indicators),
+      "монитор не считает ДОЛЮ надбавки: строка обещала бы полный размер уже при " +
+      "61%, тогда как движок начисляет пропорционально");
+    // Проверяем именно КОД, а не комментарий: в пояснении к функции нарочно
+    // оставлена запись «было `metabolismPercent()>60`».
+    const indicatorsCode=indicators.replace(/\/\*[\s\S]*?\*\//g,"")
+      .replace(/^\s*\/\/.*$/gm,"");
+    check(!/metabolismPercent\(\)>60/.test(indicatorsCode) &&
+      !/resiliencePercent\(\)>60/.test(indicatorsCode),
+      "монитор снова зашивает номинал 60 ДВУМЯ литералами: правка калибровки до " +
+      "этих строк не доедет, хотя 45 и 75 уже приходят полями");
+    check(/exhaustionResilienceDivisor/.test(indicators) &&
+      /exhaustionResilienceDivisor/.test(simulatorForm),
+      "шанс устойчивости не показывается игроку: это её сильнейший эффект, и он " +
+      "обязан быть виден строкой монитора");
+    // ГАЛОЧКА «%/время» — настройка ХОСТА, а не страницы. Если её состояние
+    // начнёт жить в localStorage, оно снова сломается при смене профиля WebView2:
+    // профиль собирается по отпечатку сборки, а настройки переживают обновление
+    // версии именно потому, что лежат в файле.
+    check(/percentUnits/.test(simulatorForm) && /AppUiPreferencesStore/.test(simulatorForm),
+      "галочка «%/время» больше не сохраняется в настройках: она обязана переживать " +
+      "перезапуск и смену профиля WebView2, как раскрытые разделы сайдбара");
+    check(/PercentUnits/.test(preferences),
+      "в пользовательских настройках нет поля PercentUnits: галочка не переживёт " +
+      "перезапуск");
+    check(!/localStorage[^\n]*percentUnits/.test(indicators),
+      "состояние галочки хранится в localStorage страницы: он живёт в профиле " +
+      "WebView2 и теряется при обновлении версии");
+    // Узел галочки СТАТИЧНЫЙ: тело монитора перерисовывается раз в секунду, и
+    // галочка внутри него теряла бы нажатие вместе со своей разметкой.
+    check(/id="percentUnitsToggle"/.test(html),
+      "в шапке монитора нет узла галочки: обработчик включения не к чему привязать");
+    check(/percentUnitsToggle/.test(indicators) && !/percentUnitsToggle/.test(
+      indicators.split("function init()")[1]?.split("function render()")[0] || ""),
+      "галочка перерисовывается вместе с телом монитора: она теряла бы нажатие");
   }
 
   if(failures.length){console.error("Indicators smoke: FAIL");failures.forEach(x=>console.error("  ✗ "+x));process.exitCode=1;}

@@ -4,6 +4,20 @@
   var highlightKey = "", highlightTimer = null, lastMarkup = "";
   var GOOD_DIRECTION = {health:1,energy:1,hydration:1,stress:-1,fatigue:-1,resilience:1,metabolism:1};
   var FLAT_RATE_EPSILON = 0.05;
+  /**
+   * ПОКАЗЫВАТЬ ЛИ СКОРОСТИ В ПРОЦЕНТАХ («−0,417%/мин (−25%/ч)»).
+   *
+   * Состояние владельца — НАСТРОЙКИ Хоста (`ui-settings.json`), а не страница:
+   * галочка обязана переживать перезапуск и обновление версии, а localStorage
+   * живёт в профиле WebView2, который меняется вместе с отпечатком сборки. Здесь
+   * лишь зеркало последнего присланного значения; значение по умолчанию —
+   * включено, и оно совпадает с настройкой домена.
+   *
+   * Процент — единственная величина, СОПОСТАВИМАЯ между шкалами: у каждой свой
+   * потолок (5000 ккал, 3000 мл, 10000 единиц), и «−13,9 ккал/мин» рядом с
+   * «−41,7 ед./мин» не читаются как одно и то же.
+   */
+  var percentUnits = true;
 
   function v(){ return global.AssistVitals; }
   function num(value){ var n=Number(value); return Number.isFinite(n)?n:0; }
@@ -27,6 +41,55 @@
   }
   function resiliencePercent(){ return Math.round(num(vitals().resilience)/100); }
   function metabolismPercent(){ return Math.round(num(vitals().metabolism)/100); }
+  /**
+   * Множитель расхода от метаболизма и «Быка» — ПРИСЛАН ДОМЕНОМ.
+   *
+   * Вторая такая же формула в Web разошлась бы с движком при первой правке
+   * границ 45/75 или множителей 0,9/1,25: границы живут в калибровке, и
+   * JavaScript их не повторяет. Старая версия страницы знала только «0,9/1,25»,
+   * литералами, и строка расхода перестала совпадать с итогом, когда автор
+   * поменял нормы в `CharacterVitalsTuning`.
+   */
+  function metabolismFactor(){
+    if(snapshot&&snapshot.conditionRates&&snapshot.conditionRates.metabolismFactor!=null)
+      return num(snapshot.conditionRates.metabolismFactor);
+    return 1;
+  }
+  /** Порог «пониженного» и «повышенного» метаболизма — тоже у домена. */
+  function reducedMetabolismPercent(){ return snapshot&&snapshot.conditionRates&&snapshot.conditionRates.reducedMetabolismPercent!=null?num(snapshot.conditionRates.reducedMetabolismPercent):45; }
+  function elevatedMetabolismPercent(){ return snapshot&&snapshot.conditionRates&&snapshot.conditionRates.elevatedMetabolismPercent!=null?num(snapshot.conditionRates.elevatedMetabolismPercent):75; }
+  /**
+   * НОМИНАЛЫ метаболизма и устойчивости — от ДОМЕНА, а не литералами «60».
+   *
+   * Раньше здесь стояло `metabolismPercent()>60`, и правка границ в калибровке
+   * до этой строки не доезжала: 45 и 75 приходили полями именно ради того,
+   * чтобы «подпись не разошлась с начислением», а номинал оставался исключением.
+   */
+  function defaultMetabolismPercent(){ return snapshot&&snapshot.conditionRates&&snapshot.conditionRates.defaultMetabolismPercent!=null?num(snapshot.conditionRates.defaultMetabolismPercent):60; }
+  function defaultResiliencePercent(){ return snapshot&&snapshot.conditionRates&&snapshot.conditionRates.defaultResiliencePercent!=null?num(snapshot.conditionRates.defaultResiliencePercent):60; }
+  /** Процент, на котором пропорциональная надбавка к здоровью становится полной. */
+  function elevatedBonusFullPercent(){ return snapshot&&snapshot.conditionRates&&snapshot.conditionRates.elevatedBonusFullPercent!=null?num(snapshot.conditionRates.elevatedBonusFullPercent):75; }
+  /** Делитель шанса устойчивости: «R / ЭТО процентов» — шанс не получить порцию истощения. */
+  function exhaustionResilienceDivisor(){ return snapshot&&snapshot.conditionRates&&snapshot.conditionRates.exhaustionResilienceDivisor!=null?num(snapshot.conditionRates.exhaustionResilienceDivisor):2; }
+  /** До какого потолка дебафф «Бомж» ОПУСКАЕТ устойчивость (%). */
+  function bumResilienceCapPercent(){ return snapshot&&snapshot.conditionRates&&snapshot.conditionRates.bumResilienceCapPercent!=null?num(snapshot.conditionRates.bumResilienceCapPercent):50; }
+  /** Насколько устойчивость тянется к потолку за 15 игр. мин: обычный режим. */
+  function resilienceReturnPerQuarterHour(){ return snapshot&&snapshot.conditionRates&&snapshot.conditionRates.resilienceReturnPerQuarterHour!=null?num(snapshot.conditionRates.resilienceReturnPerQuarterHour):0.5; }
+  /** То же под «Бомжом» — вдвое быстрее. */
+  function resilienceBumReturnPerQuarterHour(){ return snapshot&&snapshot.conditionRates&&snapshot.conditionRates.resilienceBumReturnPerQuarterHour!=null?num(snapshot.conditionRates.resilienceBumReturnPerQuarterHour):1; }
+  /**
+   * ДОЛЯ надбавки за «свойство выше номинала» при данном проценте ШКАЛЫ:
+   * 0 на номинале, 1 на elevatedBonusFullPercent, линейно между ними.
+   *
+   * Повторяет <c>ElevatedBonusShare</c> домена. Иначе строка вклада показывала
+   * бы полный размер надбавки уже с 61%, тогда как движок начисляет его
+   * пропорционально.
+   */
+  function elevatedBonusShare(percent){
+    var span=elevatedBonusFullPercent()-defaultMetabolismPercent();
+    if(span<=0) return percent>defaultMetabolismPercent()?1:0;
+    return Math.max(0,Math.min(1,(percent-defaultMetabolismPercent())/span));
+  }
   /**
    * «В движении» = ВКЛЮЧЁННОЕ движение по маршруту, а не мгновенная скорость.
    *
@@ -140,13 +203,22 @@
     var good=semanticOverride==null?(GOOD_DIRECTION[key]||0):semanticOverride;
     var useful=Math.abs(rate)<FLAT_RATE_EPSILON?null:good!==0&&((rate>0)===(good>0));
     var physicalPerMinute=unit==="ед."?rate:rate/physicalFactor(key);
-    return {unitsPerHour:unitsPerHour,percentPerHour:percentPerHour,useful:useful,physicalPerMinute:physicalPerMinute,unit:unit};
+    // Процент за МИНУТУ — та же величина, что и `percentPerHour`, но за минуту:
+    // именно её печатает главное число при включённой галочке. Считается от той же
+    // базы, поэтому два знака об одном не могут разойтись.
+    var percentPerMinute=percentPerHour/60;
+    return {unitsPerHour:unitsPerHour,percentPerHour:percentPerHour,percentPerMinute:percentPerMinute,useful:useful,physicalPerMinute:physicalPerMinute,unit:unit};
   }
   function contributionHtml(rate,key,semanticOverride){
     var c=contribution(rate,key,semanticOverride);
     var cls=Math.abs(rate)<FLAT_RATE_EPSILON?"factorContribution factorNeutral":c.useful?"factorContribution factorGood":"factorContribution factorBad";
-    // Главное число — в единицах шкалы (ккал/мл, если они есть), рядом в скобках
-    // остаётся скорость в единицах хранения и в процентах за час.
+    // Галочка «%/время»: главное число — процент за минуту, в скобках — он же за
+    // час. Без галочки остаётся физическая величина (ккал/мин, мл/мин), а рядом в
+    // скобках — единицы хранения и проценты за час, как было до неё.
+    if(percentUnits){
+      return "<strong class='"+cls+"'>"+(rate>0?"+":"")+fmt(c.percentPerMinute,3)+"%/мин ("+
+        (c.percentPerHour>0?"+":"")+fmt(c.percentPerHour,1)+"%/ч)</strong>";
+    }
     return "<strong class='"+cls+"'>"+(rate>0?"+":"")+fmt(c.physicalPerMinute,1)+" "+c.unit+"/мин ("+
       (c.unitsPerHour>0?"+":"")+fmt(c.unitsPerHour,1)+" ед./час; "+
       (c.percentPerHour>0?"+":"")+fmt(c.percentPerHour,1)+"%/ч)</strong>";
@@ -186,15 +258,15 @@
    * влияют на шкалу». Раньше строка была ОДНА и бралась из
    * `conditions.lastConsumedItemId` — то есть называла ПОСЛЕДНИЙ съеденный
    * предмет, независимо от того, даёт ли он эту шкалу и лежит ли он ещё в
-   * желудке. Из-за этого выпитый кофе подписывал восстановление воды, а вода
+   * пищеварении. Из-за этого выпитый кофе подписывал восстановление воды, а вода
    * «исчезала» из строки, стоив съесть после неё апельсин.
    *
-   * Теперь источник — СПИСОК ПОРЦИЙ желудка: у каждой есть свой вклад по каждой
+   * Теперь источник — СПИСОК ПОРЦИЙ пищеварения: у каждой есть свой вклад по каждой
    * шкале, и предмет попадает в строку ровно тогда, когда его вклад есть.
    * `lastConsumedItemId` здесь не участвует вовсе.
    *
    * Ставка берётся У ПОРЦИИ (приходит из домена как energyPerMinute /
-   * hydrationPerMinute), а не из общей суммы желудка: сумма описывает все порции
+   * hydrationPerMinute), а не из общей суммы пищеварения: сумма описывает все порции
    * сразу, и «+9000 ед./час» про каждую было бы неправдой.
    */
   function digestedItemsFor(key){
@@ -234,13 +306,17 @@
     else if(wanted==="burnout"&&key==="fatigue") value=Math.abs(rate)*0.10;
     // «Жажда» и «Обезвоживание»: вклад показан ТЕМ ЖЕ числом, что начисляет
     // домен. Жажда даёт аддитивные +0,5 %/мин к стрессу (то есть 0,5% шкалы =
-    // 50 ед./мин при шкале 10000), обезвоживание множит скорость стресса на
-    // 1,25 и отнимает метаболизм 2% за 10 минут (2% = 200 ед. за 10 мин =
-    // 200/10/60 ед./мин).
+    // 50 ед./мин при шкале 10000), обезвоживание множит скорость стресса на 1,25.
+    // Штрафы метаболизма заданы «за 10 игр. мин», поэтому 1% = 100 ед./10 мин =
+    // 10 ед./мин, а 2% — 20 ед./мин.
     else if(wanted==="thirst"&&key==="stress") value=50;
-    else if(wanted==="thirst"&&key==="metabolism") value=-200/60;
+    // ВКЛАДЫ В ЕДИНИЦАХ ШКАЛЫ ЗА МИНУТУ. Жажда: 1% за 10 минут = 100 ед./10 мин
+    // = 10 ед./мин. Обезвоживание: 2% за 10 минут = 20 ед./мин. Раньше стояло
+    // −200/60 у обоих — потеря смысла размерности и одинаковое число для разной
+    // по замыслу скорости.
+    else if(wanted==="thirst"&&key==="metabolism") value=-100/10;
     else if(wanted==="dehydration"&&key==="stress") value=Math.abs(rate)*0.25;
-    else if(wanted==="dehydration"&&key==="metabolism") value=-200/60;
+    else if(wanted==="dehydration"&&key==="metabolism") value=-200/10;
     else if(wanted==="dehydration"&&key==="resilience") value=-Math.abs(rateFor("hydration"));
     else if(wanted==="drowsiness"&&key==="fatigue") value=Math.abs(rate)*0.10;
     else if(wanted==="alcohol_aftereffect"&&(key==="hydration"||key==="fatigue")) value=-Math.abs(rate)*0.10;
@@ -306,44 +382,70 @@
       // за любой и ещё ×0,5 за кумулятивный.
       var healthMax=Math.max(1,num(vitals().maxHealth)||10000);
       var canRegen=num(vitals().health)<healthMax;
-      var elevatedMetabolism=metabolismPercent()>60;
-      var elevatedResilience=resiliencePercent()>60;
+      // НАДБАВКА РАСТЁТ С ПРОЦЕНТОМ — повторяет ElevatedBonusShare домена.
+      // Единицы вклада — те же, что у базовой строки «1% за 10 мин» (=10 ед./мин),
+      // поэтому доля умножается на 10.
+      var metabolismShare=elevatedBonusShare(metabolismPercent());
+      var resilienceShare=elevatedBonusShare(resiliencePercent());
       var bull=hasEffect("bull");
-      var perTen=1+(elevatedMetabolism?1:0)+(elevatedResilience?1:0)+(bull?2:0);
+      var perTen=1+metabolismShare+resilienceShare+(bull?2:0);
       var baseUnitsPerMinute=perTen*10;
       var afterAnyStress=baseUnitsPerMinute*(totalStressPercent()>0?0.75:1);
       var effective=afterAnyStress*(num(conditions().cumulativeStress)>0?0.5:1);
 
       result.push(factor("Базовое восстановление: 1% за 10 игр. мин",key,canRegen?10:0,"permanent",canRegen));
-      result.push(factor("Повышенный метаболизм: восстановление +1% за 10 игр. мин",key,elevatedMetabolism?10:0,"permanent",elevatedMetabolism));
-      result.push(factor("Повышенная устойчивость: восстановление +1% за 10 игр. мин",key,elevatedResilience?10:0,"permanent",elevatedResilience));
+      // НАЗВАНИЯ ДВУХ СОСТОЯНИЙ РАЗНЫЕ НАМЕРЕННО: «выше номинала» — про
+      // регенерацию здоровья, «повышенный» — про выход за коридор нормы
+      // (расход, пищеварение, объём, заживление). Одним словом они обозначали
+      // две разные вещи, и автор справедливо не мог понять, повышен у него
+      // метаболизм или нет.
+      result.push(factor("Метаболизм выше номинала ("+fmt(defaultMetabolismPercent(),0)+"–"+fmt(elevatedBonusFullPercent(),0)+"%): восстановление +"+fmt(metabolismShare,2)+"% за 10 игр. мин",key,canRegen?metabolismShare*10:0,"permanent",metabolismShare>0));
+      result.push(factor("Устойчивость выше номинала: восстановление +"+fmt(resilienceShare,2)+"% за 10 игр. мин",key,canRegen?resilienceShare*10:0,"permanent",resilienceShare>0));
       result.push(factor("«Бык»: восстановление +2% за 10 игр. мин",key,bull?20:0,"permanent",bull));
       result.push(factor("Любой стресс: восстановление ×0,75",key,canRegen?afterAnyStress-baseUnitsPerMinute:0,"permanent",canRegen&&totalStressPercent()>0));
       result.push(factor("Кумулятивный стресс: дополнительно ×0,5",key,canRegen?effective-afterAnyStress:0,"permanent",canRegen&&num(conditions().cumulativeStress)>0));
       return result;
     }
     if(key==="energy"||key==="hydration"){
-      // Нормы расхода ЗАВИСЯТ ОТ НАГРУЗКИ (задано автором): под нагрузкой
-      // 2500 ккал за 3 игровых часа и 150 мл за 30 игровых минут, в покое —
-      // 2500 ккал за 8 часов и 60 мл за 30 минут. В процентах шкалы это
-      // 16,67%/ч и 6,25%/ч для энергии (шкала 5000 ккал) и 10%/ч и 4%/ч для
-      // жидкости (шкала 3000 мл).
-      var moving=isMoving();
-      var percentPerHour=key==="energy"
-        ? (moving?100*(2500/3)/5000:100*(2500/8)/5000)
-        : (moving?100*300/3000:100*120/3000);
-      var normalBase=percentPerHour;
-      var m=metabolismPercent(), mf=m<45?0.9:m>=75?1.25:1;
-      var base=-normalBase*mf*100/60;
-      result.push(factor(key==="energy"?"Базовый расход энергии в Нормальном состоянии":"Базовый расход жидкости в Нормальном состоянии",key,base,"permanent",true));
+      // РАСКЛАДКА РАСХОДА. Числа берутся у ДОМЕНА, а не из таблицы констант в
+      // JavaScript.
+      //
+      // Что было не так. Строка «Базовый расход» считалась здесь по СВОИМ числам
+      // (2500/3, 300/3000…), и автор справедливо увидел расхождение: он поправил
+      // нормы в `CharacterVitalsTuning`, строка динамики за ним пошла, а ЭТА
+      // строка осталась со старыми 5 мл и 13,9 ккал — правку калибровки она не
+      // замечала, потому что норм в ней не было вовсе, был их литерал.
+      //
+      // Теперь норма ВЫВОДИТСЯ из итоговой скорости делением на поправку
+      // метаболизма, а сама поправка приходит полем `conditionRates.metabolismFactor`.
+      // Ни одного числа баланса в странице не осталось.
+      //
+      // Сон здесь не участвует: в этом симуляторе сон — РАЗОВЫЙ шаг (час за
+      // нажатие), а не длящееся состояние, и множителя «во сне» в скорости нет.
+      var speed=num(rateFor(key)), mf=metabolismFactor();
+      // Норма ЗА ИГРОВУЮ МИНУТУ — это скорость ДО поправки метаболизма, то есть
+      // speed / mf. Вклад измеряется в единицах шкалы за минуту, как и все
+      // вклады монитора: умножать на 60 здесь нельзя, иначе строка обещала бы
+      // «−1250 ккал/мин» вместо «−20,8».
+      var normalBase=speed/mf;
+      result.push(factor(key==="energy"?"Базовый расход энергии в Нормальном состоянии":"Базовый расход жидкости в Нормальном состоянии",key,normalBase,"permanent",true));
       var needs=num(vitals().health)<num(vitals().maxHealth);
       // Восстановление здоровья — ПОЛЕЗНО, но его цена — РАСХОД ценного
       // ресурса, и зелёный на ней вводил в заблуждение: автор видел «зелёный
       // минус». semanticOverride = -1 означает «знак минус опасен для игрока»,
       // поэтому цена красится красным, хотя она и есть плата за пользу.
       result.push(factor(key==="energy"?"Восстановление здоровья: 1:1 по энергии":"Восстановление здоровья: 1:2 по жидкости",key,needs?rate*0.15:0,"permanent",needs,-1));
-      result.push(factor("Метаболизм <45%: расход ×0,9",key,m<45?Math.abs(base)*0.1:0,"permanent",m<45,-1));
-      result.push(factor("Метаболизм ≥75%: расход ×1,25",key,m>=75?-Math.abs(base)*0.25:0,"permanent",m>=75,-1));
+      // ШТРАФ И БОНУС МЕТАБОЛИЗМА. Пороги (45 и 75) приходят от домена, а
+      // величина вклада выведена из ФАКТИЧЕСКОГО множителя: вклад равен разнице
+      // между скоростью и её «нормальным» значением speed / mf. При пониженном
+      // метаболизме вклад ПОЛОЖИТЕЛЕН (расход сэкономлен — игроку выгодно,
+      // поэтому строка зелёная), при повышенном — отрицателен (расход вырос).
+      // Оба знака — арифметические, и цвет ставится по ним, а не наоборот.
+      var metabolismContribution=speed-speed/mf;
+      var reduced=metabolismPercent()<reducedMetabolismPercent();
+      var elevated=!reduced&&mf>1;
+      result.push(factor("Метаболизм <"+fmt(reducedMetabolismPercent(),0)+"%: расход ×0,9",key,reduced?metabolismContribution:0,"permanent",reduced));
+      result.push(factor("Метаболизм ≥"+fmt(elevatedMetabolismPercent(),0)+"%: расход ×1,25",key,elevated?metabolismContribution:0,"permanent",elevated));
       return result;
     }
     if(key==="fatigue"){
@@ -367,26 +469,48 @@
       return result;
     }
     if(key==="resilience"){
-      var rp=resiliencePercent(), target=hasEffect("bum")?50:60;
-      var delta=target>rp?Math.min(0.8333,(target-rp)/15):-Math.min(0.8333,(rp-target)/15);
-      result.push(factor("Возврат к номиналу 60%",key,hasEffect("bum")?0:delta,"permanent",!hasEffect("bum")&&Math.abs(delta)>FLAT_RATE_EPSILON));
-      result.push(factor("Дебафф «Бомж» ограничивает устойчивость 50%",key,hasEffect("bum")?rate:0,"permanent",hasEffect("bum"),-1));
+      // РАЗМЕРНОСТЬ ВКЛАДОВ — ЕДИНИЦЫ ШКАЛЫ ЗА ИГРОВУЮ МИНУТУ, как у всех строк
+      // монитора. Калибровка задаёт возврат как «% за 15 минут», поэтому
+      // перевод в минуту — деление на 15, а не на 60.
+      //
+      // Раньше в шапке стояло деление на 60 (занижение в 4 раза), а падение от
+      // обезвоживания вычиталось уже ПОСЛЕ этого — как «% в минуту». Из-за
+      // разницы в размерности вклад обезвоживания не перекрывал возврат, и под
+      // обезвоживанием шапка показывала РОСТ шкалы, хотя она падает.
+      var rp=resiliencePercent(), target=hasEffect("bum")?bumResilienceCapPercent():defaultResiliencePercent();
+      var quarterRate=hasEffect("bum")?resilienceBumReturnPerQuarterHour():resilienceReturnPerQuarterHour();
+      // Под «Бомжом» шкала ТОЛЬКО падает до потолка (как и в движке).
+      var pull=hasEffect("bum")?-Math.min(quarterRate,Math.max(0,rp-target)):-Math.min(quarterRate,Math.abs(target-rp));
+      var ret=pull*100/15;
+      result.push(factor("Возврат к номиналу "+fmt(defaultResiliencePercent(),0)+"%",key,hasEffect("bum")?0:ret,"permanent",!hasEffect("bum")&&Math.abs(ret)>FLAT_RATE_EPSILON));
+      result.push(factor("Дебафф «Бомж» тянет устойчивость вниз до "+fmt(bumResilienceCapPercent(),0)+"%",key,hasEffect("bum")?ret:0,"permanent",hasEffect("bum"),-1));
+      // ШАНС УСТОЙЧИВОСТИ — её сильнейший эффект, и раньше он не был виден
+      // игроку вообще. Считается по тому же делителю, что и в движке (R/2).
+      var skip=rp/exhaustionResilienceDivisor();
+      result.push(factor("Шанс не получить порцию истощения: "+fmt(skip,1)+"% (устойчивость ÷ "+fmt(exhaustionResilienceDivisor(),0)+")",key,0,"permanent",skip>0));
       if(hasEffect("dehydration"))
-        result.push(factor("«Обезвоживание»: устойчивость падает вместе с расходом жидкости",key,-Math.abs(rateFor("hydration")),"permanent",true,-1));
+        result.push(factor("«Обезвоживание»: устойчивость падает вместе с нормой расхода жидкости",key,-Math.abs(rateFor("hydration")),"permanent",true,-1));
       return result;
     }
     if(key==="metabolism"){
       var mp2=metabolismPercent();
-      result.push(factor("Возврат к номиналу 60%",key,(60-mp2)*100/60/60,"permanent",Math.abs(60-mp2)>0));
+      // ВОЗВРАТ К НОМИНАЛУ: 1% в час = 100 единиц за 60 минут. Раньше стояло
+      // «(60−M)·100/60/60» — формула без физического смысла, дававшая в 240 раз
+      // меньше фактического возврата.
+      var recoveryDiff=(defaultMetabolismPercent()-mp2)*100;
+      var recovery=Math.max(-100/60,Math.min(100/60,recoveryDiff/60));
+      result.push(factor("Возврат к номиналу "+fmt(defaultMetabolismPercent(),0)+"%",key,recovery,"permanent",Math.abs(defaultMetabolismPercent()-mp2)>0));
       [['cumulativeStress',"Истощение стресса"],["cumulativeFatigue","Истощение усталости"],["cumulativeHydration","Истощение жидкости"],["cumulativeEnergy","Истощение энергии"]].forEach(function(entry){
         var active=num(conditions()[entry[0]])>0;
-        result.push(factor(entry[1]+": −2% за 15 игр. мин",key,active?-200/60:0,"permanent",active,1));
+        // 2% за 15 минут = 200 единиц / 15 минут = 13,33 ед./мин.
+        result.push(factor(entry[1]+": −2% за 15 игр. мин",key,active?-200/15:0,"permanent",active,1));
       });
-      // «Жажда» отнимает 1% за 10 игр. мин, «Обезвоживание» — вдвое быстрее, 2%.
+      // «Жажда» отнимает 1% за 10 игр. мин (=10 ед./мин), «Обезвоживание» —
+      // вдвое быстрее, 2% (=20 ед./мин). Те же делители, что у движка.
       if(hasEffect("dehydration"))
-        result.push(factor("«Обезвоживание»: метаболизм −2% за 10 игр. мин",key,-200/60,"permanent",true,1));
+        result.push(factor("«Обезвоживание»: метаболизм −2% за 10 игр. мин",key,-200/10,"permanent",true,1));
       else if(hasEffect("thirst"))
-        result.push(factor("«Жажда»: метаболизм −1% за 10 игр. мин",key,-100/60,"permanent",true,1));
+        result.push(factor("«Жажда»: метаболизм −1% за 10 игр. мин",key,-100/10,"permanent",true,1));
       return result;
     }
     return result;
@@ -400,10 +524,23 @@
   }
   function headerDynamics(key){
     var rate=rateFor(key);
-    if(!Number.isFinite(rate)||Math.abs(rate)<FLAT_RATE_EPSILON) return "<span class='trendFlat'>— 0 "+rateUnit(key)+"/мин (0 ед./час)</span>";
+    if(!Number.isFinite(rate)||Math.abs(rate)<FLAT_RATE_EPSILON){
+      // Нулевая скорость тоже подчиняется галочке: иначе «0 ккал/мин» рядом с
+      // «0%/мин» в остальных строках читались бы как два разных формата в одном
+      // блоке.
+      return percentUnits
+        ? "<span class='trendFlat'>— 0%/мин (0%/ч)</span>"
+        : "<span class='trendFlat'>— 0 "+rateUnit(key)+"/мин (0 ед./час)</span>";
+    }
     var rising=rate>0, good=GOOD_DIRECTION[key]||0, positive=good!==0&&rising===(good>0);
     // Физическая скорость в шапке: −13,9 ккал/мин читается лучше, чем −41,7 ед./мин.
     var c=contribution(rate,key);
+    // Галочка «%/время»: процент за минуту и за час — обе величины видны сразу,
+    // и по ним шкалы сравнимы между собой.
+    if(percentUnits){
+      return "<span class='"+(positive?"trendGood":"trendBad")+"'>"+(rising?"▲":"▼")+" "+(rate>0?"+":"")+
+        fmt(c.percentPerMinute,3)+"%/мин ("+(c.percentPerHour>0?"+":"")+fmt(c.percentPerHour,1)+"%/ч)</span>";
+    }
     return "<span class='"+(positive?"trendGood":"trendBad")+"'>"+(rising?"▲":"▼")+" "+(rate>0?"+":"")+fmt(c.physicalPerMinute,1)+" "+c.unit+"/мин ("+(rate*60>0?"+":"")+fmt(rate*60,1)+" ед./час)</span>";
   }
   function stateFromRates(){
@@ -427,6 +564,29 @@
     var state=stateFromRates(); node.className="characterStateValue "+state.className;
     node.textContent=state.text; node.title="Суммарная оценка динамики: "+fmt(state.score,1)+"/100";
   }
+  /**
+   * Галочка «%/время» в шапке окна.
+   *
+   * Автор: «Нужна галочка: "%/время". По умолчанию включена. Если галочка
+   * включена, то все единицы измерения в окне визуально заменяются на процент в
+   * минуту и процент в час соответственно: например 2%/мин (120%/ч). Если
+   * выключена, то как сейчас показываются полные единицы, миллилитры, кДж и т.п.»
+   *
+   * Разметка СТАТИЧНАЯ (лежит в indicators.html рядом с шапкой), поэтому
+   * обработчик вешается на неё один раз при инициализации: render() перерисовывает
+   * только ТЕЛО монитора и кнопки не касается — то же правило, по которому живёт
+   * кнопка «Содержимое».
+   */
+  function percentUnitsCheckbox(){ return document.getElementById("percentUnitsToggle"); }
+  function renderPercentUnits(){
+    var node=percentUnitsCheckbox(); if(!node) return;
+    if(node.checked!==percentUnits) node.checked=percentUnits;
+    // Подсказка объясняет ОБА состояния: без неё непонятно, что именно
+    // переключает галочка, а «%/время» читается неоднозначно.
+    node.title=percentUnits
+      ? "Скорости показаны в процентах шкалы за игровую минуту и час. Снять — показать килокалории, миллилитры и единицы."
+      : "Скорости показаны в килокалориях, миллилитрах и единицах. Поставить — показать проценты шкалы за минуту и час.";
+  }
   function renderCard(key){
     var s=scale(key); if(!s) return "";
     var values=valuesFor(key), current=Math.round(values.actual), maximum=Math.round(values.maximum);
@@ -445,11 +605,17 @@
     // двойная (кумулятивная) часть и форсаж совпадают с блоком состояния в
     // сайдбаре, поэтому «одна шкала» не выглядит двумя разными приборами.
     var bar=(v()&&v().barTrack)?v().barTrack(s,values):"";
+    // Жёлтая подпись «Истощение» — ТА ЖЕ функция, что рисует сайдбар
+    // (AssistVitals.exhaustionMarkup): подпись под дорожкой и полоса истощения
+    // обязаны совпадать в двух местах, и вторая копия правила разошлась бы при
+    // первой же правке формулировки.
+    var exhaustion=(v()&&v().exhaustionMarkup)?v().exhaustionMarkup(s,values):"";
     return "<section class='indicatorCard"+highlighted+"' data-scale-key='"+esc(key)+"'>"+
       "<div class='indicatorTopRow'><div class='indicatorName' data-game-tooltip=\""+esc(scaleDescription(s))+"\">"+esc(s.label)+"</div>"+
       "<div class='indicatorDynamics'>"+headerDynamics(key)+"</div>"+
       "<div class='indicatorValue'><div class='indicatorScale'>"+bar+"</div>"+
       "<div class='indicatorValueText'><span class='valueReal'>("+real+")</span> <span class='valuePercent'>"+display+"%</span></div></div></div>"+
+      exhaustion+
       "<div class='indicatorFactors'>"+dynamicChipRows(key)+
       dynamic.map(function(x){return renderDynamicFactor(x,key);}).join("")+
       active.map(function(x){return renderFactor(x,key);}).join("")+
@@ -488,7 +654,7 @@
    * переносе узел берётся уже с новым содержимым вклада.
    *
    * С появлением `AssistDom.reconcile` (dom_reconcile.js) этой функции уже мало:
-   * она спасает ТОЛЬКО кнопки-чипы, а плитки желудка, кнопка «Содержимое» и
+   * она спасает ТОЛЬКО кнопки-чипы, а плитки пищеварения, кнопка «Содержимое» и
    * подписи шкал оставались подменяемыми — и мерцали ровно так же. Сейчас вся
    * карточка собирается сверкой узлов, а перенос чипов оставлен как ВТОРОЙ рубеж
    * для кнопок, у которых ключ разметки когда-нибудь изменится.
@@ -547,11 +713,11 @@
     }
     for(;index<old.length;index++) body.removeChild(old[index]);
   }
-  // ── Блок «Желудок» ───────────────────────────────────────────────────────
+  // ── Блок «Пищеварение» ───────────────────────────────────────────────────
   //
   // Порции раскладываются ПЛИТКОЙ из горизонтальных прямоугольников: высота у
   // всех одинаковая (две строки текста), а ширина — по занимаемому объёму,
-  // поэтому «площадь = объём» сохраняется. Место порции в желудке значения не
+  // поэтому «площадь = объём» сохраняется. Место порции в пищеварении значения не
   // имеет — важен только размер, и это то, что задал автор: «объекты должны
   // просто располагаться плиткой».
   //
@@ -575,7 +741,7 @@
   /**
    * Читаемый цвет подписи на заливке предмета — БЕЛЫЙ или ЧЁРНЫЙ.
    *
-   * Автор: «проверить контраст текста в плашках содержимого желудка. Плохо
+   * Автор: «проверить контраст текста в плашках содержимого пищеварения. Плохо
    * читается, плашки светлые, текст белый». Так и было: заливка берётся из
    * каталога (молоко #e8e0ca, витамин C #f0c94b, записка #e7d58a), а подпись
    * всегда белая — на светлом фоне это почти нечитаемо.
@@ -649,16 +815,20 @@
     return minutes>0?hours+" ч "+minutes+" мин":hours+" ч";
   }
   /**
-   * Область желудка — ЧЕТЫРЕ СТРОКИ ПО 35px, и её площадь строго отвечает
-   * литру: 1 литр распределён на 470×140px (автор: «объём желудка визуально
-   * будет состоять из 4 строк высотой по 35px»).
+   * Область пищеварения — ЧЕТЫРЕ СТРОКИ ПО 35px, и её площадь строго отвечает
+   * ДВУМ литрам: 2000 мл распределены на 470×140px (автор: «объём желудка
+   * визуально будет состоять из 4 строк высотой по 35px»).
    *
    * Раньше ширина плитки считалась как «литры × 240px» в одну строку: полный
    * литр давал 240px — то есть область визуально не имела ничего общего с
    * литром, и «занято 1 из 1 л» показывалось при видимой пустоте (ровно это и
    * увидел автор). Теперь объём — это ПЛОЩАДЬ.
+   *
+   * 500 мл на строку × 4 строки = 2000 мл — ровно новая вместимость. Прежние
+   * 250 мл отвечали литровому желудку; менять 4 строки на большее число нельзя,
+   * потому что высота области (140px) задана автором.
    */
-  var STOMACH_MILLILITRES_PER_ROW = 250;
+  var STOMACH_MILLILITRES_PER_ROW = 500;
   var STOMACH_ROW_COUNT = 4;
   var STOMACH_TILE_HEIGHT = 35;
   var STOMACH_TILE_GAP = 3;
@@ -678,16 +848,16 @@
       : num(portion.volumeLiters)*1000);
   }
   /**
-   * Раскладывает порции по области желудка — плиткой, БЕЗ наложения и БЕЗ
+   * Раскладывает порции по области пищеварения — плиткой, БЕЗ наложения и БЕЗ
    * потерь, с площадью, строго пропорциональной миллилитрам.
    *
-   * Автор: «1 литр желудка нужно распределить по области размером 470×140px.
+   * Автор: «объём желудка нужно распределить по области размером 470×140px.
    * Предметы должны в этой области располагаться плиткой без пересечения или
    * наложения. Занятое и свободное пространство в этой области должно строго
-   * соответствовать занятым и свободным миллилитрам желудка».
+   * соответствовать занятым и свободным миллилитрам».
    *
    * Как это устроено. Область — ЭТАЖЕРКА из четырёх рядов по 35px, и в каждом
-   * ряду укладывается ровно 250 мл (250 × 4 = 1000). Ряд заполняется слева
+   * ряду укладывается ровно 500 мл (500 × 4 = 2000). Ряд заполняется слева
    * направо, а когда в ряду не остаётся места, порция ПРОДОЛЖАЕТСЯ в следующем
    * ряду с его начала. Отсюда три свойства сразу:
    *
@@ -700,10 +870,10 @@
    *     поэтому сумма площадей всех участков и есть занятые миллилитры.
    *
    * Крупная порция показывается НЕСКОЛЬКИМИ прямоугольниками той же заливки:
-   * вода 500 мл — двумя по 250 мл, обед 400 мл — отрезками 250 + 150. Иначе
-   * блоки разной ширины пришлось бы сводить в один прямоугольник по ширине
-   * самого широкого ряда, и «обед 400 мл» занял бы площадь как 500 мл — то
-   * самое расхождение площади и объёма, на которое автор и жаловался.
+   * бутылка воды 500 мл занимает ровно ряд, обед 700 мл — отрезками 500 + 200.
+   * Иначе блоки разной ширины пришлось бы сводить в один прямоугольник по
+   * ширине самого широкого ряда, и «обед 400 мл» занял бы площадь как 500 мл —
+   * то самое расхождение площади и объёма, на которое автор и жаловался.
    *
    * Прямоугольники одной порции остаются ОДНИМ предметом: у них один
    * `data-stomach-item`, поэтому и наведение, и ПКМ, и подписи работают как с
@@ -718,7 +888,7 @@
       var parts=[];
       if(ml<=0){
         // Нулевая порция (мыло, каталожная мелочь) всё равно должна быть видна:
-        // предмет в желудке есть, и пропадать из области ему нельзя. Ширину ей
+        // предмет в пищеварении есть, и пропадать из области ему нельзя. Ширину ей
         // даёт минимальные 2px в layoutStomachTiles.
         var zero=freestRow(rows);
         parts.push({row:zero,startMl:rows[zero],widthMl:0});
@@ -762,10 +932,9 @@
   /**
    * Разметка участка плитки. Ширина — его миллилитры (ставит layoutStomachTiles),
    * высота — ровно один ряд (35px), поэтому «четыре строки по 35px» выполняются
-   * буквально, а литр занимает всю область без остатка.
+   * буквально, а полный объём занимает всю область без остатка.
    *
-   * Объём подписан в миллилитрах (автор: «объём желудка отображать в
-   * миллилитрах»): 5 мл мёда читаются как «5 мл», а не как «0,005 л».
+   * Объём подписан в миллилитрах: 5 мл мёда читаются как «5 мл».
    */
   function portionTileHtml(rect){
     var portion=rect.portion, ml=rect.volumeMl;
@@ -796,7 +965,7 @@
    * Ставит участкам координаты ПОСЛЕ вставки разметки: ширина области известна
    * только в документе, поэтому укладка не может жить в stomachMarkup().
    *
-   * Миллилитры → пиксели: ширина внутренней части области делится на 250 мл в
+   * Миллилитры → пиксели: ширина внутренней части области делится на 500 мл в
    * ряду, высота — на четыре ряда по 35px. Отсюда «занято / всего» и площадь
    * считаются одной формулой, и разойтись они не могут.
    */
@@ -826,7 +995,7 @@
    * Подбирает шрифт строки плитки так, чтобы текст ПОМЕЩАЛСЯ в ширину.
    *
    * Автор: «если текст внутри предмета не помещается, уменьшаем шрифт».
-   * Плитка занимает ряд целиком (250 мл), поэтому шрифт уменьшается РЕДКО —
+   * Плитка занимает ряд целиком (500 мл), поэтому шрифт уменьшается РЕДКО —
    * только для самых длинных названий каталога («Соли для восстановления
    * организма» ≈ 230px при базовых 10px).
    *
@@ -875,7 +1044,7 @@
     // Объём берём из ТОЙ ЖЕ величины, что печатают меню и список содержимого
     // (`volumeMilliliters`), а не из литров: иначе три места показывали бы три
     // числа на одну порцию.
-    items.push("<li>Объём: "+fmt(volumeMillilitres(portion),0)+" мл из литра</li>");
+    items.push("<li>Объём: "+fmt(volumeMillilitres(portion),0)+" мл</li>");
     items.push("<li>Осталось: "+durationLabel(portion.remainingGameSeconds)+"</li>");
     return "<strong>"+esc(itemName(portion.itemId))+"</strong><ul>"+items.join("")+"</ul>";
   }
@@ -895,37 +1064,49 @@
     tileRectangles(portions).forEach(function(rect){
       inner+=portionTileHtml(rect);
     });
-    if(!inner) inner="<div class='stomachAreaEmpty'>Желудок пуст. ПКМ — употребить предмет.</div>";
+    if(!inner) inner="<div class='stomachAreaEmpty'>Пищеварение пусто. ПКМ — употребить предмет.</div>";
 
-    // Общая динамика усвоения — в ФИЗИЧЕСКИХ величинах, как и шкалы в карточках:
-    // «+10 ккал/мин» игрок сверяет с этикеткой еды, а «+21 ед./мин» — ни с чем.
+    // Общая динамика усвоения — в тех же единицах, что и шкалы: по умолчанию в
+    // ПРОЦЕНТАХ (галочка «%/время»), без неё — в физических величинах, как и
+    // раньше («+10 ккал/мин» игрок сверяет с этикеткой еды).
     var energyPerMinute=num(d.energyPerMinute), hydrationPerMinute=num(d.hydrationPerMinute);
     var dynamics=[];
-    if(energyPerMinute>0) dynamics.push("+"+fmt(energyPerMinute/2,1)+" ккал/мин");
-    if(hydrationPerMinute>0) dynamics.push("+"+fmt(hydrationPerMinute*0.3,0)+" мл/мин");
+    if(percentUnits){
+      // Единицы шкалы за минуту → проценты. Потолки берутся из ТЕХ ЖЕ полей
+      // домена, что и у карточек шкал, поэтому вторых констант не заводится.
+      var energyMax=num((valuesFor("energy")||{}).maximum)||10000;
+      var hydrationMax=num((valuesFor("hydration")||{}).maximum)||10000;
+      if(energyPerMinute>0) dynamics.push("+"+fmt(energyPerMinute/energyMax*100,3)+"%/мин энергии");
+      if(hydrationPerMinute>0) dynamics.push("+"+fmt(hydrationPerMinute/hydrationMax*100,3)+"%/мин жидкости");
+    } else {
+      if(energyPerMinute>0) dynamics.push("+"+fmt(energyPerMinute/2,1)+" ккал/мин");
+      if(hydrationPerMinute>0) dynamics.push("+"+fmt(hydrationPerMinute*0.3,0)+" мл/мин");
+    }
     var dynamicsHtml=dynamics.length
       ? "<span class='stomachDynamics'>Усвоение: "+dynamics.join(", ")+"</span>"
       : "<span class='stomachDynamics'>Усвоение: —</span>";
 
-    // Занятый объём — в МИЛЛИЛИТРАХ (автор: «объём желудка отображать в
-    // миллилитрах»). Миллилитры приходят из домена готовыми: страница их не
-    // пересчитывает из литров, иначе подпись и вёрстка области могли бы
-    // разойтись. Объём — единственный предел желудка: он не даёт съесть больше
-    // литра, и без числа игрок не понимает, почему предмет не помещается.
+    // Занятый объём — в МИЛЛИЛИТРАХ. Миллилитры приходят из домена готовыми:
+    // страница их не пересчитывает из литров, иначе подпись и вёрстка области
+    // могли бы разойтись. Объём — единственный предел пищеварения: он не даёт
+    // съесть больше вместимости, и без числа игрок не понимает, почему предмет
+    // не помещается. Объём — единственный предел пищеварения: он не даёт съесть
+    // больше вместимости, и без числа игрок не понимает, почему предмет не
+    // помещается.
     var occupied=millilitres(d.occupiedMilliliters), total=millilitres(d.totalMilliliters);
     var volumeHtml=total>0
-      ? "<span class='stomachVolume' title='Занятый объём желудка'>"+
+      ? "<span class='stomachVolume' title='Занятый объём пищеварения'>"+
         fmt(occupied,0)+" / "+fmt(total,0)+" мл</span>"
       : "";
 
     return "<section class='indicatorCard stomachCard' data-stomach='1'>"+
-      "<div class='stomachHead'><span class='stomachTitle'>Желудок</span>"+
+      "<div class='stomachHead'><span class='stomachTitle'>Пищеварение</span>"+
       dynamicsHtml+
       "<span class='stomachFactors'>"+stomachFactorsHtml()+"</span>"+
       volumeHtml+
       // Кнопка стоит ПОСЛЕ динамики и её влияний (требование автора), а
       // margin-left:auto уводит её к правому краю той же строки.
-      "<button type='button' class='stomachContentsButton' id='stomachContentsButton' title='Список содержимого желудка'>Содержимое</button>"+
+      "<button type='button' class='stomachContentsButton' id='stomachContentsButton' title='Список содержимого пищеварения'>Содержимое</button>"+
       "</div>"+
       "<div class='stomachArea' id='stomachArea'>"+inner+"</div></section>";
   }
@@ -946,11 +1127,11 @@
     node.style.left=left+"px"; node.style.top=top+"px";
   }
   /**
-   * Меню КАТАЛОГА употребимого (ПКМ по ПУСТОМУ месту желудка).
+   * Меню КАТАЛОГА употребимого (ПКМ по ПУСТОМУ месту пищеварения).
    *
    * Автор: «открывает список не инвентаря, а каталог существующих объектов,
    * которые съедобны. Это действие заменяет поиск предмета, выдачу в инвентарь и
-   * нажатие "использовать"; действия сокращаются до "выбрал — попало в желудок"».
+   * нажатие "использовать"; действия сокращаются до "выбрал — попало в пищеварение"».
    * Поэтому список берётся из каталога (поле `consumables`), а НЕ из инвентаря:
    * инвентарь тут не нужен вовсе, ни количество, ни выдача.
    */
@@ -959,12 +1140,13 @@
   function consumables(){ return (snapshot&&Array.isArray(snapshot.consumables))?snapshot.consumables:[]; }
   /**
    * Объём порции предмета в миллилитрах — ЕДИНСТВЕННАЯ величина, по которой
-   * считается и показывается место в желудке.
+   * считается и показывается место в пищеварении.
    *
-   * Автор: «в желудок должно добавляться строго то количество миллилитров
-   * предмета, которое указано в списке ПКМ-добавления». Значит список и желудок
-   * обязаны печатать ОДНО число. Домен отдаёт его в `volumeMilliliters`; прежний
-   * `grams` оставлен запасным путём для старой версии Хоста.
+   * Автор: «в пищеварение должно добавляться строго то количество миллилитров
+   * предмета, которое указано в списке ПКМ-добавления». Значит список и
+   * пищеварение обязаны печатать ОДНО число. Домен отдаёт его в
+   * `volumeMilliliters`; прежний `grams` оставлен запасным путём для старой
+   * версии Хоста.
    */
   function portionMillilitres(item){
     if(!item) return 0;
@@ -974,7 +1156,7 @@
    * Подпись пункта меню: ОБЪЁМ ПОРЦИИ, затем пищевая ценность.
    *
    * Объём идёт ПЕРВЫМ и всегда: он единственное число, которое можно сверить с
-   * желудком, и именно его автор сверял, когда сообщил о расхождении. Прежняя
+   * пищеварением, и именно его автор сверял, когда сообщил о расхождении. Прежняя
    * подпись начиналась с ккал, а объём показывала только у неедовых предметов —
    * то есть у еды его не было вовсе, и сверить было нечего.
    *
@@ -991,9 +1173,9 @@
   function showMenuAt(x,y){
     var node=menuNode(); if(!node) return;
     var items=consumables();
-    // Свободное место в желудке — ОДНО число на всё меню: по нему видно, почему
-    // часть пунктов погашена. Считается из тех же миллилитров, что и подпись
-    // «занято / всего», поэтому подсказка и шапка всегда сходятся.
+    // Свободное место в пищеварении — ОДНО число на всé меню: по нему видно,
+    // почему часть пунктов погашена. Считается из тех же миллилитров, что и
+    // подпись «занято / всего», поэтому подсказка и шапка всегда сходятся.
     var d=digestion();
     var totalMl=d?millilitres(d.totalMilliliters):0;
     var freeMl=totalMl>0?Math.max(0,totalMl-millilitres(d.occupiedMilliliters)):0;
@@ -1005,7 +1187,7 @@
           // а не пропавшие из списка: пропажа читалась бы как «предмет
           // исчез из каталога», а серый пункт с подписью «не помещается»
           // объясняет, ЧТО именно мешает и почему. Признак `fits` считает домен
-          // по текущему желудку; при отсутствии поля пункт считается годным,
+          // по текущему содержимому; при отсутствии поля пункт считается годным,
           // чтобы старая версия Хоста не делала меню целиком мёртвым.
           var fits=item.fits!==false;
           return "<button type='button' class='stomachMenuItem"+(fits?"":" stomachMenuItemDisabled")+
@@ -1029,7 +1211,7 @@
   }
 
   /**
-   * Окно «Содержимое желудка»: ПРОСТОЙ список порций — название и таймер.
+   * Окно «Содержимое пищеварения»: ПРОСТОЙ список порций — название и таймер.
    *
    * Плитка отвечает на вопрос «сколько места занято», а этот список — «что именно
    * и когда усвоится». Плитки с этой задачей не справляются: у мелкой порции
@@ -1044,7 +1226,7 @@
   var lastContentsMarkup="";
   function contentsRowsHtml(){
     var portions=stomachPortions();
-    if(!portions.length) return "<div class='stomachWindowEmpty'>Желудок пуст.</div>";
+    if(!portions.length) return "<div class='stomachWindowEmpty'>Пищеварение пусто.</div>";
     return portions.map(function(portion){
       var ml=millilitres(portion.volumeMilliliters!=null?portion.volumeMilliliters:num(portion.volumeLiters)*1000);
       return "<div class='stomachRow' data-stomach-item='"+esc(portion.itemId)+"'>"+
@@ -1053,7 +1235,7 @@
         // Объём — в МИЛЛИЛИТРАХ, как и занятое место в шапке блока: автор
         // заметил, что подпись расходилась с добавленным («5 мл мёда добавилось
         // как 30»), и расхождение было в пересчёте. Здесь печатается ТО ЖЕ число,
-        // что занимает место в желудке.
+        // что занимает место в пищеварении.
         "<span class='stomachRowVolume'>"+fmt(ml,0)+" мл</span>"+
         "<span class='stomachRowTimer'>"+durationLabel(portion.remainingGameSeconds)+"</span></div>";
     }).join("");
@@ -1094,7 +1276,7 @@
    * Перетаскивание всплывающего окна за шапку.
    *
    * Окно плавающее и перекрывает плитки, поэтому его должно быть можно убрать с
-   * дороги, не закрывая: иначе «Содержимое» мешало бы смотреть сам желудок.
+   * дороги, не закрывая: иначе «Содержимое» мешало бы смотреть само пищеварение.
    */
   function dragWindowBy(node,handle){
     if(!node||!handle) return;
@@ -1118,8 +1300,11 @@
 
   function render(){
     if(!body||!snapshot||!v()) return;
+    // Галочка синхронизируется ДО разметки: от неё зависит формат каждой строки, и
+    // переключение обязано перерисовать тело тем же проходом.
+    renderPercentUnits();
     var markup=(v().SCALES||[]).map(function(s){return renderCard(s.key);}).join("");
-    // Блок желудка — ПЕРВЫМ: он во всю ширину, и шкалы выстраиваются под ним.
+    // Блок пищеварения — ПЕРВЫМ: он во всю ширину, и шкалы выстраиваются под ним.
     markup=stomachMarkup()+markup;
     if(markup!==lastMarkup){
       lastMarkup=markup;
@@ -1156,11 +1341,16 @@
     if(!message) return;
     if(message.type==="snapshot"){
       snapshot=message.snapshot||snapshot;
+      if(message.playerVitals) snapshot.playerVitals=message.playerVitals;
       if(Array.isArray(message.itemCatalog)) itemCatalog=message.itemCatalog;
       if(snapshot&&message.conditionRates) snapshot.conditionRates=message.conditionRates;
       if(snapshot&&message.digestion) snapshot.digestion=message.digestion;
       if(Array.isArray(message.consumables)) snapshot.consumables=message.consumables;
       if(message.daylight) snapshot.daylight=message.daylight;
+      // Галочка «%/время» — из НАСТРОЕК Хоста: страница лишь рисует то, что
+      // реально сохранено. Без этой строки после перезапуска галочка показывала бы
+      // состояние по умолчанию, а числа — присланные, и они разошлись бы.
+      if(typeof message.percentUnits==="boolean") percentUnits=message.percentUnits;
       // Признак маршрута приходит РЯДОМ со снимком и должен пережить полное
       // обновление: без этого «покой» возвращался на каждом снимке.
       applyRoute(message);
@@ -1199,7 +1389,7 @@
       if(contents){toggleContentsWindow(contents);return;}
     });
 
-    // ── Желудок: тултип, ПКМ по порции, ПКМ по пустому месту ────────────────
+    // ── Пищеварение: тултип, ПКМ по порции, ПКМ по пустому месту ────────────
     //
     // Обработчики висят на ТЕЛЕ (а не на самих порциях): разметка блока
     // перерисовывается на каждом шаге усвоения, и обработчик на узле пропадал бы
@@ -1220,7 +1410,7 @@
       hideTooltip();
       var node=event.target.closest("[data-stomach-item]");
       if(node){
-        // ПКМ по ПОРЦИИ — убрать её из желудка (задано автором).
+        // ПКМ по ПОРЦИИ — убрать её из пищеварения (задано автором).
         send({action:"remove_stomach_portion",itemId:node.getAttribute("data-stomach-item")||""});
         return;
       }
@@ -1237,13 +1427,30 @@
       hideMenu();
     });
 
-    // ── Окно «Содержимое желудка» ───────────────────────────────────────────
+    // ── Галочка «%/время» ───────────────────────────────────────────────────
+    //
+    // Узел СТАТИЧНЫЙ (в шапке, вне тела монитора), поэтому обработчик вешается
+    // один раз. Страница НЕ хранит настройку: она сообщает о щелчке Хосту, а тот
+    // пишет файл настроек и возвращает снимок с фактическим значением — тот же
+    // путь, по которому живут раскрытые разделы сайдбара.
+    //
+    // Локальное значение ставится СРАЗУ (оптимистично): ждать снимок до секунды
+    // игрок воспринимал бы как «галочка не работает». Пришедший снимок всё равно
+    // перезапишет его фактическим значением — расхождение живёт доли секунды.
+    var toggle=percentUnitsCheckbox();
+    if(toggle) toggle.addEventListener("change",function(){
+      percentUnits=!!toggle.checked;
+      send({action:"set_percent_units",value:percentUnits});
+      render();
+    });
+
+    // ── Окно «Содержимое пищеварения» ───────────────────────────────────────
     //
     // Окно статичное (в разметке страницы), поэтому его обработчики можно вешать
     // прямо на него: render() перерисовывает только ТЕЛО монитора, окно лежит
     // вне его. Список внутри обновляется через innerHTML, и ПКМ обрабатывается
     // на самом окне — то есть переживает обновление списка, как и обработчики
-    // блока желудка на body.
+    // блока пищеварения на body.
     var contentsWindow=windowNode();
     if(contentsWindow){
       // Клик по крестику ЗАКРЫВАЕТ окно, а не «переключает»: кнопка закрытия

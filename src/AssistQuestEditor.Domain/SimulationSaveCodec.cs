@@ -468,6 +468,15 @@ public static class SimulationSaveCodec
             writer.Write(conditions.RandomSequence);
         }
 
+        // v17: накопитель дробных порций броска устойчивости. Без него перезапуск
+        // обнулял бы уже накопленную долю десятиминутной порции, и шанс
+        // «не получить порцию штрафа» зависел бы от того, как часто игрок
+        // сохраняется.
+        if (formatVersion >= 17)
+        {
+            WriteDouble(writer, conditions.ExhaustionRollPending);
+        }
+
         if (formatVersion >= 12)
         {
             WriteDouble(writer, conditions.CaffeineLoadMg);
@@ -494,7 +503,50 @@ public static class SimulationSaveCodec
         // единственное имя последнего предмета, и «Вода» подменялась
         // «Апельсином». Суммы пишутся ВСЕГДА (они нужны движку и старым
         // читателям), список порций — только новым форматом.
-        if (formatVersion >= 15)
+        //
+        // v16: порции хранят ФИЗИЧЕСКИЕ величины (объём, калории, воду), а
+        // ставки НЕ пишутся: они выводятся из состава при загрузке
+        // (<see cref="CharacterDigestion.Normalize"/>). Иначе файл «запомнил» бы
+        // скорости на момент записи, и пищеварение после загрузки вело бы себя
+        // иначе, чем в непрерывной игре.
+        //
+        // v17: вместо признаков «повышенный/пониженный» пишется САМ ПРОЦЕНТ
+        // метаболизма. Флаги фиксировали скорость на моменте приёма еды и давали
+        // эксплоит; теперь пищеварение пересчитывается под текущее состояние на
+        // каждом шаге, поэтому в файле достаточно последнего значения.
+        if (formatVersion >= 16)
+        {
+            var portions = conditions.Stomach.Portions ??
+                Array.Empty<StomachPortion>();
+
+            if (formatVersion >= 17)
+            {
+                WriteDouble(writer, conditions.Stomach.MetabolismPercent);
+            }
+            else
+            {
+                // Запись v16 в точности: два признака, затем счётчик. Признаки
+                // выводятся из процента по тем же границам калибровки, поэтому
+                // переходный файл читается обратно без потери поправки.
+                var percent = conditions.Stomach.MetabolismPercent;
+                writer.Write(
+                    percent >= CharacterVitalsEngine.ElevatedMetabolismPercent);
+                writer.Write(
+                    percent < CharacterVitalsEngine.ReducedMetabolismPercent);
+            }
+
+            writer.Write(portions.Count);
+            foreach (var portion in portions)
+            {
+                WriteString(writer, portion.ItemId);
+                WriteDouble(writer, portion.MassTotal);
+                WriteDouble(writer, portion.MassRemaining);
+                WriteDouble(writer, portion.KilocaloriesTotal);
+                WriteDouble(writer, portion.WaterMillilitersTotal);
+                WriteDouble(writer, portion.YieldBonusFraction);
+            }
+        }
+        else if (formatVersion >= 15)
         {
             var portions = conditions.Stomach.Portions ??
                 Array.Empty<StomachPortion>();
@@ -503,9 +555,9 @@ public static class SimulationSaveCodec
             foreach (var portion in portions)
             {
                 WriteString(writer, portion.ItemId);
-                WriteDouble(writer, portion.VolumeFraction);
-                WriteDouble(writer, portion.EnergyRemaining);
-                WriteDouble(writer, portion.HydrationRemaining);
+                WriteDouble(writer, CharacterDigestion.PortionFraction(portion.MassTotal));
+                WriteDouble(writer, portion.EnergyRemainingUnits);
+                WriteDouble(writer, portion.HydrationRemainingUnits);
                 WriteDouble(writer, portion.EnergyPerGameSecond);
                 WriteDouble(writer, portion.HydrationPerGameSecond);
             }
@@ -561,6 +613,14 @@ public static class SimulationSaveCodec
             };
         }
 
+        if (formatVersion >= 17)
+        {
+            state = state with
+            {
+                ExhaustionRollPending = ReadDouble(reader)
+            };
+        }
+
         if (formatVersion >= 12)
         {
             state = state with
@@ -592,8 +652,26 @@ public static class SimulationSaveCodec
             };
         }
 
-        if (formatVersion >= 15)
+        if (formatVersion >= 16)
         {
+            // v16 писал ДВА признака метаболизма ПЕРЕД счётчиком порций — они
+            // читаются здесь, чтобы порядок полей старого файла не поехал.
+            double metabolismPercent;
+            if (formatVersion >= 17)
+            {
+                metabolismPercent = ReadDouble(reader);
+            }
+            else
+            {
+                var elevated = reader.ReadBoolean();
+                var reduced = reader.ReadBoolean();
+                metabolismPercent = reduced
+                    ? CharacterVitalsEngine.ReducedMetabolismPercent
+                    : elevated
+                        ? CharacterVitalsEngine.ElevatedMetabolismPercent
+                        : CharacterVitalsTuning.DefaultMetabolismPercent;
+            }
+
             var portions = new List<StomachPortion>();
             var portionCount = reader.ReadInt32();
             for (var index = 0; index < portionCount; index++)
@@ -604,7 +682,47 @@ public static class SimulationSaveCodec
                     ReadDouble(reader),
                     ReadDouble(reader),
                     ReadDouble(reader),
-                    ReadDouble(reader)));
+                    ReadDouble(reader),
+                    0d));
+            }
+
+            state = state with
+            {
+                Stomach = state.Stomach with
+                {
+                    Portions = portions,
+                    MetabolismPercent = metabolismPercent
+                }
+            };
+        }
+        else if (formatVersion >= 15)
+        {
+            // Порции v15 хранили СУММЫ ШКАЛ, а не физические величины. Переводим
+            // их обратно через те же константы шкал, а объём собираем из доли
+            // вместимости: иначе загруженный файл «забыл» бы, что в желудке есть
+            // объём, и еда перестала бы занимать место.
+            var portions = new List<StomachPortion>();
+            var portionCount = reader.ReadInt32();
+            for (var index = 0; index < portionCount; index++)
+            {
+                var itemId = ReadString(reader);
+                var fraction = Math.Clamp(ReadDouble(reader), 0d, 1d);
+                var kilocalories = CharacterDigestion.KilocaloriesFromUnits(
+                    ReadDouble(reader));
+                var water = CharacterDigestion.MillilitersFromUnits(
+                    ReadDouble(reader));
+                ReadDouble(reader); // ставка энергии v15 — выводится заново
+                ReadDouble(reader); // ставка жидкости v15 — выводится заново
+
+                var mass = fraction * CharacterDigestion.CapacityMilliliters;
+                portions.Add(new StomachPortion(
+                    itemId,
+                    mass,
+                    mass,
+                    kilocalories,
+                    water,
+                    1d,
+                    0d));
             }
 
             state = state with

@@ -56,6 +56,17 @@ public sealed class SimulatorForm : WebViewForm
     private List<string> _sidebarSections = new();
 
     /// <summary>
+    /// Показывать ли в мониторе показателей скорости шкал В ПРОЦЕНТАХ («2%/мин»)
+    /// вместо физических величин (ккал/мин, мл/мин). Галочка в шапке монитора.
+    ///
+    /// Состояние принадлежит НАСТРОЙКАМ, а не странице: оно обязано переживать
+    /// перезапуск и обновление версии, а localStorage живёт в профиле WebView2,
+    /// который меняется вместе с отпечатком сборки. Страница лишь рисует то, что
+    /// прислал Хост, — ровно как с раскрытыми разделами сайдбара.
+    /// </summary>
+    private bool _percentUnits = true;
+
+    /// <summary>
     /// Позиция игрока на прошлом тике начисления условий.
     ///
     /// Нужна, чтобы считать ПРОЙДЕННУЮ дистанцию: усталость растёт и по
@@ -191,6 +202,7 @@ public sealed class SimulatorForm : WebViewForm
         _sidebarSections = preferences.SidebarSections is { } savedSections
             ? new List<string>(savedSections)
             : new List<string>();
+        _percentUnits = preferences.PercentUnits;
         Opacity = 0;
         GlobalHotKeyPressed += SimulatorForm_GlobalHotKeyPressed;
         _questGraph.Changed += QuestGraph_Changed;
@@ -411,6 +423,12 @@ public sealed class SimulatorForm : WebViewForm
             type = "snapshot",
             version = VersionInfo.InformationalVersion,
             snapshot,
+            // Виталы едут ОТДЕЛЬНО: монитор показателей раскладывает скорость
+            // энергии и жидкости на вклады «база × метаболизм × сон», а для
+            // этого ему нужен процент метаболизма. Он есть внутри `snapshot`,
+            // но у монитора снимок приходит и БЕЗ полного payload (live_state),
+            // и читать правило из одного места удобнее одним полем.
+            playerVitals = snapshot.PlayerVitals,
             conditionRates,
             // Желудок для монитора: порции в литрах/ккал/мл и их сроки.
             // Считает ДОМЕН — время до конца порции выводится из остатка и
@@ -458,6 +476,10 @@ public sealed class SimulatorForm : WebViewForm
             // рисует присланное. Так разделы переживают перезапуск и не зависят
             // от того, менялся ли профиль WebView2.
             sidebarSections = _sidebarSections,
+            // Галочка «%/время» едет со снимком ПО ТОЙ ЖЕ причине: её состояние
+            // тоже живёт в настройках, и монитор обязан показать то, что реально
+            // сохранено, а не свою догадку.
+            percentUnits = _percentUnits,
             // Режим визуализации Location едет вместе со снимком: снимок
             // перерисовывает всю карту, и без этого набор точек исчезал бы
             // через доли секунды после нажатия «Показать в симуляторе».
@@ -583,18 +605,24 @@ public sealed class SimulatorForm : WebViewForm
     }
 
     /// <summary>
-    /// Желудок для монитора показателей: порции, объём и влияние на усвоение.
+    /// Пищеварение для монитора показателей: порции, объём и влияние на усвоение.
     ///
     /// Считает ДОМЕН (<see cref="CharacterDigestionReport"/>), а не страница:
-    /// срок порции выводится из её остатка и ставки, а ставку задаёт физиология
-    /// (еда — «полный желудок за два часа», питьё — «1,35 литра в час»). Вторая
-    /// такая же формула в JavaScript разошлась бы с начислением при первой же
-    /// правке баланса — ровно тот класс дефектов, что «потолок 10000».
+    /// срок порции выводится из её остатка и ставки, а ставку задаёт ОДНА общая
+    /// пропускная способность пищеварения, поделённая между порциями по их
+    /// «лёгкости» (вода легче сухой пищи). Вторая такая же формула в JavaScript
+    /// разошлась бы с начислением при первой же правке баланса — ровно тот класс
+    /// дефектов, что «потолок 10000».
     /// </summary>
     private static object BuildDigestionSnapshot(SimulatorSnapshot snapshot)
     {
         var conditions = snapshot.Conditions;
         var stomach = conditions.Stomach;
+        // Метаболизм берётся ТЕКУЩИЙ: пищеварение пересчитывает ставки на каждом
+        // шаге под фактическое состояние, поэтому подсказка обязана читать то же
+        // число. Раньше здесь подавался текущий метаболизм, а ставки порций были
+        // зафиксированы при приёме еды — съел при 80%, упал до 50%, и строка
+        // продолжала обещать «×2,5».
         var metabolismPercent = PlayerConditionScale.ToPercent(
             snapshot.PlayerVitals.Metabolism);
 
@@ -615,23 +643,21 @@ public sealed class SimulatorForm : WebViewForm
                 waterMilliliters = portion.WaterMilliliters,
                 remainingGameSeconds = portion.RemainingGameSeconds,
                 remainingGameMinutes = portion.RemainingGameMinutes,
+                // Доля ВОДЫ в порции: по ней игрок понимает, почему две порции
+                // одного объёма уходят за разное время.
+                waterContent = portion.WaterContent,
                 // СКОРОСТЬ ЭТОЙ ПОРЦИИ: без неё строка предмета в шкале не
-                // может показать свой вклад и повторяла бы общий итог желудка,
-                // приписывая апельсину восстановление жидкости, которого он не
-                // даёт. В единицах шкалы за игровую минуту — та же размерность,
-                // что у energyPerMinute/hydrationPerMinute ниже.
+                // может показать свой вклад и повторяла бы общий итог
+                // пищеварения, приписывая апельсину восстановление жидкости,
+                // которого он не даёт. В единицах шкалы за игровую минуту — та
+                // же размерность, что у energyPerMinute/hydrationPerMinute ниже.
                 energyPerMinute = portion.EnergyPerGameSecond * 60d,
                 hydrationPerMinute = portion.HydrationPerGameSecond * 60d
             })
             .ToArray();
 
         var factors = CharacterDigestionReport
-            .MetabolismFactors(
-                metabolismPercent,
-                elevatedMetabolism: metabolismPercent >=
-                    CharacterVitalsEngine.ElevatedMetabolismPercent,
-                reducedMetabolism: metabolismPercent <
-                    CharacterVitalsEngine.ReducedMetabolismPercent)
+            .MetabolismFactors(metabolismPercent)
             .Select(factor => new
             {
                 text = factor.Text,
@@ -641,17 +667,22 @@ public sealed class SimulatorForm : WebViewForm
 
         return new
         {
-            // Доли, а не только литры: страница раскладывает желудок на всю
-            // ширину блока, и рисовать приходится ОТНОСИТЕЛЬНЫМИ размерами.
+            // Доли, а не только литры: страница раскладывает область пищеварения
+            // на всю ширину блока, и рисовать приходится ОТНОСИТЕЛЬНЫМИ размерами.
             volumeFraction = stomach.VolumeFraction,
             occupiedLiters = stomach.OccupiedLiters,
             totalLiters = CharacterDigestion.StomachVolumeLiters,
-            // МИЛЛИЛИТРЫ — то, чем подписан блок«занято / всего» и чем отмерена
-            // область желудка. Считает домен: миллилитр и грамм приравнены в
+            // МИЛЛИЛИТРЫ — то, чем подписан блок «занято / всего» и чем отмерена
+            // область пищеварения. Считает домен: миллилитр и грамм приравнены в
             // одном месте, и повторять это в JavaScript значило бы завести вторую
             // версию правила об объёме.
-            occupiedMilliliters = stomach.OccupiedLiters * 1000d,
+            occupiedMilliliters = stomach.OccupiedMilliliters,
             totalMilliliters = CharacterDigestionReport.StomachCapacityMilliliters,
+            // Пропускная способность в миллилитрах в час — её показывает первый
+            // фактор блока: игрок обязан видеть лимит, из которого считаются
+            // сроки порций.
+            dryThroughputMillilitersPerHour =
+                CharacterDigestion.DryThroughputLitersPerHour * 1000d,
             // Скорости усвоения в единицах шкалы за игровую минуту: их показывает
             // строка «общая динамика усвоения» в шапке блока.
             energyPerMinute = stomach.EnergyPerGameSecond * 60d,
@@ -682,7 +713,46 @@ public sealed class SimulatorForm : WebViewForm
             fatigue = rates.FatiguePerGameMinute,
             stress = rates.StressPerGameMinute,
             resilience = rates.ResiliencePerGameMinute,
-            metabolism = rates.MetabolismPerGameMinute
+            metabolism = rates.MetabolismPerGameMinute,
+            // Расход энергии и жидкости зависит от МЕТАБОЛИЗМА (0,9 при
+            // пониженном, 1,25 при повышенном) и от баффа «Бык» (ещё ×0,5).
+            // Монитор показателей раскладывает скорость на вклады и обязан
+            // применить ТОТ ЖЕ множитель: иначе базовая строка показывала бы
+            // норму без поправки и не сходилась бы с итогом. Считает домен,
+            // повторять условие «45/75» в JavaScript нельзя.
+            metabolismFactor = CharacterVitalsEngine.MetabolismConsumptionFactor(
+                PlayerConditionScale.ToPercent(snapshot.PlayerVitals.Metabolism),
+                snapshot.Conditions.Effects.Any(effect =>
+                    effect.Id.Equals("bull", StringComparison.OrdinalIgnoreCase) &&
+                    effect.RemainingRealSeconds > 0d)),
+            // Границы «пониженного» и «повышенного» метаболизма: по ним монитор
+            // подписывает вклады расхода. Числа заданы калибровкой — Web их не
+            // повторяет, иначе подпись разошлась бы с начислением.
+            reducedMetabolismPercent = CharacterVitalsEngine.ReducedMetabolismPercent,
+            elevatedMetabolismPercent = CharacterVitalsEngine.ElevatedMetabolismPercent,
+            // НОМИНАЛЫ: раньше монитор зашивал «60» двумя литералами, и правка
+            // калибровки до него не доезжала — ровно тот дефект, ради которого
+            // 45 и 75 уже приходили полями. Теперь от домена приходит и номинал,
+            // и процент, на котором пропорциональная надбавка к здоровью
+            // становится полной (см. ElevatedBonusShare).
+            defaultMetabolismPercent = CharacterVitalsEngine.DefaultMetabolismPercent,
+            defaultResiliencePercent = CharacterVitalsEngine.DefaultResiliencePercent,
+            elevatedBonusFullPercent =
+                CharacterVitalsTuning.ElevatedBonusFullPercent,
+            // ДЕЛИТЕЛЬ ШАНСА УСТОЙЧИВОСТИ: по нему монитор считает и подписывает
+            // «R/2 = 30% шанс не получить порцию истощения». Самый сильный эффект
+            // устойчивости раньше не был виден игроку ни в одной строке.
+            exhaustionResilienceDivisor =
+                CharacterVitalsTuning.ExhaustionResilienceDivisor,
+            // Потолок и скорости возврата устойчивости: монитор показывает их
+            // вкладом, и числа обязаны приходить от домена — иначе правка
+            // калибровки снова разошлась бы с подписью.
+            bumResilienceCapPercent =
+                CharacterVitalsTuning.BumResilienceCapPercent,
+            resilienceReturnPerQuarterHour =
+                CharacterVitalsTuning.ResilienceReturnPercentPerQuarterHour,
+            resilienceBumReturnPerQuarterHour =
+                CharacterVitalsTuning.ResilienceBumReturnPercentPerQuarterHour
         };
     }
 
@@ -857,18 +927,25 @@ public sealed class SimulatorForm : WebViewForm
         _hub.Get<PlayerConditionState>("player-conditions").Set(
             conditions with
             {
+                // Суммы и ставки пересчитываются из оставшихся порций
+                // (Normalize → Materialize). Метаболизм берётся У САМОГО
+                // содержимого: без него ставки пересчитались бы по «нормальной»
+                // пропускной способности, и оставшаяся еда пошла бы в шкалы не с
+                // той скоростью, с какой шла до удаления. Дальше его переписывает
+                // каждый шаг пищеварения, поэтому «запасённой» скорости нет.
                 Stomach = new StomachContents(0d, 0d, 0d, 0d, 0d)
                 {
-                    Portions = remaining
+                    Portions = remaining,
+                    MetabolismPercent = conditions.Stomach.MetabolismPercent
                 }.Normalize()
             },
-            "Удаление порции из желудка");
+            "Удаление порции из пищеварения");
 
         AppendJournal(
             "StomachPortionRemoved",
             DateTimeOffset.UtcNow,
             "Состояние игрока",
-            "Из желудка удалён предмет: [[item:" + itemId + ":" +
+            "Из пищеварения удалён предмет: [[item:" + itemId + ":" +
             ItemLabel(itemId) + "]] " + ItemLabel(itemId) + ".",
             _hub.Get<PlayerState>("player").Value.Position);
 
@@ -1132,6 +1209,10 @@ public sealed class SimulatorForm : WebViewForm
 
             inventory.Items.TryGetValue(item.Id, out var count);
 
+            var edible = CharacterVitalsEngine.CanConsume(item.Id);
+            var nutrients = ItemData.Nutrition(item.Id);
+            var (quality, condition) = ItemData.Attributes(item.Id, edible);
+
             return new
             {
                 id = item.Id,
@@ -1152,12 +1233,39 @@ public sealed class SimulatorForm : WebViewForm
                 // меню желудка — «110 мл» (вода в банане): два разных числа на один
                 // предмет. Теперь всюду одно и то же — объём порции.
                 milliliters = CharacterConsumableCatalog.GetPortionMilliliters(item.Id),
+                // А масса — отдельное, ФИЗИЧЕСКОЕ число, и путать её с объёмом
+                // нельзя: у литра воды это 1000 г и 1000 мл, а у 30 г мёда — 30 г
+                // против 5 мл воды в нём. Прежде окно рисовало только объём, и
+                // «сколько весит» в рюкзаке нигде не было видно.
                 grams = profile.Grams,
+                // БЖУ порции, граммы. Пустое у несъедобного: у таблетки нет
+                // состава, и рисовать ей «0 г белка» значило бы утверждать
+                // диетологический факт о предмете, который не едят.
+                proteinGrams = nutrients.HasAny ? nutrients.ProteinGrams : 0d,
+                fatGrams = nutrients.HasAny ? nutrients.FatGrams : 0d,
+                carbohydrateGrams = nutrients.HasAny ? nutrients.CarbohydrateGrams : 0d,
+                // Качество и состояние — задел для механик крафта и порчи. Сейчас
+                // у всех предметов значения по умолчанию, но они уже приходят в
+                // окно подписями: пустое место показало бы «неизвестно», а
+                // неизвестного нет.
+                quality = ItemAttributeLabels.Quality(quality),
+                condition = ItemAttributeLabels.Condition(condition),
+                // Цена — из справочника предметов, с отсечкой квестового внутри
+                // PriceRubles. Ноль означает «не продаётся»: у квестовых он
+                // по правилу автора, а «0 ₽» рисовать не нужно — бесплатного
+                // товара в мире нет. Покупка появится в механиках квестов; пока
+                // цена только ПОКАЗЫВАЕТСЯ, как и просил автор.
+                priceRubles = ItemCatalogFactory.PriceRubles(item),
+                // Квестовость отдаётся ОТДЕЛЬНЫМ флагом, а не выводится в окне из
+                // категории: правило «не продаётся» живёт в домене, и окно должно
+                // получать его решение, а не повторять строку категории у себя.
+                quest = ItemCatalogFactory.IsQuestOnly(item.Category),
                 // Съедобность считает ДОМЕН: у таблеток калорий нет, но они
                 // занимают желудок и действуют, поэтому «съедобно» — это не
-                // «есть калории», а «CanConsume». Галочка «только съедобное» и
-                // салатовая плашка обязаны означать ровно то же, что меню желудка.
-                edible = CharacterVitalsEngine.CanConsume(item.Id),
+                // «есть калории», а «CanConsume». Галочки «только съедобное» /
+                // «только несъедобное» и салатовая плашка обязаны означать ровно
+                // то же, что меню желудка.
+                edible,
                 kilocalories = profile.Kilocalories,
                 waterMilliliters = profile.WaterMilliliters,
                 energyPercent = profile.EnergyPercent,
@@ -1874,6 +1982,15 @@ public sealed class SimulatorForm : WebViewForm
 
                 case "set_sidebar_sections":
                     SetSidebarSections(root);
+                    break;
+
+                // Галочка «%/время» в шапке монитора показателей: страница сообщает
+                // о переключении, Хост запоминает его в настройках и ОТВЕЧАЕТ
+                // свежим снимком. Ответ обязателен: без него страница осталась бы
+                // с собственной догадкой о состоянии, а она после перезапуска
+                // разошлась бы с файлом настроек.
+                case "set_percent_units":
+                    SetPercentUnits(root);
                     break;
                 case "open_journal":
                     OpenJournalWindow();
@@ -4925,6 +5042,41 @@ public sealed class SimulatorForm : WebViewForm
             DateTimeOffset.UtcNow,
             String(root, "source", "Simulator"),
             payload));
+    }
+
+    /// <summary>
+    /// Запоминает выбор галочки «%/время» и возвращает монитору свежий снимок.
+    ///
+    /// Пишется только ИЗМЕНЕНИЕ: щелчок по галочке — редкое действие, но
+    /// сравнение всё равно нужно — без него повторное сообщение с тем же значением
+    /// переписывало бы файл настроек на диск.
+    /// </summary>
+    private void SetPercentUnits(JsonElement root)
+    {
+        if (!root.TryGetProperty("value", out var valueNode) ||
+            (valueNode.ValueKind != JsonValueKind.True &&
+             valueNode.ValueKind != JsonValueKind.False))
+        {
+            return;
+        }
+
+        var requested = valueNode.GetBoolean();
+
+        if (requested == _percentUnits)
+            return;
+
+        _percentUnits = requested;
+
+        var preferences = AppUiPreferencesStore.Load();
+        AppUiPreferencesStore.Save(preferences with { PercentUnits = _percentUnits });
+
+        AppLogger.Info(
+            "SimulatorForm: единицы монитора показателей переключены.",
+            $"percentUnits={_percentUnits}");
+
+        // Снимок возвращается СРАЗУ: галочка — мгновенное действие, и ожидание
+        // следующего тика (до секунды) читалось бы как «не сработало».
+        RequestSnapshot("percent units changed");
     }
 
     /// <summary>

@@ -45,7 +45,9 @@ const payload = {
       category: "Напиток", color: "#4b8fe8", letter: "В", quantity: 3,
       feeds: true, edible: true, grams: 500, milliliters: 500,
       kilocalories: 0, waterMilliliters: 500,
-      energyPercent: 0, hydrationPercent: 3.33
+      energyPercent: 0, hydrationPercent: 3.33,
+      proteinGrams: 0, fatGrams: 0, carbohydrateGrams: 0,
+      quality: "Обычное", condition: "Свежее", quest: false, priceRubles: 45
     },
     {
       // ОБЪЁМ ПОРЦИИ (400) НАРОЧНО ОТЛИЧАЕТСЯ от содержимого ВОДЫ (250) —
@@ -56,17 +58,41 @@ const payload = {
       category: "Еда", color: "#b98a55", letter: "П", quantity: 0,
       feeds: true, edible: true, grams: 400, milliliters: 400,
       kilocalories: 600, waterMilliliters: 250,
-      energyPercent: 12, hydrationPercent: 1.67
+      energyPercent: 12, hydrationPercent: 1.67,
+      // БЖУ порции: 8,0/6,0/18,0 на 100 г × 4.
+      proteinGrams: 32, fatGrams: 24, carbohydrateGrams: 72,
+      quality: "Обычное", condition: "Свежее", quest: false, priceRubles: 320
     },
     {
       // Неедовый предмет: блока пищевой ценности быть НЕ должно — «0 ккал»
       // читалось бы как «еда, но бесполезная». ОБЪЁМ при этом показать надо:
-      // это свойство предмета, а не еды.
+      // это свойство предмета, а не еды. ЦЕНЫ нет (0) — и строки цены тоже быть
+      // не должно: «0 ₽» читалось бы как «бесплатно».
+      //
+      // КВЕСТОВЫЙ: единственный предмет в пробе с `quest: true`. Он же — сторож
+      // правила «квестовое никогда не продаётся»: `priceRubles` намеренно 0.
       id: "note", name: "Записка", description: "Короткая записка из тайника.",
       category: "Квестовый предмет", color: "#e7d58a", letter: "З", quantity: 1,
       feeds: false, edible: false, grams: 0, milliliters: 0,
       kilocalories: 0, waterMilliliters: 0,
-      energyPercent: 0, hydrationPercent: 0
+      energyPercent: 0, hydrationPercent: 0, priceRubles: 0,
+      proteinGrams: 0, fatGrams: 0, carbohydrateGrams: 0,
+      quality: "Обычное", condition: "Без повреждений", quest: true
+    },
+    {
+      // ПОЗИЦИЯ МЕНЮ КАФЕ: цена приходит от Хоста и обязана быть ВИДНА. Цена —
+      // число автора (план кафе «У Дороги»), а не оценка рынка; окно её только
+      // показывает, покупка появится в механиках квестов.
+      id: "cafe.borscht", name: "Борщ со сметаной",
+      description: "Первое блюдо. Ценность 100-80-90-0 (здоровье-голод-жажда-тонус).",
+      category: "Кафе", color: "#a8324a", letter: "Б", quantity: 0,
+      feeds: true, edible: true, grams: 400, milliliters: 400,
+      kilocalories: 4000, waterMilliliters: 2700,
+      energyPercent: 80, hydrationPercent: 90,
+      priceRubles: 250,
+      // БЖУ автора-меню: 3,2/4,5/3,8 на 100 г × 4.
+      proteinGrams: 12.8, fatGrams: 18, carbohydrateGrams: 15.2,
+      quality: "Обычное", condition: "Свежее", quest: false
     }
   ]
 };
@@ -156,6 +182,24 @@ try {
   check(!/Пищевая ценность/.test(note.text),
     "у неедового предмета показана пищевая ценность: " + note.text);
 
+  // ── Цена ──────────────────────────────────────────────────────────────────
+  // Автор: «Цену показывать, но покупка будет совершаться только в определённых
+  // ситуациях в новых механиках». Значит окно цену ПОКАЗЫВАЕТ и НЕ продаёт.
+  const borscht = cards.find(card => card.id === "cafe.borscht");
+  check(/Цена: 250 ₽/.test(borscht.text),
+    "у позиции кафе не показана цена автора: " + borscht.text);
+
+  // Нулевая цена — это «цены нет», и строки быть НЕ должно: «0 ₽» читалось бы
+  // как «бесплатно», то есть как обещание.
+  check(!/Цена/.test(note.text),
+    "у предмета без цены нарисована строка цены: " + note.text);
+
+  // Покупки в этом окне нет: цену показываем, но денег не списываем и предмет не
+  // выдаём. Проверка держит это явно — иначе следующая правка легко приделает
+  // сюда продажу, и «цена только для показа» перестанет быть правдой молча.
+  check(!/Купить|Продать|Оплатить/i.test(borscht.text),
+    "в карточке появилась кнопка покупки, которой быть не должно: " + borscht.text);
+
   // ── Салатовая плашка «съедобно» ───────────────────────────────────────────
   // Автор: «съедобные предметы пометить салатовой плашкой - "съедобно"».
   check(/съедобно/.test(water.badge), "у воды нет плашки «съедобно»: " + water.badge);
@@ -171,6 +215,46 @@ try {
   check(badgeColor.g > badgeColor.r && badgeColor.g > badgeColor.b,
     "плашка «съедобно» не салатовая: rgb(" +
     badgeColor.r + "," + badgeColor.g + "," + badgeColor.b + ")");
+
+  // ── Масса в граммах ───────────────────────────────────────────────────────
+  // Автор: «добавить предметам в окне предметов не только объём, но и массу в
+  // граммах». Это РАЗНЫЕ числа, и оба обязаны быть видны: у пайка объём 400 мл и
+  // масса 400 г, но у банана они расходятся (110 мл воды против 150 г), поэтому
+  // проверяется ИМЕННО наличие подписи «Масса», а не совпадение с объёмом.
+  check(/Масса 500 г/.test(water.text),
+    "у воды не показана масса в граммах: " + water.text);
+  check(/Масса 400 г/.test(meal.text),
+    "у пайка не показана масса в граммах: " + meal.text);
+
+  // ── БЖУ ───────────────────────────────────────────────────────────────────
+  // Автор: «зафиксировать для всех предметов БЖУ для будущих механик».
+  // Печатается отдельной строкой от пищевой ценности: состав — это НЕ эффект.
+  check(/БЖУ порции/.test(meal.text), "у пайка не показано БЖУ: " + meal.text);
+  check(/б 32 г/.test(meal.text) && /ж 24 г/.test(meal.text) &&
+    /у 72 г/.test(meal.text),
+    "у пайка показано неверное БЖУ: " + meal.text);
+
+  // У непродовольственного предмета строки БЖУ быть НЕ должно: «БЖУ: 0/0/0»
+  // утверждало бы диетологический факт о том, что не едят.
+  check(!/БЖУ/.test(note.text),
+    "у неедового предмета показано БЖУ: " + note.text);
+
+  // ── Качество изготовления и состояние ─────────────────────────────────────
+  // Автор: «у всех предметов сделать свойство "Качество изготовления" и
+  // "Состояние". По умолчанию качество "Обычное", состояние для съедобных
+  // "Свежее", для несъедобных "Без повреждений". Это для будущих механик».
+  check(/Качество: Обычное/.test(meal.text),
+    "у еды не показано качество изготовления: " + meal.text);
+  check(/Состояние: Свежее/.test(meal.text),
+    "у съедобного не показано состояние «Свежее»: " + meal.text);
+  check(/Состояние: Без повреждений/.test(note.text),
+    "у несъедобного не показано состояние «Без повреждений»: " + note.text);
+  check(/Качество: Обычное/.test(note.text),
+    "у несъедобного не показано качество: " + note.text);
+  // Свойства показываются у ВСЕХ, а не только у отклонившихся от умолчания:
+  // иначе первая же механика порчи явила бы строку «из ниоткуда».
+  check(/Качество: Обычное/.test(water.text),
+    "у воды нет строки качества: " + water.text);
 
   // ── Галочка «только съедобное» ────────────────────────────────────────────
   // Автор: «сделать возле поиска галочку - "только съедобное" - которая скрывает
@@ -193,6 +277,68 @@ try {
     const restored = await page.$$eval(".itemCard", nodes => nodes.length);
     check(restored === payload.entries.length,
       "снятие галочки не вернуло весь каталог: " + restored + " из " + payload.entries.length);
+  }
+
+  // ── Галочка «только несъедобное» ──────────────────────────────────────────
+  // Автор: «Сделать галочку-фильтр "Только несъедобное"». Это ОБРАТНЫЙ фильтр, а
+  // не тот же флаг с другим названием: он обязан оставить РОВНО непродовольствие.
+  const inedibleFilter = await page.$("#itemsOnlyInedible");
+  check(!!inedibleFilter, "нет галочки «только несъедобное».");
+  if (inedibleFilter) {
+    await page.check("#itemsOnlyInedible");
+    await page.waitForTimeout(80);
+    const filtered = await page.$$eval(".itemCard", nodes =>
+      nodes.map(node => node.getAttribute("data-item-id")));
+    check(filtered.includes("note"),
+      "галочка «только несъедобное» скрыла неедовый предмет: " + filtered.join(","));
+    check(!filtered.includes("water.bottle") && !filtered.includes("food.meal"),
+      "галочка «только несъедобное» оставила съедобные предметы: " + filtered.join(","));
+
+    await page.uncheck("#itemsOnlyInedible");
+    await page.waitForTimeout(80);
+  }
+
+  // ── Галочка «квестовое» ───────────────────────────────────────────────────
+  // Автор: «и "Квестовое"». Фильтр обязан отделять по признаку ХОСТА (`quest`), а
+  // не по строке категории: правило «квестовое не продаётся» живёт в домене.
+  const questFilter = await page.$("#itemsOnlyQuest");
+  check(!!questFilter, "нет галочки «квестовое».");
+  if (questFilter) {
+    await page.check("#itemsOnlyQuest");
+    await page.waitForTimeout(80);
+    const filtered = await page.$$eval(".itemCard", nodes =>
+      nodes.map(node => node.getAttribute("data-item-id")));
+    check(filtered.length === 1 && filtered[0] === "note",
+      "галочка «квестовое» показала не только квестовые предметы: " + filtered.join(","));
+
+    await page.uncheck("#itemsOnlyQuest");
+    await page.waitForTimeout(80);
+  }
+
+  // ── Взаимоисключающие фильтры ─────────────────────────────────────────────
+  // «Только съедобное» + «только несъедобное» одновременно дают пустой список:
+  // предмет не бывает едой и не-едой сразу. Пустой список ПРАВИЛЬНЫЙ, но он обязан
+  // быть ПОДПИСАН: молчаливая пустота читалась бы как поломка каталога.
+  if (edibleFilter && inedibleFilter) {
+    await page.check("#itemsOnlyEdible");
+    await page.check("#itemsOnlyInedible");
+    await page.waitForTimeout(80);
+
+    const conflict = await page.$$eval(".itemCard", nodes => nodes.length);
+    check(conflict === 0,
+      "взаимоисключающие галочки не дали пустой список: " + conflict);
+
+    const conflictText = await page.$eval(".itemsEmpty", node => node.textContent);
+    check(/исключают/.test(conflictText),
+      "пустой список от противоречивых галочек не объяснён: " + conflictText);
+
+    await page.uncheck("#itemsOnlyEdible");
+    await page.uncheck("#itemsOnlyInedible");
+    await page.waitForTimeout(80);
+
+    const back = await page.$$eval(".itemCard", nodes => nodes.length);
+    check(back === payload.entries.length,
+      "снятие обеих галочек не вернуло каталог: " + back);
   }
 
   // ── Количество ────────────────────────────────────────────────────────────
@@ -393,7 +539,8 @@ try {
     process.exitCode = 1;
   } else {
     console.log("Окно предметов: OK (" + cards.length + " предметов, плитка 48×48, " +
-      "пищевая ценность, количество и поиск)");
+      "пищевая ценность, масса и БЖУ, качество и состояние, цена, " +
+      "три фильтра, количество и поиск)");
   }
 } finally {
   await closeBrowser(browser);

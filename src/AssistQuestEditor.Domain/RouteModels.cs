@@ -121,19 +121,86 @@ public sealed record RoutePlan(
     public static RoutePlan Empty { get; } =
         new(Array.Empty<RouteLeg>(), Array.Empty<string>());
 
-    // Вычисляемые свойства, а не инициализаторы полей: инициализатор поля не
-    // может обращаться к другим ЧЛЕНАМ экземпляра (CS0236), потому что порядок
-    // инициализации не определён. Здесь же важна и идентичность: `Points` и
-    // `Segments` обязаны строиться из ОДНИХ Legs/WaypointSource, и это
-    // гарантируется только тем, что оба читают одни и те же входные данные.
+    // Материализуются ЛЕНИВО и РОВНО ОДИН РАЗ на экземпляр.
+    //
+    // ПОЧЕМУ ЭТО ВАЖНО. Прежде `Points` и `Segments` были чистыми getter-ами и
+    // строили список ПРИ КАЖДОМ чтении. План маршрута читается десятки раз на
+    // кадр (перестроение, движение, снимок интерфейса), поэтому `Points.Count`,
+    // `Points[index]` и `Segments.Count` суммарно пересобирали геометрию
+    // постоянно — тем заметнее, чем длиннее маршрут.
+    //
+    // ПОЧЕМУ ЛЕНИВО, А НЕ В КОНСТРУКТОРЕ. Строить в конструкторе нельзя: это
+    // запись позиционного record, и присваивание полей до инициализации `Legs`
+    // было бы невозможно, а ручной конструктор сломал бы `with`-выражения
+    // (например <see cref="ShiftWaypointIndices"/>). Ленивость даёт то же число
+    // построений, но не навязывает форму инициализации.
+    //
+    // ПОЧЕМУ ЭТО НЕ ЛОМАЕТ РАВЕНСТВО. Синтезированные методы record сравнивают
+    // ТОЛЬКО позиционные свойства (<see cref="Legs"/>, <see cref="Errors"/>,
+    // <see cref="WaypointSource"/>). Приватные поля-кэши в сравнение не входят, и
+    // два плана с одинаковыми входами остаются равными независимо от того,
+    // материализованы их кэши или нет.
+    private IReadOnlyList<RoutePoint>? _points;
+    private IReadOnlyList<RouteSegment>? _segments;
+    private double? _totalDistanceMeters;
+
+    /// <summary>
+    /// РАВЕНСТВО ОБЪЯВЛЕНО ЯВНО, и это обязательное условие кэша выше.
+    ///
+    /// Синтезированное равенство record сравнивает ВСЕ поля экземпляра, включая
+    /// ПРИВАТНЫЕ. Значит без этого переопределения два плана с ОДНИМИ входами
+    /// оказались бы не равны, если один из них читали (`Points`), а другой нет:
+    /// различие было бы только в кэшах, то есть в том, чего в значении плана нет
+    /// вовсе. Это ломало бы и сравнение планов, и их использование ключами.
+    ///
+    /// Сравниваются ТОЛЬКО позиционные свойства, и ровно так, как это делал
+    /// синтезированный метод: через <see cref="EqualityComparer{T}.Default"/> для
+    /// каждого из них (списки в этом проекте — массивы, поэтому сравнение
+    /// ссылочное). Поведение равенства поэтому НЕ изменилось — изменился лишь
+    /// состав полей, участвующих в нём.
+    /// </summary>
+    public bool Equals(RoutePlan? other) =>
+        other is not null &&
+        EqualityComparer<IReadOnlyList<RouteLeg>>.Default
+            .Equals(Legs, other.Legs) &&
+        EqualityComparer<IReadOnlyList<string>>.Default
+            .Equals(Errors, other.Errors) &&
+        EqualityComparer<IReadOnlyList<RouteWaypoint>?>.Default
+            .Equals(WaypointSource, other.WaypointSource);
+
+    public override int GetHashCode() =>
+        HashCode.Combine(
+            Legs is null
+                ? 0
+                : EqualityComparer<IReadOnlyList<RouteLeg>>.Default
+                    .GetHashCode(Legs),
+            Errors is null
+                ? 0
+                : EqualityComparer<IReadOnlyList<string>>.Default
+                    .GetHashCode(Errors),
+            WaypointSource is null
+                ? 0
+                : EqualityComparer<IReadOnlyList<RouteWaypoint>?>.Default
+                    .GetHashCode(WaypointSource));
+
+    /// <summary>
+    /// Точки маршрута. Материализуются ПРИ ПЕРВОМ обращении и дальше отдаются
+    /// тем же списком: вызывающий код может рассчитывать на идентичность
+    /// (например сравнить ссылки в горячем цикле).
+    /// </summary>
     public IReadOnlyList<RoutePoint> Points =>
-        BuildPoints(Legs, WaypointSource);
+        _points ??= BuildPoints(Legs, WaypointSource);
 
     public IReadOnlyList<RouteSegment> Segments =>
-        BuildSegments(Points);
+        _segments ??= BuildSegments(Points);
 
+    /// <summary>
+    /// Суммарная длина маршрута, метров. Считается из УЖЕ материализованных
+    /// сегментов и тоже кэшируется: сумма по списку длиной в тысячи сегментов
+    /// была ещё одним проходом на каждое чтение.
+    /// </summary>
     public double TotalDistanceMeters =>
-        Segments.Sum(item => item.LengthMeters);
+        _totalDistanceMeters ??= Segments.Sum(item => item.LengthMeters);
 
     public bool IsUsable =>
         Points.Count > 0 &&
