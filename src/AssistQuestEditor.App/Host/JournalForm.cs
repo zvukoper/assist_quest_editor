@@ -190,7 +190,8 @@ public sealed class JournalForm : Form
                 _log.SelectionStart = _log.TextLength;
                 _log.SelectionLength = 0;
                 _log.SelectionColor = ParseTextColor(entry.TextColor);
-                _log.SelectionFont = JournalFont(entry.FontWeight);
+                using var compactFont = JournalFont(entry.FontWeight);
+                _log.SelectionFont = compactFont;
                 _log.AppendText(time + "  " + formattedMessage);
                 _log.SelectionFont = _log.Font;
                 _log.AppendText(Environment.NewLine);
