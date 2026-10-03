@@ -36,6 +36,7 @@ public sealed class Ets2TruckTelemetry : IDisposable
     private Task? _restTask;
     private Snapshot? _lastSnapshot;
     private bool _running;
+    private bool _gamePaused;
     private int _port;
     private DateTimeOffset _nextWarningUtc;
 
