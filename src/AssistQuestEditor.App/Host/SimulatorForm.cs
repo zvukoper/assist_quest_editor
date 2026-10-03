@@ -1349,12 +1349,10 @@ public sealed class SimulatorForm : WebViewForm
         switch (notification.Kind)
         {
             case Ets2SyncNotificationKind.InitialSetupRequired:
-                MessageBox.Show(
-                    this,
-                    notification.Message,
-                    "Начало игры в AQE",
-                    MessageBoxButtons.OK,
-                    MessageBoxIcon.Information);
+                // Отсутствие привязки — штатное состояние блокировки, а не
+                // модальный диалог: причину игрок видит прямо в симуляторе.
+                AppLogger.Info("SimulatorForm: для мира ещё нет связанной карьеры ETS2.",
+                    notification.Message);
                 break;
 
             case Ets2SyncNotificationKind.ProfilesMissing:
