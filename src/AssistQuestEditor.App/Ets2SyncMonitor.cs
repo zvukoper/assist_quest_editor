@@ -193,6 +193,11 @@ public sealed class Ets2SyncMonitor : IDisposable
 
         _processWasRunning = processRunning;
 
+        var previouslyUnknownLineages = profiles
+            .Where(profile => _store.FindKnownProfile(profile.Lineage.Id) is null)
+            .Select(profile => profile.Lineage.Id)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
         foreach (var profile in profiles)
             UpsertKnown(profile, now);
 
@@ -215,8 +220,37 @@ public sealed class Ets2SyncMonitor : IDisposable
                 catalog.ActiveProfileName,
                 StringComparison.OrdinalIgnoreCase));
 
+        if (active is null && previouslyUnknownLineages.Count == 1)
+        {
+            // ETS2 может держать game.log.txt открытым так, что даже shared-read
+            // недоступен. В таком окне мы не знаем точный activeHex, но точно знаем,
+            // что эта линия профиля появилась только что и ранее не была известна
+            // AQE. Для сценария создания новой карьеры это однозначный кандидат.
+            active = profiles.FirstOrDefault(profile =>
+                previouslyUnknownLineages.Contains(profile.Lineage.Id));
+
+            if (active is not null)
+            {
+                AppLogger.Warn(
+                    "Ets2SyncMonitor: активный профиль не определён из game.log.txt; " +
+                    "использую единственный новый профиль как кандидата новой карьеры.",
+                    $"lineage={active.Lineage.Id}; profile={active.Lineage.Name}");
+            }
+        }
+
         if (active is null)
+        {
+            if (processRunning && profiles.Count > 0)
+            {
+                AppLogger.Warn(
+                    "Ets2SyncMonitor: ETS2 запущен, но активный профиль не определён.",
+                    $"profiles={profiles.Count}; activeHex={catalog.ActiveHexFolder ?? "<none>"}; " +
+                    $"activeName={catalog.ActiveProfileName ?? "<none>"}; " +
+                    $"newProfiles={previouslyUnknownLineages.Count}");
+            }
+
             return;
+        }
 
         _activeLineageId = active.Lineage.Id;
 
