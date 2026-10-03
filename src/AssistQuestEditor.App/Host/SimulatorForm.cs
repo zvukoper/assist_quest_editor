@@ -149,7 +149,6 @@ public sealed class SimulatorForm : WebViewForm
     private readonly Ets2TruckTelemetry _ets2TruckTelemetry;
     private bool _telemetryFollowEnabled;
     private DateTimeOffset? _lastAppliedTelemetrySampleAt;
-    private string? _ets2CareerPromptOpenLineageId;
 
     /// <summary>Мир, которому принадлежит окно. Null — режим без выбранного мира (CI).</summary>
     private readonly WorldRecord? _world;
@@ -1414,12 +1413,15 @@ public sealed class SimulatorForm : WebViewForm
 
             case Ets2SyncNotificationKind.SaveSynchronized:
             case Ets2SyncNotificationKind.AutosaveSynchronized:
-                MessageBox.Show(
-                    this,
+                AppendJournal(
+                    "Ets2SaveSynchronized",
+                    DateTimeOffset.UtcNow,
+                    string.Empty,
                     notification.Message,
-                    "Синхронизация с ETS2",
-                    MessageBoxButtons.OK,
-                    MessageBoxIcon.Information);
+                    coordinate: null,
+                    compact: true,
+                    textColor: "lime",
+                    fontWeight: 500);
                 RequestSnapshot("ETS2 save synchronized");
                 break;
 
@@ -1431,37 +1433,6 @@ public sealed class SimulatorForm : WebViewForm
             case Ets2SyncNotificationKind.GameStopped:
                 AppLogger.Info("SimulatorForm: ETS2 sync.", notification.Message);
                 break;
-        }
-    }
-
-    private void Ets2SyncMonitor_NewCareerDetected(Ets2SyncCareerCandidate candidate)
-    {
-        if (string.Equals(
-                _ets2CareerPromptOpenLineageId,
-                candidate.LineageId,
-                StringComparison.OrdinalIgnoreCase))
-        {
-            return;
-        }
-
-        _ets2CareerPromptOpenLineageId = candidate.LineageId;
-        try
-        {
-            var result = MessageBox.Show(
-                this,
-                $"Обнаружена новая карьера «{candidate.ProfileName}». Подключить её к миру «{_world?.DisplayName ?? "AQE"}»?\n\nПри подключении состояние мира будет сброшено.",
-                "Новая карьера",
-                MessageBoxButtons.YesNo,
-                MessageBoxIcon.Question);
-
-            if (result == DialogResult.Yes)
-                _ets2SyncMonitor.BindCandidate(candidate.LineageId);
-            else
-                _ets2SyncMonitor.DeclineCandidate(candidate.LineageId);
-        }
-        finally
-        {
-            _ets2CareerPromptOpenLineageId = null;
         }
     }
 
@@ -3095,6 +3066,12 @@ public sealed class SimulatorForm : WebViewForm
 
     private void SetRouteEditingEnabled(bool enabled)
     {
+        if (enabled && _telemetryFollowEnabled)
+        {
+            throw new InvalidOperationException(
+                "Редактирование маршрута недоступно при включённой телеметрии ETS2.");
+        }
+
         if (enabled && (_runtime.SimulationRunning || _runtime.IsPaused))
         {
             throw new InvalidOperationException(
@@ -3464,6 +3441,12 @@ public sealed class SimulatorForm : WebViewForm
 
     private void UpdateRouteMovement()
     {
+        if (_telemetryFollowEnabled)
+        {
+            _routeMovementLastTick = null;
+            return;
+        }
+
         if (!_routeEnabled || !_runtime.SimulationRunning)
         {
             _routeMovementLastTick = null;
@@ -5004,25 +4987,61 @@ public sealed class SimulatorForm : WebViewForm
             throw new InvalidOperationException("Телеметрия доступна только при подключённой карьере ETS2.");
         }
 
-        if (enabled && _routeEnabled)
-        {
-            // Два независимых источника позиции не должны одновременно двигать
-            // игрока. Телеметрия становится единственным источником координат.
-            SetRouteEnabled(false);
-        }
-
-        _telemetryFollowEnabled = enabled;
-        _lastAppliedTelemetrySampleAt = null;
-
         if (enabled)
+        {
+            // Телеметрия полностью забирает управление позицией у маршрута.
+            // Поэтому при её включении редактирование выключается, а старый
+            // маршрут очищается, чтобы он не мог возобновиться после отключения.
+            ResetRouteForTelemetry();
+
+            _telemetryFollowEnabled = true;
+            _lastAppliedTelemetrySampleAt = null;
             _ets2TruckTelemetry.Start();
+
+            // Включение телеметрии — это одновременно запуск симуляции. Если
+            // симулятор был на паузе, StartSimulation корректно продолжит его;
+            // следующее состояние TruckTel тут же вернёт паузу, если сама ETS2
+            // уже стоит на паузе.
+            StartSimulation();
+        }
         else
+        {
+            _telemetryFollowEnabled = false;
+            _lastAppliedTelemetrySampleAt = null;
             _ets2TruckTelemetry.Stop();
+        }
 
         AppLogger.Info(
             "SimulatorForm: следование позиции по телеметрии изменено.",
             $"enabled={enabled}; careerConnected={_ets2SyncMonitor.ViewState.CareerConnected}");
         RequestSnapshot("telemetry follow changed");
+    }
+
+    private void ResetRouteForTelemetry()
+    {
+        var hadRoute =
+            _routeState.Waypoints.Count > 0 ||
+            _routePlan.Points.Count > 0 ||
+            _routeEnabled ||
+            _routeEditingEnabled;
+
+        _routeState = RouteState.Empty;
+        _routePlan = RoutePlan.Empty;
+        _routeCursor = RouteCursor.Initial;
+        _selectedRouteWaypointId = null;
+        _routeStoppedWaypointIndex = null;
+        _routeStoppedWaypointId = null;
+        _routeTargetWaypointIndex = null;
+        _routeTargetWaypointId = null;
+        _routeTravelRealSeconds = 0d;
+        _routeTravelGameSeconds = 0d;
+        _routeEnabled = false;
+        _routeEditingEnabled = false;
+        _routeMovementLastTick = null;
+        SetPlayerMovementIdle();
+
+        if (hadRoute)
+            PersistSession("автосохранение: маршрут сброшен для телеметрии", force: true);
     }
 
     private void ApplyExternalTelemetry()
@@ -5710,12 +5729,24 @@ public sealed class SimulatorForm : WebViewForm
         DateTimeOffset timestamp,
         string source,
         string message,
-        WorldCoordinate? coordinate = null)
+        WorldCoordinate? coordinate = null,
+        bool compact = false,
+        string? textColor = null,
+        int fontWeight = 400)
     {
-        coordinate ??= _hub.Get<PlayerState>("player").Value.Position;
+        if (!compact)
+            coordinate ??= _hub.Get<PlayerState>("player").Value.Position;
         _journalEntries.Insert(
             0,
-            new SimulatorJournalEntry(eventType, timestamp, source, message, coordinate));
+            new SimulatorJournalEntry(
+                eventType,
+                timestamp,
+                source,
+                message,
+                coordinate,
+                compact,
+                textColor,
+                fontWeight));
         if (_journalEntries.Count > 250)
         {
             _journalEntries.RemoveRange(250, _journalEntries.Count - 250);
@@ -6567,7 +6598,7 @@ public sealed class SimulatorForm : WebViewForm
             totalDistanceMeters = totalDistance,
             distanceFromFirstWaypointMeters = currentDistance,
             editing = _routeEditingEnabled,
-            editingAllowed = !_runtime.SimulationRunning && !_runtime.IsPaused,
+            editingAllowed = !_runtime.SimulationRunning && !_runtime.IsPaused && !_telemetryFollowEnabled,
             waypoints,
             routePoints,
             segments,
@@ -6687,11 +6718,24 @@ public sealed class SimulatorForm : WebViewForm
     /// </summary>
     private void Ets2SyncMonitor_StateChanged(Ets2SyncViewState state)
     {
-        if (!state.CareerConnected && _telemetryFollowEnabled)
+        if (_ets2SyncRequired && !state.CareerConnected)
         {
-            _telemetryFollowEnabled = false;
-            _ets2TruckTelemetry.Stop();
-            _lastAppliedTelemetrySampleAt = null;
+            if (_telemetryFollowEnabled)
+            {
+                _telemetryFollowEnabled = false;
+                _ets2TruckTelemetry.Stop();
+                _lastAppliedTelemetrySampleAt = null;
+            }
+
+            // Несвязанная активная карьера блокирует симулятор. Не вызываем
+            // StopSimulation(), чтобы не записывать состояние мира от старой
+            // карьеры как будто это сохранение новой.
+            if (_runtime.SimulationRunning || _runtime.IsPaused)
+            {
+                _runtime.SetSimulationRunning(false);
+                _dynamicEventDispatcher.SetSimulationRunning(false);
+                SetPlayerMovementIdle();
+            }
         }
 
         RequestSnapshot("ETS2 sync state changed");
