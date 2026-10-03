@@ -150,6 +150,8 @@ public enum Ets2SyncNotificationKind
     CheckpointCreated,
     CheckpointLoaded,
     CheckpointNotFound,
+    SaveSynchronized,
+    AutosaveSynchronized,
     GameStarted,
     GameStopped
 }
@@ -166,6 +168,23 @@ public sealed record Ets2SyncCareerCandidate(
     string ProfileName);
 
 /// <summary>Чекпоинт, который можно безопасно применить к состоянию симулятора.</summary>
+public sealed record Ets2SyncSaveView(
+    string Name,
+    string Slot,
+    DateTimeOffset? ModifiedAt);
+
+public sealed record Ets2SyncViewState(
+    bool CareerConnected,
+    string? LineageId,
+    string? CareerName,
+    string? HexFolder,
+    Ets2SyncSaveView? LastSave,
+    Ets2SyncSaveView? LoadedSave)
+{
+    public static Ets2SyncViewState Empty =>
+        new(false, null, null, null, null, null);
+}
+
 public sealed record Ets2SyncCheckpointReady(
     Ets2SyncCheckpointEntry Entry,
     SimulationSave Save);
