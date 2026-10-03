@@ -8,6 +8,104 @@
 <style>
   .mapSurface { position:relative; overflow:hidden; }
   #mapCanvas { display:block; width:100%; height:100%; cursor:default; touch-action:none; background:#0d1014; }
+
+  #mapWrap.ets2Locked::after {
+    content: "Не подключена карьера ETS2";
+    position: absolute;
+    inset: 0;
+    z-index: 40;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+    box-sizing: border-box;
+    background: rgba(95, 95, 95, .68);
+    color: #f4f4f4;
+    font-size: 18px;
+    font-weight: 600;
+    text-align: center;
+    pointer-events: auto;
+  }
+
+  #side.ets2Locked {
+    position: relative;
+    min-height: 0;
+  }
+
+  #side.ets2Locked::after {
+    content: "Не подключена карьера ETS2";
+    position: absolute;
+    inset: 0;
+    z-index: 40;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+    box-sizing: border-box;
+    background: rgba(95, 95, 95, .68);
+    color: #f4f4f4;
+    font-size: 15px;
+    font-weight: 600;
+    text-align: center;
+    pointer-events: auto;
+  }
+
+  .simTelemetryToggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    margin-left: 6px;
+    min-height: 28px;
+    padding: 0 8px;
+    border: 1px solid rgba(255,255,255,.12);
+    border-radius: 5px;
+    background: rgba(255,255,255,.035);
+    font-size: 12px;
+    white-space: nowrap;
+    user-select: none;
+  }
+
+  .simTelemetryToggle input {
+    margin: 0;
+  }
+
+  .simTelemetryToggle.isActive {
+    border-color: rgba(250,176,3,.6);
+    background: rgba(250,176,3,.10);
+  }
+
+  .runtimeEts2Sync {
+    border-color: rgba(250,176,3,.26);
+  }
+
+  .runtimeEts2Sync .ets2SyncConnected {
+    color: #8ee29a;
+  }
+
+  .runtimeEts2Sync .ets2SyncDisconnected {
+    color: #ff8b8b;
+  }
+
+  .runtimeEts2Sync .ets2SyncCareer {
+    display: block;
+    width: 100%;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: inherit;
+    text-align: left;
+    cursor: pointer;
+    font: inherit;
+  }
+
+  .runtimeEts2Sync .ets2SyncCareer:hover {
+    text-decoration: underline;
+  }
+
+  .runtimeEts2Sync .ets2SyncValue {
+    min-width: 0;
+    word-break: break-word;
+  }
 </style>
 </head>
 <body>
@@ -74,6 +172,11 @@
                 aria-label="Остановить симуляцию и автосохранить мир">⏹</button>
         <button class="toolButton simTransportButton" id="simFastForward" type="button"
                 aria-label="Ускорить игровое время">⏩</button>
+        <label class="simTelemetryToggle" id="simTelemetryToggleLabel"
+               title="Подставлять координаты грузовика из телеметрии ETS2 в точку игрока">
+          <input type="checkbox" id="simTelemetryToggle" disabled>
+          <span>Телеметрия</span>
+        </label>
       </div>
       <!-- Тогл маршрута с иконкой колеса: дублирует кнопку правого сайдбара.
            Иконка — колесо со стрелкой движения, нарисованное линиями, а не
@@ -174,7 +277,7 @@
       </div>
       <div class="inventoryNotifications" id="inventoryNotifications" aria-live="polite"></div>
     </section>
-    <aside class="simSide" id="side"></aside>
+    <aside class="simSide ets2Locked" id="side"></aside>
   </div>
   <div id="interfaceLayer" class="interfaceLayer" aria-live="polite"></div>
   <!-- Панель сохранений: отдельный слой поверх карты, а не в боковой панели.
