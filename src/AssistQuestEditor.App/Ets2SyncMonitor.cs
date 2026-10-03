@@ -31,6 +31,7 @@ public sealed class Ets2SyncMonitor : IDisposable
     private readonly Ets2SyncStore _store;
     private readonly Func<SimulationSaveState> _captureState;
     private readonly Func<string> _currentCampaignId;
+    private readonly Action<string>? _resetWorld;
 
     private readonly Dictionary<string, PhysicalObservation> _physicalSaves =
         new(StringComparer.OrdinalIgnoreCase);
@@ -50,6 +51,9 @@ public sealed class Ets2SyncMonitor : IDisposable
     private bool _activeProfileWarningShown;
     private bool _newProfileFallbackWarningShown;
     private string? _activeLineageId;
+    private Ets2SyncSaveView? _lastSave;
+    private Ets2SyncSaveView? _loadedSave;
+    private Ets2SyncViewState _viewState = Ets2SyncViewState.Empty;
     private bool _disposed;
 
     public Ets2SyncMonitor(
@@ -58,7 +62,8 @@ public sealed class Ets2SyncMonitor : IDisposable
         Ets2ProfileReader? reader,
         Ets2SyncStore? store,
         Func<SimulationSaveState> captureState,
-        Func<string> currentCampaignId)
+        Func<string> currentCampaignId,
+        Action<string>? resetWorld = null)
     {
         _worldId = worldId ?? throw new ArgumentNullException(nameof(worldId));
         _worldName = string.IsNullOrWhiteSpace(worldName) ? worldId : worldName;
@@ -66,11 +71,15 @@ public sealed class Ets2SyncMonitor : IDisposable
         _store = store ?? new Ets2SyncStore();
         _captureState = captureState ?? throw new ArgumentNullException(nameof(captureState));
         _currentCampaignId = currentCampaignId ?? throw new ArgumentNullException(nameof(currentCampaignId));
+        _resetWorld = resetWorld;
     }
 
     public event Action<Ets2SyncNotification>? Notification;
     public event Action<Ets2SyncCareerCandidate>? NewCareerDetected;
     public event Action<Ets2SyncCheckpointReady>? CheckpointReady;
+    public event Action<Ets2SyncViewState>? StateChanged;
+
+    public Ets2SyncViewState ViewState => _viewState;
 
     public bool GameRunning => IsGameRunning();
 
@@ -101,9 +110,9 @@ public sealed class Ets2SyncMonitor : IDisposable
         if (known is null)
             return false;
 
-        var currentBinding = _store.FindBindingForLineage(lineageId);
-        if (currentBinding is not null &&
-            !currentBinding.WorldId.Equals(_worldId, StringComparison.OrdinalIgnoreCase))
+        var currentLineageBinding = _store.FindBindingForLineage(lineageId);
+        if (currentLineageBinding is not null &&
+            !currentLineageBinding.WorldId.Equals(_worldId, StringComparison.OrdinalIgnoreCase))
         {
             Notify(
                 Ets2SyncNotificationKind.OtherWorldCareerBlocked,
@@ -113,9 +122,12 @@ public sealed class Ets2SyncMonitor : IDisposable
             return false;
         }
 
+        var alreadyBoundToThisWorld = _store.FindBinding(_worldId, lineageId) is not null;
+
         if (!_store.TryBind(
                 _worldId,
                 ToLineage(known),
+                out _,
                 out _))
         {
             Notify(
@@ -129,9 +141,27 @@ public sealed class Ets2SyncMonitor : IDisposable
         _declinedCandidates.Remove(lineageId);
         _activeLineageId = lineageId;
 
+        if (alreadyBoundToThisWorld)
+        {
+            RefreshViewState();
+
+            Notify(
+                Ets2SyncNotificationKind.CareerBound,
+                $"Карьера «{known.Name}» уже подключена к миру «{_worldName}».",
+                lineageId,
+                known.Name);
+            return true;
+        }
+
+        // Подключение НОВОЙ карьеры означает начало новой линии прохождения:
+        // старое состояние AQE нельзя переносить в неё автоматически.
+        _resetWorld?.Invoke("подключение новой карьеры ETS2");
+
+        RefreshViewState();
+
         Notify(
             Ets2SyncNotificationKind.CareerBound,
-            $"Карьера «{known.Name}» привязана к миру «{_worldName}».",
+            $"Карьера «{known.Name}» подключена к миру «{_worldName}». Состояние мира сброшено для новой карьеры.",
             lineageId,
             known.Name);
 
@@ -300,7 +330,14 @@ public sealed class Ets2SyncMonitor : IDisposable
         var saves = ReadStableSaves(active);
 
         if (saves.Count == 0)
+        {
+            RefreshViewState();
             return;
+        }
+
+        _lastSave = ToSaveView(saves
+            .OrderByDescending(save => save.ModifiedAt ?? DateTimeOffset.MinValue)
+            .First());
 
         // После принятия новой карьеры первый autosave может появиться с задержкой:
         // binding уже создан, но стабильные info.sii/game.sii становятся доступны
@@ -323,11 +360,14 @@ public sealed class Ets2SyncMonitor : IDisposable
             var loaded = saves.FirstOrDefault(save =>
                 save.Slot.Equals(session.LoadedSaveSlot, StringComparison.OrdinalIgnoreCase));
 
+            _loadedSave = loaded is null ? null : ToSaveView(loaded);
+
             if (loaded is not null)
                 TryRestoreExactCheckpoint(active.Lineage, loaded);
         }
 
         ObserveSaveChanges(active.Lineage, saves);
+        RefreshViewState();
     }
 
     private void EnsureWorldBaseline(IReadOnlyList<CandidateProfile> profiles)
@@ -634,7 +674,7 @@ public sealed class Ets2SyncMonitor : IDisposable
                 continue;
 
             previous[save.Slot] = save;
-            CreateCheckpoint(lineage, save);
+            CreateCheckpoint(lineage, save, notifySynchronization: true);
         }
     }
 
@@ -652,11 +692,16 @@ public sealed class Ets2SyncMonitor : IDisposable
         if (newest is null)
             return;
 
-        CreateCheckpoint(profile.Lineage, newest);
+        CreateCheckpoint(profile.Lineage, newest, notifySynchronization: false);
         SeedObserved(profile.Lineage, newest);
+        _lastSave = ToSaveView(newest);
+        RefreshViewState();
     }
 
-    private void CreateCheckpoint(Ets2ProfileLineage lineage, Ets2SaveFingerprint save)
+    private void CreateCheckpoint(
+        Ets2ProfileLineage lineage,
+        Ets2SaveFingerprint save,
+        bool notifySynchronization)
     {
         try
         {
@@ -681,12 +726,29 @@ public sealed class Ets2SyncMonitor : IDisposable
                 simulationSave);
 
             SeedObserved(lineage, save);
+            _lastSave = ToSaveView(save);
 
             Notify(
                 Ets2SyncNotificationKind.CheckpointCreated,
                 $"Чекпоинт AQE создан по сохранению ETS2 «{save.Name}» ({save.Slot}).",
                 lineage.Id,
                 lineage.Name);
+
+            if (notifySynchronization)
+            {
+                var autosave = save.Slot.StartsWith("autosave", StringComparison.OrdinalIgnoreCase);
+                Notify(
+                    autosave
+                        ? Ets2SyncNotificationKind.AutosaveSynchronized
+                        : Ets2SyncNotificationKind.SaveSynchronized,
+                    autosave
+                        ? "Выполнено автосохранение и синхронизировано с ETS2."
+                        : "Выполнено сохранение и синхронизировано с ETS2.",
+                    lineage.Id,
+                    lineage.Name);
+            }
+
+            RefreshViewState();
 
             AppLogger.Info(
                 "Ets2SyncMonitor: создан чекпоинт.",
@@ -853,6 +915,37 @@ public sealed class Ets2SyncMonitor : IDisposable
             known.StableIdentity,
             known.KnownHexFolders.FirstOrDefault() ?? string.Empty,
             known.KnownHexFolders);
+
+    private void RefreshViewState()
+    {
+        var binding = _store.FindBindingForWorld(_worldId);
+        Ets2SyncViewState next;
+
+        if (binding is null)
+        {
+            next = Ets2SyncViewState.Empty;
+        }
+        else
+        {
+            var known = _store.FindKnownProfile(binding.LineageId);
+            next = new Ets2SyncViewState(
+                CareerConnected: true,
+                LineageId: binding.LineageId,
+                CareerName: known?.Name,
+                HexFolder: known?.KnownHexFolders.FirstOrDefault(),
+                LastSave: _lastSave,
+                LoadedSave: _loadedSave);
+        }
+
+        if (next == _viewState)
+            return;
+
+        _viewState = next;
+        StateChanged?.Invoke(_viewState);
+    }
+
+    private static Ets2SyncSaveView ToSaveView(Ets2SaveFingerprint save) =>
+        new(save.Name, save.Slot, save.ModifiedAt);
 
     private void Notify(
         Ets2SyncNotificationKind kind,
