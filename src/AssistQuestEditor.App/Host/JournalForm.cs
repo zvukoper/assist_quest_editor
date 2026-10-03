@@ -10,7 +10,10 @@ public sealed record SimulatorJournalEntry(
     DateTimeOffset Timestamp,
     string Source,
     string Message,
-    WorldCoordinate? Coordinate = null);
+    WorldCoordinate? Coordinate = null,
+    bool Compact = false,
+    string? TextColor = null,
+    int FontWeight = 400);
 
 /// <summary>
 /// Что открыть по клику на подсвеченный фрагмент строки журнала.
@@ -180,8 +183,21 @@ public sealed class JournalForm : Form
         foreach (var entry in entries)
         {
             var time = entry.Timestamp.ToLocalTime().ToString("HH:mm:ss");
-            var source = string.IsNullOrWhiteSpace(entry.Source) ? "Источник" : entry.Source;
             var formattedMessage = FormatMessage(entry.Message);
+
+            if (entry.Compact)
+            {
+                _log.SelectionStart = _log.TextLength;
+                _log.SelectionLength = 0;
+                _log.SelectionColor = ParseTextColor(entry.TextColor);
+                _log.SelectionFont = JournalFont(entry.FontWeight);
+                _log.AppendText(time + "  " + formattedMessage);
+                _log.SelectionFont = _log.Font;
+                _log.AppendText(Environment.NewLine);
+                continue;
+            }
+
+            var source = string.IsNullOrWhiteSpace(entry.Source) ? "Источник" : entry.Source;
 
             _log.SelectionStart = _log.TextLength;
             _log.SelectionLength = 0;
@@ -340,6 +356,16 @@ public sealed class JournalForm : Form
         JournalLinkKind.Item => Color.FromArgb(190, 160, 255),
         _ => Color.FromArgb(110, 170, 255)
     };
+
+    private static Font JournalFont(int fontWeight) =>
+        fontWeight >= 600
+            ? new Font("Consolas", 9f, FontStyle.Bold)
+            : new Font("Consolas", 9f, FontStyle.Regular);
+
+    private static Color ParseTextColor(string? color) =>
+        string.Equals(color, "lime", StringComparison.OrdinalIgnoreCase)
+            ? Color.Lime
+            : Color.FromArgb(205, 215, 225);
 
     private static Color EventColor(SimulatorJournalEntry entry)
     {
