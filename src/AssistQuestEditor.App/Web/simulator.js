@@ -5105,6 +5105,14 @@
       return;
     }
 
+    // Имя профиля ETS2, выбранного в окне «Профили ETS2». Печатается НИЖЕ
+    // авторства (требование автора). Владелец строки — Host: профиль выбирается
+    // в другом окне, и без этого сообщения подпись в шапке не появлялась бы.
+    if (message.type === "ets2_profile_selection") {
+      applyEts2ProfileSelection(message);
+      return;
+    }
+
     if (message.type === "live_state") {
       if (snapshot) {
         if (message.player) snapshot.player = message.player;
@@ -5932,6 +5940,26 @@
       : "Имя не указано: изменения подписываются как «анонимно». Нажмите, чтобы указать имя.";
   }
 
+  /**
+   * Имя профиля ETS2 из окна «Профили ETS2» — под подписью авторства.
+   *
+   * Пустое имя СКРЫВАЕТ строку целиком: профиль по умолчанию не выбран, и
+   * постоянная подпись «Профиль ETS2: —» выглядела бы незаполненным полем. Строка
+   * не кликабельна: профиль выбирается в своём окне, а не из шапки — здесь он
+   * только ПОДПИСАН, чтобы было видно, чьи данные сейчас смотрят.
+   */
+  function applyEts2ProfileSelection(data) {
+    const node = document.getElementById("simEts2Profile");
+    if (!node) return;
+
+    const name = typeof data?.name === "string" ? data.name.trim() : "";
+    node.textContent = name.length > 0 ? "Профиль ETS2: " + name : "";
+    node.title = name.length > 0
+      ? "Данные профиля игры «" + name + "» открыты в окне «Профили ETS2»."
+      : "";
+    node.hidden = name.length === 0;
+  }
+
   document.getElementById("simPlay")?.addEventListener("click", () => {
     send({ action: simulationRunning ? "simulation_pause" : "simulation_start" });
   });
@@ -5957,6 +5985,12 @@
   // кэшируется в Host, и без перечитывания карта показывала бы старую точку
   // активации. Сохранение из редактора обновляет каталог автоматически.
   document.getElementById("reloadCatalog")?.addEventListener("click", () => send({ action: "reload_catalog" }));
+
+  // «Профили ETS2» — справочник профилей игры в отдельном окне. Симуляция при
+  // этом не останавливается: окно ничего не меняет в мире, только показывает.
+  document.getElementById("openEts2Profiles")?.addEventListener("click", () => {
+    send({ action: "open_ets2_profiles" });
+  });
 
   document.getElementById("openSaves")?.addEventListener("click", () => {
     savesOpen = true;

@@ -11,10 +11,10 @@
     <Prefer32Bit>false</Prefer32Bit>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
 
-    <Version>1.0.51.1</Version>
-    <AssemblyVersion>1.0.51.1</AssemblyVersion>
-    <FileVersion>1.0.51.1</FileVersion>
-    <AssemblyInformationalVersion>1.0.51.1-PERCENT-UNITS-R1</AssemblyInformationalVersion>
+    <Version>1.0.54.1</Version>
+    <AssemblyVersion>1.0.54.1</AssemblyVersion>
+    <FileVersion>1.0.54.1</FileVersion>
+    <AssemblyInformationalVersion>1.0.54.1-ETS2-CLOUD-PROFILES-R1</AssemblyInformationalVersion>
     <PublishSingleFile>true</PublishSingleFile>
     <SelfContained>true</SelfContained>
     <RuntimeIdentifier>win-x64</RuntimeIdentifier>

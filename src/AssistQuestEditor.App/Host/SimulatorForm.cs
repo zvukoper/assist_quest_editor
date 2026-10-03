@@ -121,6 +121,26 @@ public sealed class SimulatorForm : WebViewForm
     /// <summary>Окно «Предметы» — каталог всех предметов симулятора.</summary>
     private ItemsForm? _itemsForm;
 
+    /// <summary>
+    /// Окно «Профили ETS2» — справочник профилей игры: язык интерфейса, моды,
+    /// карты, DLC и сохранения.
+    ///
+    /// Профили принадлежат ИГРЕ, а не миру AQE, поэтому ссылку держит Симулятор:
+    /// окно открывается кнопкой в его шапке, а не из меню редактора, и без
+    /// хозяина осталось бы висеть после закрытия Симулятора.
+    /// </summary>
+    private Ets2ProfilesForm? _ets2ProfilesForm;
+
+    /// <summary>
+    /// Имя выбранного в окне профиля ETS2 для подписи под авторством.
+    ///
+    /// Пустая строка означает «профиль не выбран» — и подпись тогда не
+    /// показывается вовсе. Подставлять туда профиль по умолчанию нельзя: выбор
+    /// профиля ничего не меняет в мире AQE, и постоянная строка «Профиль ETS2: …»
+    /// читалась бы как «симулятор работает с этим профилем игры», чего нет.
+    /// </summary>
+    private string _ets2ProfileName = string.Empty;
+
     /// <summary>Мир, которому принадлежит окно. Null — режим без выбранного мира (CI).</summary>
     private readonly WorldRecord? _world;
 
@@ -273,6 +293,16 @@ public sealed class SimulatorForm : WebViewForm
                 _itemsForm = null;
             }
 
+            // Окно профилей ETS2 тоже закрывается вместе с Симулятором: кнопка,
+            // которая его открывает, живёт в шапке Симулятора, и оставленное окно
+            // было бы сиротой без единого способа к нему вернуться.
+            if (_ets2ProfilesForm is not null)
+            {
+                _ets2ProfilesForm.ProfileSelected -= Ets2ProfilesForm_ProfileSelected;
+                _ets2ProfilesForm.Close();
+                _ets2ProfilesForm = null;
+            }
+
             if (_campaignsForm is not null)
             {
                 _campaignsForm.CampaignActiveChanged -= CampaignsForm_CampaignActiveChanged;
@@ -307,6 +337,19 @@ public sealed class SimulatorForm : WebViewForm
         PushSnapshot();
         PostJson(_worldSelectionJson);
         PostJson(_authorJson);
+
+        // Подпись профиля ETS2 пересылается ПОСЛЕ перезагрузки страницы: её
+        // владелец — Host, и без повторной отправки выбранный профиль исчезал бы
+        // из шапки при каждом обновлении вида.
+        if (_ets2ProfileName.Length > 0)
+        {
+            PostJson(JsonSerializer.Serialize(new
+            {
+                type = "ets2_profile_selection",
+                name = _ets2ProfileName
+            }, SnapshotJsonOptions));
+        }
+
         if (_journalDetached)
         {
             BeginInvoke((Action)OpenJournalWindow);
@@ -1185,6 +1228,90 @@ public sealed class SimulatorForm : WebViewForm
     }
 
     /// <summary>
+    /// Открывает окно «Профили ETS2».
+    ///
+    /// Симуляцию окно НЕ ставит на паузу: это справочник о профилях ИГРЫ, а не
+    /// действие над миром AQE. Чтение профилей идёт своим ходом, и мир продолжает
+    /// тикать.
+    ///
+    /// Окно создаётся один раз: повторное нажатие кнопки поднимает уже открытое,
+    /// иначе на каждый клик читался бы весь каталог профилей заново.
+    /// </summary>
+    private void OpenEts2ProfilesWindow()
+    {
+        if (_ets2ProfilesForm is not null && !_ets2ProfilesForm.IsDisposed)
+        {
+            _ets2ProfilesForm.WindowState = FormWindowState.Normal;
+            _ets2ProfilesForm.BringToFront();
+            _ets2ProfilesForm.Activate();
+            return;
+        }
+
+        _ets2ProfilesForm = new Ets2ProfilesForm();
+        _ets2ProfilesForm.GlobalHotKeyPressed += SimulatorForm_GlobalHotKeyPressed;
+        // Окно профилей НЕ подписывается на StateChangeRequested: оно ничего не
+        // меняет в симуляции, и общего с ней состояния у него нет — кроме имени
+        // профиля, которое идёт в шапку отдельным событием.
+        _ets2ProfilesForm.CloseRequested += (_, _) => CloseEts2ProfilesWindow();
+        _ets2ProfilesForm.ProfileSelected += Ets2ProfilesForm_ProfileSelected;
+        _ets2ProfilesForm.FormClosed += (_, _) =>
+        {
+            _ets2ProfilesForm!.GlobalHotKeyPressed -= SimulatorForm_GlobalHotKeyPressed;
+            _ets2ProfilesForm.ProfileSelected -= Ets2ProfilesForm_ProfileSelected;
+            _ets2ProfilesForm = null;
+
+            // Подпись под авторством снимается ВМЕСТЕ с окном: она сообщает, что
+            // профиль выбран в открытом окне, а закрытое окно ничего не выбирает.
+            SetEts2ProfileName(string.Empty);
+        };
+
+        _ets2ProfilesForm.Show(this);
+        AppLogger.Info("SimulatorForm: окно профилей ETS2 открыто.",
+            $"size={_ets2ProfilesForm.Width}x{_ets2ProfilesForm.Height}; " +
+            $"gameRoot={_ets2ProfilesForm.GameRoot ?? "<нет>"}");
+    }
+
+    /// <summary>Закрывает окно профилей ETS2, если оно открыто.</summary>
+    private void CloseEts2ProfilesWindow()
+    {
+        if (_ets2ProfilesForm is null || _ets2ProfilesForm.IsDisposed)
+            return;
+
+        _ets2ProfilesForm.Close();
+    }
+
+    /// <summary>
+    /// Запоминает имя профиля, выбранного в окне профилей ETS2, и передаёт его
+    /// в шапку Симулятора под подписью авторства.
+    /// </summary>
+    private void Ets2ProfilesForm_ProfileSelected(object? sender, string profileName)
+        => SetEts2ProfileName(profileName);
+
+    /// <summary>
+    /// Показывает имя профиля ETS2 под авторством (требование автора).
+    ///
+    /// Пустое имя СКРЫВАЕТ строку, а не печатает «—»: профиль по умолчанию не
+    /// выбран, и подпись «Профиль ETS2: —» выглядела бы незаполненным полем.
+    /// </summary>
+    private void SetEts2ProfileName(string? profileName)
+    {
+        var name = (profileName ?? string.Empty).Trim();
+
+        // Событие приходит на каждое переключение селекта, включая повторный выбор
+        // того же профиля; без этой проверки страница перерисовывалась бы зря.
+        if (name.Equals(_ets2ProfileName, StringComparison.Ordinal))
+            return;
+
+        _ets2ProfileName = name;
+
+        PostJson(JsonSerializer.Serialize(new
+        {
+            type = "ets2_profile_selection",
+            name = _ets2ProfileName
+        }, SnapshotJsonOptions));
+    }
+
+    /// <summary>
     /// Отправляет в окно предметов каталог с пищевой ценностью и количеством.
     ///
     /// Пищевую ценность считает домен (<see cref="CharacterConsumableCatalog"/>):
@@ -1908,6 +2035,12 @@ public sealed class SimulatorForm : WebViewForm
 
                 case "open_items":
                     OpenItemsWindow(StringOrNull(root, "itemId"));
+                    break;
+
+                // Кнопка «Профили ETS2» рядом с «Обновить квесты». Действие без
+                // параметров: профиль выбирается уже внутри окна.
+                case "open_ets2_profiles":
+                    OpenEts2ProfilesWindow();
                     break;
 
                 case "set_vitals":

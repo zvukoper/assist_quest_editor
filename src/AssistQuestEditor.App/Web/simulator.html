@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Симулятор</title>
-<link rel="stylesheet" href="theme.css?v=114c7820">
+<link rel="stylesheet" href="theme.css?v=946348ac">
 <style>
   .mapSurface { position:relative; overflow:hidden; }
   #mapCanvas { display:block; width:100%; height:100%; cursor:default; touch-action:none; background:#0d1014; }
@@ -39,6 +39,11 @@
            Клик открывает настройки, где имя и меняется. -->
       <button class="authorChip" id="authorChip" type="button"
               title="Открыть настройки и указать имя"><span id="authorChipText">Авторство: —</span></button>
+      <!-- Профиль ETS2, выбранный в окне «Профили ETS2», — НИЖЕ авторства
+           (требование автора). Показывается только когда профиль выбран: пустая
+           строка «Профиль ETS2: —» выглядела бы как незаполненное поле, тогда как
+           профиль и не должен быть выбран по умолчанию. -->
+      <div class="simEts2Profile" id="simEts2Profile" hidden></div>
     </div>
 
     <div class="simTopRow simTopMain">
@@ -99,6 +104,10 @@
            правого края. -->
       <div class="topSpacer"></div>
       <button class="toolButton" id="reloadCatalog" title="Перечитать файлы квестов с диска: точка активации и статусы берутся из файла">Обновить квесты</button>
+      <!-- Профили ETS2 стоят рядом с «Обновить квесты» (требование автора: кнопка
+           там, где сейчас действия над каталогом). Открывают отдельное окно со
+           справочником профилей игры, модов, карт и DLC. -->
+      <button class="toolButton" id="openEts2Profiles" title="Профили ETS2: язык интерфейса, моды, карты, DLC и сохранения каждого профиля игры">Профили ETS2</button>
       <button class="toolButton" id="openSaves" title="Сохранения симуляции: создать, загрузить, переименовать, удалить">Сохранения</button>
       <button class="toolButton" id="reset" title="Очистить прохождение, не выключая симуляцию">Сбросить</button>
     </div>
@@ -193,7 +202,7 @@
 <script src="dom_reconcile.js?v=b4a5a022"></script>
 <script src="vitals.js?v=73bb2b32"></script>
 <script src="perf.js?v=04a0d57f"></script>
-<script src="simulator.js?v=e86fb633"></script>
+<script src="simulator.js?v=af70fe03"></script>
 <script src="interface.js?v=ea4ccb52"></script>
 <script>
 (function () {

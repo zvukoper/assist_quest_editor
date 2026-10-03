@@ -65,6 +65,17 @@ button.primary:disabled,.toolButton.primary:disabled{
    жирный. Акцентом помечено не «имя есть», а именно «имени нет», потому что это
    единственное состояние, требующее действия от пользователя. */
 .authorChip.authorMissing,.authorChip.authorMissing:hover{color:var(--accent);font-weight:800}
+/* Профиль ETS2, выбранный в окне «Профили ETS2», — НИЖЕ авторства (требование
+   автора). НЕ кнопка: профиль выбирается в своём окне, здесь он только назван,
+   поэтому курсор и подсветка при наведении не подсказывают кликабельность,
+   которой нет. Пустое имя скрывает строку целиком (атрибут hidden снимается
+   скриптом), а не оставляет «Профиль ETS2: —» — незаполненное поле на месте,
+   где выбора и не должно быть по умолчанию. */
+.simEts2Profile{
+  color:var(--accent);font-size:11px;line-height:1.2;
+  padding:1px 6px 0;margin:1px 0 0 2px;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:320px;
+}
 .content{flex:1;min-height:0;padding:18px;overflow:auto}
 .sectionHeader{display:flex;align-items:flex-end;justify-content:space-between;gap:18px;margin-bottom:16px}.sectionHeader h1,.sectionHeader h2{margin:0;font-size:25px;letter-spacing:.1px}.sectionHeader p{margin:5px 0 0;color:var(--muted);font-size:13px;line-height:1.5}
 .miniLabel{color:var(--accent);font-size:11px;font-weight:800;letter-spacing:.8px;text-transform:uppercase}

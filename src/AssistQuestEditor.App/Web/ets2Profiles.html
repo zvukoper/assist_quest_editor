@@ -1,0 +1,242 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Профили ETS2</title>
+<link rel="stylesheet" href="theme.css?v=946348ac">
+<style>
+  html, body { height:100%; margin:0; overflow:hidden; background:#0d1014; }
+  .ets2Window {
+    height:100%;
+    box-sizing:border-box;
+    padding:8px;
+    display:flex;
+    flex-direction:column;
+    min-height:0;
+    gap:8px;
+  }
+
+  /* Верхний блок: селект профиля, кнопка обновления и язык интерфейса СПРАВА от
+     селекта (прямое требование автора). Язык — не поле ввода, а показание, и
+     стоит он там, где его видно сразу при выборе профиля. */
+  .ets2Head {
+    flex:0 0 auto;
+    display:flex;
+    align-items:flex-end;
+    gap:12px;
+    padding:2px 2px 4px;
+    flex-wrap:wrap;
+  }
+  .ets2Field { display:flex; flex-direction:column; gap:4px; min-width:0; }
+  .ets2FieldLabel {
+    font-size:10px;
+    letter-spacing:.08em;
+    text-transform:uppercase;
+    color:var(--muted);
+  }
+  .ets2Select {
+    background:#0f141a;
+    color:#e9edf2;
+    border:1px solid var(--border);
+    border-radius:4px;
+    padding:5px 8px;
+    font-size:13px;
+    min-width:320px;
+    max-width:520px;
+  }
+  .ets2Select:focus-visible { outline:2px solid var(--accent); outline-offset:1px; }
+  /* Язык интерфейса: подпись «Язык интерфейса: …» рядом с селектом. Место
+     фиксировано по правому краю блока выбора, поэтому оно не «прыгает» при
+     смене длины названия профиля. */
+  .ets2Language {
+    display:flex;
+    align-items:center;
+    gap:6px;
+    font-size:12px;
+    color:#e9edf2;
+    white-space:nowrap;
+    padding-bottom:6px;
+  }
+  .ets2Language .ets2LanguageValue {
+    color:var(--accent);
+    font-weight:600;
+  }
+  .ets2Language .ets2LanguageCode { color:var(--muted); font-size:11px; }
+  .ets2HeadSpacer { flex:1 1 auto; }
+
+  /* Второй блок — на всю оставшуюся высоту окна, с прокруткой при нехватке
+     места (прямое требование автора: «большой высокий на всю высоту окна»).
+     `min-height:0` обязателен: без него flex-элемент не сжимается, и прокрутка
+     не появляется. */
+  .ets2Body {
+    flex:1 1 auto;
+    min-height:0;
+    overflow:auto;
+    display:flex;
+    flex-direction:column;
+    gap:8px;
+  }
+  .ets2Card {
+    padding:8px 10px;
+    border:1px solid var(--border);
+    border-radius:6px;
+    background:rgba(255,255,255,.02);
+  }
+  .ets2CardTitle {
+    font-size:13px;
+    font-weight:600;
+    display:flex;
+    align-items:baseline;
+    gap:8px;
+    margin-bottom:6px;
+  }
+  .ets2CardTitle .ets2Count { color:var(--muted); font-size:11px; font-weight:400; }
+
+  /* Данные профиля — НЕНУМЕРОВАННЫМ списком (прямое требование автора). */
+  .ets2Properties {
+    list-style:none;
+    margin:0;
+    padding:0;
+    display:grid;
+    grid-template-columns:repeat(auto-fill,minmax(330px,1fr));
+    gap:2px 16px;
+    font-size:12px;
+    line-height:1.5;
+  }
+  .ets2Properties li { display:flex; gap:8px; min-width:0; }
+  .ets2Properties .ets2PropertyName {
+    color:var(--muted);
+    flex:0 0 auto;
+    min-width:150px;
+    max-width:190px;
+  }
+  .ets2Properties .ets2PropertyValue {
+    color:#e9edf2;
+    min-width:0;
+    overflow-wrap:anywhere;
+  }
+  .ets2Properties .ets2PropertyValue.ets2Missing { color:var(--muted); font-style:italic; }
+
+  /* Шапка с аватаром: аватар профиля показывается, если игра его сохранила.
+     Заглушка — не «сломанная картинка», а явная подпись «аватара нет». */
+  .ets2ProfileHead { display:flex; gap:12px; align-items:flex-start; }
+  .ets2Avatar {
+    flex:0 0 auto;
+    width:96px;
+    height:96px;
+    border-radius:8px;
+    border:1px solid var(--border);
+    background:#0f141a;
+    object-fit:cover;
+    display:block;
+  }
+  .ets2AvatarMissing {
+    flex:0 0 auto;
+    width:96px;
+    height:96px;
+    border-radius:8px;
+    border:1px dashed var(--border);
+    background:rgba(255,255,255,.02);
+    color:var(--muted);
+    font-size:11px;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    text-align:center;
+    padding:6px;
+    box-sizing:border-box;
+  }
+  .ets2ProfileHeadBody { flex:1 1 auto; min-width:0; }
+  .ets2ProfileName {
+    font-size:16px;
+    font-weight:700;
+    margin:0 0 2px;
+    overflow-wrap:anywhere;
+  }
+  .ets2ProfileSub { font-size:12px; color:var(--muted); margin-bottom:6px; }
+
+  /* Компоненты: моды, карты, DLC. Три списка показываются по-разному, потому
+     что отвечают на разные вопросы: «что установлено», «какая карта», «что
+     докуплено». Слить их в один значило бы потерять ответ. */
+  .ets2ComponentList { list-style:none; margin:0; padding:0; font-size:12px; line-height:1.5; }
+  .ets2ComponentList li {
+    display:flex;
+    gap:8px;
+    padding:2px 0;
+    border-bottom:1px solid rgba(255,255,255,.04);
+  }
+  .ets2ComponentList li:last-child { border-bottom:none; }
+  .ets2ComponentList .ets2ComponentName { flex:1 1 auto; min-width:0; overflow-wrap:anywhere; }
+  .ets2ComponentList .ets2ComponentId {
+    flex:0 0 auto;
+    color:var(--muted);
+    font-size:11px;
+    font-family:Consolas,monospace;
+    max-width:280px;
+    overflow:hidden;
+    text-overflow:ellipsis;
+    white-space:nowrap;
+  }
+  .ets2Empty { color:var(--muted); font-size:12px; font-style:italic; }
+
+  /* Сохранения — таблица: у строки четыре сравнимых поля, и «в столбик», как
+     свойства, она читалась бы хуже. */
+  .ets2Saves { width:100%; border-collapse:collapse; font-size:12px; }
+  .ets2Saves th, .ets2Saves td { text-align:left; padding:3px 8px 3px 0; vertical-align:top; }
+  .ets2Saves th { color:var(--muted); font-weight:500; border-bottom:1px solid var(--border); }
+  .ets2Saves tr + tr td { border-top:1px solid rgba(255,255,255,.04); }
+  .ets2Saves td.ets2Num { text-align:right; white-space:nowrap; }
+
+  .ets2Warnings {
+    list-style:none;
+    margin:0;
+    padding:6px 10px;
+    border:1px solid rgba(250,176,3,.35);
+    border-radius:6px;
+    background:rgba(250,176,3,.07);
+    color:#f2c85a;
+    font-size:11px;
+    line-height:1.5;
+  }
+  .ets2Notice { color:var(--muted); font-size:12px; padding:10px 2px; }
+  .ets2Error { color:#ff9a9a; font-size:12px; padding:6px 2px; min-height:14px; }
+</style>
+</head>
+<body>
+<div class="ets2Window">
+  <div class="ets2Head">
+    <label class="ets2Field">
+      <span class="ets2FieldLabel">Профиль ETS2</span>
+      <select class="ets2Select" id="ets2ProfileSelect">
+        <option value="">— выберите профиль —</option>
+      </select>
+    </label>
+    <!-- Язык интерфейса игры — СРАЗУ СПРАВА от селекта (требование автора), без
+         других органов управления между ними: подпись читается как ответ на
+         выбор профиля, а не как отдельный элемент шапки. Значение приходит из
+         конфигурации профиля; при отсутствии честно говорит «не определён». -->
+    <div class="ets2Language" id="ets2Language" title="Язык интерфейса, выбранный в игре для этого профиля">
+      <span>Язык интерфейса:</span>
+      <span class="ets2LanguageValue" id="ets2LanguageValue">—</span>
+      <span class="ets2LanguageCode" id="ets2LanguageCode"></span>
+    </div>
+    <button class="toolButton" id="ets2Refresh" type="button"
+            title="Перечитать профили с диска: игра создаёт их в любой момент">Обновить список</button>
+    <span class="ets2HeadSpacer"></span>
+    <span class="ets2Notice" id="ets2Root"></span>
+  </div>
+
+  <div class="ets2Error" id="ets2Error"></div>
+
+  <div class="ets2Body" id="ets2Body">
+    <div class="ets2Notice" id="ets2Placeholder">
+      Выберите профиль ETS2 в списке выше — в окне появятся его данные: имя, язык
+      интерфейса, статистика, подключённые моды, карты, DLC и сохранения.
+    </div>
+  </div>
+</div>
+<script src="web_log.js?v=18763af3"></script>
+<script src="ets2Profiles.js?v=da202a46"></script>
+</body>
+</html>
