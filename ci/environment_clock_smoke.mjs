@@ -86,15 +86,28 @@ check(/PostSaveError\(/.test(simulatorForm.slice(
   "Сохранение мира должно сообщать об ошибке вместо записи мусора.");
 
 // «Сброс» обязан возвращать мир к стартовым условиям кампании.
-const resetBody = simulatorForm.slice(
+const resetCaseBody = simulatorForm.slice(
   simulatorForm.indexOf('case "reset"'),
   simulatorForm.indexOf('case "reload_catalog"')
 );
-check(/ApplyWorldFromCampaign/.test(resetBody),
+// Тело вынесено в ResetWorldState (общий путь с перепривязкой карьеры ETS2,
+// commit 4e2d105): ветка switch только называет метод, поэтому проверять надо
+// ОБА места. Оба среза ограничены — иначе в них попал бы код после switch.
+const resetMethodBody = simulatorForm.slice(
+  simulatorForm.indexOf("private void ResetWorldState("),
+  simulatorForm.indexOf("private void LoadWorldFromCampaign(")
+);
+check(/ApplyWorldFromCampaign/.test(resetMethodBody),
   "«Сбросить» должен приводить мир к стартовым условиям кампании: иначе " +
   "испорченная правка в Окружении не отменяется ни сбросом, ни загрузкой.");
-check(!/SetSimulationRunning\(false\)/.test(resetBody),
-  "«Сбросить» НЕ должен выключать симуляцию: сброс и остановка — разные действия.");
+// Выключение симуляции в ResetWorldState обязано быть УСЛОВНЫМ: метод обслуживает
+// и «Сбросить» (мир продолжает идти), и перепривязку карьеры ETS2 (мир надо
+// выключить). Запрет на саму строку был бы неверен — важно, что она под условием.
+check(
+  /if \(stopSimulation\)[\s\S]{0,240}_runtime\.SetSimulationRunning\(false\)/.test(resetMethodBody),
+  "ResetWorldState обязан выключать симуляцию ТОЛЬКО при stopSimulation=true: " +
+  "иначе «Сбросить» остановит мир, хотя сброс и остановка — разные действия."
+);
 
 // Кампания: вычисляемое свойство не должно утекать в файл.
 // Проверяется именно атрибут НА свойстве: простое вхождение строки "JsonIgnore"
@@ -879,6 +892,17 @@ try {
         simulationRunning: running,
         simulationPaused: !!state.paused,
         simulationSpeed: state.speed || 1,
+        // Режим ETS2 объявляется ЯВНО, как это делает Host в каждом сообщении.
+        // Без поля страница берёт умолчание «синхронизация требуется» и, поскольку
+        // подключённой карьеры в этой проверке нет, ГАСИТ транспорт: play, stop и ff
+        // оказываются disabled, и клик по ff падал по таймауту. Проверка про время,
+        // а не про ETS2, поэтому здесь режим «без обязательной карьеры», как у
+        // технического запуска симулятора без выбранного мира.
+        ets2SyncRequired: false,
+        ets2Sync: {
+          careerConnected: false, lineageId: null, careerName: null,
+          hexFolder: null, lastSave: null, loadedSave: null
+        },
         autoSaveLabel: state.autoSaveLabel || null,
         enabledQuestIds: [], selectedQuest: { campaignId: "", questId: "" },
         itemCatalog: { items: [] }, npcCatalog: { npcs: [] }, reputationViews: {},

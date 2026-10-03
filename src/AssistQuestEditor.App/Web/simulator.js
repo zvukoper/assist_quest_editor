@@ -3393,6 +3393,24 @@
     return ets2SyncSection;
   }
 
+  /**
+   * Возвращает на место разделы левого сайдбара, живущие ВНЕ его разметки.
+   *
+   * Их два, и порядок задан АВТОРОМ: «Инструменты» — ПЕРВЫЙ раздел, потому что это
+   * окна постоянного доступа (монитор показателей, перки, предметы), а не
+   * настройка мира. «Синхронизация с ETS2» — следом: её содержимое меняется редко
+   * и она не должна отодвигать постоянные кнопки.
+   *
+   * Правило одно на ОБА пути размещения (смена состояния синхронизации и
+   * пересборка содержимого) — две копии неизбежно разошлись бы, и раздел
+   * «Инструменты» уехал бы на второе место, как это уже случилось.
+   */
+  function placeRuntimePreservedSections() {
+    if (!runtimeSide) return;
+    runtimeSide.insertBefore(ensureToolsSection(), runtimeSide.firstChild);
+    runtimeSide.insertBefore(ensureEts2SyncSection(), runtimeSide.children[1] || null);
+  }
+
   function applyEts2SyncState(data) {
     ets2Sync = {
       careerConnected: !!data?.careerConnected,
@@ -3420,8 +3438,7 @@
       telemetryFollowEnabled = false;
 
     renderSimulationTransport();
-    if (runtimeSide)
-      runtimeSide.insertBefore(ensureEts2SyncSection(), runtimeSide.firstChild);
+    placeRuntimePreservedSections();
   }
 
 let toolsSection = null;
@@ -3552,8 +3569,7 @@ let toolsSection = null;
     }
     // Раздел инструментов возвращается на ПЕРВОЕ место: это единственный узел,
     // который переживает пересборку, поэтому порядок восстанавливаем явно.
-    runtimeSide.insertBefore(ensureEts2SyncSection(), runtimeSide.firstChild);
-    runtimeSide.insertBefore(ensureToolsSection(), runtimeSide.children[1] || null);
+    placeRuntimePreservedSections();
 
     runtimeSide.querySelector("#detachJournal")?.addEventListener("click", () => send({ action: "detach_journal" }));
     runtimeSide.querySelector("#openJournal")?.addEventListener("click", () => send({ action: "open_journal" }));

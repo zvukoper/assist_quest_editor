@@ -196,7 +196,12 @@ public sealed class Ets2TruckTelemetry : IDisposable
 
             try
             {
-                using var document = JsonDocument.Parse(message.GetBuffer().AsSpan(0, checked((int)message.Length)));
+                // JsonDocument.Parse(Span) с .NET 10 больше не принимает Span<byte>:
+                // ожидается ReadOnlySequence<byte>/ReadOnlyMemory<byte>. Читаем кадр
+                // как поток — ParseAsync переиспользует тот же путь разбора, что и
+                // резервный REST-канал, и не требует дополнительных using.
+                message.Position = 0;
+                using var document = await JsonDocument.ParseAsync(message, cancellationToken: token);
                 Apply(document.RootElement);
             }
             catch (JsonException ex)

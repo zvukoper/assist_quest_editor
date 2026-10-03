@@ -204,17 +204,37 @@ check(
     read("src/AssistQuestEditor.Domain/RouteModels.cs")),
   "RoutePlan обязан уметь перенумеровывать точки плана."
 );
-const resetBody = simulatorForm.slice(
+const resetCaseBody = simulatorForm.slice(
   simulatorForm.indexOf('case "reset"'),
   simulatorForm.indexOf('case "reload_catalog"')
 );
+// Тело «Сбросить» вынесено в ResetWorldState (общий путь с перепривязкой карьеры
+// ETS2, commit 4e2d105), поэтому одной case-ветки больше НЕ хватает: ветка лишь
+// называет метод, а контракт живёт в нём. СРЕЗ МЕТОДА ОБЯЗАН БЫТЬ ОГРАНИЧЕН:
+// без второй границы в него попал бы код после switch, и проверки ниже читали бы
+// чужие вызовы.
+const resetMethodBody = simulatorForm.slice(
+  simulatorForm.indexOf("private void ResetWorldState("),
+  simulatorForm.indexOf("private void LoadWorldFromCampaign(")
+);
+const resetBody = resetCaseBody + resetMethodBody;
 check(
   /ClearSession\(\)/.test(resetBody),
   "«Сбросить» должен вызывать ClearSession."
 );
+// Выключение симуляции обязано быть УСЛОВНЫМ, и «Сбросить» обязано просить
+// stopSimulation: false. Проверять одно лишь отсутствие строки нельзя: метод один
+// на два пути, поэтому «нет SetSimulationRunning» и «есть, но под условием» —
+// разные вещи, и ловит именно второе.
 check(
-  !/SetSimulationRunning\(false\)/.test(resetBody),
-  "«Сбросить» НЕ должен выключать симуляцию: сброс и остановка — разные действия."
+  /ResetWorldState\([^)]*stopSimulation:\s*false\s*\)/.test(resetCaseBody),
+  "«Сбросить» обязан звать ResetWorldState со stopSimulation: false: сброс и " +
+  "остановка — разные действия."
+);
+check(
+  /if \(stopSimulation\)[\s\S]{0,240}_runtime\.SetSimulationRunning\(false\)/.test(resetMethodBody),
+  "ResetWorldState обязан выключать симуляцию ТОЛЬКО при stopSimulation=true: " +
+  "иначе «Сбросить» остановит мир, хотя сброс и остановка — разные действия."
 );
 check(
   !/PersistSession\("сброс/.test(resetBody),
