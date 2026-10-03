@@ -556,6 +556,8 @@ public sealed class SimulatorForm : WebViewForm
             simulationRunning = _runtime.SimulationRunning,
             simulationPaused = _runtime.IsPaused,
             simulationSpeed = _runtime.SimulationSpeed,
+            ets2Sync = _ets2SyncMonitor.ViewState,
+            telemetryFollowEnabled = _telemetryFollowEnabled,
             // Подпись под кнопкой запуска: к какому состоянию мира игрок вернётся.
             // Берётся СИСТЕМНАЯ дата текущего автосохранения (локальное время
             // машины, до секунды), а не игровое время мира: подпись отвечает на
@@ -4025,6 +4027,8 @@ public sealed class SimulatorForm : WebViewForm
             simulationRunning = _runtime.SimulationRunning,
             simulationPaused = _runtime.IsPaused,
             simulationSpeed = _runtime.SimulationSpeed,
+            ets2Sync = _ets2SyncMonitor.ViewState,
+            telemetryFollowEnabled = _telemetryFollowEnabled,
             route = BuildRouteSnapshot(),
             lodging = BuildLodgingSnapshot()
         }, SnapshotJsonOptions);
