@@ -462,16 +462,56 @@ public sealed class Ets2ProfileReader
         try
         {
             var lines = Ets2GameLog.ReadLines(logPath);
+
+            // Активность профиля определяется не последним случайным путём
+            // profiles/... в хвосте журнала, а последним событием выбора профиля.
+            // Между каталогом профиля и таким событием ETS2 обычно пишет несколько
+            // технических строк, поэтому ищем ближайший путь только в пределах
+            // одного окна переключения.
             for (var i = lines.Length - 1; i >= 0; i--)
             {
                 var line = lines[i];
+                var isProfileEvent =
+                    line.Contains("New profile selected:", StringComparison.Ordinal) ||
+                    line.Contains(ProfileFinishedMarker, StringComparison.Ordinal);
 
-                // Имя берётся из САМОЙ ПОЗДНЕЙ записи: профиль мог открываться
-                // несколько раз за запуск, и первая запись устарела.
-                if (activeName is null && line.Contains(ProfileFinishedMarker, StringComparison.Ordinal))
-                    activeName = ExtractQuoted(line[line.IndexOf(ProfileFinishedMarker, StringComparison.Ordinal)..]);
+                if (!isProfileEvent)
+                    continue;
 
-                if (TryExtractProfileHex(line, out var hex))
+                if (line.Contains("New profile selected:", StringComparison.Ordinal))
+                {
+                    var marker = "New profile selected:";
+                    activeName = ExtractQuoted(
+                        line[line.IndexOf(marker, StringComparison.Ordinal)..]);
+                }
+                else
+                {
+                    activeName = ExtractQuoted(
+                        line[line.IndexOf(ProfileFinishedMarker, StringComparison.Ordinal)..]);
+                }
+
+                var from = Math.Max(0, i - 120);
+                for (var j = i; j >= from; j--)
+                {
+                    if (TryExtractProfileHex(lines[j], out var hex))
+                        return hex;
+                }
+
+                // Иногда путь в журнале появляется сразу после события выбора.
+                // Ограниченный поиск вперёд не позволяет случайно захватить старый
+                // профиль из другой игровой сессии.
+                var to = Math.Min(lines.Length, i + 40);
+                for (var j = i + 1; j < to; j++)
+                {
+                    if (TryExtractProfileHex(lines[j], out var hex))
+                        return hex;
+                }
+            }
+
+            // Запасной путь для старых/урезанных журналов без событий выбора.
+            for (var i = lines.Length - 1; i >= 0; i--)
+            {
+                if (TryExtractProfileHex(lines[i], out var hex))
                     return hex;
             }
         }
