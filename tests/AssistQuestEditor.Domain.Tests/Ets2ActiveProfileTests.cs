@@ -109,6 +109,26 @@ public sealed class Ets2ActiveProfileTests : IDisposable
     /// обычное состояние свежей установки, а не ошибка чтения.
     /// </summary>
     [Fact]
+    public void NewProfileRemainsActiveWhenLaterLogLinesMentionOldProfile()
+    {
+        Directory.CreateDirectory(Path.Combine(_root, "steam_profiles", "4151455F5431"));
+        Directory.CreateDirectory(Path.Combine(_root, "steam_profiles", "5465737432"));
+        WriteLog(
+            "00:00:11.557 : File /home/steam_profiles/4151455F5431/ffb_lut.sii does not exist.",
+            "00:00:11.594 : Set profile finished: 'AQE_T1'",
+            "00:00:22.021 : File /home/steam_profiles/5465737432/ffb_lut.sii does not exist.",
+            "00:00:22.112 : Set profile finished: 'Test2'",
+            "00:00:22.576 : New profile selected: 'Test2'",
+            "00:00:22.800 : [GET FILES] File /home/steam_profiles/4151455F5431/profile.sii exists.");
+
+        var catalog = ReadCatalog();
+
+        Assert.Equal("5465737432", catalog.ActiveHexFolder);
+        Assert.Equal("Test2", catalog.ActiveProfileName);
+        Assert.Single(catalog.Profiles, profile => profile.IsActive);
+    }
+
+    [Fact]
     public void MissingLogStillListsProfiles()
     {
         Directory.CreateDirectory(Path.Combine(_root, "steam_profiles", "5465737432"));
