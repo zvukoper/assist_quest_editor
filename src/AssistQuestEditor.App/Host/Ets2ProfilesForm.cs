@@ -28,6 +28,7 @@ public sealed class Ets2ProfilesForm : WebViewForm
     };
 
     private readonly Ets2ProfileReader _reader;
+    private string? _pendingHexFolder;
 
     public Ets2ProfilesForm(Ets2ProfileReader? reader = null)
         : base(
@@ -59,6 +60,11 @@ public sealed class Ets2ProfilesForm : WebViewForm
     {
         AppLogger.Info("Ets2ProfilesForm: окно профилей ETS2 готово.",
             $"size={Width}x{Height}; gameRoot={_reader.GameRoot ?? "<нет>"}");
+
+        var pending = _pendingHexFolder;
+        _pendingHexFolder = null;
+        if (!string.IsNullOrWhiteSpace(pending))
+            BeginInvoke((Action)(() => OpenProfileByHexFolder(pending)));
     }
 
     protected override void OnWebMessage(string json)
@@ -118,6 +124,48 @@ public sealed class Ets2ProfilesForm : WebViewForm
     /// Сохранённый каталог давал бы список, не совпадающий с тем, что лежит в
     /// документах игры.
     /// </summary>
+    /// <summary>
+    /// Открывает профиль по папке lineage, не заставляя пользователя искать его
+    /// вручную в списке. Используется карточкой «Синхронизация с ETS2».
+    /// </summary>
+    public void OpenProfileByHexFolder(string? hexFolder)
+    {
+        var wanted = (hexFolder ?? string.Empty).Trim();
+        if (wanted.Length == 0)
+            return;
+
+        if (Browser.CoreWebView2 is null)
+        {
+            _pendingHexFolder = wanted;
+            return;
+        }
+
+        try
+        {
+            var catalog = _reader.ReadCatalog();
+            var profile = catalog.Profiles.FirstOrDefault(item =>
+                item.HexFolder.Equals(wanted, StringComparison.OrdinalIgnoreCase));
+
+            if (profile is null)
+            {
+                AppLogger.Warn(
+                    "Ets2ProfilesForm: привязанный профиль не найден в текущем каталоге.",
+                    $"hexFolder={wanted}");
+                return;
+            }
+
+            SendCatalog();
+            SendProfile(profile.Area, profile.HexFolder);
+        }
+        catch (Exception ex)
+        {
+            AppLogger.Error(
+                "Ets2ProfilesForm: не удалось открыть привязанный профиль.",
+                ex,
+                $"hexFolder={wanted}");
+        }
+    }
+
     public void SendCatalog()
     {
         try
