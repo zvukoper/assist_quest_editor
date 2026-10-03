@@ -461,7 +461,7 @@ public sealed class Ets2ProfileReader
 
         try
         {
-            var lines = File.ReadAllLines(logPath);
+            var lines = Ets2GameLog.ReadLines(logPath);
             for (var i = lines.Length - 1; i >= 0; i--)
             {
                 var line = lines[i];
@@ -756,7 +756,7 @@ public sealed class Ets2ProfileReader
             {
                 try
                 {
-                    foreach (var line in File.ReadAllLines(logPath))
+                    foreach (var line in Ets2GameLog.ReadLines(logPath))
                     {
                         const string marker = "Selected language:";
                         var index = line.IndexOf(marker, StringComparison.Ordinal);

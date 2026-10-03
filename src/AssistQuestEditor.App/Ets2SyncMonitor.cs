@@ -764,7 +764,7 @@ public sealed class Ets2SyncMonitor : IDisposable
 
         try
         {
-            var lines = File.ReadAllLines(logPath);
+            var lines = Ets2GameLog.ReadLines(logPath);
             for (var i = lines.Length - 1; i >= 0; i--)
             {
                 var line = lines[i];
