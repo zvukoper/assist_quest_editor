@@ -69,6 +69,14 @@ public static class AppPaths
     public static string UserLocationRoot => Path.Combine(UserRoot, "locations");
 
     /// <summary>
+    /// Корень собственного read-only ledger синхронизации ETS2/AQE.
+    ///
+    /// Каталог полностью принадлежит AQE и расположен вне профилей ETS2 и
+    /// Steam Cloud. Здесь не должно появиться ни одного файла игры.
+    /// </summary>
+    public static string Ets2SyncRoot => Path.Combine(UserRoot, "ets2-sync");
+
+    /// <summary>
     /// Корень сохранений.
     ///
     /// Оставлен для совместимости с уже созданными снимками: новые сохранения

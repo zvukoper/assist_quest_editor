@@ -141,6 +141,12 @@ public sealed class SimulatorForm : WebViewForm
     /// </summary>
     private string _ets2ProfileName = string.Empty;
 
+    /// <summary>
+    /// Read-only монитор связи симулятора с ETS2. Он не записывает ни байта в
+    /// профиль игры или Steam Cloud: собственный ledger и чекпоинты живут в AQE.
+    /// </summary>
+    private readonly Ets2SyncMonitor _ets2SyncMonitor;
+
     /// <summary>Мир, которому принадлежит окно. Null — режим без выбранного мира (CI).</summary>
     private readonly WorldRecord? _world;
 
@@ -208,6 +214,26 @@ public sealed class SimulatorForm : WebViewForm
             world is null
                 ? AppPaths.SimulationSaveRoot
                 : WorldPaths.SavesFolderPath(world.FolderPath));
+
+        _ets2SyncMonitor = world is null
+            ? new Ets2SyncMonitor(
+                "ci",
+                "CI",
+                null,
+                null,
+                CaptureState,
+                CurrentCampaignId)
+            : new Ets2SyncMonitor(
+                world.Definition.Id,
+                world.DisplayName,
+                null,
+                null,
+                CaptureState,
+                CurrentCampaignId);
+        _ets2SyncMonitor.Notification += Ets2SyncMonitor_Notification;
+        _ets2SyncMonitor.NewCareerDetected += Ets2SyncMonitor_NewCareerDetected;
+        _ets2SyncMonitor.CheckpointReady += Ets2SyncMonitor_CheckpointReady;
+
         _openQuestEditor = openQuestEditor ?? throw new ArgumentNullException(nameof(openQuestEditor));
         _locationResolver = locationResolver ?? throw new ArgumentNullException(nameof(locationResolver));
         _dynamicEventDispatcher = dynamicEventDispatcher ?? throw new ArgumentNullException(nameof(dynamicEventDispatcher));
@@ -234,6 +260,12 @@ public sealed class SimulatorForm : WebViewForm
             _runtime.Tick();
             _dynamicEventDispatcher.Tick();
             UpdatePlayerConditions();
+
+            // Наблюдение ETS2 живёт независимо от того, идёт ли симуляция:
+            // процесс игры и save-каталог — внешнее состояние, которое нельзя
+            // привязывать к кнопке Play/Stop AQE.
+            if (Browser.CoreWebView2 is not null)
+                _ets2SyncMonitor.Poll();
 
             // Живое состояние идёт в окна в ЛЮБОМ состоянии симуляции, а не
             // только в запущенной. Движок показателей тикает и в паузе, и в
@@ -313,6 +345,11 @@ public sealed class SimulatorForm : WebViewForm
                 _campaignsForm = null;
             }
 
+            _ets2SyncMonitor.Notification -= Ets2SyncMonitor_Notification;
+            _ets2SyncMonitor.NewCareerDetected -= Ets2SyncMonitor_NewCareerDetected;
+            _ets2SyncMonitor.CheckpointReady -= Ets2SyncMonitor_CheckpointReady;
+            _ets2SyncMonitor.Dispose();
+
             _runtimeTimer.Stop();
             _runtimeTimer.Dispose();
             GlobalHotKeyPressed -= SimulatorForm_GlobalHotKeyPressed;
@@ -333,6 +370,11 @@ public sealed class SimulatorForm : WebViewForm
         // Мир восстанавливается ДО первого снимка: карта должна сразу показать
         // актуальное состояние, а не мигнуть «началом мира» и перерисоваться.
         AutoLoadWorld();
+
+        // Сначала восстанавливаем обычное состояние мира, затем ETS2 sync может
+        // заменить его только при точном совпадении с наблюдаемым game save.
+        _ets2SyncMonitor.Poll();
+
         PushRoads();
         PushSnapshot();
         PostJson(_worldSelectionJson);
@@ -1286,6 +1328,114 @@ public sealed class SimulatorForm : WebViewForm
     /// </summary>
     private void Ets2ProfilesForm_ProfileSelected(object? sender, string profileName)
         => SetEts2ProfileName(profileName);
+
+    private void Ets2SyncMonitor_Notification(Ets2SyncNotification notification)
+    {
+        switch (notification.Kind)
+        {
+            case Ets2SyncNotificationKind.InitialSetupRequired:
+                MessageBox.Show(
+                    this,
+                    notification.Message,
+                    "Начало игры в AQE",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Information);
+                break;
+
+            case Ets2SyncNotificationKind.ProfilesMissing:
+                MessageBox.Show(
+                    this,
+                    notification.Message,
+                    "Профиль ETS2 недоступен",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Warning);
+                break;
+
+            case Ets2SyncNotificationKind.ProfilesReturned:
+                MessageBox.Show(
+                    this,
+                    notification.Message,
+                    "Профиль ETS2 снова доступен",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Information);
+                break;
+
+            case Ets2SyncNotificationKind.OtherWorldCareerBlocked:
+                MessageBox.Show(
+                    this,
+                    notification.Message,
+                    "Карьера уже занята другим миром",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Warning);
+                break;
+
+            case Ets2SyncNotificationKind.CareerBound:
+                AppLogger.Info("SimulatorForm: ETS2 карьера привязана.", notification.Message);
+                break;
+
+            case Ets2SyncNotificationKind.CareerRejected:
+                AppLogger.Info("SimulatorForm: новая карьера отклонена.", notification.Message);
+                break;
+
+            case Ets2SyncNotificationKind.CheckpointCreated:
+            case Ets2SyncNotificationKind.CheckpointLoaded:
+                AppLogger.Info("SimulatorForm: ETS2 sync.", notification.Message);
+                break;
+
+            case Ets2SyncNotificationKind.CheckpointNotFound:
+                AppLogger.Warn("SimulatorForm: ETS2 sync.", notification.Message);
+                break;
+
+            case Ets2SyncNotificationKind.GameStarted:
+            case Ets2SyncNotificationKind.GameStopped:
+                AppLogger.Info("SimulatorForm: ETS2 sync.", notification.Message);
+                break;
+        }
+    }
+
+    private void Ets2SyncMonitor_NewCareerDetected(Ets2SyncCareerCandidate candidate)
+    {
+        var result = MessageBox.Show(
+            this,
+            $"Обнаружена новая карьера. Использовать её для игры в «{_world?.DisplayName ?? "AQE"}»?",
+            "Новая карьера",
+            MessageBoxButtons.YesNo,
+            MessageBoxIcon.Question);
+
+        if (result == DialogResult.Yes)
+        {
+            _ets2SyncMonitor.BindCandidate(candidate.LineageId);
+        }
+        else
+        {
+            _ets2SyncMonitor.DeclineCandidate(candidate.LineageId);
+        }
+    }
+
+    private void Ets2SyncMonitor_CheckpointReady(Ets2SyncCheckpointReady ready)
+    {
+        try
+        {
+            _dynamicEventDispatcher.SetSimulationRunning(false);
+            SimulationSaveMapper.Apply(_hub, ready.Save.State);
+            SetRouteStateAfterLoad(ready.Save.State.Route, ready.Save.State.RouteRuntime);
+            _mapView = ready.Save.State.MapView?.Normalize();
+            _mapViewRestoreToken++;
+            _inventoryPausedSimulation = false;
+            _runtime.PauseSimulation();
+            SyncRuntimeQuestEnabled();
+
+            AppLogger.Info(
+                "SimulatorForm: применён чекпоинт ETS2 sync.",
+                $"checkpoint={ready.Entry.Id}; slot={ready.Entry.Ets2Save.Slot}; save={ready.Entry.Ets2Save.Name}");
+        }
+        catch (Exception ex)
+        {
+            AppLogger.Error("SimulatorForm: не удалось применить чекпоинт ETS2 sync.", ex);
+        }
+
+        RequestSnapshot("ETS2 checkpoint loaded");
+    }
 
     /// <summary>
     /// Показывает имя профиля ETS2 под авторством (требование автора).

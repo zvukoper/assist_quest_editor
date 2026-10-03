@@ -64,11 +64,13 @@ public sealed class Ets2ProfileReader
     private readonly string? _gameRoot;
     private readonly string? _steamRoot;
     private readonly string? _steamCloudRoot;
+    private readonly string? _steamAccountId;
 
     public Ets2ProfileReader(string? gameRoot = null, string? steamRoot = null)
     {
         _gameRoot = string.IsNullOrWhiteSpace(gameRoot) ? DetectGameRoot() : gameRoot;
         _steamRoot = string.IsNullOrWhiteSpace(steamRoot) ? DetectSteamRoot() : steamRoot;
+        _steamAccountId = ReadCurrentSteamAccountId(_steamRoot ?? string.Empty);
         _steamCloudRoot = DetectSteamCloudRoot(_steamRoot);
     }
 
@@ -77,6 +79,9 @@ public sealed class Ets2ProfileReader
 
     /// <summary>Корень Steam или null.</summary>
     public string? SteamRoot => _steamRoot;
+
+    /// <summary>Текущий аккаунт Steam, если он удалось определить.</summary>
+    public string? SteamAccountId => _steamAccountId;
 
     /// <summary>
     /// Папка облачного хранилища профилей ETS2 внутри Steam или null.
