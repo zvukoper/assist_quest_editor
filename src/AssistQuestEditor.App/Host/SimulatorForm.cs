@@ -240,7 +240,6 @@ public sealed class SimulatorForm : WebViewForm
                 CurrentCampaignId,
                 ResetWorldForNewEts2Career);
         _ets2SyncMonitor.Notification += Ets2SyncMonitor_Notification;
-        _ets2SyncMonitor.NewCareerDetected += Ets2SyncMonitor_NewCareerDetected;
         _ets2SyncMonitor.CheckpointReady += Ets2SyncMonitor_CheckpointReady;
         _ets2SyncMonitor.StateChanged += Ets2SyncMonitor_StateChanged;
 
@@ -351,7 +350,6 @@ public sealed class SimulatorForm : WebViewForm
             }
 
             _ets2SyncMonitor.Notification -= Ets2SyncMonitor_Notification;
-            _ets2SyncMonitor.NewCareerDetected -= Ets2SyncMonitor_NewCareerDetected;
             _ets2SyncMonitor.CheckpointReady -= Ets2SyncMonitor_CheckpointReady;
             _ets2SyncMonitor.StateChanged -= Ets2SyncMonitor_StateChanged;
             _ets2SyncMonitor.Dispose();
