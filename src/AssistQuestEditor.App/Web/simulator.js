@@ -3431,8 +3431,13 @@
     const signature = String(ets2SyncRequired) + "|" + JSON.stringify(ets2Sync);
     if (signature !== lastEts2SyncSignature) {
       lastEts2SyncSignature = signature;
+      // Раздел «Синхронизация с ETS2» теперь живёт в СТАТИЧЕСКОЙ разметке, а
+      // ensureEts2SyncSection отдаёт null, если его там нет. Без этой проверки
+      // падал ВЕСЬ обработчик сообщения: `section.querySelector` бросал
+      // TypeError, и снимок не применялся вообще — плашка оставалась «stopped»,
+      // HUD пустым, часы без секунд.
       const section = ensureEts2SyncSection();
-      const body = section.querySelector("#ets2SyncBody");
+      const body = section?.querySelector("#ets2SyncBody");
       if (body) body.innerHTML = renderEts2SyncBody();
     }
 
