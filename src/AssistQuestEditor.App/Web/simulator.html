@@ -30,30 +30,7 @@
   #mapWrap.ets2Locked .ets2MapLock { display: flex; }
   #mapWrap.ets2Locked { cursor: not-allowed; }
 
-  #mapWrap.ets2Locked::after {
-    content: none;
-    position: absolute;
-    inset: 0;
-    z-index: 40;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    padding: 24px;
-    box-sizing: border-box;
-    background: rgba(95, 95, 95, .68);
-    color: #f4f4f4;
-    font-size: 18px;
-    font-weight: 600;
-    text-align: center;
-    pointer-events: auto;
-  }
-
-  #side.ets2Locked {
-    position: relative;
-    min-height: 0;
-  }
-
-  .ets2SideLock { display: none; }
+  #side.ets2Locked { position: relative; min-height: 0; }
 
   #side.ets2Locked {
     position: relative;
@@ -327,9 +304,7 @@
       </div>
       <div class="inventoryNotifications" id="inventoryNotifications" aria-live="polite"></div>
     </section>
-    <aside class="simSide ets2Locked" id="side">
-      <div class="ets2SideLock">Не подключена карьера ETS2</div>
-    </aside>
+    <aside class="simSide ets2Locked" id="side"></aside>
   </div>
   <div id="interfaceLayer" class="interfaceLayer" aria-live="polite"></div>
   <!-- Панель сохранений: отдельный слой поверх карты, а не в боковой панели.
