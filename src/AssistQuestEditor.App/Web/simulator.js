@@ -155,6 +155,7 @@
   // астрономия и можно ли писать в файл кампании.
   let worldSettings = null;
 
+  let ets2SyncRequired = true;
   let ets2Sync = {
     careerConnected: false,
     lineageId: null,
@@ -3347,6 +3348,11 @@
   }
 
   function renderEts2SyncBody() {
+    if (!ets2SyncRequired) {
+      return "<div class='kv'><span>Состояние</span><span class='ets2SyncConnected'>Не требуется</span></div>" +
+        "<div class='notice' style='margin-top:8px'>Симулятор запущен в техническом режиме без выбранного мира.</div>";
+    }
+
     if (!ets2Sync.careerConnected) {
       return "<div class='kv'><span>Состояние</span><span class='ets2SyncDisconnected'>Не подключена</span></div>" +
         "<div class='notice' style='margin-top:8px'>Создай новую карьеру ETS2 и подтверди её подключение. Состояние мира будет сброшено.</div>";
@@ -3405,7 +3411,7 @@
       if (body) body.innerHTML = renderEts2SyncBody();
     }
 
-    const locked = !ets2Sync.careerConnected;
+    const locked = ets2SyncRequired && !ets2Sync.careerConnected;
     mapWrap?.classList.toggle("ets2Locked", locked);
     side?.classList.toggle("ets2Locked", locked);
     if (side) side.inert = locked;
@@ -3919,7 +3925,7 @@ let toolsSection = null;
     // паузу (⏸️), иначе нажатие запустит или продолжит (▶️). Во время паузы
     // кнопка дополнительно пульсирует — это прямой визуальный сигнал продолжения.
     if (play) {
-      play.disabled = !ets2Sync.careerConnected;
+      play.disabled = ets2SyncRequired && !ets2Sync.careerConnected;
        play.textContent = simulationRunning ? "⏸️" : "▶️";
       play.title = simulationRunning ? "Пауза" : simulationPaused ? "Продолжить" : "Запустить симуляцию";
       play.setAttribute("aria-label", play.title);
@@ -3929,14 +3935,14 @@ let toolsSection = null;
     // Стоп доступен всегда: он же создаёт автосохранение, и игрок вправе
     // зафиксировать мир, даже если симуляция ещё не запускалась.
     if (stop) {
-      stop.disabled = !ets2Sync.careerConnected;
+      stop.disabled = ets2SyncRequired && !ets2Sync.careerConnected;
       stop.title = "Остановить симуляцию и автосохранить мир";
     }
 
     // ff сообщает текущую кратность: иначе непонятно, куда придёт следующее
     // нажатие, и ускорение выглядит как «кнопка без состояния».
     if (fastForward) {
-      fastForward.disabled = !ets2Sync.careerConnected;
+      fastForward.disabled = ets2SyncRequired && !ets2Sync.careerConnected;
        const speedText = simulationSpeed === 1 ? "" : " (сейчас ×" + formatSpeed(simulationSpeed) + ")";
       fastForward.title = "Ускорить игровое время" + speedText;
       fastForward.setAttribute("aria-label", fastForward.title);
@@ -3949,7 +3955,7 @@ let toolsSection = null;
     // показывала бы «едем», пока другая показывала «стоим». Поэтому состояние
     // здесь только ОТРАЖАЕТСЯ, а переключается общим действием route_toggle.
     if (routeToggle) {
-      routeToggle.disabled = !ets2Sync.careerConnected || telemetryFollowEnabled;
+      routeToggle.disabled = !ets2SyncRequired || !ets2Sync.careerConnected || telemetryFollowEnabled;
        const moving = !!(route && route.enabled);
       routeToggle.classList.toggle("active", moving);
       routeToggle.setAttribute("aria-pressed", moving ? "true" : "false");
@@ -3962,13 +3968,13 @@ let toolsSection = null;
     }
 
     if (telemetryToggle) {
-       telemetryToggle.disabled = !ets2Sync.careerConnected;
-       telemetryToggle.checked = !!ets2Sync.careerConnected && !!telemetryFollowEnabled;
+       telemetryToggle.disabled = !ets2SyncRequired || !ets2Sync.careerConnected;
+       telemetryToggle.checked = !!ets2SyncRequired && !!ets2Sync.careerConnected && !!telemetryFollowEnabled;
      }
      if (telemetryToggleLabel)
        telemetryToggleLabel.classList.toggle(
          "isActive",
-         !!ets2Sync.careerConnected && !!telemetryFollowEnabled);
+         !!ets2SyncRequired && !!ets2Sync.careerConnected && !!telemetryFollowEnabled);
 
      if (plate) {
       plate.dataset.simState = state;
@@ -5244,6 +5250,8 @@ let toolsSection = null;
         if (typeof message.simulationRunning === "boolean") simulationRunning = message.simulationRunning;
         if (typeof message.simulationPaused === "boolean") simulationPaused = message.simulationPaused;
         if (typeof message.simulationSpeed === "number") simulationSpeed = message.simulationSpeed;
+        if (typeof message.ets2SyncRequired === "boolean")
+          ets2SyncRequired = message.ets2SyncRequired;
         if (message.ets2Sync) applyEts2SyncState(message.ets2Sync);
         if (typeof message.telemetryFollowEnabled === "boolean")
           telemetryFollowEnabled = message.telemetryFollowEnabled;
@@ -5271,6 +5279,8 @@ let toolsSection = null;
       // Подпись автосохранения: null означает «слота ещё нет», и интерфейс
       // обязан это сказать именно так, а не показывать пустую дату.
       autoSaveLabel = message.autoSaveLabel || null;
+      if (typeof message.ets2SyncRequired === "boolean")
+        ets2SyncRequired = message.ets2SyncRequired;
       if (message.ets2Sync) applyEts2SyncState(message.ets2Sync);
       if (typeof message.telemetryFollowEnabled === "boolean")
         telemetryFollowEnabled = message.telemetryFollowEnabled;
@@ -6084,7 +6094,7 @@ let toolsSection = null;
   }
 
   document.getElementById("simTelemetryToggle")?.addEventListener("change", event => {
-     if (!ets2Sync.careerConnected) {
+     if (!ets2SyncRequired || !ets2Sync.careerConnected) {
        event.target.checked = false;
        return;
      }
