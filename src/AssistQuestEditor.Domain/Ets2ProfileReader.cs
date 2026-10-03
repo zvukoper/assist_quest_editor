@@ -461,7 +461,7 @@ public sealed class Ets2ProfileReader
 
         try
         {
-            var lines = ReadLogLinesShared(logPath);
+            var lines = File.ReadAllLines(logPath);
             for (var i = lines.Length - 1; i >= 0; i--)
             {
                 var line = lines[i];
@@ -484,40 +484,6 @@ public sealed class Ets2ProfileReader
     }
 
     private const string ProfileFinishedMarker = "Set profile finished:";
-
-    /// <summary>
-    /// Читает game.log.txt с максимально мягким режимом общего доступа.
-    ///
-    /// ETS2 пишет журнал во время работы. File.ReadAllLines использует более
-    /// ограниченный share-режим и на некоторых запусках получает IOException,
-    /// из-за чего activeHex превращался в null и монитор не видел новую карьеру.
-    /// Сначала открываем файл с FileShare.ReadWrite | FileShare.Delete; если
-    /// ОС всё равно не разрешает чтение, возвращаемся к обычному API.
-    /// </summary>
-    private static string[] ReadLogLinesShared(string path)
-    {
-        try
-        {
-            using var stream = new FileStream(
-                path,
-                FileMode.Open,
-                FileAccess.Read,
-                FileShare.ReadWrite | FileShare.Delete,
-                bufferSize: 64 * 1024,
-                useAsync: false);
-
-            using var reader = new StreamReader(stream);
-            var lines = new List<string>();
-            while (!reader.EndOfStream)
-                lines.Add(reader.ReadLine() ?? string.Empty);
-
-            return lines.ToArray();
-        }
-        catch (IOException)
-        {
-            return File.ReadAllLines(path);
-        }
-    }
 
     /// <summary>
     /// Достаёт hex-имя папки профиля из строки журнала.
@@ -790,7 +756,7 @@ public sealed class Ets2ProfileReader
             {
                 try
                 {
-                    foreach (var line in ReadLogLinesShared(logPath))
+                    foreach (var line in File.ReadAllLines(logPath))
                     {
                         const string marker = "Selected language:";
                         var index = line.IndexOf(marker, StringComparison.Ordinal);

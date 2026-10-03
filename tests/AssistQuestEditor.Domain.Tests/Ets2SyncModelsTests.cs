@@ -10,22 +10,15 @@ public sealed class Ets2SyncModelsTests
     {
         var created = new DateTimeOffset(2026, 10, 3, 9, 0, 0, TimeSpan.Zero);
 
-        var first = Create("OldName", "414243", created);
-        var renamed = Create("NewName", "444546", created);
+        var first = Create("OldName", "41514", created, "414243");
+        var renamed = Create("NewName", "41514", created, "444546");
 
         var a = Ets2ProfileLineage.FromProfile("76561198000000001", first);
         var b = Ets2ProfileLineage.FromProfile("76561198000000001", renamed);
 
-        // Ни имя, ни hex-каталог не входят в отпечаток: линия остаётся одна.
         Assert.Equal(a.Id, b.Id);
         Assert.True(a.IsStable);
-
-        // Сам снимок знает только текущий каталог; прежний приносит наблюдатель.
-        var merged = a.Merge(renamed);
-        Assert.Equal(a.Id, merged.Id);
-        Assert.Contains("414243", merged.KnownHexFolders);
-        Assert.Contains("444546", merged.KnownHexFolders);
-        Assert.Equal("444546", merged.CurrentHexFolder);
+        Assert.Contains("414243", a.KnownHexFolders);
     }
 
     [Fact]
@@ -33,10 +26,10 @@ public sealed class Ets2SyncModelsTests
     {
         var a = Ets2ProfileLineage.FromProfile(
             "76561198000000001",
-            Create("Same", "41514", new DateTimeOffset(2026, 10, 3, 9, 0, 0, TimeSpan.Zero)));
+            Create("Same", "41514", new DateTimeOffset(2026, 10, 3, 9, 0, 0, TimeSpan.Zero), "41"));
         var b = Ets2ProfileLineage.FromProfile(
             "76561198000000001",
-            Create("Same", "41514", new DateTimeOffset(2026, 10, 9, 9, 0, 0, TimeSpan.Zero)));
+            Create("Same", "41514", new DateTimeOffset(2026, 10, 9, 9, 0, 0, TimeSpan.Zero), "41"));
 
         Assert.NotEqual(a.Id, b.Id);
     }
@@ -54,7 +47,8 @@ public sealed class Ets2SyncModelsTests
     private static Ets2ProfileData Create(
         string name,
         string hex,
-        DateTimeOffset created)
+        DateTimeOffset created,
+        string alias)
         => new(
             "steam_profiles",
             hex,

@@ -47,6 +47,8 @@ public sealed class Ets2SyncMonitor : IDisposable
     private bool _processWasRunning;
     private bool _observedAnyCareerProfiles;
     private bool _profilesMissing;
+    private bool _activeProfileWarningShown;
+    private bool _newProfileFallbackWarningShown;
     private string? _activeLineageId;
     private bool _disposed;
 
@@ -181,6 +183,8 @@ public sealed class Ets2SyncMonitor : IDisposable
             _declinedCandidates.Clear();
             _promptedCandidates.Clear();
             _otherWorldWarnings.Clear();
+            _activeProfileWarningShown = false;
+            _newProfileFallbackWarningShown = false;
             Notify(Ets2SyncNotificationKind.GameStarted, "Euro Truck Simulator 2 запущен.");
         }
         else if (!processRunning && _processWasRunning)
@@ -229,8 +233,9 @@ public sealed class Ets2SyncMonitor : IDisposable
             active = profiles.FirstOrDefault(profile =>
                 previouslyUnknownLineages.Contains(profile.Lineage.Id));
 
-            if (active is not null)
+            if (active is not null && !_newProfileFallbackWarningShown)
             {
+                _newProfileFallbackWarningShown = true;
                 AppLogger.Warn(
                     "Ets2SyncMonitor: активный профиль не определён из game.log.txt; " +
                     "использую единственный новый профиль как кандидата новой карьеры.",
@@ -240,8 +245,9 @@ public sealed class Ets2SyncMonitor : IDisposable
 
         if (active is null)
         {
-            if (processRunning && profiles.Count > 0)
+            if (processRunning && profiles.Count > 0 && !_activeProfileWarningShown)
             {
+                _activeProfileWarningShown = true;
                 AppLogger.Warn(
                     "Ets2SyncMonitor: ETS2 запущен, но активный профиль не определён.",
                     $"profiles={profiles.Count}; activeHex={catalog.ActiveHexFolder ?? "<none>"}; " +
@@ -863,6 +869,8 @@ public sealed class Ets2SyncMonitor : IDisposable
         _promptedCandidates.Clear();
         _declinedCandidates.Clear();
         _otherWorldWarnings.Clear();
+        _activeProfileWarningShown = false;
+        _newProfileFallbackWarningShown = false;
     }
 
     private sealed record Ets2SessionObservation(
