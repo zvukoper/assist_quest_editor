@@ -153,6 +153,7 @@ public sealed class SimulatorForm : WebViewForm
 
     /// <summary>Мир, которому принадлежит окно. Null — режим без выбранного мира (CI).</summary>
     private readonly WorldRecord? _world;
+    private readonly bool _ets2SyncRequired;
 
     private bool _journalDetached;
     private bool _snapshotRequestScheduled;
@@ -209,6 +210,7 @@ public sealed class SimulatorForm : WebViewForm
         // с одним и тем же id (например Common), и без ограничения они бы
         // наложились друг на друга в списке и на карте.
         _world = world;
+        _ets2SyncRequired = world is not null;
         _campaignStore = (campaignStore ?? throw new ArgumentNullException(nameof(campaignStore)))
             .ScopedTo(world?.FolderPath);
         // Симулятор при каждом открытии обязан начинаться выключенным:
@@ -557,6 +559,7 @@ public sealed class SimulatorForm : WebViewForm
             simulationPaused = _runtime.IsPaused,
             simulationSpeed = _runtime.SimulationSpeed,
             ets2Sync = _ets2SyncMonitor.ViewState,
+            ets2SyncRequired = _ets2SyncRequired,
             telemetryFollowEnabled = _telemetryFollowEnabled,
             // Подпись под кнопкой запуска: к какому состоянию мира игрок вернётся.
             // Берётся СИСТЕМНАЯ дата текущего автосохранения (локальное время
