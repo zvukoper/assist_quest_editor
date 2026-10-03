@@ -2237,6 +2237,11 @@ public sealed class SimulatorForm : WebViewForm
                     SetTelemetryFollow(root);
                     break;
 
+                case "bind_active_ets2_career":
+                    if (!_ets2SyncMonitor.BindActiveCareer())
+                        RequestSnapshot("ETS2 active career binding failed");
+                    break;
+
                 case "set_environment":
                     SetEnvironment(root);
                     break;
