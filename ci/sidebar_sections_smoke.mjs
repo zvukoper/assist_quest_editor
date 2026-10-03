@@ -29,15 +29,36 @@ for (const name of [
   if (fs.existsSync(src)) fs.copyFileSync(src, path.join(tmp, "Web", name));
 }
 
+// Стили блокировок ETS2 живут ВНУТРИ simulator.html, поэтому в фикстуру их надо
+// перенести отдельно: из theme.css заглушек не видно, и проверка меряла бы не
+// то оформление, которое открывается в приложении (так уже было — проверка
+// проходила на правиле, которого приложение не использует). Берётся первый
+// <style> страницы Симулятора.
+const simulatorHtmlSource = fs.readFileSync(
+  path.join(root, "src", "AssistQuestEditor.App", "Web", "simulator.html"), "utf8");
+const pageStyles = (simulatorHtmlSource.match(/<style>([\s\S]*?)<\/style>/) || ["", ""])[1];
+
 const failures = [];
 const check = (condition, message) => { if (!condition) failures.push(message); };
 
 fs.writeFileSync(path.join(tmp, "Web", "s.html"), `<!doctype html>
 <html lang="ru"><head><meta charset="utf-8"><link rel="stylesheet" href="theme.css">
+<style>${pageStyles}</style>
 <style>body{margin:0}#mapCanvas{display:block;width:900px;height:640px}</style></head>
 <body>
-<div id="hud"></div><aside id="side"></aside><aside id="runtimeSide"></aside>
+<div id="hud"></div><aside id="side"></aside>
+<aside id="runtimeSide">
+  <section class="acc open runtimeEts2Sync" id="ets2SyncSection">
+    <div class="accHead"><strong>Синхронизация с ETS2</strong><span>⌄</span></div>
+    <div class="accBody" id="ets2SyncBody">
+      <div class="kv"><span>Состояние</span><span class="ets2SyncDisconnected">Не подключена</span></div>
+    </div>
+  </section>
+</aside>
 <canvas id="mapCanvas"></canvas>
+<section class="mapSurface ets2Locked" id="mapWrap">
+  <div class="ets2MapLock" id="ets2MapLock">Не подключена карьера ETS2</div>
+</section>
 <div class="mapContextMenu" id="mapContextMenu" hidden><button id="movePlayerHere"></button></div>
 <button id="backpackButton"></button><div id="inventoryNotifications"></div>
 <div id="playerOverlay"><section id="inventoryPanel"></section>
@@ -92,7 +113,15 @@ try {
       type: "snapshot", version: "s", snapshot: value, route: value.route,
       // Разделы хранит Host: страница их только рисует.
       sidebarSections: value.__sidebarSections || [],
-      simulationRunning: false, simulationPaused: false, simulationSpeed: 1
+      simulationRunning: false, simulationPaused: false, simulationSpeed: 1,
+      // Режим ETS2 без обязательной карьеры: правый сайдбар при locked накрыт
+      // заглушкой (`pointer-events:auto`), и клики по нему стали бы таймаутом,
+      // то есть проверкой заглушки, а не разделов.
+      ets2SyncRequired: false,
+      ets2Sync: {
+        careerConnected: false, lineageId: null, careerName: null,
+        hexFolder: null, lastSave: null, loadedSave: null
+      }
     });
   }, snapshotValue);
 
@@ -219,6 +248,48 @@ try {
     "кнопки инструментов не в левом сайдбаре: " + JSON.stringify(toolsInRuntime));
   check(!toolsInRuntime.inRightSidebar,
     "кнопки инструментов продублированы в правом сайдбаре");
+
+  // --- 5б. Раздел «Синхронизация с ETS2» НЕ пропадает после снимка ---
+  //
+  // Раздел живёт в СТАТИЧЕСКОЙ разметке, а левый сайдбар пересобирается сверкой
+  // узлов. Сверка удаляла его как узел, которого нет в динамической разметке, а
+  // `ensureEts2SyncSection` искал его заново через document.getElementById и
+  // получал null — раздел исчезал из сайдбара НАВСЕГДА после первого снимка.
+  // Проверка держит УЗЕЛ: он обязан остаться тем же и стоять в runtimeSide.
+  await page.evaluate(() => { window.__syncNode = document.getElementById("ets2SyncSection"); });
+  await pushSnapshot(makeSnapshot({ __sidebarSections: [] }));
+  await page.waitForTimeout(150);
+
+  const syncState = await page.evaluate(() => {
+    const node = document.getElementById("ets2SyncSection");
+    const runtime = document.getElementById("runtimeSide");
+    const children = [...runtime.children];
+    return {
+      present: !!node,
+      connected: !!node && node.isConnected,
+      inRuntime: !!node && node.parentElement === runtime,
+      sameNode: window.__syncNode === node,
+      firstIsTools: !!children[0] && children[0].className.includes("runtimeTools"),
+      secondIsSync: children[1] === node,
+      order: children.map(child => child.id || child.className),
+      bodyFilled: (document.getElementById("ets2SyncBody")?.textContent || "").includes("Не требуется")
+    };
+  });
+
+  check(syncState.present && syncState.connected && syncState.inRuntime,
+    "раздел «Синхронизация с ETS2» исчез из левого сайдбара после снимка: " +
+    JSON.stringify(syncState));
+  check(syncState.sameNode,
+    "раздел «Синхронизация с ETS2» пересоздан при пересборке сайдбара: " +
+    "обработчик открытия карьеры потерян");
+  check(syncState.firstIsTools,
+    "первый раздел левого сайдбара перестал быть «Инструменты»: " +
+    JSON.stringify(syncState.order));
+  check(syncState.secondIsSync,
+    "«Синхронизация с ETS2» должна стоять сразу после «Инструментов»: " +
+    JSON.stringify(syncState.order));
+  check(syncState.bodyFilled,
+    "тело раздела синхронизации не заполнено состоянием из снимка");
 
   await page.evaluate(() => { window.__sent = []; });
   await page.locator("#runtimeSide #openIndicators").click();
@@ -353,6 +424,78 @@ try {
   check(singleClick === 1,
     "одно нажатие кнопки отправило Host " + singleClick + " сообщений вместо 1: " +
     "обработчик навешен дважды на переиспользованный узел");
+
+  // --- 11. Заглушки блокировки возвращаются вместе с блокировкой ---
+  //
+  // Требование автора: заглушка карты — «Не подключена карьера ETS2», заглушка
+  // сайдбара — «Не подключена карьера ETS2». Обе обязаны снова ПОЯВЛЯТЬСЯ, когда
+  // связь с карьерой пропадает, а не исчезать навсегда после первой разблокировки.
+  // Проверяются ВЫЧИСЛЕННЫЕ стили: класс может остаться на узле, а правило
+  // оформления — потеряться (именно так уже было при чистке дублирующей
+  // разметки блокировок).
+  const lockVisible = async () => page.evaluate(() => {
+    const mapWrap = document.getElementById("mapWrap");
+    const side = document.getElementById("side");
+    const mapLock = document.getElementById("ets2MapLock");
+    return {
+      mapLocked: mapWrap.classList.contains("ets2Locked"),
+      mapLockDisplay: mapLock ? getComputedStyle(mapLock).display : "missing",
+      mapLockVisible: !!mapLock && mapLock.offsetParent !== null,
+      sideLocked: side.classList.contains("ets2Locked"),
+      sideAfterContent: getComputedStyle(side, "::after").content,
+      sideAfterDisplay: getComputedStyle(side, "::after").display
+    };
+  });
+
+  // Блокировка приходит сообщением с обязательным режимом ETS2: pushSnapshot
+  // выше объявляет режим БЕЗ обязательной карьеры (иначе клики по правому
+  // сайдбару перехватывала бы заглушка), а замок ставится именно при required.
+  const pushEts2 = (required, connected) => page.evaluate(({ required: req, connected: conn }) => {
+    window.chrome.webview.dispatch("message", {
+      type: "snapshot", version: "s", snapshot: null, route: null,
+      simulationRunning: false, simulationPaused: false, simulationSpeed: 1,
+      ets2SyncRequired: req,
+      ets2Sync: {
+        careerConnected: conn, lineageId: conn ? "l1" : null,
+        careerName: conn ? "Карьера" : null, hexFolder: conn ? "41" : null,
+        lastSave: null, loadedSave: null
+      }
+    });
+  }, { required, connected });
+
+  await pushEts2(true, false);
+  await page.waitForTimeout(200);
+  const locked = await lockVisible();
+
+  check(locked.mapLocked && locked.sideLocked,
+    "при отсутствии карьеры ETS2 блокировка не выставлена: " + JSON.stringify(locked));
+  check(locked.mapLockDisplay === "flex" && locked.mapLockVisible,
+    "заглушка карты не показана под блокировкой: " + JSON.stringify(locked));
+  check(locked.sideAfterContent.includes("Не подключена карьера ETS2") &&
+        locked.sideAfterDisplay === "flex",
+    "заглушка правого сайдбара не показана под блокировкой: " + JSON.stringify(locked));
+
+  // Возврат карьеры обязан снять ОБЕ заглушки.
+  await pushEts2(true, true);
+  await page.waitForTimeout(200);
+  const unlocked = await lockVisible();
+
+  check(!unlocked.mapLocked && !unlocked.sideLocked,
+    "подключение карьеры не сняло блокировку: " + JSON.stringify(unlocked));
+  check(unlocked.mapLockDisplay === "none",
+    "заглушка карты осталась после подключения карьеры: " + JSON.stringify(unlocked));
+  check(unlocked.sideAfterContent === "none",
+    "заглушка правого сайдбара осталась после подключения карьеры: " + JSON.stringify(unlocked));
+
+  // Блокировка возвращается — заглушки обязаны появиться СНОВА.
+  await pushEts2(true, false);
+  await page.waitForTimeout(200);
+  const relocked = await lockVisible();
+
+  check(relocked.mapLockDisplay === "flex" && relocked.mapLockVisible,
+    "заглушка карты не вернулась при повторной потере карьеры: " + JSON.stringify(relocked));
+  check(relocked.sideAfterDisplay === "flex",
+    "заглушка правого сайдбара не вернулась при повторной потере карьеры: " + JSON.stringify(relocked));
 
   check(pageErrors.length === 0, "ошибки страницы: " + pageErrors.join(" | "));
 

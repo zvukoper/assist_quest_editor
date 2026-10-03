@@ -3371,12 +3371,15 @@
   }
 
   function ensureEts2SyncSection() {
-    if (ets2SyncSection && document.contains(ets2SyncSection))
-      return ets2SyncSection;
+    if (ets2SyncSection) return ets2SyncSection;
 
+    // Узел берётся из СТАТИЧЕСКОЙ разметки и запоминается. Второй поиск по
+    // документу («document.getElementById») НЕ используется сознательно: если
+    // раздел почему-то покинул документ, поиск вернул бы null и раздел исчез
+    // навсегда, вместо того чтобы вернуться на место. Запоминание ссылки делает
+    // восстановление возможным.
     ets2SyncSection = document.getElementById("ets2SyncSection");
-    if (!ets2SyncSection)
-      return null;
+    if (!ets2SyncSection) return null;
 
     if (!ets2SyncSection.dataset.bound) {
       ets2SyncSection.dataset.bound = "1";
@@ -3408,14 +3411,20 @@
   function placeRuntimePreservedSections() {
     if (!runtimeSide) return;
 
-    const syncSection = ensureEts2SyncSection();
-    if (syncSection)
-      runtimeSide.insertBefore(syncSection, runtimeSide.firstChild);
-
+    // insertBefore на уже стоящем на месте узле ничего не делает: проверка
+    // нужна, чтобы лишний раз не двигать DOM (иначе сбрасывался бы :hover).
+    //
+    // Порядок: «Инструменты» — ПЕРВЫЙ, «Синхронизация с ETS2» — СЛЕДОМ.
+    // Проверять его обязательно и здесь: пока раздел sync отсутствовал в
+    // разметке, порядок устанавливался сам собой, а вместе с ним вернулся бы и
+    // прежний дефект — «Инструменты» уезжали на второе место.
     const tools = ensureToolsSection();
-    runtimeSide.insertBefore(
-      tools,
-      syncSection ? runtimeSide.children[1] || null : runtimeSide.firstChild);
+    if (runtimeSide.firstChild !== tools)
+      runtimeSide.insertBefore(tools, runtimeSide.firstChild);
+
+    const syncSection = ensureEts2SyncSection();
+    if (syncSection && syncSection !== tools.nextSibling)
+      runtimeSide.insertBefore(syncSection, tools.nextSibling);
   }
 
   function applyEts2SyncState(data) {
@@ -3459,26 +3468,41 @@ let toolsSection = null;
   function ensureToolsSection() {
     if (toolsSection) return toolsSection;
 
-    const host = document.createElement("div");
-    host.innerHTML =
-      "<section class='acc open runtimeTools'>" +
-        "<div class='accHead'><strong>Инструменты</strong></div>" +
-        "<div class='accBody'>" +
-          "<button class='smallButton primary' id='openIndicators' style='width:100%'>Монитор показателей</button>" +
-          "<button class='smallButton' id='openPerks' style='width:100%;margin-top:6px'>Перки, баффы, скиллы</button>" +
-          "<button class='smallButton' id='openItems' style='width:100%;margin-top:6px'>Предметы</button>" +
-        "</div>" +
-      "</section>";
-    toolsSection = host.firstElementChild;
+    // Обёртка section.runtimeTools — ЯВНЫЙ узел (не создаётся через innerHTML),
+    // поэтому совпадение по тегу «section» в сверке исключено: обёртка
+    // сохраняется, даже если кто-то забудет передать preserve.
+    toolsSection = document.createElement("section");
+    toolsSection.className = "acc open runtimeTools";
+
+    const head = document.createElement("div");
+    head.className = "accHead";
+    head.innerHTML = "<strong>Инструменты</strong>";
+
+    const body = document.createElement("div");
+    body.className = "accBody";
+
+    const makeButton = (id, label, marginTop) => {
+      const button = document.createElement("button");
+      button.id = id;
+      button.className = "smallButton" + (id === "openIndicators" ? " primary" : "");
+      button.style.width = "100%";
+      if (marginTop) button.style.marginTop = marginTop;
+      button.textContent = label;
+      return button;
+    };
+
+    const indicators = makeButton("openIndicators", "Монитор показателей", "");
+    const perks = makeButton("openPerks", "Перки, баффы, скиллы", "6px");
+    const items = makeButton("openItems", "Предметы", "6px");
 
     // Обработчики навешиваются ОДИН раз: узел больше не пересоздаётся, поэтому
     // терять их вместе с разметкой, как это было раньше, негде.
-    toolsSection.querySelector("#openIndicators")
-      .addEventListener("click", () => send({ action: "open_indicators" }));
-    toolsSection.querySelector("#openPerks")
-      .addEventListener("click", () => send({ action: "open_perks" }));
-    toolsSection.querySelector("#openItems")
-      .addEventListener("click", () => send({ action: "open_items" }));
+    indicators.addEventListener("click", () => send({ action: "open_indicators" }));
+    perks.addEventListener("click", () => send({ action: "open_perks" }));
+    items.addEventListener("click", () => send({ action: "open_items" }));
+
+    body.append(indicators, perks, items);
+    toolsSection.append(head, body);
 
     return toolsSection;
   }
@@ -3572,20 +3596,24 @@ let toolsSection = null;
     // подменяются только изменившиеся элементы, поэтому кнопки шапки раздела
     // при обновлении журнала событий не мигают.
     //
-    // «Синхронизация с ETS2» и «Инструменты» живут вне динамической разметки.
-    // Sync временно отцепляется перед reconcile, чтобы тот не удалил постоянный
-    // DOM-узел.
-    const syncSectionBeforeReconcile = ensureEts2SyncSection();
-    if (syncSectionBeforeReconcile?.parentElement === runtimeSide)
-      syncSectionBeforeReconcile.remove();
-
+    // «Синхронизация с ETS2» и «Инструменты» живут вне динамической разметки и
+    // переживают пересборку: сверка их СОХРАНЯЕТ (preserve), а на свои места
+    // возвращает placeRuntimePreservedSections.
+    //
+    // ⚠ Оба селектора перечислены здесь ОБЯЗАТЕЛЬНО. Раньше sync отцеплялся
+    // вручную перед сверкой — и это была ошибка: remove() снимал узел ДО того,
+    // как reconcile успевал его спасти, узел не был обёрнут (не совпадал ни с
+    // одной «section» из разметки), поэтому сверка удаляла его навсегда, и после
+    // этого document.getElementById уже не находил раздел. Так блок
+    // «Синхронизация с ETS2» пропадал из левого сайдбара после первого снимка.
     if (window.AssistDom && window.AssistDom.reconcile) {
-      window.AssistDom.reconcile(runtimeSide, markup, { preserve: "section.runtimeTools" });
+      window.AssistDom.reconcile(runtimeSide, markup, {
+        preserve: "section.runtimeTools, #ets2SyncSection"
+      });
     } else {
       runtimeSide.innerHTML = markup;
     }
-    // Раздел инструментов возвращается на ПЕРВОЕ место: это единственный узел,
-    // который переживает пересборку, поэтому порядок восстанавливаем явно.
+    // Постоянные разделы возвращаются на свои места ПОСЛЕ сверки.
     placeRuntimePreservedSections();
 
     runtimeSide.querySelector("#detachJournal")?.addEventListener("click", () => send({ action: "detach_journal" }));
