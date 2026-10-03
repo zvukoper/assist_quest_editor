@@ -419,7 +419,20 @@ public sealed record TelemetryState(
     double DamageEnginePercent,
     double DamageTransmissionPercent,
     double DamageWheelPercent,
-    bool HornPressed);
+    bool HornPressed)
+{
+    /// <summary>Последняя мировая координата грузовика из внешней телеметрии ETS2.</summary>
+    public WorldCoordinate? TruckPosition { get; init; }
+
+    /// <summary>Курс грузовика в градусах, полученный из truck.world.placement.</summary>
+    public double TruckHeading { get; init; }
+
+    /// <summary>Есть ли сейчас свежий внешний сэмпл TruckTel.</summary>
+    public bool ExternalLive { get; init; }
+
+    /// <summary>Время последнего принятого внешнего сэмпла.</summary>
+    public DateTimeOffset? ExternalSampleAt { get; init; }
+};
 
 public sealed record EnvironmentState(
     string Weather,
