@@ -146,6 +146,10 @@ public sealed class SimulatorForm : WebViewForm
     /// профиль игры или Steam Cloud: собственный ledger и чекпоинты живут в AQE.
     /// </summary>
     private readonly Ets2SyncMonitor _ets2SyncMonitor;
+    private readonly Ets2TruckTelemetry _ets2TruckTelemetry;
+    private bool _telemetryFollowEnabled;
+    private DateTimeOffset? _lastAppliedTelemetrySampleAt;
+    private string? _ets2CareerPromptOpenLineageId;
 
     /// <summary>Мир, которому принадлежит окно. Null — режим без выбранного мира (CI).</summary>
     private readonly WorldRecord? _world;
@@ -215,6 +219,8 @@ public sealed class SimulatorForm : WebViewForm
                 ? AppPaths.SimulationSaveRoot
                 : WorldPaths.SavesFolderPath(world.FolderPath));
 
+        _ets2TruckTelemetry = new Ets2TruckTelemetry();
+
         _ets2SyncMonitor = world is null
             ? new Ets2SyncMonitor(
                 "ci",
@@ -222,17 +228,20 @@ public sealed class SimulatorForm : WebViewForm
                 null,
                 null,
                 CaptureState,
-                CurrentCampaignId)
+                CurrentCampaignId,
+                ResetWorldForNewEts2Career)
             : new Ets2SyncMonitor(
                 world.Definition.Id,
                 world.DisplayName,
                 null,
                 null,
                 CaptureState,
-                CurrentCampaignId);
+                CurrentCampaignId,
+                ResetWorldForNewEts2Career);
         _ets2SyncMonitor.Notification += Ets2SyncMonitor_Notification;
         _ets2SyncMonitor.NewCareerDetected += Ets2SyncMonitor_NewCareerDetected;
         _ets2SyncMonitor.CheckpointReady += Ets2SyncMonitor_CheckpointReady;
+        _ets2SyncMonitor.StateChanged += Ets2SyncMonitor_StateChanged;
 
         _openQuestEditor = openQuestEditor ?? throw new ArgumentNullException(nameof(openQuestEditor));
         _locationResolver = locationResolver ?? throw new ArgumentNullException(nameof(locationResolver));
@@ -265,7 +274,10 @@ public sealed class SimulatorForm : WebViewForm
             // процесс игры и save-каталог — внешнее состояние, которое нельзя
             // привязывать к кнопке Play/Stop AQE.
             if (Browser.CoreWebView2 is not null)
+            {
                 _ets2SyncMonitor.Poll();
+                ApplyExternalTelemetry();
+            }
 
             // Живое состояние идёт в окна в ЛЮБОМ состоянии симуляции, а не
             // только в запущенной. Движок показателей тикает и в паузе, и в
@@ -348,7 +360,9 @@ public sealed class SimulatorForm : WebViewForm
             _ets2SyncMonitor.Notification -= Ets2SyncMonitor_Notification;
             _ets2SyncMonitor.NewCareerDetected -= Ets2SyncMonitor_NewCareerDetected;
             _ets2SyncMonitor.CheckpointReady -= Ets2SyncMonitor_CheckpointReady;
+            _ets2SyncMonitor.StateChanged -= Ets2SyncMonitor_StateChanged;
             _ets2SyncMonitor.Dispose();
+            _ets2TruckTelemetry.Dispose();
 
             _runtimeTimer.Stop();
             _runtimeTimer.Dispose();
@@ -1279,13 +1293,15 @@ public sealed class SimulatorForm : WebViewForm
     /// Окно создаётся один раз: повторное нажатие кнопки поднимает уже открытое,
     /// иначе на каждый клик читался бы весь каталог профилей заново.
     /// </summary>
-    private void OpenEts2ProfilesWindow()
+    private void OpenEts2ProfilesWindow(string? hexFolder = null)
     {
         if (_ets2ProfilesForm is not null && !_ets2ProfilesForm.IsDisposed)
         {
             _ets2ProfilesForm.WindowState = FormWindowState.Normal;
             _ets2ProfilesForm.BringToFront();
             _ets2ProfilesForm.Activate();
+            if (!string.IsNullOrWhiteSpace(hexFolder))
+                _ets2ProfilesForm.OpenProfileByHexFolder(hexFolder);
             return;
         }
 
@@ -1308,6 +1324,9 @@ public sealed class SimulatorForm : WebViewForm
         };
 
         _ets2ProfilesForm.Show(this);
+        if (!string.IsNullOrWhiteSpace(hexFolder))
+            _ets2ProfilesForm.OpenProfileByHexFolder(hexFolder);
+
         AppLogger.Info("SimulatorForm: окно профилей ETS2 открыто.",
             $"size={_ets2ProfilesForm.Width}x{_ets2ProfilesForm.Height}; " +
             $"gameRoot={_ets2ProfilesForm.GameRoot ?? "<нет>"}");
@@ -1370,7 +1389,13 @@ public sealed class SimulatorForm : WebViewForm
                 break;
 
             case Ets2SyncNotificationKind.CareerBound:
-                AppLogger.Info("SimulatorForm: ETS2 карьера привязана.", notification.Message);
+                MessageBox.Show(
+                    this,
+                    notification.Message,
+                    "Синхронизация с ETS2",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Information);
+                RequestSnapshot("ETS2 career bound");
                 break;
 
             case Ets2SyncNotificationKind.CareerRejected:
@@ -1380,6 +1405,17 @@ public sealed class SimulatorForm : WebViewForm
             case Ets2SyncNotificationKind.CheckpointCreated:
             case Ets2SyncNotificationKind.CheckpointLoaded:
                 AppLogger.Info("SimulatorForm: ETS2 sync.", notification.Message);
+                break;
+
+            case Ets2SyncNotificationKind.SaveSynchronized:
+            case Ets2SyncNotificationKind.AutosaveSynchronized:
+                MessageBox.Show(
+                    this,
+                    notification.Message,
+                    "Синхронизация с ETS2",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Information);
+                RequestSnapshot("ETS2 save synchronized");
                 break;
 
             case Ets2SyncNotificationKind.CheckpointNotFound:
@@ -1395,20 +1431,32 @@ public sealed class SimulatorForm : WebViewForm
 
     private void Ets2SyncMonitor_NewCareerDetected(Ets2SyncCareerCandidate candidate)
     {
-        var result = MessageBox.Show(
-            this,
-            $"Обнаружена новая карьера. Использовать её для игры в «{_world?.DisplayName ?? "AQE"}»?",
-            "Новая карьера",
-            MessageBoxButtons.YesNo,
-            MessageBoxIcon.Question);
-
-        if (result == DialogResult.Yes)
+        if (string.Equals(
+                _ets2CareerPromptOpenLineageId,
+                candidate.LineageId,
+                StringComparison.OrdinalIgnoreCase))
         {
-            _ets2SyncMonitor.BindCandidate(candidate.LineageId);
+            return;
         }
-        else
+
+        _ets2CareerPromptOpenLineageId = candidate.LineageId;
+        try
         {
-            _ets2SyncMonitor.DeclineCandidate(candidate.LineageId);
+            var result = MessageBox.Show(
+                this,
+                $"Обнаружена новая карьера «{candidate.ProfileName}». Подключить её к миру «{_world?.DisplayName ?? "AQE"}»?\n\nПри подключении состояние мира будет сброшено.",
+                "Новая карьера",
+                MessageBoxButtons.YesNo,
+                MessageBoxIcon.Question);
+
+            if (result == DialogResult.Yes)
+                _ets2SyncMonitor.BindCandidate(candidate.LineageId);
+            else
+                _ets2SyncMonitor.DeclineCandidate(candidate.LineageId);
+        }
+        finally
+        {
+            _ets2CareerPromptOpenLineageId = null;
         }
     }
 
@@ -2190,7 +2238,7 @@ public sealed class SimulatorForm : WebViewForm
                 // Кнопка «Профили ETS2» рядом с «Обновить квесты». Действие без
                 // параметров: профиль выбирается уже внутри окна.
                 case "open_ets2_profiles":
-                    OpenEts2ProfilesWindow();
+                    OpenEts2ProfilesWindow(StringOrNull(root, "hexFolder"));
                     break;
 
                 case "set_vitals":
@@ -2215,6 +2263,10 @@ public sealed class SimulatorForm : WebViewForm
 
                 case "set_telemetry":
                     SetTelemetry(root);
+                    break;
+
+                case "set_telemetry_follow":
+                    SetTelemetryFollow(root);
                     break;
 
                 case "set_environment":
@@ -2351,35 +2403,7 @@ public sealed class SimulatorForm : WebViewForm
                     break;
 
                 case "reset":
-                    if (_locationResolver is ILocationResolutionSession locationSession)
-                        locationSession.Reset();
-
-                    if (_hub is SimulatorDataChannelHub simulatorHub)
-                    {
-                        simulatorHub.Reset();
-                    }
-                    _runtime.Reset();
-                    _dynamicEventDispatcher.Reset();
-                    // «Сбросить» обнуляет сохранённое прохождение, но НЕ выключает
-                    // симуляцию: пользователь продолжает работу в чистом мире с
-                    // той же сессией.
-                    //
-                    // Автосохранение после сброса НЕ пишется: автосохранение — это
-                    // только реакция на выключение симуляции. Пустой слот означает
-                    // «прохождения нет», и следующий запуск честно возьмёт мир из
-                    // кампании.
-                    _saveStore.ClearSession();
-                    _autoSaveAt = null;
-                    _mapView = null;
-                    _mapViewRestoreToken++;
-                    SetRouteStateAfterLoad(RouteState.Empty);
-
-                    // Свойства мира берутся из КАМПАНИИ, а не остаются какими были:
-                    // сброс возвращает мир к состоянию «на входе», и погода с
-                    // временем — часть этого состояния. Раньше сброс их не трогал,
-                    // и после испорченной правки координаты не возвращались.
-                    ApplyWorldFromCampaign("сброс симулятора");
-
+                    ResetWorldState("сброс симулятора", stopSimulation: false);
                     AppLogger.Info("SimulatorForm: прохождение сброшено.",
                         $"simulationRunning={_runtime.SimulationRunning}");
                     break;
@@ -3082,6 +3106,9 @@ public sealed class SimulatorForm : WebViewForm
     private void SetRouteEnabled(bool enabled)
     {
         _routeMovementLastTick = null;
+
+        if (enabled && !_ets2SyncMonitor.ViewState.CareerConnected)
+            throw new InvalidOperationException("Движение по маршруту доступно только при подключённой карьере ETS2.");
 
         if (!enabled)
         {
@@ -4955,6 +4982,92 @@ public sealed class SimulatorForm : WebViewForm
         channel.Set(channel.Value.WithValue(key, amount), "Редактор репутации");
     }
 
+    private void SetTelemetryFollow(JsonElement root)
+    {
+        var enabled = root.GetProperty("enabled").GetBoolean();
+
+        if (enabled && !_ets2SyncMonitor.ViewState.CareerConnected)
+        {
+            _telemetryFollowEnabled = false;
+            _ets2TruckTelemetry.Stop();
+            throw new InvalidOperationException("Телеметрия доступна только при подключённой карьере ETS2.");
+        }
+
+        _telemetryFollowEnabled = enabled;
+        _lastAppliedTelemetrySampleAt = null;
+
+        if (enabled)
+            _ets2TruckTelemetry.Start();
+        else
+            _ets2TruckTelemetry.Stop();
+
+        AppLogger.Info(
+            "SimulatorForm: следование позиции по телеметрии изменено.",
+            $"enabled={enabled}; careerConnected={_ets2SyncMonitor.ViewState.CareerConnected}");
+        RequestSnapshot("telemetry follow changed");
+    }
+
+    private void ApplyExternalTelemetry()
+    {
+        if (!_ets2SyncMonitor.ViewState.CareerConnected)
+        {
+            if (_telemetryFollowEnabled)
+            {
+                _telemetryFollowEnabled = false;
+                _ets2TruckTelemetry.Stop();
+                _lastAppliedTelemetrySampleAt = null;
+            }
+
+            return;
+        }
+
+        if (!_telemetryFollowEnabled ||
+            !_ets2TruckTelemetry.TryGetSnapshot(out var telemetry) ||
+            _lastAppliedTelemetrySampleAt == telemetry.SampleAt)
+        {
+            return;
+        }
+
+        _lastAppliedTelemetrySampleAt = telemetry.SampleAt;
+
+        var telemetryChannel = _hub.Get<TelemetryState>("telemetry");
+        var oldTelemetry = telemetryChannel.Value;
+        telemetryChannel.Set(
+            oldTelemetry with
+            {
+                SpeedKmh = telemetry.SpeedKmh,
+                TruckPosition = new WorldCoordinate(telemetry.X, telemetry.Y, telemetry.Z),
+                TruckHeading = telemetry.HeadingDegrees,
+                ExternalLive = telemetry.Live,
+                ExternalSampleAt = telemetry.SampleAt
+            },
+            "ETS2 TruckTel");
+
+        if (!telemetry.Live)
+            return;
+
+        var playerChannel = _hub.Get<PlayerState>("player");
+        var player = playerChannel.Value;
+        var position = new WorldCoordinate(telemetry.X, telemetry.Y, telemetry.Z);
+
+        if (Distance2D(player.Position, position) < 0.01d &&
+            Math.Abs(player.Heading - telemetry.HeadingDegrees) < 0.05d &&
+            Math.Abs(player.SpeedKmh - telemetry.SpeedKmh) < 0.01d)
+        {
+            return;
+        }
+
+        playerChannel.Set(
+            player with
+            {
+                Position = position,
+                SpeedKmh = telemetry.SpeedKmh,
+                Heading = telemetry.HeadingDegrees,
+                Paused = _runtime.IsPaused
+            },
+            "ETS2 телеметрия");
+    }
+
     private void SetTelemetry(JsonElement root)
     {
         var old = _hub.Get<TelemetryState>("telemetry").Value;
@@ -5168,6 +5281,40 @@ public sealed class SimulatorForm : WebViewForm
 
         _campaignStore.SaveWorldSettings(campaign.Definition.Id, world);
         PostWorldSettings("saved", "Стартовые условия мира сохранены в кампанию «" + campaign.Definition.Name + "».");
+    }
+
+    private void ResetWorldForNewEts2Career(string reason)
+    {
+        ResetWorldState(reason, stopSimulation: true);
+    }
+
+    private void ResetWorldState(string reason, bool stopSimulation)
+    {
+        if (stopSimulation)
+        {
+            _inventoryPausedSimulation = false;
+            _runtime.SetSimulationRunning(false);
+            _dynamicEventDispatcher.SetSimulationRunning(false);
+            _ets2TruckTelemetry.Stop();
+            _telemetryFollowEnabled = false;
+            _lastAppliedTelemetrySampleAt = null;
+        }
+
+        if (_locationResolver is ILocationResolutionSession locationSession)
+            locationSession.Reset();
+
+        if (_hub is SimulatorDataChannelHub simulatorHub)
+            simulatorHub.Reset();
+
+        _runtime.Reset();
+        _dynamicEventDispatcher.Reset();
+        _saveStore.ClearSession();
+        _autoSaveAt = null;
+        _mapView = null;
+        _mapViewRestoreToken++;
+        SetRouteStateAfterLoad(RouteState.Empty);
+        ApplyWorldFromCampaign(reason);
+        RequestSnapshot("world reset: " + reason);
     }
 
     /// <summary>
@@ -6520,8 +6667,27 @@ public sealed class SimulatorForm : WebViewForm
     /// восстановлен к моменту, когда пользователь жмёт play. Поэтому запуск —
     /// это только включение часов и Runtime.
     /// </summary>
+    private void Ets2SyncMonitor_StateChanged(Ets2SyncViewState state)
+    {
+        if (!state.CareerConnected && _telemetryFollowEnabled)
+        {
+            _telemetryFollowEnabled = false;
+            _ets2TruckTelemetry.Stop();
+            _lastAppliedTelemetrySampleAt = null;
+        }
+
+        RequestSnapshot("ETS2 sync state changed");
+    }
+
     private void StartSimulation()
     {
+        if (!_ets2SyncMonitor.ViewState.CareerConnected)
+        {
+            AppLogger.Warn("SimulatorForm: запуск симуляции заблокирован — карьера ETS2 не подключена.");
+            RequestSnapshot("simulation start blocked: no ETS2 career");
+            return;
+        }
+
         if (_runtime.SimulationRunning)
             return;
 
