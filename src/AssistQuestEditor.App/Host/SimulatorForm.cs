@@ -3112,7 +3112,7 @@ public sealed class SimulatorForm : WebViewForm
     {
         _routeMovementLastTick = null;
 
-        if (enabled && !_ets2SyncMonitor.ViewState.CareerConnected)
+        if (enabled && (_ets2SyncRequired && !_ets2SyncMonitor.ViewState.CareerConnected))
             throw new InvalidOperationException("Движение по маршруту доступно только при подключённой карьере ETS2.");
 
         if (enabled && _telemetryFollowEnabled)
@@ -5026,7 +5026,7 @@ public sealed class SimulatorForm : WebViewForm
 
     private void ApplyExternalTelemetry()
     {
-        if (!_ets2SyncMonitor.ViewState.CareerConnected)
+        if (_ets2SyncRequired && !_ets2SyncMonitor.ViewState.CareerConnected)
         {
             if (_telemetryFollowEnabled)
             {
