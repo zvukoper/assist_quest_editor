@@ -6699,7 +6699,7 @@ public sealed class SimulatorForm : WebViewForm
 
     private void StartSimulation()
     {
-        if (!_ets2SyncMonitor.ViewState.CareerConnected)
+        if (_ets2SyncRequired && !_ets2SyncMonitor.ViewState.CareerConnected)
         {
             AppLogger.Warn("SimulatorForm: запуск симуляции заблокирован — карьера ETS2 не подключена.");
             RequestSnapshot("simulation start blocked: no ETS2 career");
