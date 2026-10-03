@@ -4034,6 +4034,7 @@ public sealed class SimulatorForm : WebViewForm
             simulationPaused = _runtime.IsPaused,
             simulationSpeed = _runtime.SimulationSpeed,
             ets2Sync = _ets2SyncMonitor.ViewState,
+            ets2SyncRequired = _ets2SyncRequired,
             telemetryFollowEnabled = _telemetryFollowEnabled,
             route = BuildRouteSnapshot(),
             lodging = BuildLodgingSnapshot()
