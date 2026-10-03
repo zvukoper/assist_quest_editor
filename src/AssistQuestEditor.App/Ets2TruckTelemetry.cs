@@ -22,6 +22,7 @@ public sealed class Ets2TruckTelemetry : IDisposable
         double Z,
         double HeadingDegrees,
         double SpeedKmh,
+        bool GamePaused,
         bool Live,
         DateTimeOffset SampleAt);
 
@@ -75,7 +76,7 @@ public sealed class Ets2TruckTelemetry : IDisposable
             var live = DateTimeOffset.UtcNow - _lastSnapshot.SampleAt <=
                        TimeSpan.FromMilliseconds(StaleMilliseconds);
 
-            snapshot = _lastSnapshot with { Live = live };
+            snapshot = _lastSnapshot with { GamePaused = _gamePaused, Live = live };
             return true;
         }
     }
@@ -256,10 +257,53 @@ public sealed class Ets2TruckTelemetry : IDisposable
 
     private void Apply(JsonElement root)
     {
-        if (!root.TryGetProperty("truck.world.placement", out var placement) ||
-            placement.ValueKind != JsonValueKind.Array ||
-            placement.GetArrayLength() < 3)
+        var now = DateTimeOffset.UtcNow;
+        var pauseKnown = TryReadGamePaused(root, out var gamePaused);
+
+        if (pauseKnown)
         {
+            lock (_sync)
+                _gamePaused = gamePaused;
+        }
+
+        var hasPlacement =
+            root.TryGetProperty("truck.world.placement", out var placement) &&
+            placement.ValueKind == JsonValueKind.Array &&
+            placement.GetArrayLength() >= 3;
+
+        var speedKmh = 0d;
+        if (root.TryGetProperty("truck.speed", out var speed) &&
+            TryNumber(speed, out var speedMs))
+        {
+            speedKmh = Math.Abs(speedMs) * 3.6d;
+        }
+
+        if (!hasPlacement)
+        {
+            // На паузе TruckTel может прислать frame.paused/game.paused без placement.
+            // Последнюю координату не обнуляем: AQE должен замереть на последнем
+            // валидном положении, но сразу увидеть состояние паузы.
+            lock (_sync)
+            {
+                if (_lastSnapshot is not null)
+                {
+                    if (root.TryGetProperty("truck.speed", out _) &&
+                        pauseKnown)
+                        _lastSnapshot = _lastSnapshot with
+                        {
+                            SpeedKmh = speedKmh,
+                            GamePaused = _gamePaused,
+                            SampleAt = now
+                        };
+                    else if (pauseKnown)
+                        _lastSnapshot = _lastSnapshot with
+                        {
+                            GamePaused = _gamePaused,
+                            SampleAt = now
+                        };
+                }
+            }
+
             return;
         }
 
@@ -275,15 +319,7 @@ public sealed class Ets2TruckTelemetry : IDisposable
             ? h
             : 0d;
 
-        var speedKmh = 0d;
-        if (root.TryGetProperty("truck.speed", out var speed) &&
-            TryNumber(speed, out var speedMs))
-        {
-            speedKmh = Math.Abs(speedMs) * 3.6d;
-        }
-
         var headingDegrees = NormalizeDegrees(headingFraction * 360d);
-        var now = DateTimeOffset.UtcNow;
 
         lock (_sync)
         {
@@ -293,9 +329,40 @@ public sealed class Ets2TruckTelemetry : IDisposable
                 z,
                 headingDegrees,
                 speedKmh,
+                _gamePaused,
                 true,
                 now);
         }
+    }
+
+    private static bool TryReadGamePaused(JsonElement root, out bool paused)
+    {
+        if (root.TryGetProperty("frame.paused", out var framePaused) &&
+            framePaused.ValueKind is JsonValueKind.True or JsonValueKind.False)
+        {
+            paused = framePaused.GetBoolean();
+            return true;
+        }
+
+        if (root.TryGetProperty("_", out var eventNode) &&
+            eventNode.ValueKind == JsonValueKind.String)
+        {
+            var value = eventNode.GetString();
+            if (string.Equals(value, "game.paused", StringComparison.OrdinalIgnoreCase))
+            {
+                paused = true;
+                return true;
+            }
+
+            if (string.Equals(value, "game.started", StringComparison.OrdinalIgnoreCase))
+            {
+                paused = false;
+                return true;
+            }
+        }
+
+        paused = false;
+        return false;
     }
 
     private void LogUnavailable(string channel, Exception ex)
