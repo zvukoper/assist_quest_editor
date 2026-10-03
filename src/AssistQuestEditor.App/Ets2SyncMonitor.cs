@@ -358,7 +358,8 @@ public sealed class Ets2SyncMonitor : IDisposable
                 .First();
 
             CreateCheckpoint(active.Lineage, initial, notifySynchronization: false);
-            SeedObserved(active.Lineage, initial);
+            foreach (var save in saves)
+                SeedObserved(active.Lineage, save);
         }
 
         var session = ReadGameLogSession(active.Lineage.CurrentHexFolder);
