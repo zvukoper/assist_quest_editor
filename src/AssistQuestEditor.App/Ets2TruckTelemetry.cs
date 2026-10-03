@@ -311,6 +311,35 @@ public sealed class Ets2TruckTelemetry : IDisposable
 
     private int ResolvePort()
     {
+        // ETS2 Assist хранит фактический wsPort в общем пользовательском
+        // web_data.json. Если файла нет или он некорректен, TruckTel использует
+        // стандартный 8080.
+        try
+        {
+            var localAppData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+            if (!string.IsNullOrWhiteSpace(localAppData))
+            {
+                var webDataPath = Path.Combine(localAppData, "ETS2_Assist", "web_data.json");
+                if (File.Exists(webDataPath))
+                {
+                    using var document = JsonDocument.Parse(File.ReadAllText(webDataPath));
+                    if (document.RootElement.TryGetProperty("wsPort", out var portElement) &&
+                        portElement.ValueKind == JsonValueKind.Number &&
+                        portElement.TryGetInt32(out var port) &&
+                        port > 0)
+                    {
+                        return port;
+                    }
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            AppLogger.Warn(
+                "Ets2TruckTelemetry: не удалось прочитать порт TruckTel из web_data.json.",
+                ex.GetBaseException().Message);
+        }
+
         return _configuredPort;
     }
 
