@@ -1,0 +1,16 @@
+﻿{
+    "tool":  "AssistQuestEditor/ETS2-CloudProbe",
+    "purpose":  "Verify custom files are synced by Steam Cloud",
+    "tag":  "20261003-045223",
+    "writtenUtc":  "2026-10-03T04:52:23.8599389Z",
+    "machineName":  "DESKTOP-GTAJT7K",
+    "profileName":  "AQE_T1",
+    "profileHex":  "4151455F5431",
+    "profileArea":  "steam_profiles",
+    "profileType":  "PC_steam_cloud",
+    "steamUserDataId":  "40536066",
+    "steamId64":  "76561198000801794",
+    "steamAccount":  "zvukoper",
+    "steamNick":  "DZR|Mikhail",
+    "nonce":  "90caa639-f635-4e17-82d6-c96a0f46759e"
+}
