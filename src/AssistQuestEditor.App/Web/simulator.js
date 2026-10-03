@@ -3371,24 +3371,24 @@
   }
 
   function ensureEts2SyncSection() {
-    if (ets2SyncSection) return ets2SyncSection;
+    if (ets2SyncSection && document.contains(ets2SyncSection))
+      return ets2SyncSection;
 
-    const host = document.createElement("div");
-    host.innerHTML =
-      "<section class='acc open runtimeEts2Sync'>" +
-        "<div class='accHead'><strong>Синхронизация с ETS2</strong><span>⌄</span></div>" +
-        "<div class='accBody' id='ets2SyncBody'></div>" +
-      "</section>";
-    ets2SyncSection = host.firstElementChild;
+    ets2SyncSection = document.getElementById("ets2SyncSection");
+    if (!ets2SyncSection)
+      return null;
 
-    ets2SyncSection.addEventListener("click", event => {
-      const button = event.target.closest("#openConnectedEts2Career");
-      if (!button || !ets2Sync.careerConnected) return;
-      send({
-        action: "open_ets2_profiles",
-        hexFolder: ets2Sync.hexFolder || ""
+    if (!ets2SyncSection.dataset.bound) {
+      ets2SyncSection.dataset.bound = "1";
+      ets2SyncSection.addEventListener("click", event => {
+        const button = event.target.closest("#openConnectedEts2Career");
+        if (!button || !ets2Sync.careerConnected) return;
+        send({
+          action: "open_ets2_profiles",
+          hexFolder: ets2Sync.hexFolder || ""
+        });
       });
-    });
+    }
 
     return ets2SyncSection;
   }
@@ -3407,8 +3407,15 @@
    */
   function placeRuntimePreservedSections() {
     if (!runtimeSide) return;
-    runtimeSide.insertBefore(ensureToolsSection(), runtimeSide.firstChild);
-    runtimeSide.insertBefore(ensureEts2SyncSection(), runtimeSide.children[1] || null);
+
+    const syncSection = ensureEts2SyncSection();
+    if (syncSection)
+      runtimeSide.insertBefore(syncSection, runtimeSide.firstChild);
+
+    const tools = ensureToolsSection();
+    runtimeSide.insertBefore(
+      tools,
+      syncSection ? runtimeSide.children[1] || null : runtimeSide.firstChild);
   }
 
   function applyEts2SyncState(data) {
@@ -3431,7 +3438,9 @@
 
     const locked = ets2SyncRequired && !ets2Sync.careerConnected;
     mapWrap?.classList.toggle("ets2Locked", locked);
+    mapWrap?.classList.toggle("ets2Unlocked", !locked);
     side?.classList.toggle("ets2Locked", locked);
+    side?.classList.toggle("ets2Unlocked", !locked);
     if (side) side.inert = locked;
 
     if (locked)
@@ -3558,10 +3567,13 @@ let toolsSection = null;
     // подменяются только изменившиеся элементы, поэтому кнопки шапки раздела
     // при обновлении журнала событий не мигают.
     //
-    // Раздел «Инструменты» ОХРАНЯЕТСЯ: он живёт вне разметки и лишь возвращается
-    // на первое место. Без этого сверка сочла бы его лишним узлом и удалила —
-    // кнопки «Монитор показателей» и соседние исчезли бы при первой же смене
-    // содержимого сайдбара.
+    // «Синхронизация с ETS2» и «Инструменты» живут вне динамической разметки.
+    // Sync временно отцепляется перед reconcile, чтобы тот не удалил постоянный
+    // DOM-узел.
+    const syncSectionBeforeReconcile = ensureEts2SyncSection();
+    if (syncSectionBeforeReconcile?.parentElement === runtimeSide)
+      syncSectionBeforeReconcile.remove();
+
     if (window.AssistDom && window.AssistDom.reconcile) {
       window.AssistDom.reconcile(runtimeSide, markup, { preserve: "section.runtimeTools" });
     } else {
