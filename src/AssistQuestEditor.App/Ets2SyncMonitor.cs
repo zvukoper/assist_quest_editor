@@ -155,6 +155,8 @@ public sealed class Ets2SyncMonitor : IDisposable
 
         // Подключение НОВОЙ карьеры означает начало новой линии прохождения:
         // старое состояние AQE нельзя переносить в неё автоматически.
+        _lastSave = null;
+        _loadedSave = null;
         _resetWorld?.Invoke("подключение новой карьеры ETS2");
 
         RefreshViewState();
@@ -236,7 +238,10 @@ public sealed class Ets2SyncMonitor : IDisposable
             UpsertKnown(profile, now);
 
         if (!processRunning)
+        {
+            RefreshViewState();
             return;
+        }
 
         var activeHex = catalog.ActiveHexFolder;
         CandidateProfile? active = null;
@@ -285,6 +290,7 @@ public sealed class Ets2SyncMonitor : IDisposable
                     $"newProfiles={previouslyUnknownLineages.Count}");
             }
 
+            RefreshViewState();
             return;
         }
 
@@ -303,6 +309,7 @@ public sealed class Ets2SyncMonitor : IDisposable
                     active.Lineage.Name);
             }
 
+            RefreshViewState();
             return;
         }
 
@@ -324,6 +331,7 @@ public sealed class Ets2SyncMonitor : IDisposable
                     new Ets2SyncCareerCandidate(active.Lineage.Id, active.Lineage.Name));
             }
 
+            RefreshViewState();
             return;
         }
 
@@ -349,7 +357,7 @@ public sealed class Ets2SyncMonitor : IDisposable
                 .OrderByDescending(save => save.ModifiedAt ?? DateTimeOffset.MinValue)
                 .First();
 
-            CreateCheckpoint(active.Lineage, initial);
+            CreateCheckpoint(active.Lineage, initial, notifySynchronization: false);
             SeedObserved(active.Lineage, initial);
         }
 
