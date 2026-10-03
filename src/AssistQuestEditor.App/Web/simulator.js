@@ -5173,8 +5173,8 @@ let toolsSection = null;
       const weight = Number(entry.fontWeight) || 400;
       return "<div class='eventRow ets2SaveJournalEntry' style='color:" + color +
         ";font-weight:" + weight + "'>" +
+        formatEventTimestamp(entry.timestamp) + "  " +
         escapeHtml(entry.message || "") +
-        " <span class='miniLabel'>" + formatEventTimestamp(entry.timestamp) + "</span>" +
         "</div>";
     }
     const routeEntry = String(entry.source || "").toLowerCase() === "движение по маршруту";
