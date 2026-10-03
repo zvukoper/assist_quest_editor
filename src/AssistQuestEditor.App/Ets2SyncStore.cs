@@ -179,21 +179,39 @@ public sealed class Ets2SyncStore
             binding.WorldId.Equals(worldId, StringComparison.OrdinalIgnoreCase) &&
             binding.LineageId.Equals(lineageId, StringComparison.OrdinalIgnoreCase));
 
+    public Ets2SyncBinding? FindBindingForWorld(string worldId) =>
+        Ledger.Bindings.FirstOrDefault(binding =>
+            binding.WorldId.Equals(worldId, StringComparison.OrdinalIgnoreCase));
+
     public bool TryBind(
         string worldId,
         Ets2ProfileLineage lineage,
-        out string? conflictWorldId)
+        out string? conflictWorldId,
+        out string? replacedLineageId)
     {
         conflictWorldId = null;
+        replacedLineageId = null;
 
         var existing = FindBindingForLineage(lineage.Id);
         if (existing is not null)
         {
-            if (existing.WorldId.Equals(worldId, StringComparison.OrdinalIgnoreCase))
-                return true;
+            if (!existing.WorldId.Equals(worldId, StringComparison.OrdinalIgnoreCase))
+            {
+                conflictWorldId = existing.WorldId;
+                return false;
+            }
 
-            conflictWorldId = existing.WorldId;
-            return false;
+            return true;
+        }
+
+        // У мира может быть ровно ОДНА активная карьера ETS2. Если пользователь
+        // подключает новую карьеру, старая привязка заменяется, а Host сбрасывает
+        // прохождение мира перед созданием нового чекпоинта.
+        var worldBinding = FindBindingForWorld(worldId);
+        if (worldBinding is not null)
+        {
+            Ledger.Bindings.Remove(worldBinding);
+            replacedLineageId = worldBinding.LineageId;
         }
 
         Ledger.Bindings.Add(new Ets2SyncBinding(
