@@ -1,5 +1,6 @@
 (() => {
   const map = document.getElementById("mapCanvas");
+  const mapWrap = document.getElementById("mapWrap");
   const side = document.getElementById("side");
   const hud = document.getElementById("hud");
   const runtimeSide = document.getElementById("runtimeSide");
@@ -153,6 +154,17 @@
   // Нужны блоку «Окружение»: без них он не знал бы, к какому миру относится
   // астрономия и можно ли писать в файл кампании.
   let worldSettings = null;
+
+  let ets2Sync = {
+    careerConnected: false,
+    lineageId: null,
+    careerName: null,
+    hexFolder: null,
+    lastSave: null,
+    loadedSave: null
+  };
+  let telemetryFollowEnabled = false;
+  let lastEts2SyncSignature = "";
   // Список сохранений приходит отдельным сообщением только при открытии панели:
   // пересылать его в каждом снимке значило бы читать заголовки файлов на каждую
   // перерисовку карты.
@@ -3316,7 +3328,98 @@
    * замена узла сбрасывает :hover и начинает переход оформления заново. Раздел
    * статичен — пересоздавать его не за чем.
    */
-  let toolsSection = null;
+  let ets2SyncSection = null;
+
+  function formatEts2SyncDate(value) {
+    if (!value) return "—";
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return "—";
+    const pad = value => value < 10 ? "0" + value : String(value);
+    return pad(date.getDate()) + "." + pad(date.getMonth() + 1) + "." +
+      date.getFullYear() + " " + pad(date.getHours()) + ":" + pad(date.getMinutes());
+  }
+
+  function ets2SyncSaveHtml(save) {
+    if (!save) return "<div class='ets2SyncValue'>—</div>";
+    const name = String(save.name || save.slot || "Без названия");
+    return "<div class='ets2SyncValue'>" + escapeHtml(name) +
+      "<br><span class='miniLabel'>" + escapeHtml(formatEts2SyncDate(save.modifiedAt)) +
+      "</span></div>";
+  }
+
+  function renderEts2SyncBody() {
+    if (!ets2Sync.careerConnected) {
+      return "<div class='kv'><span>Состояние</span><span class='ets2SyncDisconnected'>Не подключена</span></div>" +
+        "<div class='notice' style='margin-top:8px'>Создай новую карьеру ETS2 и подтверди её подключение. Состояние мира будет сброшено.</div>";
+    }
+
+    const careerName = ets2Sync.careerName || "Карьера ETS2";
+    return "<div class='kv'><span>Состояние</span><span class='ets2SyncConnected'>Подключена</span></div>" +
+      "<div class='miniLabel' style='margin-top:8px'>Карьера</div>" +
+      "<button class='ets2SyncCareer' id='openConnectedEts2Career' type='button' title='Открыть подробности подключённой карьеры ETS2'>" +
+        escapeHtml(careerName) +
+      "</button>" +
+      "<div class='miniLabel' style='margin-top:10px'>Последнее сохранение</div>" +
+      ets2SyncSaveHtml(ets2Sync.lastSave) +
+      "<div class='miniLabel' style='margin-top:10px'>Загруженная игра</div>" +
+      ets2SyncSaveHtml(ets2Sync.loadedSave);
+  }
+
+  function ensureEts2SyncSection() {
+    if (ets2SyncSection) return ets2SyncSection;
+
+    const host = document.createElement("div");
+    host.innerHTML =
+      "<section class='acc open runtimeEts2Sync'>" +
+        "<div class='accHead'><strong>Синхронизация с ETS2</strong><span>⌄</span></div>" +
+        "<div class='accBody' id='ets2SyncBody'></div>" +
+      "</section>";
+    ets2SyncSection = host.firstElementChild;
+
+    ets2SyncSection.addEventListener("click", event => {
+      const button = event.target.closest("#openConnectedEts2Career");
+      if (!button || !ets2Sync.careerConnected) return;
+      send({
+        action: "open_ets2_profiles",
+        hexFolder: ets2Sync.hexFolder || ""
+      });
+    });
+
+    return ets2SyncSection;
+  }
+
+  function applyEts2SyncState(data) {
+    ets2Sync = {
+      careerConnected: !!data?.careerConnected,
+      lineageId: data?.lineageId || null,
+      careerName: data?.careerName || null,
+      hexFolder: data?.hexFolder || null,
+      lastSave: data?.lastSave || null,
+      loadedSave: data?.loadedSave || null
+    };
+
+    const signature = JSON.stringify(ets2Sync);
+    if (signature !== lastEts2SyncSignature) {
+      lastEts2SyncSignature = signature;
+      const section = ensureEts2SyncSection();
+      const body = section.querySelector("#ets2SyncBody");
+      if (body) body.innerHTML = renderEts2SyncBody();
+    }
+
+    const locked = !ets2Sync.careerConnected;
+    mapWrap?.classList.toggle("ets2Locked", locked);
+    side?.classList.toggle("ets2Locked", locked);
+    if (side) side.inert = locked;
+
+    if (locked)
+      telemetryFollowEnabled = false;
+
+    renderSimulationTransport();
+    if (runtimeSide)
+      runtimeSide.insertBefore(ensureEts2SyncSection(), runtimeSide.firstChild);
+  }
+
+let toolsSection = null;
   function ensureToolsSection() {
     if (toolsSection) return toolsSection;
 
@@ -3444,7 +3547,8 @@
     }
     // Раздел инструментов возвращается на ПЕРВОЕ место: это единственный узел,
     // который переживает пересборку, поэтому порядок восстанавливаем явно.
-    runtimeSide.insertBefore(ensureToolsSection(), runtimeSide.firstChild);
+    runtimeSide.insertBefore(ensureEts2SyncSection(), runtimeSide.firstChild);
+    runtimeSide.insertBefore(ensureToolsSection(), runtimeSide.children[1] || null);
 
     runtimeSide.querySelector("#detachJournal")?.addEventListener("click", () => send({ action: "detach_journal" }));
     runtimeSide.querySelector("#openJournal")?.addEventListener("click", () => send({ action: "open_journal" }));
@@ -3786,6 +3890,8 @@
     const stop = document.getElementById("simStop");
     const fastForward = document.getElementById("simFastForward");
     const routeToggle = document.getElementById("simRouteToggle");
+     const telemetryToggle = document.getElementById("simTelemetryToggle");
+     const telemetryToggleLabel = document.getElementById("simTelemetryToggleLabel");
     const plate = document.getElementById("simStatusPlate");
     const autoSave = document.getElementById("simAutoSave");
 
@@ -3814,7 +3920,8 @@
     // паузу (⏸️), иначе нажатие запустит или продолжит (▶️). Во время паузы
     // кнопка дополнительно пульсирует — это прямой визуальный сигнал продолжения.
     if (play) {
-      play.textContent = simulationRunning ? "⏸️" : "▶️";
+      play.disabled = !ets2Sync.careerConnected;
+       play.textContent = simulationRunning ? "⏸️" : "▶️";
       play.title = simulationRunning ? "Пауза" : simulationPaused ? "Продолжить" : "Запустить симуляцию";
       play.setAttribute("aria-label", play.title);
       play.classList.toggle("paused", simulationPaused);
@@ -3823,14 +3930,15 @@
     // Стоп доступен всегда: он же создаёт автосохранение, и игрок вправе
     // зафиксировать мир, даже если симуляция ещё не запускалась.
     if (stop) {
-      stop.disabled = false;
+      stop.disabled = !ets2Sync.careerConnected;
       stop.title = "Остановить симуляцию и автосохранить мир";
     }
 
     // ff сообщает текущую кратность: иначе непонятно, куда придёт следующее
     // нажатие, и ускорение выглядит как «кнопка без состояния».
     if (fastForward) {
-      const speedText = simulationSpeed === 1 ? "" : " (сейчас ×" + formatSpeed(simulationSpeed) + ")";
+      fastForward.disabled = !ets2Sync.careerConnected;
+       const speedText = simulationSpeed === 1 ? "" : " (сейчас ×" + formatSpeed(simulationSpeed) + ")";
       fastForward.title = "Ускорить игровое время" + speedText;
       fastForward.setAttribute("aria-label", fastForward.title);
     }
@@ -3842,7 +3950,8 @@
     // показывала бы «едем», пока другая показывала «стоим». Поэтому состояние
     // здесь только ОТРАЖАЕТСЯ, а переключается общим действием route_toggle.
     if (routeToggle) {
-      const moving = !!(route && route.enabled);
+      routeToggle.disabled = !ets2Sync.careerConnected;
+       const moving = !!(route && route.enabled);
       routeToggle.classList.toggle("active", moving);
       routeToggle.setAttribute("aria-pressed", moving ? "true" : "false");
       // Остановка на точке со скоростью 0 — то же состояние, что и у кнопки
@@ -3853,7 +3962,16 @@
         : "Включить движение по маршруту";
     }
 
-    if (plate) {
+    if (telemetryToggle) {
+       telemetryToggle.disabled = !ets2Sync.careerConnected;
+       telemetryToggle.checked = !!ets2Sync.careerConnected && !!telemetryFollowEnabled;
+     }
+     if (telemetryToggleLabel)
+       telemetryToggleLabel.classList.toggle(
+         "isActive",
+         !!ets2Sync.careerConnected && !!telemetryFollowEnabled);
+
+     if (plate) {
       plate.dataset.simState = state;
     }
 
@@ -5127,6 +5245,9 @@
         if (typeof message.simulationRunning === "boolean") simulationRunning = message.simulationRunning;
         if (typeof message.simulationPaused === "boolean") simulationPaused = message.simulationPaused;
         if (typeof message.simulationSpeed === "number") simulationSpeed = message.simulationSpeed;
+        if (message.ets2Sync) applyEts2SyncState(message.ets2Sync);
+        if (typeof message.telemetryFollowEnabled === "boolean")
+          telemetryFollowEnabled = message.telemetryFollowEnabled;
         if (message.route) route = normalizeRoute(message.route);
         lastPlayerSnapshotAt = performance.now();
         scheduleUiRender();
@@ -5151,6 +5272,9 @@
       // Подпись автосохранения: null означает «слота ещё нет», и интерфейс
       // обязан это сказать именно так, а не показывать пустую дату.
       autoSaveLabel = message.autoSaveLabel || null;
+      if (message.ets2Sync) applyEts2SyncState(message.ets2Sync);
+      if (typeof message.telemetryFollowEnabled === "boolean")
+        telemetryFollowEnabled = message.telemetryFollowEnabled;
       if (Array.isArray(message.journal))
         journalHistory = message.journal.slice(0, 250);
       questCatalog = normalizeQuestCatalog(message.questCatalog);
@@ -5960,7 +6084,18 @@
     node.hidden = name.length === 0;
   }
 
-  document.getElementById("simPlay")?.addEventListener("click", () => {
+  document.getElementById("simTelemetryToggle")?.addEventListener("change", event => {
+     if (!ets2Sync.careerConnected) {
+       event.target.checked = false;
+       return;
+     }
+     send({
+       action: "set_telemetry_follow",
+       enabled: !!event.target.checked
+     });
+   });
+
+   document.getElementById("simPlay")?.addEventListener("click", () => {
     send({ action: simulationRunning ? "simulation_pause" : "simulation_start" });
   });
 
