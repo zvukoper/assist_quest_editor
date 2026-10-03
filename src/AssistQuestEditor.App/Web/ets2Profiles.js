@@ -263,6 +263,16 @@
 
     var profile = message.profile || {};
     selected = { area: profile.area, hexFolder: profile.hexFolder };
+
+    // При открытии из блока «Синхронизация с ETS2» Host уже знает lineage. Сразу
+    // отражаем его и в селекте, иначе карточка была бы правильной, а список
+    // визуально оставался на «— выберите профиль —».
+    if (select && profile.area && profile.hexFolder) {
+      var selectedValue = profile.area + "|" + profile.hexFolder;
+      if (select.querySelector("option[value='" + cssEscape(selectedValue) + "']"))
+        select.value = selectedValue;
+    }
+
     setLanguage(profile.languageLabel || profile.language, profile.language);
 
     var avatar = message.avatarDataUrl
