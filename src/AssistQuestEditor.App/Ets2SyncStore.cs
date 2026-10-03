@@ -180,8 +180,10 @@ public sealed class Ets2SyncStore
             binding.LineageId.Equals(lineageId, StringComparison.OrdinalIgnoreCase));
 
     public Ets2SyncBinding? FindBindingForWorld(string worldId) =>
-        Ledger.Bindings.FirstOrDefault(binding =>
-            binding.WorldId.Equals(worldId, StringComparison.OrdinalIgnoreCase));
+        Ledger.Bindings
+            .Where(binding => binding.WorldId.Equals(worldId, StringComparison.OrdinalIgnoreCase))
+            .OrderByDescending(binding => binding.BoundAt)
+            .FirstOrDefault();
 
     public bool TryBind(
         string worldId,
@@ -193,25 +195,49 @@ public sealed class Ets2SyncStore
         replacedLineageId = null;
 
         var existing = FindBindingForLineage(lineage.Id);
+        if (existing is not null &&
+            !existing.WorldId.Equals(worldId, StringComparison.OrdinalIgnoreCase))
+        {
+            conflictWorldId = existing.WorldId;
+            return false;
+        }
+
+        // Исторически ledger мог накопить несколько привязок одного мира:
+        // старые версии не заменяли предыдущую карьеру при подключении новой.
+        // Перед записью новой связи очищаем ВСЕ старые записи этого мира, а
+        // активной считаем самую свежую по BoundAt.
+        var worldBindings = Ledger.Bindings
+            .Where(binding => binding.WorldId.Equals(worldId, StringComparison.OrdinalIgnoreCase))
+            .ToArray();
+
         if (existing is not null)
         {
-            if (!existing.WorldId.Equals(worldId, StringComparison.OrdinalIgnoreCase))
+            foreach (var stale in worldBindings.Where(binding =>
+                         !ReferenceEquals(binding, existing)))
             {
-                conflictWorldId = existing.WorldId;
-                return false;
+                Ledger.Bindings.Remove(stale);
+                replacedLineageId ??= stale.LineageId;
             }
 
+            if (worldBindings.Any(binding =>
+                    !binding.LineageId.Equals(lineage.Id, StringComparison.OrdinalIgnoreCase)))
+            {
+                foreach (var stale in worldBindings.Where(binding =>
+                             !binding.LineageId.Equals(lineage.Id, StringComparison.OrdinalIgnoreCase)))
+                {
+                    Ledger.Bindings.Remove(stale);
+                    replacedLineageId ??= stale.LineageId;
+                }
+            }
+
+            SaveLedger();
             return true;
         }
 
-        // У мира может быть ровно ОДНА активная карьера ETS2. Если пользователь
-        // подключает новую карьеру, старая привязка заменяется, а Host сбрасывает
-        // прохождение мира перед созданием нового чекпоинта.
-        var worldBinding = FindBindingForWorld(worldId);
-        if (worldBinding is not null)
+        foreach (var stale in worldBindings)
         {
-            Ledger.Bindings.Remove(worldBinding);
-            replacedLineageId = worldBinding.LineageId;
+            Ledger.Bindings.Remove(stale);
+            replacedLineageId ??= stale.LineageId;
         }
 
         Ledger.Bindings.Add(new Ets2SyncBinding(
