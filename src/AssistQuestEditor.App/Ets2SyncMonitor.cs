@@ -677,8 +677,17 @@ public sealed class Ets2SyncMonitor : IDisposable
 
         foreach (var save in saves)
         {
-            if (!previous.TryGetValue(save.Slot, out var old) ||
-                string.Equals(old.ContentKey, save.ContentKey, StringComparison.Ordinal))
+            if (!previous.TryGetValue(save.Slot, out var old))
+            {
+                // Новый слот появляется, например, при обычном сохранении с новым
+                // именем. Это такое же внешнее событие ETS2, как изменение
+                // autosave-файла, и оно тоже должно синхронизироваться.
+                previous[save.Slot] = save;
+                CreateCheckpoint(lineage, save, notifySynchronization: true);
+                continue;
+            }
+
+            if (string.Equals(old.ContentKey, save.ContentKey, StringComparison.Ordinal))
                 continue;
 
             previous[save.Slot] = save;
@@ -701,7 +710,11 @@ public sealed class Ets2SyncMonitor : IDisposable
             return;
 
         CreateCheckpoint(profile.Lineage, newest, notifySynchronization: false);
-        SeedObserved(profile.Lineage, newest);
+        // До первого наблюдения помечаем ВСЕ уже существующие слоты. Иначе
+        // старый профиль с несколькими сохранениями выглядел бы как серия новых
+        // сохранений после подключения.
+        foreach (var save in saves)
+            SeedObserved(profile.Lineage, save);
         _lastSave = ToSaveView(newest);
         RefreshViewState();
     }
