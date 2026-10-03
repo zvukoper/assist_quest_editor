@@ -6748,6 +6748,20 @@ public sealed class SimulatorForm : WebViewForm
                 _dynamicEventDispatcher.SetSimulationRunning(false);
                 SetPlayerMovementIdle();
             }
+
+            // Открытое окно профилей тоже не должно продолжать показывать старую
+            // связанную карьеру, когда ETS2 уже переключился на другую.
+            if (_ets2ProfilesForm is not null && !_ets2ProfilesForm.IsDisposed)
+                _ets2ProfilesForm.ClearProfile();
+        }
+        else if (state.CareerConnected &&
+                 !string.IsNullOrWhiteSpace(state.HexFolder) &&
+                 _ets2ProfilesForm is not null &&
+                 !_ets2ProfilesForm.IsDisposed)
+        {
+            // Если справочник профилей открыт, он автоматически переключается на
+            // профиль, который сейчас связан с активной карьерой ETS2.
+            _ets2ProfilesForm.OpenProfileByHexFolder(state.HexFolder);
         }
 
         RequestSnapshot("ETS2 sync state changed");
