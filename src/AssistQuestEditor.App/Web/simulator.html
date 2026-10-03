@@ -53,7 +53,15 @@
     min-height: 0;
   }
 
-  .ets2SideLock {
+  .ets2SideLock { display: none; }
+
+  #side.ets2Locked {
+    position: relative;
+    cursor: not-allowed;
+  }
+
+  #side.ets2Locked::after {
+    content: "Не подключена карьера ETS2";
     position: absolute;
     inset: 0;
     z-index: 40;
@@ -68,14 +76,6 @@
     font-weight: 600;
     text-align: center;
     pointer-events: auto;
-  }
-
-  #side.ets2Locked .ets2SideLock { display: flex; }
-  #side.ets2Unlocked .ets2SideLock { display: none; }
-  #side.ets2Locked { cursor: not-allowed; }
-
-  #side.ets2Locked::after {
-    content: none;
     position: absolute;
     inset: 0;
     z-index: 40;
