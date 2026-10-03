@@ -3403,7 +3403,7 @@
       loadedSave: data?.loadedSave || null
     };
 
-    const signature = JSON.stringify(ets2Sync);
+    const signature = String(ets2SyncRequired) + "|" + JSON.stringify(ets2Sync);
     if (signature !== lastEts2SyncSignature) {
       lastEts2SyncSignature = signature;
       const section = ensureEts2SyncSection();
