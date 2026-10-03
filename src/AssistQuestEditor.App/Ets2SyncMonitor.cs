@@ -294,7 +294,18 @@ public sealed class Ets2SyncMonitor : IDisposable
             return;
         }
 
+        var previousActiveLineageId = _activeLineageId;
         _activeLineageId = active.Lineage.Id;
+
+        if (!string.Equals(
+                previousActiveLineageId,
+                _activeLineageId,
+                StringComparison.OrdinalIgnoreCase))
+        {
+            _lastSave = null;
+            _loadedSave = null;
+            _lastLoadedCheckpointId = null;
+        }
 
         var otherWorldBinding = _store.FindBindingForLineage(active.Lineage.Id);
         if (otherWorldBinding is not null &&
@@ -316,22 +327,16 @@ public sealed class Ets2SyncMonitor : IDisposable
         var currentBinding = _store.FindBinding(_worldId, active.Lineage.Id);
         if (currentBinding is null)
         {
-            if (!_store.IsBaselineProfile(_worldId, active.Lineage.Id) &&
-                !_promptedCandidates.Contains(active.Lineage.Id) &&
-                !_declinedCandidates.Contains(active.Lineage.Id))
-            {
-                _promptedCandidates.Add(active.Lineage.Id);
-                Notify(
-                    Ets2SyncNotificationKind.NewCareerDetected,
-                    $"Обнаружена новая карьера. Использовать её для игры в «{_worldName}»?",
-                    active.Lineage.Id,
-                    active.Lineage.Name);
+            RefreshViewState();
 
-                NewCareerDetected?.Invoke(
-                    new Ets2SyncCareerCandidate(active.Lineage.Id, active.Lineage.Name));
+            if (!_declinedCandidates.Contains(active.Lineage.Id))
+            {
+                _declinedCandidates.Add(active.Lineage.Id);
+                AppLogger.Warn(
+                    "Ets2SyncMonitor: активная карьера ETS2 не связана с текущим миром.",
+                    $"world={_worldId}; lineage={active.Lineage.Id}; profile={active.Lineage.Name}");
             }
 
-            RefreshViewState();
             return;
         }
 
@@ -741,6 +746,19 @@ public sealed class Ets2SyncMonitor : IDisposable
                     state.Clock.Elapsed),
                 state);
 
+            var existingCheckpoint = _store.FindExactCheckpoint(
+                _worldId,
+                lineage.Id,
+                save);
+
+            if (existingCheckpoint is not null)
+            {
+                SeedObserved(lineage, save);
+                _lastSave = ToSaveView(save);
+                RefreshViewState();
+                return;
+            }
+
             var entry = _store.AddCheckpoint(
                 _worldId,
                 lineage.Id,
@@ -764,8 +782,8 @@ public sealed class Ets2SyncMonitor : IDisposable
                         ? Ets2SyncNotificationKind.AutosaveSynchronized
                         : Ets2SyncNotificationKind.SaveSynchronized,
                     autosave
-                        ? "Выполнено автосохранение и синхронизировано с ETS2."
-                        : "Выполнено сохранение и синхронизировано с ETS2.",
+                        ? "Выполнено автосохранение и синхронизировано с ETS2"
+                        : "Выполнено сохранение и синхронизировано с ETS2",
                     lineage.Id,
                     lineage.Name);
             }
@@ -943,7 +961,9 @@ public sealed class Ets2SyncMonitor : IDisposable
         var binding = _store.FindBindingForWorld(_worldId);
         Ets2SyncViewState next;
 
-        if (binding is null)
+        if (binding is null ||
+            string.IsNullOrWhiteSpace(_activeLineageId) ||
+            !binding.LineageId.Equals(_activeLineageId, StringComparison.OrdinalIgnoreCase))
         {
             next = Ets2SyncViewState.Empty;
         }
