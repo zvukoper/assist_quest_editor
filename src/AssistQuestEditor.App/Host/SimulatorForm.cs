@@ -6752,7 +6752,7 @@ public sealed class SimulatorForm : WebViewForm
             // Открытое окно профилей тоже не должно продолжать показывать старую
             // связанную карьеру, когда ETS2 уже переключился на другую.
             if (_ets2ProfilesForm is not null && !_ets2ProfilesForm.IsDisposed)
-                _ets2ProfilesForm.ClearProfile();
+                _ets2ProfilesForm.SendProfile(string.Empty, string.Empty);
         }
         else if (state.CareerConnected &&
                  !string.IsNullOrWhiteSpace(state.HexFolder) &&
