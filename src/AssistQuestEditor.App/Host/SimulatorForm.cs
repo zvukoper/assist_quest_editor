@@ -3112,6 +3112,9 @@ public sealed class SimulatorForm : WebViewForm
         if (enabled && !_ets2SyncMonitor.ViewState.CareerConnected)
             throw new InvalidOperationException("Движение по маршруту доступно только при подключённой карьере ETS2.");
 
+        if (enabled && _telemetryFollowEnabled)
+            throw new InvalidOperationException("Движение по маршруту недоступно при включённой телеметрии ETS2.");
+
         if (!enabled)
         {
             _routeEnabled = false;
@@ -4995,6 +4998,13 @@ public sealed class SimulatorForm : WebViewForm
             _telemetryFollowEnabled = false;
             _ets2TruckTelemetry.Stop();
             throw new InvalidOperationException("Телеметрия доступна только при подключённой карьере ETS2.");
+        }
+
+        if (enabled && _routeEnabled)
+        {
+            // Два независимых источника позиции не должны одновременно двигать
+            // игрока. Телеметрия становится единственным источником координат.
+            SetRouteEnabled(false);
         }
 
         _telemetryFollowEnabled = enabled;
