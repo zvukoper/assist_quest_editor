@@ -37,6 +37,7 @@ public sealed class Ets2TruckTelemetry : IDisposable
     private Snapshot? _lastSnapshot;
     private bool _running;
     private int _port;
+    private DateTimeOffset _nextWarningUtc;
 
     public Ets2TruckTelemetry(int port = DefaultPort)
     {
@@ -130,10 +131,8 @@ public sealed class Ets2TruckTelemetry : IDisposable
                 var port = ResolvePort();
                 lock (_sync) _port = port;
 
-                socket = new ClientWebSocket
-                {
-                    Options = { KeepAliveInterval = TimeSpan.FromSeconds(20) }
-                };
+                socket = new ClientWebSocket();
+                socket.Options.KeepAliveInterval = TimeSpan.FromSeconds(20);
 
                 await socket.ConnectAsync(
                     new Uri($"ws://localhost:{port}/api/ws/delta/flat/?throttle=50"),
@@ -148,9 +147,7 @@ public sealed class Ets2TruckTelemetry : IDisposable
             }
             catch (Exception ex)
             {
-                AppLogger.Warn(
-                    "Ets2TruckTelemetry: WS TruckTel недоступен.",
-                    $"port={Port}; error={ex.GetBaseException().Message}");
+                LogUnavailable("WS", ex);
             }
             finally
             {
@@ -239,9 +236,7 @@ public sealed class Ets2TruckTelemetry : IDisposable
                 // REST — резервный канал. Не превращаем отсутствие TruckTel в
                 // поток одинаковых ошибок, но оставляем запись в логах для
                 // диагностики подключения.
-                AppLogger.Warn(
-                    "Ets2TruckTelemetry: REST TruckTel недоступен.",
-                    $"port={Port}; error={ex.GetBaseException().Message}");
+                LogUnavailable("REST", ex);
             }
 
             try
@@ -297,6 +292,21 @@ public sealed class Ets2TruckTelemetry : IDisposable
                 true,
                 now);
         }
+    }
+
+    private void LogUnavailable(string channel, Exception ex)
+    {
+        var now = DateTimeOffset.UtcNow;
+        lock (_sync)
+        {
+            if (now < _nextWarningUtc)
+                return;
+            _nextWarningUtc = now.AddSeconds(15);
+        }
+
+        AppLogger.Warn(
+            "Ets2TruckTelemetry: TruckTel недоступен.",
+            $"channel={channel}; port={Port}; error={ex.GetBaseException().Message}");
     }
 
     private int ResolvePort()
