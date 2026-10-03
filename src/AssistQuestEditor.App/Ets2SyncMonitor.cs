@@ -104,6 +104,10 @@ public sealed class Ets2SyncMonitor : IDisposable
         }
     }
 
+    public bool BindActiveCareer() =>
+        !string.IsNullOrWhiteSpace(_activeLineageId) &&
+        BindCandidate(_activeLineageId);
+
     public bool BindCandidate(string lineageId)
     {
         var known = _store.FindKnownProfile(lineageId);
