@@ -3355,7 +3355,8 @@
 
     if (!ets2Sync.careerConnected) {
       return "<div class='kv'><span>Состояние</span><span class='ets2SyncDisconnected'>Не подключена</span></div>" +
-        "<div class='notice' style='margin-top:8px'>Создай новую карьеру ETS2 и подтверди её подключение. Состояние мира будет сброшено.</div>";
+        "<div class='notice' style='margin-top:8px'>Текущая карьера ETS2 не связана с этим миром. Симулятор заблокирован.</div>" +
+        "<button class='smallButton' id='bindActiveEts2Career' style='margin-top:6px'>Подключить текущую карьеру</button>";
     }
 
     const careerName = ets2Sync.careerName || "Карьера ETS2";
@@ -3384,12 +3385,19 @@
     if (!ets2SyncSection.dataset.bound) {
       ets2SyncSection.dataset.bound = "1";
       ets2SyncSection.addEventListener("click", event => {
-        const button = event.target.closest("#openConnectedEts2Career");
-        if (!button || !ets2Sync.careerConnected) return;
-        send({
-          action: "open_ets2_profiles",
-          hexFolder: ets2Sync.hexFolder || ""
-        });
+        const careerButton = event.target.closest("#openConnectedEts2Career");
+        if (careerButton && ets2Sync.careerConnected) {
+          send({
+            action: "open_ets2_profiles",
+            hexFolder: ets2Sync.hexFolder || ""
+          });
+          return;
+        }
+
+        const bindButton = event.target.closest("#bindActiveEts2Career");
+        if (bindButton && !ets2Sync.careerConnected) {
+          send({ action: "bind_active_ets2_career" });
+        }
       });
     }
 
@@ -3411,20 +3419,15 @@
   function placeRuntimePreservedSections() {
     if (!runtimeSide) return;
 
-    // insertBefore на уже стоящем на месте узле ничего не делает: проверка
-    // нужна, чтобы лишний раз не двигать DOM (иначе сбрасывался бы :hover).
-    //
-    // Порядок: «Инструменты» — ПЕРВЫЙ, «Синхронизация с ETS2» — СЛЕДОМ.
-    // Проверять его обязательно и здесь: пока раздел sync отсутствовал в
-    // разметке, порядок устанавливался сам собой, а вместе с ним вернулся бы и
-    // прежний дефект — «Инструменты» уезжали на второе место.
-    const tools = ensureToolsSection();
-    if (runtimeSide.firstChild !== tools)
-      runtimeSide.insertBefore(tools, runtimeSide.firstChild);
-
+    // Порядок задан требованием интерфейса: синхронизация ETS2 — ПЕРВЫЙ блок,
+    // инструменты — сразу за ним.
     const syncSection = ensureEts2SyncSection();
-    if (syncSection && syncSection !== tools.nextSibling)
-      runtimeSide.insertBefore(syncSection, tools.nextSibling);
+    if (syncSection && runtimeSide.firstChild !== syncSection)
+      runtimeSide.insertBefore(syncSection, runtimeSide.firstChild);
+
+    const tools = ensureToolsSection();
+    if (runtimeSide.children[1] !== tools)
+      runtimeSide.insertBefore(tools, syncSection ? syncSection.nextSibling : runtimeSide.firstChild);
   }
 
   function applyEts2SyncState(data) {
@@ -4016,7 +4019,7 @@ let toolsSection = null;
     // показывала бы «едем», пока другая показывала «стоим». Поэтому состояние
     // здесь только ОТРАЖАЕТСЯ, а переключается общим действием route_toggle.
     if (routeToggle) {
-      routeToggle.disabled = !ets2SyncRequired || !ets2Sync.careerConnected || telemetryFollowEnabled;
+      routeToggle.disabled = ets2SyncRequired && (!ets2Sync.careerConnected || telemetryFollowEnabled);
        const moving = !!(route && route.enabled);
       routeToggle.classList.toggle("active", moving);
       routeToggle.setAttribute("aria-pressed", moving ? "true" : "false");
@@ -4518,12 +4521,15 @@ let toolsSection = null;
         : 0;
       const routeSpeed = selectedRoute ? selectedRoute.speedKmh : route.defaultSpeedKmh;
       const simulationLocked = simulationRunning || simulationPaused;
-      const canEdit = route.editing && !simulationLocked;
-      const editTitle = simulationLocked
-        ? "Для редактирования маршрута нужно выключить симуляцию."
-        : (route.editing
-          ? "Редактирование маршрута включено."
-          : "Включите «Редактирование», чтобы менять точки.");
+      const telemetryLocked = telemetryFollowEnabled;
+      const canEdit = route.editing && !simulationLocked && !telemetryLocked;
+      const editTitle = telemetryLocked
+        ? "Редактирование маршрута недоступно при включённой телеметрии ETS2."
+        : (simulationLocked
+          ? "Для редактирования маршрута нужно выключить симуляцию."
+          : (route.editing
+            ? "Редактирование маршрута включено."
+            : "Включите «Редактирование», чтобы менять точки."));
 
       const routeStatus =
         route.errors?.length
@@ -5162,6 +5168,15 @@ let toolsSection = null;
 
   function renderJournalEntry(entry) {
     if (!entry) return "";
+    if (entry.compact) {
+      const color = String(entry.textColor || "").toLowerCase() === "lime" ? "lime" : "inherit";
+      const weight = Number(entry.fontWeight) || 400;
+      return "<div class='eventRow ets2SaveJournalEntry' style='color:" + color +
+        ";font-weight:" + weight + "'>" +
+        escapeHtml(entry.message || "") +
+        " <span class='miniLabel'>" + formatEventTimestamp(entry.timestamp) + "</span>" +
+        "</div>";
+    }
     const routeEntry = String(entry.source || "").toLowerCase() === "движение по маршруту";
     const coordinate = entry.coordinate;
     const coordinateMarkup = coordinate
@@ -5345,6 +5360,7 @@ let toolsSection = null;
       if (message.ets2Sync) applyEts2SyncState(message.ets2Sync);
       if (typeof message.telemetryFollowEnabled === "boolean")
         telemetryFollowEnabled = message.telemetryFollowEnabled;
+      renderSimulationTransport();
       if (Array.isArray(message.journal))
         journalHistory = message.journal.slice(0, 250);
       questCatalog = normalizeQuestCatalog(message.questCatalog);
