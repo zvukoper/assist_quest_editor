@@ -266,28 +266,20 @@ public sealed class SimulatorForm : WebViewForm
         _runtimeTimer = new System.Windows.Forms.Timer { Interval = 250 };
         _runtimeTimer.Tick += (_, _) =>
         {
-            UpdateRouteMovement();
-            _runtime.Tick();
-            _dynamicEventDispatcher.Tick();
-            UpdatePlayerConditions();
-
-            // Наблюдение ETS2 живёт независимо от того, идёт ли симуляция:
-            // процесс игры и save-каталог — внешнее состояние, которое нельзя
-            // привязывать к кнопке Play/Stop AQE.
+            // Состояние ETS2 читается ДО локального тика симуляции: пауза игры
+            // должна заморозить AQE в этом же цикле, а возобновление — продолжить
+            // его до следующего шага игрового времени.
             if (Browser.CoreWebView2 is not null)
             {
                 _ets2SyncMonitor.Poll();
                 ApplyExternalTelemetry();
             }
 
-            // Живое состояние идёт в окна в ЛЮБОМ состоянии симуляции, а не
-            // только в запущенной. Движок показателей тикает и в паузе, и в
-            // стопе (смотри <see cref="UpdatePlayerConditions"/>): шкалы и
-            // таймеры эффектов обязаны обновляться без симуляции, а таймеры
-            // завязаны на СИСТЕМНОЕ время, которое не останавливается вместе с
-            // игровым. Прежнее условие показывало интерфейсу только последний
-            // снимок, и включение маршрута на остановленной симуляции не
-            // отражалось в окнах до следующего полного обновления.
+            UpdateRouteMovement();
+            _runtime.Tick();
+            _dynamicEventDispatcher.Tick();
+            UpdatePlayerConditions();
+
             PushLiveState();
         };
         _runtimeTimer.Start();
@@ -5059,11 +5051,24 @@ public sealed class SimulatorForm : WebViewForm
         }
 
         if (!_telemetryFollowEnabled ||
-            !_ets2TruckTelemetry.TryGetSnapshot(out var telemetry) ||
-            _lastAppliedTelemetrySampleAt == telemetry.SampleAt)
+            !_ets2TruckTelemetry.TryGetSnapshot(out var telemetry))
         {
             return;
         }
+
+        // TruckTel передаёт отдельный признак состояния игры. Пока поток свежий,
+        // он является источником истины и для паузы AQE: ручная пауза внутри AQE
+        // не должна расходиться с паузой ETS2.
+        if (telemetry.Live)
+        {
+            if (telemetry.GamePaused && _runtime.SimulationRunning)
+                PauseSimulation();
+            else if (!telemetry.GamePaused && _runtime.IsPaused)
+                ResumeSimulation();
+        }
+
+        if (_lastAppliedTelemetrySampleAt == telemetry.SampleAt)
+            return;
 
         _lastAppliedTelemetrySampleAt = telemetry.SampleAt;
 
@@ -5086,10 +5091,12 @@ public sealed class SimulatorForm : WebViewForm
         var playerChannel = _hub.Get<PlayerState>("player");
         var player = playerChannel.Value;
         var position = new WorldCoordinate(telemetry.X, telemetry.Y, telemetry.Z);
+        var paused = telemetry.GamePaused || _runtime.IsPaused;
 
         if (Distance2D(player.Position, position) < 0.01d &&
             Math.Abs(player.Heading - telemetry.HeadingDegrees) < 0.05d &&
-            Math.Abs(player.SpeedKmh - telemetry.SpeedKmh) < 0.01d)
+            Math.Abs(player.SpeedKmh - telemetry.SpeedKmh) < 0.01d &&
+            player.Paused == paused)
         {
             return;
         }
@@ -5100,7 +5107,7 @@ public sealed class SimulatorForm : WebViewForm
                 Position = position,
                 SpeedKmh = telemetry.SpeedKmh,
                 Heading = telemetry.HeadingDegrees,
-                Paused = _runtime.IsPaused
+                Paused = paused
             },
             "ETS2 телеметрия");
     }
